@@ -1,0 +1,21 @@
+# Dependências e artefatos de build (regeneráveis)
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
+# Build do Tauri/Rust (pesado, regenerável)
+src-tauri/target/
+src-tauri/gen/
+
+# Screenshots/artefatos de automação
+.playwright-mcp/
+
+# Sistema operacional / editores
+.DS_Store
+Thumbs.db
+*.log
+*.local
+.idea/
+.vscode/*
+!.vscode/extensions.json

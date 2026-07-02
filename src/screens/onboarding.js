@@ -1,0 +1,265 @@
+// Onboarding (assistente curto, 3 etapas): concurso → prova/ritmo (opcional) →
+// Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
+// em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
+import { bindActions, toast } from "../ui.js";
+import { esc } from "../util.js";
+import { icone } from "../icones.js";
+import { testarConexao, iaDisponivel } from "../ia-provider.js";
+
+let passo = 1;
+let temaOb = null; // tema escolhido no onboarding (persistido ao avançar do passo 1)
+
+// Indicador de etapas (done / atual / futura).
+function steps(atual) {
+  const it = (n, txt) => `<span class="${n < atual ? "done" : n === atual ? "atual" : ""}">${n}. ${txt}</span>`;
+  return `<div class="ob-steps">${it(1, "Concurso")} › ${it(2, "Prova e ritmo")} › ${it(3, "IA (opcional)")}</div>`;
+}
+
+// Campo de tempo em horas + minutos (mesma convenção da tela Configurações).
+function campoHM(idBase, totalMin, disabled) {
+  const t = Math.max(0, totalMin || 0);
+  const h = Math.floor(t / 60);
+  const m = t % 60;
+  const d = disabled ? "disabled" : "";
+  return `<span class="hm-campo">
+    <input id="${idBase}-h" type="number" min="0" value="${h}" ${d} /><span class="hm-sep">h</span>
+    <input id="${idBase}-m" type="number" min="0" max="59" value="${m}" ${d} /><span class="hm-sep">min</span>
+  </span>`;
+}
+
+export default function renderOnboarding(root, app) {
+  const { store } = app;
+  const st = store.get();
+  const cfg = st.config;
+  // "Meta não definida": nenhuma das 3 metas definida.
+  const semMetas = !cfg.metaDiariaMin && !cfg.metaSemanalMin && !cfg.metaMensalMin;
+
+  // Robustez: sem concurso, sempre começa no passo 1.
+  if (!st.concurso) passo = 1;
+
+  const hm = (base) => {
+    const h = Math.max(0, parseInt(root.querySelector(`#${base}-h`)?.value, 10) || 0);
+    const m = Math.max(0, parseInt(root.querySelector(`#${base}-m`)?.value, 10) || 0);
+    return h * 60 + m;
+  };
+
+  // Finaliza o onboarding e abre a tela "Por onde começar?".
+  const irComecar = () => {
+    store.finalizarOnboarding();
+    app.navigate("comecar");
+  };
+
+  // -------- PASSO 1: Concurso (obrigatório) --------
+  if (passo === 1) {
+    root.innerHTML = `
+      <div class="ob-card">
+        <div class="ob-logo">${icone("library")}</div>
+        <h1>Bem-vindo ao Mentor Concurso</h1>
+        <p class="ob-lead"><b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova.</p>
+        <p class="ob-steps" style="justify-content:center; display:flex">São só 3 passos rápidos. Comece informando o concurso.</p>
+        <div class="ob-tema">
+          <span class="ob-tema-label">Aparência</span>
+          <div class="tema-opcoes">
+            <button type="button" class="tema-opt ${(temaOb ?? cfg.tema) !== "escuro" ? "on" : ""}" data-action="set-tema" data-tema="claro"><span class="tema-amostra tema-amostra-claro"></span><span>Claro</span></button>
+            <button type="button" class="tema-opt ${(temaOb ?? cfg.tema) === "escuro" ? "on" : ""}" data-action="set-tema" data-tema="escuro"><span class="tema-amostra tema-amostra-escuro"></span><span>Escuro</span></button>
+          </div>
+        </div>
+        <div class="ob-form">
+          <label>Qual concurso você vai prestar? <span class="ob-tag-req">obrigatório</span>
+            <input id="ob-cargo" type="text" value="${esc(st.concurso ? st.concurso.cargo : "")}" placeholder="Ex.: Escrevente Técnico Judiciário · TJSP" />
+          </label>
+          <label>Banca <span class="ob-tag-opt">opcional</span>
+            <input id="ob-banca" type="text" value="${esc(st.concurso ? st.concurso.banca : "")}" placeholder="Ex.: VUNESP" />
+          </label>
+          <div class="ob-final" style="border:0; padding:0; margin-top:4px">
+            <button class="btn btn-ghost" data-action="pular-tudo" data-tip="Cria só o concurso e já abre o edital. Metas e IA ficam para depois, em Configurações.">Pular para o fim</button>
+            <button class="btn btn-primary btn-lg" data-action="criar">Continuar →</button>
+          </div>
+        </div>
+        <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>
+      </div>`;
+
+    bindActions(root, {
+      "set-tema": (el) => {
+        temaOb = el.getAttribute("data-tema") === "escuro" ? "escuro" : "claro";
+        // aplica ao vivo sem re-render (preserva o que já foi digitado)
+        document.documentElement.setAttribute("data-tema", temaOb);
+        root.querySelectorAll(".tema-opt").forEach((b) => b.classList.toggle("on", b.getAttribute("data-tema") === temaOb));
+      },
+      criar: () => {
+        if (!salvarConcurso(root, store)) return;
+        if (temaOb) store.setConfig({ tema: temaOb });
+        passo = 2;
+        app.refresh();
+      },
+      "pular-tudo": () => {
+        if (!salvarConcurso(root, store)) return;
+        if (temaOb) store.setConfig({ tema: temaOb });
+        irComecar();
+      },
+    });
+    return;
+  }
+
+  // -------- PASSO 2: Prova e ritmo (opcional) --------
+  if (passo === 2) {
+    root.innerHTML = `
+      <div class="ob-card ob-wide">
+        ${steps(2)}
+        <h1>Prova e ritmo de estudo <span class="ob-tag-opt">opcional</span></h1>
+        <p class="ob-lead">Tem data da prova ou uma meta de horas em mente? Informe e o app acompanha seu ritmo. Sem pressa: deixe em branco e ajuste quando quiser em Configurações.</p>
+        <div class="ob-form">
+          <div class="ob-grupo">
+            <h3>${icone("calendar")} Prova</h3>
+            <div style="max-width:240px">
+              <label style="margin-bottom:6px">Data da prova
+                <input id="ob-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
+              </label>
+              <label class="inline small" style="font-weight:400"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
+            </div>
+          </div>
+          <div class="ob-grupo">
+            <h3>${icone("target")} Metas</h3>
+            <div class="form-row">
+              <label>Meta diária ${campoHM("ob-meta-dia", cfg.metaDiariaMin, semMetas)}</label>
+              <label>Meta semanal ${campoHM("ob-meta-sem", cfg.metaSemanalMin, semMetas)}</label>
+              <label>Meta mensal ${campoHM("ob-meta-mes", cfg.metaMensalMin, semMetas)}</label>
+            </div>
+            <label class="inline small" style="font-weight:400; display:flex; width:fit-content"><input id="ob-meta-pre" type="checkbox" ${semMetas ? "checked" : ""} /> Meta não definida</label>
+          </div>
+        </div>
+        <div class="ob-final">
+          <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn btn-ghost" data-action="pular">Pular</button>
+            <button class="btn btn-primary" data-action="salvar">Continuar →</button>
+          </div>
+        </div>
+      </div>`;
+
+    bindActions(root, {
+      voltar: () => { passo = 1; app.refresh(); },
+      pular: () => { passo = 3; app.refresh(); },
+      salvar: () => {
+        const metaPre = root.querySelector("#ob-meta-pre").checked;
+        store.setConfig({
+          dataProva: root.querySelector("#ob-prova-pre").checked ? null : (root.querySelector("#ob-prova").value || null),
+          metaDiariaMin: metaPre ? 0 : hm("ob-meta-dia"),
+          metaSemanalMin: metaPre ? 0 : hm("ob-meta-sem"),
+          metaMensalMin: metaPre ? 0 : hm("ob-meta-mes"),
+          // Disponibilidade diária = meta diária (mesmo conceito); alimenta o Mentor.
+          dispDiariaMin: metaPre ? 0 : hm("ob-meta-dia"),
+        });
+        passo = 3;
+        app.refresh();
+      },
+    });
+    // Checkboxes "não definida": desabilitam (e zeram) os campos.
+    const ligarNaoDef = (chkSel, inputSels, vazio) => {
+      root.querySelector(chkSel)?.addEventListener("change", (e) => {
+        inputSels.forEach((s) => {
+          const el = root.querySelector(s);
+          if (el) { el.disabled = e.target.checked; if (e.target.checked) el.value = vazio; }
+        });
+      });
+    };
+    ligarNaoDef("#ob-prova-pre", ["#ob-prova"], "");
+    ligarNaoDef("#ob-meta-pre", ["#ob-meta-dia-h", "#ob-meta-dia-m", "#ob-meta-sem-h", "#ob-meta-sem-m", "#ob-meta-mes-h", "#ob-meta-mes-m"], "0");
+    return;
+  }
+
+  // -------- PASSO 3: IA (opcional) --------
+  const prov = cfg.iaProvider || "offline";
+  const inativa = ["offline", "claude", "gemini-cli"].includes(prov);
+  root.innerHTML = `
+    <div class="ob-card ob-wide">
+      ${steps(3)}
+      <h1>Mentor IA <span class="ob-tag-opt">opcional</span></h1>
+      <p class="ob-lead">O app já funciona completo offline. Se quiser, conecte uma IA com a <b>chave grátis do Google Gemini</b> para gerar questões e flashcards, comentar seus erros, corrigir discursivas e conversar com o mentor. Dá para começar offline e conectar depois.</p>
+      <p class="small ob-ia-status">Status: ${iaDisponivel(cfg) ? '<b style="color:var(--success)">IA conectada</b> ' : '<b>Offline</b> — a IA é opcional; conecte agora ou depois em Configurações.'}</p>
+      <div class="ob-form">
+        <div class="form-row">
+          <label>Provedor
+            <select id="ob-ia">
+              <option value="offline" ${prov === "offline" ? "selected" : ""}>Offline (sem IA)</option>
+              <option value="gemini" ${prov === "gemini" ? "selected" : ""}>Google Gemini (chave grátis)</option>
+              <option value="claude" ${prov === "claude" ? "selected" : ""}>Claude Code local (em breve)</option>
+              <option value="gemini-cli" ${prov === "gemini-cli" ? "selected" : ""}>Gemini CLI (em breve)</option>
+            </select>
+          </label>
+          <label>Chave de API
+            <input id="ob-key" type="password" value="${esc(cfg.iaKey || "")}" placeholder="cole a chave aqui" ${inativa ? "disabled" : ""} />
+          </label>
+        </div>
+        ${prov === "gemini" ? `<div class="form-acoes">
+          <button class="btn btn-ghost btn-sm" data-action="testar">${icone("plug-zap")} Testar conexão</button>
+          <span class="small" id="ob-ia-msg"></span>
+        </div>
+        <p class="muted small">Pegue a chave grátis em aistudio.google.com/apikey, cole acima e clique em Testar conexão (ele escolhe sozinho o melhor modelo grátis que sua chave aceita).</p>` : ""}
+      </div>
+      <div class="ob-final">
+        <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <button class="btn btn-ghost" data-action="offline" data-tip="Começa sem IA. Você pode conectar a qualquer momento em Configurações.">Começar offline</button>
+          <button class="btn btn-primary btn-lg" data-action="concluir">Concluir e abrir o Edital →</button>
+        </div>
+      </div>
+    </div>`;
+
+  const setMsg = (html, cor) => {
+    const m = root.querySelector("#ob-ia-msg");
+    if (m) { m.innerHTML = html; m.style.color = cor || ""; }
+  };
+  const lerIA = () => ({
+    iaProvider: root.querySelector("#ob-ia").value,
+    iaKey: root.querySelector("#ob-key")?.value || "",
+    iaModelo: cfg.iaModelo || "",
+  });
+
+  bindActions(root, {
+    voltar: () => { passo = 2; app.refresh(); },
+    offline: () => { store.setConfig({ iaProvider: "offline" }); irComecar(); },
+    concluir: () => { store.setConfig(lerIA()); irComecar(); },
+    testar: async (el) => {
+      const c = lerIA();
+      if (!c.iaKey.trim()) { setMsg("Cole a chave antes de testar.", "var(--danger)"); return; }
+      el.disabled = true;
+      const txt = el.textContent;
+      el.textContent = "Testando…";
+      setMsg("Testando conexão (pode tentar alguns modelos)…");
+      try {
+        const { ok, modelo } = await testarConexao(c);
+        if (ok) {
+          c.iaModelo = modelo || "";
+          store.setConfig(c);
+          setMsg(`Conectado com o modelo <b>${modelo || "padrão"}</b>.`, "var(--success)");
+        } else {
+          setMsg("Conectou, mas a resposta foi inesperada.", "var(--danger)");
+        }
+      } catch (e) {
+        setMsg("Falha: " + esc(e.message), "var(--danger)");
+      } finally {
+        el.disabled = false;
+        el.textContent = txt;
+      }
+    },
+  });
+
+  // Trocar provedor habilita/desabilita a chave e mostra o "Testar conexão".
+  root.querySelector("#ob-ia")?.addEventListener("change", (e) => {
+    store.setConfig({ iaProvider: e.target.value, iaKey: root.querySelector("#ob-key")?.value || "" });
+    app.refresh();
+  });
+}
+
+// Valida e cria/atualiza o concurso a partir dos campos do passo 1.
+function salvarConcurso(root, store) {
+  const cargo = root.querySelector("#ob-cargo").value;
+  const banca = root.querySelector("#ob-banca").value;
+  if (!cargo.trim()) {
+    toast("Informe o cargo/concurso.", "erro");
+    return false;
+  }
+  store.criarConcurso({ cargo, banca });
+  return true;
+}
