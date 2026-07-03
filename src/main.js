@@ -10,7 +10,8 @@ import { esc } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
 import { abrirPaleta } from "./paleta.js";
 import { ligarFaixasIA, ativarReveal, ativarCountUp } from "./ui.js";
-import { montarCronometro, setEstiloAlarme, montarCronoMini } from "./cronometro.js";
+import { montarCronometro, setEstiloAlarme, montarCronoMini, setAoPedirRegistro } from "./cronometro.js";
+import { abrirRegistroSessao } from "./registro-sessao.js";
 import { iniciarCapturaErros } from "./erro-log.js";
 import { dispararNotificacoesDevidas, iniciarAgendadorDiario } from "./notificacoes.js";
 import { checarLicenca } from "./licenca.js";
@@ -539,6 +540,8 @@ async function bootstrap() {
     }
   });
   montarCronometro(app); // mini-relógio global que acompanha o usuário entre as telas
+  // O botão "Registrar" do flutuante/tela cheia abre a janela de registro (modo cronômetro).
+  setAoPedirRegistro(() => abrirRegistroSessao(store, app, { modo: "crono" }));
   montarPlexus(); // malha "plexus" animada de fundo (atmosfera); respeita reduced-motion
   initTooltips(); // tooltips via portal (imunes a overflow:hidden dos ancestrais)
   setEstiloAlarme(store.get().config.somAlarme); // aplica a preferência de som do alarme

@@ -1046,6 +1046,24 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .crono-fab.crono-focus .crono-mini:hover { color: var(--text); border-color: var(--primary); }
 .crono-fab.crono-focus .crono-expandir { display: none; } /* já está no foco */
 
+/* Botão "Registrar" do flutuante (verde discreto). Na pill mostra só o ícone; no foco, ícone + texto. */
+.crono-fab .crono-registrar { gap: 5px; padding: 6px 10px; border-radius: 10px;
+  color: var(--success, #16a34a); border: 1px solid color-mix(in srgb, var(--success, #16a34a) 42%, transparent);
+  font-size: var(--fs-2xs); font-weight: 650; }
+.crono-fab .crono-registrar:hover { background: color-mix(in srgb, var(--success, #16a34a) 13%, transparent); }
+.crono-fab.crono-pill .crono-registrar { padding: 5px 7px; }
+.crono-fab.crono-pill .crono-registrar .crono-registrar-t { display: none; }
+.crono-fab.crono-focus .crono-registrar { padding: 9px 16px; border-radius: 11px; font-size: var(--fs-md); }
+
+/* Config do cronômetro (modo + bloco): só aparece no modo FOCO, sob o relógio grande. */
+.crono-config { display: none; }
+.crono-fab.crono-focus .crono-config { display: flex; align-items: center; justify-content: center;
+  gap: 16px; margin-top: 26px; flex-wrap: wrap; }
+.crono-fab.crono-focus .crono-modo { display: inline-flex; gap: 6px; }
+.crono-fab.crono-focus .crono-alvo { display: inline-flex; align-items: center; gap: 6px;
+  color: var(--text-2, var(--muted)); font-size: var(--fs-sm); }
+.crono-fab.crono-focus .crono-min { width: 70px; text-align: center; }
+
 /* ===== Janela flutuante do cronômetro (carregada com ?crono=1, sem decoração do SO) ===== */
 .crono-mini-body { margin: 0; height: 100vh; overflow: hidden; background: transparent; }
 .crono-mini-win { display: flex; flex-direction: column; justify-content: center; gap: 3px;
@@ -3260,6 +3278,10 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .hoje-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 1080px) { .hoje-grid { grid-template-columns: 1fr; } }
 .hoje-side { display: flex; flex-direction: column; gap: 16px; }
+/* "＋ Registrar sessão": link discreto no canto, acima dos anéis. */
+.side-top { display: flex; justify-content: flex-end; margin: -2px 0 -6px; }
+.side-registrar { color: var(--text-2, var(--muted)); gap: 5px; }
+.side-registrar:hover { color: var(--primary); }
 .hoje-rings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 16px 18px; }
 .hr-item { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .hr-txt { min-width: 0; }
@@ -3340,6 +3362,15 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .ses-q-ac input { border-color: var(--success); }
 .ses-q-ac input:focus { box-shadow: 0 0 0 3px rgba(13,155,108,.2); }
 .ses-chip-rev { margin-left: 6px; font-size: var(--fs-2xs); padding: 3px 9px; }
+
+/* Janela de registro de sessão (cronômetro / manual) — topo com campos + rodapé com CTA. */
+.registro-sessao > .form-row { gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.registro-sessao > .form-row > label { flex: 1; min-width: 108px; display: flex; flex-direction: column; gap: 4px;
+  font-size: var(--fs-2xs); color: var(--muted); font-weight: 600; }
+.rs-crono { text-align: center; padding: 6px 0 18px; }
+.rs-crono-time { font-size: clamp(2.6rem, 8vw, 3.4rem); font-weight: 800; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em; color: var(--primary); line-height: 1; }
+.rs-rodape { display: flex; justify-content: flex-end; margin-top: 18px; }
 
 /* ===== Painel da disciplina (Dossiê nível 2 — .ddx-*) ===== */
 .ddx-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 18px; flex-wrap: wrap; }

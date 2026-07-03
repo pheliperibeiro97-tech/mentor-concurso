@@ -15,10 +15,10 @@ import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";
 import * as crono from "../cronometro.js";
+import { abrirRegistroSessao } from "../registro-sessao.js";
 import { progressRing } from "../viz.js";
 
 let sel = { fase: null, topicoId: null };
-let cronoAberto = false; // mantém o bloco do cronômetro aberto entre re-renders (ex.: trocar modo)
 let anelAnimou = false; // count-up dos anéis só na 1ª renderização da sessão (não re-anima a cada ação)
 let mentorFalou = false; // streaming do texto do Mentor só uma vez por sessão (não re-digita a cada ação)
 
@@ -79,9 +79,6 @@ export default function renderHoje(root, app) {
   const opcoesTopico = topicosOrd
     .map((t) => `<option value="${t.id}" ${t.id === sel.topicoId ? "selected" : ""}>${esc(rotuloTopico(st, t))}</option>`)
     .join("");
-  const opcoesTopicoMan = topicosOrd
-    .map((t) => `<option value="${t.id}">${esc(rotuloTopico(st, t))}</option>`)
-    .join("");
   // Tarefas pendentes (para vincular opcionalmente à sessão).
   const opcoesTarefas = st.missoes
     .filter((m) => !m.concluida)
@@ -98,7 +95,6 @@ export default function renderHoje(root, app) {
   const ofensHoje = store.ofensiva();
   const pontos = store.pontosAtencao();
   const tarefasHojePend = store.tarefasDoDia(todayISO()).filter((x) => !x.concluida);
-  const cr = crono.snapshot();
   // "Onde parei": última sessão registrada (tópico + data) — retoma sem precisar pensar.
   const ultimaSess = st.sessoes && st.sessoes.length
     ? [...st.sessoes].sort((a, b) => (a.data < b.data ? 1 : -1))[0]
@@ -208,6 +204,9 @@ export default function renderHoje(root, app) {
       </div>
     </section>
       <aside class="hoje-side">
+        <div class="side-top">
+          <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões."><span class="side-registrar-pl">＋</span> Registrar sessão</button>
+        </div>
         ${ringsHTML(store)}
         ${mentorVozHTML(store, st, topicoSel, pontoInsight ? pontoInsight.txt : "")}
       </aside>
@@ -216,155 +215,6 @@ export default function renderHoje(root, app) {
     ${hubRevisoesHTML(store)}
 
     ${planoSec}
-
-      <details class="card crono-card hoje-recolhe" ${cronoAberto || cr.running || cr.elapsed > 0 ? "open" : ""}>
-        <summary class="hoje-recolhe-sum">${icone("clock-3")} Cronômetro de foco <span class="muted small" style="font-weight:400">— ${cr.running ? "em andamento" : "clique para abrir"}</span></summary>
-        <div class="cronometro">
-        <div class="crono-modo">
-          <button class="chip ${cr.modo === "regressivo" ? "on" : ""}" data-action="modo" data-modo="regressivo" data-tip="Conta o tempo para baixo, a partir do bloco definido.">Regressivo</button>
-          <button class="chip ${cr.modo === "progressivo" ? "on" : ""}" data-action="modo" data-modo="progressivo" data-tip="Conta o tempo para cima, até você interromper.">Progressivo</button>
-        </div>
-        <div class="crono-display ${cr.overtime ? "overtime" : ""}" id="crono-display">${cr.overtime ? "+" : ""}${fmtMMSS(cr.display)}</div>
-        <div class="crono-label" id="crono-label">${labelInicial()}</div>
-        <div class="crono-vinculo" id="crono-vinculo">Registrar como <b>${faseInfo.nome}</b> · <b>${topicoSel ? esc(rotuloTopico(st, topicoSel)) : "sem tópico"}</b></div>
-        <div class="crono-nota muted small" data-tip="O tempo continua mesmo se você abrir Flashcards, Questões ou outra tela.">⏱ Continua rodando em qualquer tela.</div>
-        <div class="crono-acoes">
-          <button class="btn btn-primary" data-action="toggle" data-tip="Iniciar ou pausar o cronômetro.">${cr.running ? `${icone("pause")} Pausar` : `${icone("play")} Iniciar`}</button>
-          <button class="btn btn-zerar" data-action="zerar" data-tip="Voltar a zero sem registrar a sessão.">Zerar</button>
-          <button class="btn btn-success" data-action="registrar" data-tip="Salvar o tempo focado nesta fase e tópico.">Registrar sessão</button>
-        </div>
-        ${
-          cr.modo === "regressivo"
-            ? `<div class="crono-presets">
-                <span class="muted">Tempo:</span>
-                <input id="crono-min" type="number" min="1" max="300" value="${Math.round(cr.target / 60)}" title="minutos" />
-                <span class="muted">minutos</span>
-              </div>`
-            : ""
-        }
-        <div class="ses-extra2">
-          <div class="ses-sec">O que você usou nesta sessão? <span class="muted small">(opcional — clique para detalhar)</span></div>
-          <div class="ses-chips">
-            <button type="button" class="chip ses-chip" data-ses-bloco="cr-b-pag">Páginas</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="cr-b-q">Questões</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="cr-b-vid">Vídeo / aula</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="cr-b-obs">Observação</button>
-          </div>
-          <div id="cr-b-pag" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label>Pág. inicial<input id="cr-pini" type="number" min="0" max="99999" value="0" /></label>
-              <label>Pág. final<input id="cr-pfim" type="number" min="0" max="99999" value="0" /></label>
-              <label>Total de páginas<input id="cr-pag" type="number" min="0" max="9999" value="0" readonly title="Calculado pela página inicial e final." /></label>
-            </div>
-          </div>
-          <div id="cr-b-q" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label>Questões feitas<input id="cr-tot" type="number" min="0" max="9999" value="0" /></label>
-              <label class="ses-q-ac">Questões certas<input id="cr-ac" type="number" min="0" max="9999" value="0" /></label>
-              <label>Aproveitamento<input id="cr-pct" type="text" value="—" readonly /></label>
-            </div>
-          </div>
-          <div id="cr-b-vid" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label style="flex:2">Aula / material <span class="muted small" data-tip="Qual aula/videoaula você assistiu (ex.: Aula 12). Opcional.">ⓘ</span><input id="cr-mat" type="text" maxlength="80" placeholder="Ex.: Aula 12 · Prof. Fulano" /></label>
-              <label>Vídeo min. ini.<input id="cr-vini" type="number" min="0" max="999" placeholder="—" /></label>
-              <label>Vídeo min. fim<input id="cr-vfim" type="number" min="0" max="999" placeholder="—" /></label>
-            </div>
-          </div>
-          <div id="cr-b-obs" class="ses-bloco" hidden>
-            <label class="ses-campo">Observação
-              <textarea id="cr-obs" class="obs-auto" rows="1" placeholder="Ex.: tive dificuldade com o princípio da insignificância"></textarea>
-            </label>
-          </div>
-          <div class="ses-fim">
-            ${
-              opcoesTarefas
-                ? `<label class="ses-campo">Vincular a uma tarefa
-                    <select id="cr-missao"><option value="">— nenhuma —</option>${opcoesTarefas}</select>
-                  </label>
-                  <label class="inline check-tarefa"><input type="checkbox" id="cr-missao-concluir" /> Concluir a tarefa ao registrar <span class="muted">(desmarque se ainda vai continuá-la)</span></label>`
-                : ""
-            }
-            ${
-              st.config.revisaoTopicoAuto
-                ? `<label class="inline check-tarefa"><input type="checkbox" id="cr-agendar-rev" checked /> Agendar revisão deste tópico <span class="chip chip-count ses-chip-rev" style="cursor:default">24h → 7d → 30d</span></label>`
-                : ""
-            }
-          </div>
-        </div>
-        </div>
-      </details>
-
-    <details class="card lancamento-manual hoje-recolhe">
-      <summary class="hoje-recolhe-sum">${icone("square-pen")} Lançar sessão manual <span class="muted small" style="font-weight:400">(já estudei, sem cronômetro)</span></summary>
-      <div class="form-row manual-row">
-        <label>Data
-          <input id="man-data" type="date" value="${hojeStr()}" data-tip="Dia em que essa sessão de fato ocorreu (pode lançar dias anteriores)." />
-        </label>
-        <label>Fase
-          <select id="man-fase">${ORDEM_FASES.map((f) => `<option value="${f}" ${f === sel.fase ? "selected" : ""}>${FASES[f].nome}</option>`).join("")}</select>
-        </label>
-        <label style="flex:2">Tópico
-          <select id="man-top"><option value="">— sem tópico —</option>${opcoesTopicoMan}</select>
-        </label>
-        <label>Minutos
-          <input id="man-min" type="number" min="0" max="600" value="30" />
-        </label>
-      </div>
-      <div class="ses-extra2">
-          <div class="ses-sec">O que você usou nesta sessão? <span class="muted small">(opcional — clique para detalhar)</span></div>
-          <div class="ses-chips">
-            <button type="button" class="chip ses-chip" data-ses-bloco="man-b-pag">Páginas</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="man-b-q">Questões</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="man-b-vid">Vídeo / aula</button>
-            <button type="button" class="chip ses-chip" data-ses-bloco="man-b-obs">Observação</button>
-          </div>
-          <div id="man-b-pag" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label>Pág. inicial<input id="man-pini" type="number" min="0" max="99999" value="0" /></label>
-              <label>Pág. final<input id="man-pfim" type="number" min="0" max="99999" value="0" /></label>
-              <label>Total de páginas<input id="man-pag" type="number" min="0" max="9999" value="0" readonly title="Calculado pela página inicial e final." /></label>
-            </div>
-          </div>
-          <div id="man-b-q" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label>Questões realizadas<input id="man-tot" type="number" min="0" max="9999" value="0" /></label>
-              <label class="ses-q-ac">Questões certas<input id="man-ac" type="number" min="0" max="9999" value="0" /></label>
-              <label>Aproveitamento<input id="man-pct" type="text" value="—" readonly /></label>
-            </div>
-          </div>
-          <div id="man-b-vid" class="ses-bloco" hidden>
-            <div class="form-row ses-row">
-              <label style="flex:2">Aula / material <span class="muted small" data-tip="Qual aula/videoaula você assistiu (ex.: Aula 12). Opcional.">ⓘ</span><input id="man-mat" type="text" maxlength="80" placeholder="Ex.: Aula 12 · Prof. Fulano" /></label>
-              <label>Vídeo min. ini.<input id="man-vini" type="number" min="0" max="999" placeholder="—" /></label>
-              <label>Vídeo min. fim<input id="man-vfim" type="number" min="0" max="999" placeholder="—" /></label>
-            </div>
-          </div>
-          <div id="man-b-obs" class="ses-bloco" hidden>
-            <label class="ses-campo">Observação
-              <textarea id="man-obs" class="obs-auto" rows="1" placeholder="Ex.: revisei súmulas, ainda confundo competência originária do STF"></textarea>
-            </label>
-          </div>
-          <div class="ses-fim">
-            ${
-              opcoesTarefas
-                ? `<label class="ses-campo">Vincular a uma tarefa
-                    <select id="man-missao"><option value="">— nenhuma —</option>${opcoesTarefas}</select>
-                  </label>
-                  <label class="inline check-tarefa"><input type="checkbox" id="man-missao-concluir" /> Concluir a tarefa ao registrar <span class="muted">(desmarque se ainda vai continuá-la)</span></label>`
-                : ""
-            }
-            ${
-              st.config.revisaoTopicoAuto
-                ? `<label class="inline check-tarefa"><input type="checkbox" id="man-agendar-rev" checked /> Agendar revisão deste tópico <span class="chip chip-count ses-chip-rev" style="cursor:default">24h → 7d → 30d</span></label>`
-                : ""
-            }
-          </div>
-        </div>
-      <div class="manual-rodape">
-        <button class="btn btn-success" data-action="lancar-manual" data-tip="Salvar uma sessão já estudada, sem usar o cronômetro.">Registrar sessão</button>
-      </div>
-    </details>
 
     <div class="hoje-rodape">
       <span class="muted small">Hoje: <b>${fmtTempo(tempoHoje(st))}</b> em foco · <b>${sessoesHoje(st)}</b> ${sessoesHoje(st) === 1 ? "sessão" : "sessões"} · <b>${questoesHoje(st)}</b> questões</span>
@@ -412,112 +262,19 @@ export default function renderHoje(root, app) {
     })
   );
 
-  // Auto-cálculo de aproveitamento (questões) e total de páginas, reaproveitado pelo
-  // lançamento manual (man-*) e pelo cronômetro (cr-*).
-  function ligarAutoCalc(pre) {
-    const tot = root.querySelector(`#${pre}-tot`);
-    const ac = root.querySelector(`#${pre}-ac`);
-    const pct = root.querySelector(`#${pre}-pct`);
-    const pini = root.querySelector(`#${pre}-pini`);
-    const pfim = root.querySelector(`#${pre}-pfim`);
-    const pag = root.querySelector(`#${pre}-pag`);
-    if (tot && ac && pct) {
-      const calc = () => {
-        const t = parseInt(tot.value, 10) || 0;
-        let a = parseInt(ac.value, 10) || 0;
-        if (a > t) a = t;
-        pct.value = t ? `${Math.round((a / t) * 100)}% (${a}/${t})` : "—";
-      };
-      tot.addEventListener("input", calc);
-      ac.addEventListener("input", calc);
-    }
-    if (pini && pfim && pag) {
-      const calc = () => {
-        const ini = parseInt(pini.value, 10) || 0;
-        const fim = parseInt(pfim.value, 10) || 0;
-        pag.value = ini > 0 && fim >= ini ? fim - ini + 1 : 0;
-      };
-      pini.addEventListener("input", calc);
-      pfim.addEventListener("input", calc);
-    }
-  }
-  ligarAutoCalc("man");
-  ligarAutoCalc("cr");
-
-  // Chips de material (progressive disclosure): o formulário nasce curto e cresce só
-  // no que interessa. Os inputs continuam no DOM (mesmos ids) — os handlers não mudam.
-  root.querySelectorAll("[data-ses-bloco]").forEach((ch) =>
-    ch.addEventListener("click", () => {
-      const alvo = root.querySelector("#" + ch.getAttribute("data-ses-bloco"));
-      if (!alvo) return;
-      const abrir = alvo.hidden;
-      alvo.hidden = !abrir;
-      ch.classList.toggle("on", abrir);
-      if (abrir) alvo.querySelector("input, textarea")?.focus();
-    })
-  );
-
-  // Campos de observação que crescem conforme o texto (apenas visual).
-  root.querySelectorAll(".obs-auto").forEach((ta) => {
-    const crescer = () => {
-      ta.style.height = "auto";
-      ta.style.height = ta.scrollHeight + "px";
-    };
-    ta.addEventListener("input", crescer);
-    crescer();
-  });
-
-  const minInput = root.querySelector("#crono-min");
-  if (minInput) {
-    minInput.addEventListener("change", () => {
-      const min = Math.max(1, parseInt(minInput.value, 10) || 25);
-      crono.setTarget(min * 60);
-      label.textContent = `Bloco de ${min} min`;
-      store.setConfig({ pomodoroFoco: min }); // lembra o tempo escolhido p/ a próxima vez
-    });
-  }
-
-  const display = root.querySelector("#crono-display");
-  const label = root.querySelector("#crono-label");
-
-  // O display grande da tela "Hoje" agora apenas REFLETE o cronômetro global, que
-  // tica num único intervalo no boot e continua rodando em qualquer tela.
-  function pintar(snapAtual) {
-    const sn = snapAtual || crono.snapshot();
-    if (display) {
-      display.textContent = (sn.overtime ? "+" : "") + fmtMMSS(sn.display);
-      display.classList.toggle("overtime", sn.overtime);
-    }
-    if (label) {
-      if (sn.pausadoSeg > 0) label.innerHTML = `<span class="crono-pausa">${icone("pause")} Em pausa ${fmtMMSS(sn.pausadoSeg)}</span>`;
-      else if (sn.overtime) label.textContent = "Tempo extra (alvo atingido) — pause para registrar.";
-      else if (sn.running) label.textContent = sn.modo === "progressivo" ? "Contando..." : "Em foco...";
-    }
-    const btn = root.querySelector('[data-action="toggle"]');
-    if (btn) btn.innerHTML = sn.running ? `${icone("pause")} Pausar` : `${icone("play")} Iniciar`;
-  }
-  // Lembra se o usuário deixou o bloco do cronômetro aberto (para não fechar ao trocar modo).
-  root.querySelector(".crono-card")?.addEventListener("toggle", (e) => { cronoAberto = e.target.open; });
-  // Esconde o mini-relógio flutuante enquanto a tela "Hoje" (com o relógio grande) está visível.
+  // O cronômetro vive no flutuante/tela cheia (não há mais display inline na Home).
+  // A Home só avisa que está visível — o flutuante aparece igual, e este flag habilita
+  // o confete ao cruzar o alvo do bloco enquanto o usuário está aqui.
   crono.setTelaHoje(true);
-  const desinscrever = crono.onTick(pintar);
-  pintar();
 
   bindActions(root, {
-    modo: (el) => {
-      const novo = el.getAttribute("data-modo");
-      if (novo === crono.snapshot().modo) return;
-      crono.setModo(novo);
-      if (novo === "regressivo") crono.setTargetIfIdle((st.config.pomodoroFoco || 25) * 60);
-      cronoAberto = true; // o usuário está com o bloco aberto: não o feche ao trocar o modo
-      app.refresh();
-    },
-    toggle: () => crono.toggle(),
+    // "Começar agora": inicia o cronômetro e entra em modo foco (tela cheia imersiva).
     "foco-comecar": () => {
       crono.iniciar();
-      app.refresh();
-      requestAnimationFrame(() => root.querySelector(".crono-card")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      crono.setModoTela("focus");
     },
+    // Abre a janela de registro de sessão (manual) já apontada para o foco atual.
+    "abrir-registro": () => abrirRegistroSessao(store, app, { modo: "manual", fasePadrao: sel.fase, topicoPadrao: sel.topicoId }),
     // Trocar o tópico em foco: seletor disciplina → tópico (o usuário escolhe, não o sistema).
     "trocar-topico": () => {
       abrirSeletorTopico(store, (topId) => {
@@ -548,114 +305,6 @@ export default function renderHoje(root, app) {
       app.refresh();
       requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
       toast("Foco atualizado — comece quando quiser.");
-    },
-    zerar: () => {
-      crono.zerar();
-      if (label) label.textContent = "";
-    },
-    registrar: () => {
-      const seg = Math.round(crono.snapshot().elapsed);
-      if (seg < 1) {
-        toast("Inicie o cronômetro antes de registrar.", "erro");
-        return;
-      }
-      crono.zerar();
-      // detalhes opcionais da sessão cronometrada
-      const pIni = parseInt(root.querySelector("#cr-pini").value, 10) || 0;
-      const pFim = parseInt(root.querySelector("#cr-pfim").value, 10) || 0;
-      let pag = 0;
-      if (pIni > 0 && pFim >= pIni) pag = pFim - pIni + 1;
-      const tot = parseInt(root.querySelector("#cr-tot").value, 10) || 0;
-      let ac = parseInt(root.querySelector("#cr-ac").value, 10) || 0;
-      if (ac > tot) ac = tot;
-      const er = Math.max(0, tot - ac);
-      const obs = root.querySelector("#cr-obs")?.value || "";
-      const mat = root.querySelector("#cr-mat")?.value || "";
-      const vIni = parseInt(root.querySelector("#cr-vini")?.value, 10) || 0;
-      const vFim = parseInt(root.querySelector("#cr-vfim")?.value, 10) || 0;
-      const crMissao = root.querySelector("#cr-missao")?.value || null;
-      const crConcluir = !!root.querySelector("#cr-missao-concluir")?.checked;
-      const crAgendarRev = root.querySelector("#cr-agendar-rev");
-      const metaAntes = store.metas();
-      store.registrarSessao({
-        fase: sel.fase,
-        topicoId: sel.topicoId,
-        tempoSeg: seg,
-        paginas: pag,
-        paginaInicial: pIni || null,
-        paginaFinal: pFim || null,
-        qAcertos: ac,
-        qErros: er,
-        comentario: obs,
-        material: mat,
-        videoIni: vIni || null,
-        videoFim: vFim || null,
-        missaoId: crMissao,
-        concluirMissao: crConcluir,
-        agendarRevisao: crAgendarRev ? crAgendarRev.checked : undefined,
-      });
-      const extra = [];
-      if (pag) extra.push(pIni && pFim ? `págs. ${pIni}–${pFim}` : `${pag} pág.`);
-      if (tot) extra.push(`${ac}/${tot} questões`);
-      if (mat.trim()) extra.push(mat.trim());
-      if (crMissao && crConcluir) extra.push("tarefa concluída");
-      else if (crMissao) extra.push("tarefa vinculada");
-      if (sel.fase === "E" && sel.topicoId && st.config.revisaoTopicoAuto && crAgendarRev && crAgendarRev.checked) extra.push("revisão agendada (24h)");
-      toast(`Sessão de ${fmtTempo(seg)} em ${FASES[sel.fase].nome}${extra.length ? " · " + extra.join(" · ") : ""}.`);
-      celebrarMeta(store, metaAntes);
-    },
-    "lancar-manual": () => {
-      const fase = root.querySelector("#man-fase").value;
-      const top = root.querySelector("#man-top").value || null;
-      const data = root.querySelector("#man-data").value || null;
-      const min = parseInt(root.querySelector("#man-min").value, 10) || 0;
-      const pIni = parseInt(root.querySelector("#man-pini").value, 10) || 0;
-      const pFim = parseInt(root.querySelector("#man-pfim").value, 10) || 0;
-      let pag = parseInt(root.querySelector("#man-pag").value, 10) || 0;
-      if (pIni > 0 && pFim >= pIni) pag = pFim - pIni + 1;
-      const tot = parseInt(root.querySelector("#man-tot").value, 10) || 0;
-      let ac = parseInt(root.querySelector("#man-ac").value, 10) || 0;
-      if (ac > tot) ac = tot;
-      const er = Math.max(0, tot - ac);
-      if (min < 1 && pag < 1 && tot < 1) {
-        toast("Informe ao menos minutos, páginas ou questões.", "erro");
-        return;
-      }
-      const obs = root.querySelector("#man-obs")?.value || "";
-      const mat = root.querySelector("#man-mat")?.value || "";
-      const vIni = parseInt(root.querySelector("#man-vini")?.value, 10) || 0;
-      const vFim = parseInt(root.querySelector("#man-vfim")?.value, 10) || 0;
-      const manMissao = root.querySelector("#man-missao")?.value || null;
-      const manConcluir = !!root.querySelector("#man-missao-concluir")?.checked;
-      const manAgendarRev = root.querySelector("#man-agendar-rev");
-      const metaAntesMan = store.metas();
-      store.registrarSessao({
-        fase,
-        topicoId: top,
-        tempoSeg: min * 60,
-        paginas: pag,
-        paginaInicial: pIni || null,
-        paginaFinal: pFim || null,
-        qAcertos: ac,
-        qErros: er,
-        comentario: obs,
-        material: mat,
-        videoIni: vIni || null,
-        videoFim: vFim || null,
-        data,
-        missaoId: manMissao,
-        concluirMissao: manConcluir,
-        agendarRevisao: manAgendarRev ? manAgendarRev.checked : undefined,
-      });
-      const partes = [];
-      if (min) partes.push(`${min} min`);
-      if (pag) partes.push(pIni && pFim ? `págs. ${pIni}–${pFim} (${pag})` : `${pag} pág.`);
-      if (tot) partes.push(`${ac}/${tot} questões (${Math.round((ac / tot) * 100)}%)`);
-      if (mat.trim()) partes.push(mat.trim());
-      if (manMissao && manConcluir) partes.push("tarefa concluída");
-      else if (manMissao) partes.push("tarefa vinculada");
-      toast(`Lançado: ${partes.join(" · ")} em ${FASES[fase].nome}.`);
-      celebrarMeta(store, metaAntesMan);
     },
     "ir-pratica": async () => {
       sel.fase = "A";
@@ -696,17 +345,10 @@ export default function renderHoje(root, app) {
   });
 
   return () => {
-    // Ao sair da tela: para de refletir o display grande e religa o mini-relógio flutuante.
+    // Ao sair da tela: religa o mini-relógio flutuante em qualquer tela.
     // NÃO para o cronômetro — ele continua ticando no módulo global.
-    desinscrever();
     crono.setTelaHoje(false);
   };
-
-  function labelInicial() {
-    if (cr.overtime) return "Tempo extra (alvo atingido) — pause para registrar.";
-    if (cr.running) return cr.modo === "progressivo" ? "Contando..." : "Em foco...";
-    return "";
-  }
 }
 
 // Hub unificado "Revisões de hoje" (dir.2+3): junta flashcards + memória lei/juris +

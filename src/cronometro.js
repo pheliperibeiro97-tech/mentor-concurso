@@ -19,8 +19,15 @@ const LS_KEY = "mentor_crono_v1";
 let app = null;
 let widget = null;
 let intervalId = null;
-let naTelaHoje = false; // some com o mini-relógio quando o cronômetro grande está visível
+let naTelaHoje = false; // habilita o confete ao cruzar o alvo quando o usuário está na Home
+let aoPedirRegistro = null; // callback: abre a janela de registro (injetado no boot)
 const ouvintes = new Set();
+
+// A tela/boot injeta como abrir a janela de registro de sessão (evita dependência circular
+// com registro-sessao.js). Chamado ao clicar "Registrar" no flutuante/tela cheia.
+export function setAoPedirRegistro(fn) {
+  aoPedirRegistro = typeof fn === "function" ? fn : null;
+}
 
 // Estado persistido. `base` = segundos já acumulados antes do startedAt atual;
 // `startedAt` = epoch(ms) do início do trecho em andamento (0 quando parado).
@@ -244,8 +251,16 @@ function montarWidget() {
     <div class="crono-corpo">
       <div class="crono-time">00:00</div>
       <div class="crono-sub"></div>
+      <div class="crono-config">
+        <div class="crono-modo">
+          <button class="chip crono-modo-btn" data-modo="regressivo" title="Conta para baixo, a partir do bloco definido.">Regressivo</button>
+          <button class="chip crono-modo-btn" data-modo="progressivo" title="Conta para cima, até você interromper.">Progressivo</button>
+        </div>
+        <label class="crono-alvo">Bloco <input class="crono-min" type="number" min="1" max="300" value="25" /> min</label>
+      </div>
     </div>
     <div class="crono-acoes">
+      <button class="crono-btn crono-registrar" title="Registrar esta sessão" aria-label="Registrar sessão">${icone("check-check")} <span class="crono-registrar-t">Registrar</span></button>
       <button class="crono-btn crono-mini crono-expandir" title="Ampliar (modo foco)" aria-label="Ampliar">${icone("maximize-2")}</button>
       <button class="crono-btn crono-mini crono-reduzir" title="Voltar ao tamanho normal" aria-label="Reduzir">${icone("minimize-2")}</button>
       <button class="crono-btn crono-mini crono-hoje" title="Abrir a tela Hoje" aria-label="Abrir Hoje">${icone("external-link")}</button>
@@ -255,6 +270,33 @@ function montarWidget() {
   widget.querySelector(".crono-expandir").addEventListener("click", (e) => { e.stopPropagation(); setModoTela("focus"); });
   widget.querySelector(".crono-reduzir").addEventListener("click", (e) => { e.stopPropagation(); setModoTela("pill"); });
   widget.querySelector(".crono-hoje").addEventListener("click", (e) => { e.stopPropagation(); if (app) app.navigate("hoje"); });
+  widget.querySelector(".crono-registrar").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (aoPedirRegistro) aoPedirRegistro();
+    else if (app) app.navigate("hoje");
+  });
+  // Config (só faz sentido no modo foco/tela cheia): trocar modo e ajustar o bloco.
+  widget.querySelectorAll(".crono-modo-btn").forEach((b) =>
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const novo = b.getAttribute("data-modo");
+      if (novo === s.modo) return;
+      setModo(novo);
+      if (novo === "regressivo") {
+        const alvoMin = app && app.store ? app.store.get().config.pomodoroFoco || 25 : 25;
+        setTargetIfIdle(alvoMin * 60);
+      }
+    })
+  );
+  const minEl = widget.querySelector(".crono-min");
+  if (minEl) {
+    minEl.addEventListener("click", (e) => e.stopPropagation());
+    minEl.addEventListener("change", () => {
+      const min = Math.max(1, parseInt(minEl.value, 10) || 25);
+      setTarget(min * 60);
+      if (app && app.store) app.store.setConfig({ pomodoroFoco: min });
+    });
+  }
   // clique no corpo: no pill abre o Hoje (atalho); no foco, não navega.
   widget.querySelector(".crono-corpo").addEventListener("click", () => {
     if (s.modoTela !== "focus" && app) app.navigate("hoje");
@@ -326,9 +368,16 @@ function ligarArrasto(el) {
 
 function atualizarWidget() {
   if (!widget) return;
-  const visivel = ativo() && (s.modoTela === "focus" || !naTelaHoje);
+  // O flutuante acompanha o usuário em QUALQUER tela (a Home não tem mais relógio inline).
+  const visivel = ativo();
   widget.classList.toggle("oculto", !visivel);
   if (!visivel) return;
+  // Config (visível só no modo foco via CSS): reflete o modo atual e o bloco alvo.
+  widget.querySelectorAll(".crono-modo-btn").forEach((b) => b.classList.toggle("on", b.getAttribute("data-modo") === s.modo));
+  const minEl = widget.querySelector(".crono-min");
+  if (minEl && document.activeElement !== minEl) minEl.value = Math.round(s.target / 60);
+  const alvoEl = widget.querySelector(".crono-alvo");
+  if (alvoEl) alvoEl.style.display = s.modo === "regressivo" ? "" : "none";
   const over = emOvertime();
   const pausadoSeg = !s.running && s.base > 0 ? Math.max(0, (Date.now() - (s.pausedAt || Date.now())) / 1000) : 0;
   widget.style.setProperty("--crono-cor", s.cor || "#2563eb");
