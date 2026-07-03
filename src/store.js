@@ -7,6 +7,7 @@ import * as ciclo from "./ciclo.js";
 import * as ia from "./ia.js";
 import * as iaProv from "./ia-provider.js";
 import * as bancas from "./bancas.js";
+import * as areas from "./areas.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
 import { detectarEstrutura } from "./estrutura.js";
@@ -551,6 +552,21 @@ export const store = {
   finalizarOnboarding() {
     state.meta.onboarded = true;
     commit();
+  },
+
+  // Monta o plano inicial do onboarding a partir de um caminho escolhido, reusando
+  // aplicarEdital (disciplinas + tópicos). A prova e o ritmo já vêm do passo 2 (config).
+  //   origem "area"    → estrutura curada da área (areas.js), 100% offline.
+  //   origem "edital"  → estrutura já parseada (Visão→JSON), passada em opts.estrutura.
+  //   origem "zero"    → não cria nada (fallback: começar do zero).
+  // Retorna { origem, disciplinas, topicos } para a tela "Seu plano está pronto!".
+  montarPlanoInicial({ origem = "zero", areaId = null, estrutura = null } = {}) {
+    let est = [];
+    if (origem === "area") est = areas.estruturaDaArea(areaId);
+    else if (origem === "edital") est = Array.isArray(estrutura) ? estrutura : [];
+    if (!est.length) return { origem, disciplinas: 0, topicos: 0 };
+    const r = this.aplicarEdital(est, "pular");
+    return { origem, disciplinas: r.disciplinas, topicos: r.topicos };
   },
 
   // ---------- bancas (registro extensível) ----------

@@ -2,17 +2,19 @@
 // Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
 // em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
 import { bindActions, toast } from "../ui.js";
-import { esc } from "../util.js";
+import { esc, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 import { testarConexao, iaDisponivel } from "../ia-provider.js";
+import { AREAS, resumoArea } from "../areas.js";
 
-let passo = 1;
+let passo = 1; // 1..4 | "montando" | "pronto"
 let temaOb = null; // tema escolhido no onboarding (persistido ao avançar do passo 1)
+let planoResultado = null; // { origem, disciplinas, topicos } — alimenta a tela "Plano pronto"
 
-// Indicador de etapas (done / atual / futura).
+// Indicador de etapas (done / atual / futura). "Montar plano" é o passo que ENTREGA o plano.
 function steps(atual) {
   const it = (n, txt) => `<span class="${n < atual ? "done" : n === atual ? "atual" : ""}">${n}. ${txt}</span>`;
-  return `<div class="ob-steps">${it(1, "Concurso")} › ${it(2, "Prova e ritmo")} › ${it(3, "IA (opcional)")}</div>`;
+  return `<div class="ob-steps">${it(1, "Concurso")} › ${it(2, "Prova e ritmo")} › ${it(3, "IA")} › ${it(4, "Montar plano")}</div>`;
 }
 
 // Campo de tempo em horas + minutos (mesma convenção da tela Configurações).
@@ -48,6 +50,100 @@ export default function renderOnboarding(root, app) {
     store.finalizarOnboarding();
     app.navigate("comecar");
   };
+
+  // Monta o plano do caminho escolhido, com uma tela de loading progressivo antes de
+  // apresentar o "Plano pronto". O trabalho é síncrono e rápido; o delay é só p/ o feedback.
+  const montarPlano = (origem, areaId) => {
+    passo = "montando";
+    app.refresh();
+    setTimeout(() => {
+      planoResultado = store.montarPlanoInicial({ origem, areaId });
+      passo = "pronto";
+      app.refresh();
+    }, 950);
+  };
+
+  // -------- LOADING: montando o plano --------
+  if (passo === "montando") {
+    root.innerHTML = `
+      <div class="ob-card">
+        <div class="ob-logo ob-logo-spin">${icone("sparkles")}</div>
+        <h1>Montando seu plano…</h1>
+        <ul class="ob-load">
+          <li style="--i:0">${icone("check")}<span>Criando as matérias</span></li>
+          <li style="--i:1">${icone("check")}<span>Adicionando os tópicos base</span></li>
+          <li style="--i:2">${icone("check")}<span>Preparando seu ponto de partida</span></li>
+        </ul>
+      </div>`;
+    return;
+  }
+
+  // -------- PLANO PRONTO --------
+  if (passo === "pronto") {
+    if (!planoResultado) { passo = 4; app.refresh(); return; }
+    const cargo = st.concurso ? st.concurso.cargo : "seus estudos";
+    const dias = cfg.dataProva ? Math.max(0, daysBetween(todayISO(), cfg.dataProva)) : null;
+    const r = planoResultado;
+    root.innerHTML = `
+      <div class="ob-card">
+        <div class="ob-logo ob-logo-ok">${icone("party-popper")}</div>
+        <h1>Seu plano está pronto!</h1>
+        <p class="ob-lead">Montamos um ponto de partida para <b>${esc(cargo)}</b>. Você já pode começar a estudar hoje — e ajustar tudo quando quiser no Edital.</p>
+        <div class="ob-plano-kpis">
+          <div class="ob-kpi"><b>${r.disciplinas}</b><span>${r.disciplinas === 1 ? "matéria" : "matérias"}</span></div>
+          <div class="ob-kpi"><b>${r.topicos}</b><span>${r.topicos === 1 ? "tópico" : "tópicos"}</span></div>
+          ${dias != null ? `<div class="ob-kpi"><b>${dias}</b><span>${dias === 1 ? "dia p/ a prova" : "dias p/ a prova"}</span></div>` : ""}
+        </div>
+        <div class="ob-final" style="border:0; justify-content:center; padding-top:6px">
+          <button class="btn btn-ghost" data-action="ver-edital">Ver meu plano no Edital</button>
+          <button class="btn btn-primary btn-lg" data-action="comecar-agora">${icone("play")} Começar agora →</button>
+        </div>
+      </div>`;
+    bindActions(root, {
+      "comecar-agora": () => { store.finalizarOnboarding(); app.navigate("hoje"); },
+      "ver-edital": () => { store.finalizarOnboarding(); app.navigate("edital"); },
+    });
+    return;
+  }
+
+  // -------- PASSO 4: Montar seu plano --------
+  if (passo === 4) {
+    root.innerHTML = `
+      <div class="ob-card ob-wide">
+        ${steps(4)}
+        <h1>Montar seu plano</h1>
+        <p class="ob-lead">Escolha sua <b>área</b> e o Mentor já cria as matérias e os tópicos base para você começar hoje. Prefere seu edital exato? Importe o PDF. Sem pressa? Comece do zero — tudo é editável depois.</p>
+        <div class="tile-grid ob-areas">
+          ${AREAS.map((a) => {
+            const rr = resumoArea(a.id);
+            return `<button class="tile-pick" data-action="area" data-area="${a.id}">
+              <span class="tile-ico">${icone(a.ico)}</span>
+              <span class="tile-lbl">${esc(a.nome)}</span>
+              <span class="tile-desc">${esc(a.desc)}</span>
+              <span class="tile-meta">${rr.materias} matérias · ${rr.topicos} tópicos</span>
+            </button>`;
+          }).join("")}
+        </div>
+        <div class="ob-final">
+          <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn btn-ghost" data-action="importar-edital">${icone("upload")} Importar edital (PDF)</button>
+            <button class="btn btn-ghost" data-action="zero">Começar do zero</button>
+          </div>
+        </div>
+      </div>`;
+    bindActions(root, {
+      voltar: () => { passo = 3; app.refresh(); },
+      area: (el) => montarPlano("area", el.getAttribute("data-area")),
+      "importar-edital": () => {
+        store.finalizarOnboarding();
+        toast("Importe o PDF do seu edital aqui: o Mentor estrutura as disciplinas e tópicos.", "ok");
+        app.navigate("edital");
+      },
+      zero: () => irComecar(),
+    });
+    return;
+  }
 
   // -------- PASSO 1: Concurso (obrigatório) --------
   if (passo === 1) {
@@ -200,8 +296,8 @@ export default function renderOnboarding(root, app) {
       <div class="ob-final">
         <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
         <div style="display:flex; gap:8px; flex-wrap:wrap">
-          <button class="btn btn-ghost" data-action="offline" data-tip="Começa sem IA. Você pode conectar a qualquer momento em Configurações.">Começar offline</button>
-          <button class="btn btn-primary btn-lg" data-action="concluir">Concluir e abrir o Edital →</button>
+          <button class="btn btn-ghost" data-action="offline" data-tip="Segue sem IA. Você pode conectar a qualquer momento em Configurações.">Seguir offline</button>
+          <button class="btn btn-primary btn-lg" data-action="concluir">Continuar →</button>
         </div>
       </div>
     </div>`;
@@ -218,8 +314,8 @@ export default function renderOnboarding(root, app) {
 
   bindActions(root, {
     voltar: () => { passo = 2; app.refresh(); },
-    offline: () => { store.setConfig({ iaProvider: "offline" }); irComecar(); },
-    concluir: () => { store.setConfig(lerIA()); irComecar(); },
+    offline: () => { store.setConfig({ iaProvider: "offline" }); passo = 4; app.refresh(); },
+    concluir: () => { store.setConfig(lerIA()); passo = 4; app.refresh(); },
     testar: async (el) => {
       const c = lerIA();
       if (!c.iaKey.trim()) { setMsg("Cole a chave antes de testar.", "var(--danger)"); return; }
