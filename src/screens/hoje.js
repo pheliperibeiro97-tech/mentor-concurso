@@ -163,7 +163,7 @@ export default function renderHoje(root, app) {
     </section>`;
 
   root.innerHTML = `
-    ${header("Hoje", `${saud} · ${dataHoje()}${provaChip}`)}
+    ${header("Hoje", "Seu dia de estudo, num relance.")}
 
     ${reta.ativo ? retaFinalHTML(metas) : ""}
 
