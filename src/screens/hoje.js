@@ -232,7 +232,7 @@ export default function renderHoje(root, app) {
         <div class="crono-acoes">
           <button class="btn btn-primary" data-action="toggle" data-tip="Iniciar ou pausar o cronômetro.">${cr.running ? `${icone("pause")} Pausar` : `${icone("play")} Iniciar`}</button>
           <button class="btn btn-zerar" data-action="zerar" data-tip="Voltar a zero sem registrar a sessão.">Zerar</button>
-          <button class="btn btn-success" data-action="registrar" data-tip="Salvar o tempo focado nesta fase e tópico.">${icone("check")} Registrar sessão</button>
+          <button class="btn btn-success" data-action="registrar" data-tip="Salvar o tempo focado nesta fase e tópico.">Registrar sessão</button>
         </div>
         ${
           cr.modo === "regressivo"
@@ -363,7 +363,7 @@ export default function renderHoje(root, app) {
           </div>
         </div>
       <div class="manual-rodape">
-        <button class="btn btn-success" data-action="lancar-manual" data-tip="Salvar uma sessão já estudada, sem usar o cronômetro.">${icone("check")} Registrar sessão</button>
+        <button class="btn btn-success" data-action="lancar-manual" data-tip="Salvar uma sessão já estudada, sem usar o cronômetro.">Registrar sessão</button>
       </div>
     </details>
 
