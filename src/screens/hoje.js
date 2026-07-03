@@ -125,6 +125,7 @@ export default function renderHoje(root, app) {
     recs.push({
       txt: `Estude <b>${esc(rotuloTopico(st, topicoSel))}</b> — ${esc(faseInfo.nome.toLowerCase())}, ~${st.config.pomodoroFoco || 25} min${porque ? `<div class="mh-porque">${icone("sparkles")} ${porque}</div>` : ""}`,
       botao: `<button class="btn btn-primary btn-sm" data-action="foco-comecar">${icone("play")} Começar</button>`,
+      foco: { top: topicoSel.id, fase: sel.fase },
     });
   }
   if (pontoInsight)
@@ -146,15 +147,16 @@ export default function renderHoje(root, app) {
     <section class="card card-ia mentor-hoje">
       <div class="mentor-hoje-head">
         <span class="orb orb-sm" aria-hidden="true"></span>
-        <b>Plano de hoje do <span class="txt-ia">Mentor</span></b>
+        <b>Plano de hoje</b>
         <span class="spacer"></span>
-        ${metas && metas.prova && metas.prova.diasRestantes >= 0 ? `<span class="chip chip-count" style="cursor:default">${plural(metas.prova.diasRestantes, "dia", "dias")} p/ prova</span>` : ""}
+        ${metas && typeof metas.diasProva === "number" && metas.diasProva >= 0 ? `<span class="chip chip-count" style="cursor:default">${plural(metas.diasProva, "dia", "dias")} p/ prova</span>` : ""}
       </div>
+      <p class="mentor-hoje-nota muted small">Sugestão do Mentor ${icone("sparkles")} — você é livre para estudar outra coisa. Clique num item para torná-lo o seu foco; o que você planejou aparece logo abaixo.</p>
       ${
         recs.length
           ? `<div class="mentor-hoje-recs stagger">${recs
               .slice(0, 4)
-              .map((r) => `<div class="mh-rec"><span class="mh-txt">${r.txt}</span>${r.botao}</div>`)
+              .map((r) => `<div class="mh-rec${r.foco ? " mh-rec-click" : ""}"${r.foco ? ` data-action="focar-topico" data-top="${r.foco.top}" data-fase="${r.foco.fase}"` : ""}><span class="mh-txt">${r.txt}</span>${r.botao}</div>`)
               .join("")}</div>`
           : `<p class="muted small" style="margin:6px 0 0">Tudo em dia. Siga o ritmo do seu ciclo.</p>`
       }
@@ -522,12 +524,16 @@ export default function renderHoje(root, app) {
       else store.toggleMissao(id);
       app.refresh();
     },
-    // Aponta o cronômetro para o tópico da tarefa (SUGESTÃO: o usuário pode trocar livremente).
-    "th-estudar": (el) => {
-      sel.topicoId = el.getAttribute("data-topico");
+    // Clicar num item do plano / numa tarefa → torna-o o FOCO atual (rola até o card de foco).
+    "focar-topico": (el) => {
+      const top = el.getAttribute("data-top") || el.getAttribute("data-topico");
+      if (!top) return;
+      sel.topicoId = top;
+      const f = el.getAttribute("data-fase");
+      if (f && FASES[f]) sel.fase = f;
       app.refresh();
-      requestAnimationFrame(() => root.querySelector(".cronometro")?.scrollIntoView({ behavior: "smooth", block: "center" }));
-      toast("Cronômetro apontado para a tarefa (você pode trocar o tópico/fase).");
+      requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      toast("Foco atualizado — comece quando quiser.");
     },
     zerar: () => {
       crono.zerar();
@@ -788,11 +794,11 @@ function tarefasHojeHTML(store) {
         .map(
           (it) => `<li class="th-item ${it.concluida ? "feito" : ""}">
             <input type="checkbox" class="th-check" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}" ${it.concluida ? "checked" : ""} />
-            <span class="th-titulo">${esc(it.titulo)}</span>
+            ${it.topicoId && !it.concluida ? `<button class="th-titulo th-titulo-btn" data-action="focar-topico" data-top="${it.topicoId}" data-tip="Tornar esta tarefa o seu foco de agora.">${esc(it.titulo)}</button>` : `<span class="th-titulo">${esc(it.titulo)}</span>`}
             ${it.tipo === "rotina" ? `<span class="th-badge" data-tip="Tarefa da sua rotina semanal">${icone("repeat-2")}</span>` : ""}
             ${it.estimMin ? `<span class="muted small th-tempo" data-tip="Tempo só sugerido.">≈ ${fmtMin(it.estimMin)}</span>` : ""}
             <span class="spacer"></span>
-            ${it.topicoId && !it.concluida ? `<button class="lnk th-estudar" data-action="th-estudar" data-topico="${it.topicoId}" data-tip="Apontar o cronômetro para esta tarefa (você pode trocar).">${icone("play")} estudar</button>` : ""}
+            ${it.topicoId && !it.concluida ? `<button class="lnk th-estudar" data-action="focar-topico" data-top="${it.topicoId}" data-tip="Tornar esta tarefa o seu foco de agora.">${icone("play")} focar</button>` : ""}
           </li>`
         )
         .join("")}

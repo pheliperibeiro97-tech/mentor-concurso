@@ -3239,6 +3239,13 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .hmv-porque svg { width: 14px; height: 14px; color: var(--accent); vertical-align: -2px; }
 .hmv-sugs { display: flex; flex-wrap: wrap; gap: 7px; }
 .hmv-nota { margin-top: 11px; }
+/* Fase 3c: "Plano de hoje" (Mentor + você) — nota + itens clicáveis viram foco */
+.mentor-hoje-nota { margin: 4px 0 12px; line-height: 1.45; }
+.mentor-hoje-nota svg { width: 13px; height: 13px; color: var(--accent); vertical-align: -2px; }
+.mh-rec-click { cursor: pointer; border-radius: var(--radius-sm); transition: background 0.14s ease; }
+.mh-rec-click:hover { background: var(--surface-2); }
+.th-titulo-btn { background: none; border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 0; }
+.th-titulo-btn:hover { color: var(--primary); text-decoration: underline; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
 .foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
 

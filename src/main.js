@@ -265,7 +265,7 @@ function topbarHTML(store) {
   let provaChip = "";
   try {
     const m = store.metas ? store.metas() : null;
-    const dias = m && m.prova ? m.prova.diasRestantes : null;
+    const dias = m && typeof m.diasProva === "number" ? m.diasProva : null;
     const reta = store.retaFinal ? store.retaFinal() : { ativo: false };
     if (dias != null && dias >= 0)
       provaChip = `<div class="tb-chip${reta.ativo ? " urg" : ""}" data-tip="Contagem regressiva da prova">${icone("calendar")}<b>${dias}</b> ${dias === 1 ? "dia" : "dias"} p/ prova</div>`;
