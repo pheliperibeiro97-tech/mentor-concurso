@@ -3331,8 +3331,8 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .plano-h h2 { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; margin: 0; }
 .plano-h .cnt { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--muted); background: var(--surface-3); border-radius: var(--radius-xs); padding: 1px 7px; }
 .plano-h .sp { flex: 1; }
-.plano-h a { font-size: var(--fs-xs); color: var(--muted); text-decoration: none; font-weight: 550; cursor: pointer; }
-.plano-h a:hover { color: var(--text); }
+.plano-h a { font-size: var(--fs-xs); color: var(--primary); text-decoration: none; font-weight: 550; cursor: pointer; }
+.plano-h a:hover { color: var(--primary-d); text-decoration: underline; text-underline-offset: 2px; }
 .plano-note { margin: 0 0 12px; }
 .plano-note svg { width: 13px; height: 13px; color: var(--accent); vertical-align: -2px; }
 .plano-blocos { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
