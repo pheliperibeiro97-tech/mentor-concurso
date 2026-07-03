@@ -433,6 +433,10 @@ button.tb-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .tb-chip.urg { color: var(--warn-ink); border-color: var(--warn-line); background: var(--warn-soft); }
 .tb-chip.urg svg { color: var(--warn); }
 .topbar-inner .cmdbar { width: auto; min-width: 230px; max-width: 320px; flex: none; }
+.tb-tema { display: inline-flex; align-items: center; justify-content: center; padding: 8px; border-radius: var(--radius-sm);
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); cursor: pointer; flex: none; transition: color .14s, border-color .14s; }
+.tb-tema:hover { color: var(--text); border-color: var(--border-hover); }
+.tb-tema svg { width: 17px; height: 17px; }
 .cmdbar { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 460px;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
   padding: 8px 12px; cursor: pointer; color: var(--muted); font-size: var(--fs-sm);
@@ -3219,7 +3223,8 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-trocar { flex: 0 0 auto; align-self: center; }
 /* Eyebrow + abas na MESMA linha (abas à direita, como no protótipo) */
 .foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.foco-top .foco-eyebrow { flex: 0 0 auto; }
+.foco-top .foco-eyebrow { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
+.foco-eyebrow .orb-xs { width: 15px; height: 15px; flex: none; }
 .foco-top .seg-fases { margin-left: auto; }
 /* Disciplina como rótulo pequeno acima do tópico (como no protótipo) */
 .foco-disc { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }

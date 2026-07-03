@@ -171,6 +171,7 @@ export default function renderHoje(root, app) {
   const dossieTop = topicoSel ? store.dossie(topicoSel.id) : null;
   const dominio = dossieTop && dossieTop.totalTentativas > 0 ? Math.round((dossieTop.acertos / dossieTop.totalTentativas) * 100) : null;
   const discFoco = topicoSel ? st.disciplinas.find((d) => d.id === topicoSel.disciplinaId) : null;
+  const ondePareiFase = ultimaSess ? (FASES[ultimaSess.fase] && FASES[ultimaSess.fase].nome) || "" : "";
 
   root.innerHTML = `
     ${header("Hoje", "Seu dia de estudo, num relance.")}
@@ -180,7 +181,7 @@ export default function renderHoje(root, app) {
     <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
       <div class="foco-top">
-        <div class="foco-eyebrow">Seu foco agora${topicoSel ? ` <span class="foco-selo">${icone("sparkles")} sugerido pelo Mentor</span>` : ""}</div>
+        <div class="foco-eyebrow"><span class="orb orb-xs" aria-hidden="true"></span> Seu foco agora${topicoSel ? ` <span class="foco-selo">sugerido pelo Mentor</span>` : ""}</div>
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
@@ -195,12 +196,11 @@ export default function renderHoje(root, app) {
         st.topicos.length
           ? `<div class="foco-meta">
         <div class="fm"><span class="fm-k">Bloco</span><span class="fm-v">${st.config.pomodoroFoco || 25} min</span></div>
-        ${dominio != null ? `<div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">${dominio}%</span></div>` : `<div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">—</span></div>`}
-        ${vencidos ? `<div class="fm"><span class="fm-k">Flashcards</span><span class="fm-v">${vencidos}</span></div>` : ""}
+        ${ondePareiFase ? `<div class="fm"><span class="fm-k">Onde parei</span><span class="fm-v">${esc(ondePareiFase)}</span></div>` : ""}
+        <div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">${dominio != null ? dominio + "%" : "—"}</span></div>
       </div>`
           : ""
       }
-      ${ondeParei ? `<div class="foco-retomar">Última sessão: <b>${ondeParei}</b></div>` : ""}
       <div class="foco-acoes">
         ${
           st.topicos.length
