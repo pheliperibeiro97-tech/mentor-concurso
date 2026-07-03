@@ -27,7 +27,7 @@ const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set"
 // não gradiente. O trilho de fundo (.pring-bg) SEMPRE aparece — a 0% mostra o anel
 // vazio COM contexto (o "0%" no centro), nunca um círculo quebrado.
 let _pringSeq = 0;
-export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)", sub = "", grad = false } = {}) {
+export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)", sub = "", grad = false, count = false } = {}) {
   const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
@@ -38,6 +38,10 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
     ? `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop class="pring-g0" offset="0"/><stop class="pring-g1" offset="1"/></linearGradient></defs>`
     : "";
   const traco = gid ? `url(#${gid})` : cor;
+  // count=true: o número usa data-count/data-suf p/ o count-up (ui.ativarCountUp anima 0→p).
+  const txt = count
+    ? `<span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px" data-count="${p}" data-suf="%">${p}%</span>`
+    : `<span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px">${p}<i>%</i>${sub ? `<small>${sub}</small>` : ""}</span>`;
   return `<div class="pring" style="width:${size}px;height:${size}px">
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
       ${defs}
@@ -46,7 +50,7 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
         stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
         transform="rotate(-90 ${cx} ${cx})"></circle>
     </svg>
-    <span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px">${p}<i>%</i>${sub ? `<small>${sub}</small>` : ""}</span>
+    ${txt}
   </div>`;
 }
 

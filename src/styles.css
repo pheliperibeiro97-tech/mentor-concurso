@@ -3214,6 +3214,12 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .foco-topline .foco-topico-nome { margin: 0; flex: 1 1 auto; }
 .foco-trocar { flex: 0 0 auto; align-self: center; }
+/* Eyebrow + abas na MESMA linha (abas à direita, como no protótipo) */
+.foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.foco-top .foco-eyebrow { flex: 0 0 auto; }
+.foco-top .seg-fases { margin-left: auto; }
+/* Disciplina como rótulo pequeno acima do tópico (como no protótipo) */
+.foco-disc { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
 /* Fase 3-visual gap#1/#2: porquê (voz da IA) + linha de meta DENTRO do card de foco */
 .foco-porque { display: flex; gap: 9px; align-items: flex-start; padding: 11px 14px; border-radius: var(--radius-sm);
   margin: 2px 0 14px; background: var(--ai-grad-soft); border: 1px solid var(--primary-soft-border);

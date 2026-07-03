@@ -1,7 +1,7 @@
 // Tela "Hoje": conduz o ciclo do dia + cronômetro Pomodoro + lançamento manual.
 // Cronômetro com dois modos: REGRESSIVO (conta para baixo de um tempo definível) e
 // PROGRESSIVO (conta para cima até você interromper).
-import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela } from "../ui.js";
+import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela, ativarCountUp } from "../ui.js";
 
 // Comemora (confete) quando uma sessão faz o tempo do dia CRUZAR a meta diária.
 function celebrarMeta(store, antes) {
@@ -19,6 +19,7 @@ import { progressRing } from "../viz.js";
 
 let sel = { fase: null, topicoId: null };
 let cronoAberto = false; // mantém o bloco do cronômetro aberto entre re-renders (ex.: trocar modo)
+let anelAnimou = false; // count-up dos anéis só na 1ª renderização da sessão (não re-anima a cada ação)
 
 // "Por quê" data-driven do foco de hoje (voz de IA de verdade, não filler): usa SÓ sinais
 // que existem no app — revisão vencida, desempenho fraco, flashcards vencidos, relevância.
@@ -168,6 +169,7 @@ export default function renderHoje(root, app) {
   const porqueHoje = topicoSel ? porqueFoco(store, st, topicoSel) : "";
   const dossieTop = topicoSel ? store.dossie(topicoSel.id) : null;
   const dominio = dossieTop && dossieTop.totalTentativas > 0 ? Math.round((dossieTop.acertos / dossieTop.totalTentativas) * 100) : null;
+  const discFoco = topicoSel ? st.disciplinas.find((d) => d.id === topicoSel.disciplinaId) : null;
   const streakMini =
     st.sessoes && st.sessoes.length
       ? `<section class="card streak-mini" data-reveal>
@@ -189,14 +191,15 @@ export default function renderHoje(root, app) {
 
     <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
-      <div class="foco-eyebrow">Seu foco agora${topicoSel ? ` <span class="foco-selo">${icone("sparkles")} sugerido pelo Mentor</span>` : ""}</div>
-      <div class="foco-fase-linha">
+      <div class="foco-top">
+        <div class="foco-eyebrow">Seu foco agora${topicoSel ? ` <span class="foco-selo">${icone("sparkles")} sugerido pelo Mentor</span>` : ""}</div>
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
       </div>
+      ${discFoco ? `<div class="foco-disc">${esc(discFoco.nome)}</div>` : ""}
       <div class="foco-topline">
-        <div class="foco-topico-nome">${topicoSel ? esc(rotuloTopico(st, topicoSel)) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
+        <div class="foco-topico-nome">${topicoSel ? esc(topicoSel.nome) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
         ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico — você decide.">${icone("repeat-2")} Trocar tópico</button>` : ""}
       </div>
       ${porqueHoje ? `<div class="foco-porque">${icone("sparkles")} ${porqueHoje}</div>` : ""}
@@ -387,6 +390,13 @@ export default function renderHoje(root, app) {
       <span class="muted small">Hoje: <b>${fmtTempo(tempoHoje(st))}</b> em foco · <b>${sessoesHoje(st)}</b> ${sessoesHoje(st) === 1 ? "sessão" : "sessões"} · <b>${questoesHoje(st)}</b> questões</span>
       <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">Ver acompanhamento completo →</button>
     </div>`;
+
+  // Atmosfera (gap#3): count-up dos anéis na 1ª renderização (respeita reduced-motion; guarda
+  // contra re-animar a cada ação). Em dados vazios os anéis são 0% → sem animação visível.
+  if (!anelAnimou) {
+    ativarCountUp(root);
+    anelAnimou = true;
+  }
 
   function atualizaVinculo() {
     const t = st.topicos.find((x) => x.id === sel.topicoId);
@@ -725,7 +735,7 @@ function ringsHTML(store) {
   const metaSem = m.metaSemanalMin > 0 ? Math.min(100, Math.round((m.feitoSemanaMin / m.metaSemanalMin) * 100)) : null;
   const metaDia = m.metaDiariaMin > 0 ? Math.min(100, Math.round((m.feitoHojeMin / m.metaDiariaMin) * 100)) : null;
   const ring = (pct, rot, sub) => `<div class="hr-item">
-      ${progressRing(pct == null ? 0 : pct, { size: 52, stroke: 6, grad: true })}
+      ${progressRing(pct == null ? 0 : pct, { size: 52, stroke: 6, grad: true, count: true })}
       <div class="hr-txt"><div class="hr-k">${rot}</div>${sub ? `<div class="hr-s">${esc(sub)}</div>` : ""}</div>
     </div>`;
   return `<section class="card hoje-rings">
