@@ -255,10 +255,34 @@ function navHTML() {
 // Não recria um input próprio — clicar (ou Ctrl/⌘+K) abre a paleta, que já tem o campo real
 // e reusa 100% o motor do chat (interpretar → propor → confirmar → executar).
 const EH_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || "");
-function topbarHTML() {
+function topbarHTML(store) {
+  const st = store.get();
+  const hora = new Date().getHours();
+  const saud = hora < 5 ? "Boa madrugada" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  const dataFmt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const cargo = st.concurso && st.concurso.cargo ? st.concurso.cargo : "";
+  // Contexto persistente no topo (reusa os mesmos sinais da tela Hoje): prova + ofensiva.
+  let provaChip = "";
+  try {
+    const m = store.metas ? store.metas() : null;
+    const dias = m && m.prova ? m.prova.diasRestantes : null;
+    const reta = store.retaFinal ? store.retaFinal() : { ativo: false };
+    if (dias != null && dias >= 0)
+      provaChip = `<div class="tb-chip${reta.ativo ? " urg" : ""}" data-tip="Contagem regressiva da prova">${icone("calendar")}<b>${dias}</b> ${dias === 1 ? "dia" : "dias"} p/ prova</div>`;
+  } catch (_) {}
+  let streakChip = "";
+  try {
+    const ofe = store.ofensiva ? store.ofensiva() : null;
+    if (ofe && ofe.atual > 0)
+      streakChip = `<div class="tb-chip tb-streak" data-tip="Dias seguidos de estudo">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</div>`;
+  } catch (_) {}
   return `
     <header class="topbar">
       <div class="topbar-inner">
+        <div class="tb-hey">${esc(saud)} · <b>${esc(dataFmt)}</b>${cargo ? ` · <span class="tb-cargo">${esc(cargo)}</span>` : ""}</div>
+        <div class="tb-sp"></div>
+        ${provaChip}
+        ${streakChip}
         <button class="cmdbar" data-cmdk type="button" aria-label="Abrir paleta de comando (navegar ou perguntar à IA)">
           ${icone("sparkles")}
           <span class="cmdbar-ph">Pergunte ou faça um comando…</span>
@@ -304,9 +328,10 @@ function render(preservarScroll = true) {
   document.body.classList.toggle("paleta-daltonismo", paleta === "daltonismo");
   document.body.classList.toggle("paleta-contraste", paleta === "contraste");
 
-  // Barra lateral recolhida (só ícones) vs. completa. Não afeta o cronômetro: o pill
-  // usa --sidebar-w, então acompanha a largura automaticamente.
-  document.body.classList.toggle("sidebar-colapsada", !!store.get().config.sidebarColapsada);
+  // Rail de ícones com hover-expand por padrão (a barra abre sobre o conteúdo ao passar o
+  // mouse); "navFixa" fixa a barra aberta (botão «). Não afeta o cronômetro: o pill usa
+  // --sidebar-w, então acompanha a largura automaticamente.
+  document.body.classList.toggle("nav-rail", !store.get().config.navFixa);
 
   atualizarChatVisibilidade(store.isOnboarded());
   if (!store.isOnboarded()) {
@@ -318,7 +343,7 @@ function render(preservarScroll = true) {
     <div class="shell">
       ${navHTML()}
       <div class="main-col">
-        ${topbarHTML()}
+        ${topbarHTML(store)}
         <main class="content" id="content"></main>
       </div>
     </div>
@@ -345,7 +370,7 @@ function render(preservarScroll = true) {
     b.addEventListener("click", () => { fecharDrawer(); app.navigate(b.getAttribute("data-rota")); });
   });
   root.querySelector("[data-toggle-sidebar]")?.addEventListener("click", () => {
-    store.setConfig({ sidebarColapsada: !store.get().config.sidebarColapsada });
+    store.setConfig({ navFixa: !store.get().config.navFixa });
   });
   root.querySelector("[data-novidades]")?.addEventListener("click", () => {
     abrirNovidades(store);

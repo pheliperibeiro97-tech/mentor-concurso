@@ -1,0 +1,352 @@
+<title>Mentor — Hoje (v3.3 refinado)</title>
+<style>
+  :root, [data-theme="dark"]{
+    --bg:#0a0e1a;--s-card:linear-gradient(165deg,#121a2e,#0f1626);--s-flat:#111a2c;--s-2:#18233c;--s-3:#1f2c49;
+    --line:rgba(255,255,255,.07);--line-2:rgba(255,255,255,.13);
+    --tx:#eaf1fb;--tx2:#aab8d4;--mut:#7688a8;--dim:#54637f;
+    --shadow:0 24px 60px -26px rgba(0,0,0,.75);--glow-b:rgba(59,130,246,.15);--glow-c:rgba(34,211,238,.13);
+    --plexus-a:.45;--gloss:inset 0 1px 0 rgba(255,255,255,.05);--fabbg:rgba(18,26,46,.82);
+    --blue:#3b82f6;--blue-d:#2563eb;--blue-l:#60a5fa;--blue-soft:rgba(59,130,246,.14);
+    --blue-grad:linear-gradient(120deg,#60a5fa,#3b82f6 55%,#2563eb);
+  }
+  [data-theme="light"]{
+    --bg:#eef2f9;--s-card:linear-gradient(165deg,#ffffff,#f7fafe);--s-flat:#ffffff;--s-2:#f0f4fb;--s-3:#e6ecf6;
+    --line:rgba(15,23,42,.09);--line-2:rgba(15,23,42,.15);
+    --tx:#0f1b33;--tx2:#3f4d66;--mut:#647089;--dim:#93a0b8;
+    --shadow:0 22px 48px -28px rgba(15,23,42,.30);--glow-b:rgba(29,78,216,.12);--glow-c:rgba(34,211,238,.12);
+    --plexus-a:.4;--gloss:inset 0 1px 0 rgba(255,255,255,.9);--fabbg:rgba(255,255,255,.88);
+    --blue:#1d4ed8;--blue-d:#1e40af;--blue-l:#3b82f6;--blue-soft:rgba(29,78,216,.09);
+    --blue-grad:linear-gradient(120deg,#3b82f6,#1d4ed8 55%,#1e40af);
+  }
+  :root{--cyan:#22d3ee;--indigo:#818cf8;--ai:linear-gradient(120deg,#22d3ee 0%,#818cf8 100%);
+    --ai-soft:linear-gradient(120deg,rgba(34,211,238,.13),rgba(129,140,248,.13));
+    --ok:#34d399;--warn:#f59e0b;--bad:#f87171;
+    --mono:"JetBrains Mono","SFMono-Regular",ui-monospace,Consolas,monospace;
+    --sans:"Inter","Inter Variable",system-ui,"Segoe UI",-apple-system,sans-serif;
+    --spring:cubic-bezier(.34,1.56,.64,1);--std:cubic-bezier(.2,.8,.2,1);--glass:saturate(150%) blur(18px);}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  .ic{stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none}
+  body{font-family:var(--sans);background:var(--bg);color:var(--tx);font-size:15px;line-height:1.5;overflow:hidden;
+    -webkit-font-smoothing:antialiased;letter-spacing:-.01em;transition:background .5s var(--std),color .5s var(--std)}
+  #plexus{position:fixed;inset:0;z-index:0;opacity:0;transition:opacity .6s}#plexus.on{opacity:var(--plexus-a)}
+  .glow{position:fixed;width:640px;height:640px;border-radius:50%;z-index:0;filter:blur(100px);pointer-events:none}
+  .glow-1{top:-280px;right:-160px;background:radial-gradient(circle,var(--glow-b),transparent 68%)}
+  .glow-2{bottom:-340px;left:80px;background:radial-gradient(circle,var(--glow-c),transparent 68%)}
+  .app{position:relative;z-index:1;display:grid;grid-template-columns:76px 1fr;height:100vh}
+  ::selection{background:rgba(59,130,246,.28)}
+  ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:9px;border:2px solid transparent;background-clip:padding-box}
+  .rail{display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 0;border-right:1px solid var(--line);background:var(--bg);backdrop-filter:var(--glass)}
+  .logo{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;margin-bottom:14px;background:var(--blue-grad);box-shadow:0 8px 24px -6px rgba(59,130,246,.55);position:relative}
+  .logo svg{width:22px;height:22px;stroke:#fff;stroke-width:2.2}
+  .ri{width:46px;height:42px;border-radius:12px;display:grid;place-items:center;color:var(--mut);cursor:pointer;position:relative;transition:.18s var(--std)}
+  .ri svg{width:21px;height:21px}
+  .ri:hover{color:var(--tx);background:var(--line)}.ri.on{color:var(--tx);background:var(--line-2)}
+  .ri.on::before{content:"";position:absolute;left:-16px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--blue)}
+  .ri.ai{color:var(--cyan)}.rail .sp{flex:1}
+  .rlbl{position:absolute;left:56px;top:50%;transform:translateY(-50%) translateX(-6px);background:var(--s-3);color:var(--tx);
+    font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;white-space:nowrap;opacity:0;pointer-events:none;
+    box-shadow:var(--shadow);border:1px solid var(--line);transition:.16s var(--std);z-index:40}
+  .ri:hover .rlbl{opacity:1;transform:translateY(-50%) translateX(0)}
+  .main{overflow-y:auto;overflow-x:hidden;padding:0 clamp(20px,3vw,46px) 96px}
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;padding:18px 0 14px;background:linear-gradient(180deg,var(--bg) 66%,transparent)}
+  .hey{font-size:14px;color:var(--mut)}.hey b{color:var(--tx);font-weight:650}.topbar .sp{flex:1}
+  .pill-t{display:flex;align-items:center;gap:7px;padding:8px 12px;border-radius:11px;font-size:13px;font-weight:600;background:var(--s-2);border:1px solid var(--line);color:var(--tx2)}
+  .pill-t svg{width:15px;height:15px}.pill-t b{color:var(--tx);font-variant-numeric:tabular-nums}
+  .pill-t.prova{border-color:rgba(245,158,11,.35);color:var(--warn)}.pill-t.prova b{color:var(--warn)}
+  .kbar{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:11px;min-width:230px;background:var(--s-2);border:1px solid var(--line);color:var(--mut);font-size:13.5px;cursor:text;transition:.18s}
+  .kbar:hover{border-color:var(--line-2)}.kbar svg{width:15px;height:15px;color:var(--cyan)}
+  .kbar .kk{margin-left:auto;font-family:var(--mono);font-size:11px;padding:2px 6px;border-radius:6px;background:var(--line);color:var(--tx2)}
+  .tgl{display:flex;align-items:center;padding:9px;border-radius:11px;background:var(--s-2);border:1px solid var(--line);cursor:pointer;color:var(--mut)}
+  .tgl:hover{color:var(--tx);border-color:var(--line-2)}.tgl svg{width:18px;height:18px}
+  .rev{opacity:0;transform:translateY(14px);animation:rev .55s var(--std) forwards}@keyframes rev{to{opacity:1;transform:none}}
+  h1.title{font-size:clamp(27px,3.4vw,40px);font-weight:800;letter-spacing:-.032em;line-height:1.02;margin:6px 0 22px;text-wrap:balance}
+  h1.title .g{background:var(--blue-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .grid{display:grid;grid-template-columns:1.6fr 1fr;gap:18px;align-items:start}@media(max-width:1080px){.grid{grid-template-columns:1fr}}
+
+  /* HERO — o único momento-herói */
+  .hero{position:relative;border-radius:22px;padding:26px 28px;overflow:hidden;border:1px solid var(--line-2);box-shadow:var(--shadow),var(--gloss);
+    background:radial-gradient(120% 150% at 90% -12%,var(--blue-soft),transparent 55%),var(--s-card)}
+  .hero-top{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+  .hero-tag{display:inline-flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--cyan)}
+  .hero-tag .orb{width:22px;height:22px;flex:none}
+  .tabs{display:inline-flex;gap:3px;padding:3px;border-radius:11px;background:var(--s-2);border:1px solid var(--line);margin-left:auto}
+  .tabs button{border:0;background:transparent;color:var(--mut);font:inherit;font-size:12.5px;font-weight:600;padding:6px 14px;border-radius:8px;cursor:pointer;transition:.15s}
+  .tabs button.on{background:var(--s-flat);color:var(--blue-l);box-shadow:var(--gloss),0 2px 8px -3px rgba(0,0,0,.4)}
+  [data-theme="light"] .tabs button.on{color:var(--blue)}
+  .hero-disc{font-size:12.5px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin:2px 0 5px}
+  .foco-topline{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:15px}
+  .hero-topic{font-size:clamp(23px,2.7vw,31px);font-weight:750;letter-spacing:-.025em;line-height:1.1;max-width:22ch}
+  .troca{display:inline-flex;align-items:center;gap:6px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--tx2);
+    background:var(--s-2);border:1px solid var(--line-2);border-radius:20px;padding:7px 13px;cursor:pointer;transition:.15s;white-space:nowrap}
+  .troca:hover{border-color:var(--blue);color:var(--tx)}.troca svg{width:14px;height:14px}
+  .hero-why{display:flex;gap:11px;padding:12px 15px;border-radius:13px;margin-bottom:19px;background:var(--ai-soft);border:1px solid rgba(129,140,248,.22)}
+  .hero-why .mi{width:20px;height:20px;flex:none}
+  .hero-why p{font-size:13.5px;color:var(--tx2);line-height:1.5}.hero-why b{color:var(--tx);font-weight:650}
+  .hero-meta{display:flex;gap:24px;margin-bottom:21px;flex-wrap:wrap}
+  .hm{display:flex;flex-direction:column;gap:3px}.hm .k{font-size:11px;text-transform:uppercase;letter-spacing:.09em;color:var(--dim);font-weight:700}
+  .hm .v{font-family:var(--mono);font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+  .hero-cta{display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14.5px;font-weight:650;padding:12px 20px;border-radius:12px;border:none;cursor:pointer;letter-spacing:-.01em;transition:.16s var(--spring)}
+  .btn svg{width:18px;height:18px}.btn:active{transform:scale(.96)}
+  .btn-go{color:#fff;background:var(--blue-grad);box-shadow:0 12px 28px -9px rgba(59,130,246,.6)}.btn-go:hover{filter:brightness(1.07);transform:translateY(-2px)}
+  .btn-gh{background:var(--s-2);color:var(--tx2);border:1px solid var(--line-2)}.btn-gh:hover{color:var(--tx)}
+
+  .side{display:flex;flex-direction:column;gap:16px}
+  .rings{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-radius:16px;overflow:hidden;border:1px solid var(--line)}
+  .ring{background:var(--s-flat);padding:15px;display:flex;flex-direction:column;gap:8px}.ring-top{display:flex;align-items:center;gap:10px}
+  .ring svg{width:48px;height:48px;flex:none;transform:rotate(-90deg)}
+  .ring .rk{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;line-height:1.3}
+  .ring .rv{font-family:var(--mono);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .ring .rd{font-size:11px;color:var(--dim)}.ring .rd .up{color:var(--ok);font-weight:600}
+
+  /* Mentor = a IA falando (único uso do gradiente cyan) */
+  .card-ai{position:relative;border-radius:16px;background:var(--s-card);box-shadow:var(--shadow),var(--gloss)}
+  .card-ai::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;background:var(--ai);opacity:.5;-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+  .ch{display:flex;align-items:center;gap:10px;padding:14px 16px 12px}.ch .orb{width:26px;height:26px;flex:none}.ch h3{font-size:14.5px;font-weight:700}
+  .ch .badge{margin-left:auto;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;padding:3px 9px;border-radius:20px;background:var(--ai-soft);color:var(--cyan)}
+  .mentor-body{padding:2px 16px 15px}.stream{font-size:13.5px;line-height:1.6;color:var(--tx2)}.stream b{color:var(--tx);font-weight:650}
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--cyan);vertical-align:-2px;margin-left:2px;border-radius:1px;animation:blink 1s steps(2) infinite}@keyframes blink{50%{opacity:0}}
+  .sugs{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
+  .sug{font-size:12px;font-weight:550;padding:7px 12px;border-radius:20px;cursor:pointer;color:var(--tx2);background:var(--s-2);border:1px solid var(--line);transition:.15s;display:inline-flex;align-items:center;gap:6px}.sug:hover{border-color:var(--indigo);color:var(--tx)}
+  .sug .sp2{width:5px;height:5px;border-radius:50%;background:var(--cyan)}
+  .propose{font-size:11px;color:var(--dim);margin-top:10px}
+
+  /* Secundário: recolhido no peso (revelação progressiva) */
+  .sec-h{display:flex;align-items:baseline;gap:11px;margin:30px 0 4px}.sec-h h2{font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--tx2)}
+  .sec-h .cnt{font-family:var(--mono);font-size:11.5px;color:var(--mut);padding:2px 8px;border-radius:6px;background:var(--line)}
+  .sec-h .sp{flex:1}.sec-h a{font-size:12.5px;color:var(--mut);text-decoration:none;font-weight:550;cursor:pointer}.sec-h a:hover{color:var(--tx)}
+  .sec-note{font-size:12px;color:var(--mut);margin:0 0 13px}.sec-note b{color:var(--tx2)}
+
+  /* Revisões — faixa slim */
+  .revstrip{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .revitem{display:inline-flex;align-items:center;gap:8px;padding:8px 13px;border-radius:11px;cursor:pointer;
+    background:var(--s-flat);border:1px solid var(--line);color:var(--tx2);font:inherit;font-size:12.5px;transition:.15s}
+  .revitem:hover{border-color:var(--line-2);color:var(--tx)}
+  .revitem svg{width:15px;height:15px;color:var(--mut)}.revitem b{color:var(--tx);font-variant-numeric:tabular-nums}
+
+  /* Plano — blocos flat, UM selo, fonte no stripe/glifo */
+  .blocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:11px}
+  .blk{position:relative;border-radius:14px;padding:15px 15px 15px 17px;cursor:pointer;overflow:hidden;background:var(--s-flat);border:1px solid var(--line);transition:.18s var(--std)}
+  .blk:hover{border-color:var(--line-2);transform:translateY(-2px)}.blk .stripe{position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c)}
+  .blk.ai-gen .stripe{background:var(--ai)}
+  .blk .bt{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+  .blk .tag{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:3px 8px;border-radius:6px;color:var(--c);background:color-mix(in srgb,var(--c) 15%,transparent)}
+  .blk .tm{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .blk h4{font-size:14px;font-weight:650;letter-spacing:-.015em;line-height:1.3;margin-bottom:4px;display:flex;align-items:flex-start;gap:7px}
+  .blk .star{color:var(--cyan);flex:none;font-size:12px;margin-top:1px}
+  .blk .meta{font-size:11.5px;color:var(--mut)}
+  .blk .chk{width:16px;height:16px;border-radius:5px;border:2px solid var(--line-2);flex:none;margin-top:1px;display:grid;place-items:center;transition:.15s}
+  .blk.checked .chk{background:var(--ok);border-color:var(--ok)}.blk.checked .chk::after{content:"✓";color:#08101f;font-size:10px;font-weight:800}
+  .blk .prog{height:4px;border-radius:4px;background:var(--line);margin-top:11px;overflow:hidden}.blk .prog i{display:block;height:100%;border-radius:4px;background:var(--c);width:var(--p)}
+  .blk.done,.blk.checked{opacity:.55}.blk.done h4,.blk.checked h4{text-decoration:line-through;text-decoration-color:var(--mut)}
+  .blk.add{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;border-style:dashed;color:var(--mut);gap:5px;min-height:98px;background:transparent}
+  .blk.add:hover{color:var(--tx);border-color:var(--blue)}.blk.add .pl{font-size:18px;line-height:1}.blk.add .t2{font-size:13px;font-weight:600}.blk.add .m2{font-size:11px;color:var(--dim)}
+
+  .daystats{display:flex;align-items:center;gap:10px;margin-top:24px;padding-top:15px;border-top:1px solid var(--line);font-size:12.5px;color:var(--mut);flex-wrap:wrap}
+  .daystats b{color:var(--tx);font-variant-numeric:tabular-nums}.daystats .sp{flex:1}
+  .daystats a{color:var(--tx2);text-decoration:none;font-weight:550;cursor:pointer}.daystats a:hover{color:var(--tx)}
+  .protonote{margin-top:13px;font-size:11.5px;color:var(--dim);display:flex;gap:8px;align-items:center}.protonote .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+
+  /* Cronômetro flutuante */
+  .crono-fab{position:fixed;right:24px;bottom:22px;z-index:60;display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:15px;
+    background:var(--fabbg);backdrop-filter:var(--glass);border:1px solid var(--line-2);box-shadow:var(--shadow)}
+  .cf-play{width:36px;height:36px;border-radius:11px;border:none;cursor:pointer;background:var(--blue-grad);color:#fff;display:grid;place-items:center;flex:none}
+  .cf-play svg{width:16px;height:16px;fill:currentColor;stroke:none}
+  .cf-body{display:flex;flex-direction:column;gap:1px;min-width:104px}
+  .cf-time{font-family:var(--mono);font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;color:var(--tx)}
+  .cf-lbl{font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+  .cf-full{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--mut);cursor:pointer;display:grid;place-items:center;flex:none}
+  .cf-full:hover{color:var(--tx);border-color:var(--line-2)}.cf-full svg{width:16px;height:16px}
+
+  .crono-full{position:fixed;inset:0;z-index:200;display:none;flex-direction:column;align-items:center;justify-content:center;gap:26px;
+    background:radial-gradient(120% 100% at 50% 0%,var(--blue-soft),transparent 60%),var(--bg)}
+  .crono-full.on{display:flex}
+  .cfl-tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;color:var(--blue-l)}
+  .cfl-time{font-family:var(--mono);font-size:clamp(72px,17vw,190px);font-weight:600;letter-spacing:-.03em;line-height:.9;font-variant-numeric:tabular-nums;
+    background:var(--blue-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .cfl-topic{font-size:17px;color:var(--tx2)}.cfl-topic b{color:var(--tx)}
+  .cfl-acoes{display:flex;gap:12px;margin-top:8px}
+  .cfl-exit{position:absolute;top:22px;right:26px;width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--s-2);color:var(--mut);cursor:pointer;display:grid;place-items:center}
+  .cfl-exit:hover{color:var(--tx)}.cfl-exit svg{width:20px;height:20px}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.rev{opacity:1;transform:none}}
+</style>
+
+<canvas id="plexus"></canvas>
+<div class="glow glow-1"></div><div class="glow glow-2"></div>
+
+<div class="app">
+  <nav class="rail">
+    <div class="logo"><svg class="ic" viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h13"/></svg></div>
+    <div class="ri on" title="Hoje"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="rlbl">Hoje</span></div>
+    <div class="ri" title="Planejamento"><svg class="ic" viewBox="0 0 24 24"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg><span class="rlbl">Planejamento</span></div>
+    <div class="ri" title="Acompanhamento"><svg class="ic" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg><span class="rlbl">Acompanhamento</span></div>
+    <div class="ri ai" title="Mentor IA"><svg class="ic" viewBox="0 0 24 24"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg><span class="rlbl">Mentor IA</span></div>
+    <div class="ri" title="Praticar"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span class="rlbl">Praticar</span></div>
+    <div class="sp"></div>
+    <div class="ri" title="Configurações"><svg class="ic" viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="rlbl">Configurações</span></div>
+  </nav>
+
+  <main class="main">
+    <header class="topbar rev">
+      <div class="hey">Boa noite · <b>quinta, 2 de julho</b> · Analista Judiciário · TJSP</div>
+      <div class="sp"></div>
+      <div class="pill-t prova" title="Contagem regressiva da prova"><svg class="ic" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg><b>47</b>&nbsp;dias p/ prova</div>
+      <div class="pill-t" title="Dias seguidos de estudo"><svg class="ic" viewBox="0 0 24 24" style="color:var(--warn)"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg><b>3</b>&nbsp;dias</div>
+      <div class="kbar"><svg class="ic" viewBox="0 0 24 24"><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0L14.06 8.5A2 2 0 0 0 15.5 9.94l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z"/></svg>Pergunte ou faça um comando…<span class="kk">Ctrl K</span></div>
+      <button class="tgl" id="tgl" title="Alternar tema"><svg class="ic" id="tgl-ico" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg></button>
+    </header>
+
+    <section id="scr-hoje">
+      <h1 class="title rev" style="animation-delay:.05s">Seu foco de hoje está <span class="g">pronto</span>.</h1>
+      <div class="grid">
+        <section class="hero rev" style="animation-delay:.1s">
+          <div class="hero-top">
+            <span class="hero-tag"><span class="orb"></span>Recomendação do Mentor</span>
+            <div class="tabs"><button class="on">Estudo</button><button>Prática</button><button>Revisão</button></div>
+          </div>
+          <div class="hero-disc" id="h-disc">Direito Constitucional</div>
+          <div class="foco-topline">
+            <div class="hero-topic" id="h-topic">Princípios fundamentais</div>
+            <button class="troca" id="troca"><svg class="ic" viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>Trocar tópico</button>
+          </div>
+          <div class="hero-why"><span class="mi orb"></span>
+            <p id="h-why">Cai bastante na sua banca (<b>VUNESP, ~90%</b>) e sua <b>revisão deste tópico vence hoje</b>. Atacar agora rende mais do que seguir a ordem do edital.</p></div>
+          <div class="hero-meta">
+            <div class="hm"><span class="k">Bloco</span><span class="v">25 min</span></div>
+            <div class="hm"><span class="k">Onde parei</span><span class="v">Prática</span></div>
+            <div class="hm"><span class="k">Domínio</span><span class="v" id="h-dom">42%</span></div>
+          </div>
+          <div class="hero-cta">
+            <button class="btn btn-go"><svg class="ic" viewBox="0 0 24 24" style="fill:currentColor;stroke:none"><polygon points="6 3 20 12 6 21 6 3"/></svg>Começar agora</button>
+            <button class="btn btn-gh"><svg class="ic" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8M13 12h8M13 18h8"/></svg>Questões</button>
+            <button class="btn btn-gh"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Revisar</button>
+          </div>
+        </section>
+        <aside class="side">
+          <div class="rings rev" style="animation-delay:.15s">
+            <div class="ring"><div class="ring-top"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--line)" stroke-width="4"/><circle class="rc" cx="20" cy="20" r="16" fill="none" stroke="url(#gb)" stroke-width="4" stroke-linecap="round" stroke-dasharray="100.5" data-pct="34"/></svg><div><div class="rv" data-num="34" data-suf="%">0%</div><div class="rk">Edital coberto</div></div></div><div class="rd"><span class="up">+6%</span> na semana</div></div>
+            <div class="ring"><div class="ring-top"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--line)" stroke-width="4"/><circle class="rc" cx="20" cy="20" r="16" fill="none" stroke="url(#gv)" stroke-width="4" stroke-linecap="round" stroke-dasharray="100.5" data-pct="61"/></svg><div><div class="rv" data-num="61" data-suf="%">0%</div><div class="rk">Aproveitamento</div></div></div><div class="rd"><span class="up">+9%</span> vs. mês</div></div>
+            <div class="ring"><div class="ring-top"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--line)" stroke-width="4"/><circle class="rc" cx="20" cy="20" r="16" fill="none" stroke="url(#gg)" stroke-width="4" stroke-linecap="round" stroke-dasharray="100.5" data-pct="82"/></svg><div><div class="rv" data-num="82" data-suf="%">0%</div><div class="rk">Meta da semana</div></div></div><div class="rd">5h45 de 7h</div></div>
+            <div class="ring"><div class="ring-top"><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="none" stroke="var(--line)" stroke-width="4"/><circle class="rc" cx="20" cy="20" r="16" fill="none" stroke="url(#ga)" stroke-width="4" stroke-linecap="round" stroke-dasharray="100.5" data-pct="55"/></svg><div><div class="rv" data-num="55" data-suf="%">0%</div><div class="rk">Meta do dia</div></div></div><div class="rd">44 de 80 min</div></div>
+          </div>
+          <div class="card-ai rev" style="animation-delay:.2s"><div class="ch"><span class="orb"></span><h3>Mentor IA</h3><span class="badge">sugere</span></div>
+            <div class="mentor-body"><p class="stream" id="stream"></p>
+              <div class="sugs"><span class="sug"><span class="sp2"></span>Gerar 10 questões</span><span class="sug"><span class="sp2"></span>Resumir o tópico</span><span class="sug"><span class="sp2"></span>Refazer meu plano</span></div>
+              <div class="propose">O Mentor propõe; você aprova antes de qualquer ação.</div>
+            </div></div>
+        </aside>
+      </div>
+
+      <div class="sec-h rev" style="animation-delay:.24s"><h2>Revisões de hoje</h2><span class="cnt">19</span><span class="sp"></span><a>abrir tudo →</a></div>
+      <div class="revstrip rev" style="animation-delay:.25s">
+        <button class="revitem"><svg class="ic" viewBox="0 0 24 24"><path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m6.08 9.5-3.49 1.59a1 1 0 0 0 0 1.81l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9a1 1 0 0 0 0-1.83l-3.5-1.59"/></svg><b>12</b>&nbsp;flashcards</button>
+        <button class="revitem"><svg class="ic" viewBox="0 0 24 24"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10M12 3v18M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg><b>3</b>&nbsp;lei seca</button>
+        <button class="revitem"><svg class="ic" viewBox="0 0 24 24"><path d="m2 9 3-3 3 3"/><path d="M13 18H7a2 2 0 0 1-2-2V6"/><path d="m22 15-3 3-3-3"/><path d="M11 6h6a2 2 0 0 1 2 2v10"/></svg><b>1</b>&nbsp;revisão de tópico</button>
+        <button class="revitem"><svg class="ic" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4M16 13H8M16 17H8"/></svg><b>2</b>&nbsp;resumos</button>
+        <button class="revitem"><svg class="ic" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg><b>1</b>&nbsp;mapa mental</button>
+      </div>
+
+      <div class="sec-h rev" style="animation-delay:.28s"><h2>Plano de hoje</h2><span class="cnt">5 itens · 2h35</span><span class="sp"></span><a>Ver semana →</a></div>
+      <p class="sec-note rev" style="animation-delay:.29s"><span style="color:var(--cyan)">✦</span> sugerido pelo Mentor · o resto é <b>seu</b>. Comece pelo que quiser.</p>
+      <div class="blocks rev" style="animation-delay:.32s">
+        <div class="blk ai-gen" style="--c:#3b82f6"><span class="stripe"></span><div class="bt"><span class="tag">Foco</span><span class="tm">agora</span></div><h4><span class="star">✦</span>Princípios fundamentais</h4><div class="meta">Estudo · 25 min · sugerido do seu edital</div><div class="prog"><i style="--p:42%"></i></div></div>
+        <div class="blk done" style="--c:#34d399"><span class="stripe"></span><div class="bt"><span class="tag">Revisão</span><span class="tm">concluído</span></div><h4><span class="star">✦</span>Princípios da Administração</h4><div class="meta">Recordar · 22 min</div><div class="prog"><i style="--p:100%"></i></div></div>
+        <div class="blk" style="--c:#818cf8" data-check><span class="stripe"></span><div class="bt"><span class="tag">Questões</span><span class="tm">≈ 40 min</span></div><h4><span class="chk"></span>Atos administrativos — 20 questões</h4><div class="meta">VUNESP · você planejou</div></div>
+        <div class="blk" style="--c:#f472b6" data-check><span class="stripe"></span><div class="bt"><span class="tag">Rotina</span><span class="tm">≈ 30 min</span></div><h4><span class="chk"></span>Ler Vicente Paulo — cap. 4</h4><div class="meta">Repete toda quinta</div></div>
+        <div class="blk add"><span class="pl">＋</span><span class="t2">Adicionar ao dia</span><span class="m2">Outra matéria, tarefa ou sessão manual</span></div>
+      </div>
+
+      <div class="daystats rev" style="animation-delay:.36s">Hoje: <b>1h20</b> em foco · <b>3</b> sessões · <b>24</b> questões<span class="sp"></span><a>Ver acompanhamento completo →</a></div>
+      <div class="protonote"><span class="dot"></span>v3.3 refinado · ícones Lucide · azul = você/o app, cyan = a IA · um selo por bloco · revelação progressiva · números com count-up · cronômetro flutuante ↘</div>
+    </section>
+  </main>
+</div>
+
+<div class="crono-fab">
+  <button class="cf-play" id="cf-play" title="Pausar"><svg viewBox="0 0 24 24" style="fill:currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
+  <div class="cf-body"><div class="cf-time" id="cf-time">24:12</div><div class="cf-lbl">Estudo · Princípios fundamentais</div></div>
+  <button class="cf-full" id="cf-full" title="Tela cheia (modo foco)"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+</div>
+
+<div class="crono-full" id="cfl">
+  <button class="cfl-exit" id="cfl-exit" title="Sair da tela cheia"><svg class="ic" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+  <div class="cfl-tag">Modo foco · sem distração</div>
+  <div class="cfl-time" id="cfl-time">24:12</div>
+  <div class="cfl-topic">Estudo · <b>Princípios fundamentais</b></div>
+  <div class="cfl-acoes"><button class="btn btn-gh" id="cfl-pause"><svg viewBox="0 0 24 24" style="fill:currentColor;width:18px;height:18px"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>Pausar</button><button class="btn btn-go"><svg class="ic" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Registrar sessão</button></div>
+</div>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <linearGradient id="gb" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  <linearGradient id="gv" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#818cf8"/><stop offset="1" stop-color="#6366f1"/></linearGradient>
+  <linearGradient id="gg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#34d399"/><stop offset="1" stop-color="#059669"/></linearGradient>
+  <linearGradient id="ga" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f59e0b"/><stop offset="1" stop-color="#d97706"/></linearGradient>
+</defs></svg>
+
+<script>
+const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+function orb(cv){const c=cv.getContext('2d'),D=window.devicePixelRatio||1;
+  function size(){const w=cv.clientWidth;cv.width=cv.height=w*D;c.setTransform(D,0,0,D,0,0);return w;}
+  let w=size(),t=0;(function loop(){t+=reduce?0:.02;const cx=w/2,cy=w/2,R=w/2-2;c.clearRect(0,0,w,w);
+    const g=c.createRadialGradient(cx,cy,1,cx,cy,R);g.addColorStop(0,'rgba(34,211,238,.95)');g.addColorStop(1,'rgba(129,140,248,.55)');
+    for(let i=0;i<3;i++){c.beginPath();for(let a=0;a<=Math.PI*2+.1;a+=.25){const r=R*(.72+.16*Math.sin(a*3+t*(1+i*.5)+i*2));const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;a?c.lineTo(x,y):c.moveTo(x,y);}c.closePath();c.fillStyle=g;c.globalAlpha=.34-i*.08;c.fill();}
+    c.globalAlpha=1;c.beginPath();c.arc(cx,cy,R*.34,0,7);c.fillStyle='#eafcff';c.fill();if(!reduce)requestAnimationFrame(loop);})();}
+document.querySelectorAll('.orb').forEach(el=>{const cv=document.createElement('canvas');cv.style.width=cv.style.height='100%';cv.style.display='block';el.appendChild(cv);orb(cv);});
+
+function countUp(el){const to=+el.dataset.num,suf=el.dataset.suf||'';if(reduce){el.textContent=to+suf;return;}
+  const dur=1000,t0=performance.now();function step(t){const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=Math.round(to*e)+suf;if(p<1)requestAnimationFrame(step);}requestAnimationFrame(step);}
+function drawRings(){document.querySelectorAll('.rc').forEach((c,i)=>{const pct=+c.dataset.pct,len=100.5,off=len*(1-pct/100);
+  if(reduce){c.style.strokeDashoffset=off;return;}c.style.strokeDashoffset=len;c.style.transition='stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)';setTimeout(()=>c.style.strokeDashoffset=off,250+i*90);});
+  document.querySelectorAll('.rv[data-num]').forEach((el,i)=>setTimeout(()=>countUp(el),250+i*90));}
+window.addEventListener('load',drawRings);
+
+const txt="Bom ritmo. Sua precisão em Constitucional subiu 9%, mas Princípios fundamentais ainda te derruba — por isso é o foco de hoje. Feche o dia com os 12 flashcards que vencem.";
+const el=document.getElementById('stream');let streamIv;
+function runStream(){if(reduce){el.innerHTML=txt+'<span class="cursor"></span>';return;}clearInterval(streamIv);let i=0;el.innerHTML='<span class="cursor"></span>';
+  streamIv=setInterval(()=>{i++;el.innerHTML=txt.slice(0,i).replace(/9%/,'<b>9%</b>')+'<span class="cursor"></span>';if(i>=txt.length)clearInterval(streamIv);},20);}
+runStream();
+
+const TOPS=[
+ {d:"Direito Constitucional",t:"Princípios fundamentais",dom:"42%",w:'Cai bastante na sua banca (<b>VUNESP, ~90%</b>) e sua <b>revisão deste tópico vence hoje</b>. Atacar agora rende mais do que seguir a ordem do edital.'},
+ {d:"Direito Constitucional",t:"Controle de constitucionalidade",dom:"38%",w:'Você <b>errou 3 das últimas 5 questões</b> deste tópico — é onde mais se perde ponto hoje.'},
+ {d:"Direito Administrativo",t:"Atos administrativos",dom:"55%",w:'<b>Peso alto</b> no seu edital e você tem <b>20 questões planejadas</b> dele para hoje.'},
+ {d:"Língua Portuguesa",t:"Crase",dom:"61%",w:'Tópico de <b>erro recorrente</b> — vale um bloco curto de reforço.'},
+ {d:"Raciocínio Lógico",t:"Proposições lógicas",dom:"93%",w:'Você <b>domina</b> este tópico — uma revisão leve mantém em dia. Prefere focar num ponto fraco?'},
+];
+let ti=0;
+function applyTop(o){document.getElementById('h-disc').textContent=o.d;document.getElementById('h-topic').textContent=o.t;
+  document.getElementById('h-dom').textContent=o.dom;document.getElementById('h-why').innerHTML=o.w;}
+document.getElementById('troca').addEventListener('click',()=>{ti=(ti+1)%TOPS.length;applyTop(TOPS[ti]);});
+
+document.querySelectorAll('.blk[data-check]').forEach(b=>b.addEventListener('click',()=>b.classList.toggle('checked')));
+document.querySelectorAll('.tabs button').forEach(b=>b.addEventListener('click',()=>{b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on'));b.classList.add('on');}));
+
+const cv=document.getElementById('plexus'),cx2=cv.getContext('2d');let pts,raf;const D=Math.min(window.devicePixelRatio||1,2);
+function initPlex(){cv.width=innerWidth*D;cv.height=innerHeight*D;cx2.setTransform(D,0,0,D,0,0);const n=Math.min(58,Math.floor(innerWidth/30));pts=[...Array(n)].map(()=>({x:Math.random()*innerWidth,y:Math.random()*innerHeight,vx:(Math.random()-.5)*.14,vy:(Math.random()-.5)*.14}));}
+initPlex();addEventListener('resize',initPlex);
+const L='90,130,210',Dt='90,150,220';
+function loopPlex(){if(reduce)return;cx2.clearRect(0,0,innerWidth,innerHeight);
+  for(const p of pts){p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>innerWidth)p.vx*=-1;if(p.y<0||p.y>innerHeight)p.vy*=-1;}
+  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const a=pts[i],b=pts[j],d=Math.hypot(a.x-b.x,a.y-b.y);if(d<128){cx2.strokeStyle='rgba('+L+','+(.15*(1-d/128))+')';cx2.lineWidth=1;cx2.beginPath();cx2.moveTo(a.x,a.y);cx2.lineTo(b.x,b.y);cx2.stroke();}}
+  for(const p of pts){cx2.fillStyle='rgba('+Dt+',.55)';cx2.beginPath();cx2.arc(p.x,p.y,1.3,0,7);cx2.fill();}raf=requestAnimationFrame(loopPlex);}
+if(!reduce){cv.classList.add('on');loopPlex();}
+
+let secs=24*60+12,running=true;
+const cfTime=document.getElementById('cf-time'),cflTime=document.getElementById('cfl-time');
+const playIco='<svg viewBox="0 0 24 24" style="fill:currentColor"><path d="M5 3l14 9-14 9V3Z"/></svg>',pauseIco='<svg viewBox="0 0 24 24" style="fill:currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>';
+function fmt(s){return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');}
+function tick(){if(running&&secs>0){secs--;cfTime.textContent=cflTime.textContent=fmt(secs);}}
+if(!reduce)setInterval(tick,1000);
+function setRun(r){running=r;document.getElementById('cf-play').innerHTML=r?pauseIco:playIco;document.getElementById('cf-play').title=r?'Pausar':'Iniciar';
+  document.getElementById('cfl-pause').innerHTML=(r?pauseIco:playIco).replace('viewBox','style="width:18px;height:18px" viewBox')+(r?'Pausar':'Iniciar');}
+document.getElementById('cf-play').addEventListener('click',()=>setRun(!running));
+document.getElementById('cfl-pause').addEventListener('click',()=>setRun(!running));
+document.getElementById('cf-full').addEventListener('click',()=>document.getElementById('cfl').classList.add('on'));
+document.getElementById('cfl-exit').addEventListener('click',()=>document.getElementById('cfl').classList.remove('on'));
+
+const sun='<path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/><circle cx="12" cy="12" r="4"/>';
+const moon='<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/>';
+document.getElementById('tgl').addEventListener('click',()=>{const cur=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';
+  document.documentElement.setAttribute('data-theme',cur);document.getElementById('tgl-ico').innerHTML=cur==='light'?sun:moon;});
+</script>
