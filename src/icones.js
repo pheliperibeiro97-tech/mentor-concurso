@@ -97,6 +97,7 @@ import x from "lucide-static/icons/x.svg?raw";
 import play from "lucide-static/icons/play.svg?raw";
 import pause from "lucide-static/icons/pause.svg?raw";
 import refreshCw from "lucide-static/icons/refresh-cw.svg?raw";
+import rotateCcw from "lucide-static/icons/rotate-ccw.svg?raw";
 import arrowLeft from "lucide-static/icons/arrow-left.svg?raw";
 import arrowRight from "lucide-static/icons/arrow-right.svg?raw";
 import arrowUp from "lucide-static/icons/arrow-up.svg?raw";
@@ -208,6 +209,7 @@ const MAPA = {
   play,
   pause,
   "refresh-cw": refreshCw,
+  "rotate-ccw": rotateCcw,
   "arrow-left": arrowLeft,
   "arrow-right": arrowRight,
   "arrow-up": arrowUp,

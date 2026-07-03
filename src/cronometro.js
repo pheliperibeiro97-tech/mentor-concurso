@@ -249,7 +249,7 @@ function montarWidget() {
   widget.innerHTML = `
     <div class="crono-play-row">
       <button class="crono-btn crono-toggle" title="Iniciar / pausar" aria-label="Iniciar ou pausar">${icone("play")}</button>
-      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro">${icone("refresh-cw")}</button>
+      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro">${icone("rotate-ccw")}</button>
     </div>
     <div class="crono-corpo">
       <div class="crono-time">00:00</div>

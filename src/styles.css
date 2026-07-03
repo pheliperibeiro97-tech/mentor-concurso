@@ -1043,7 +1043,7 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .crono-fab.crono-focus.rodando .crono-time { color: var(--crono-cor, var(--primary)); }
 .crono-fab.crono-focus.extra .crono-time { color: var(--warn, #d97706); }
 .crono-fab.crono-focus .crono-sub { font-size: var(--fs-xl); color: var(--text-2, var(--muted)); margin-top: 10px; }
-.crono-fab.crono-focus .crono-toggle { order: 2; width: 76px; height: 76px; font-size: 1.9rem; }
+.crono-fab.crono-focus .crono-toggle { width: 76px; height: 76px; font-size: 1.9rem; }
 .crono-fab.crono-focus .crono-acoes { position: fixed; top: 20px; right: 22px; gap: 10px; }
 .crono-fab.crono-focus .crono-mini { width: 42px; height: 42px; border-radius: 11px; font-size: var(--fs-xl); background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
 .crono-fab.crono-focus .crono-mini:hover { color: var(--text); border-color: var(--primary); }
@@ -3306,10 +3306,11 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
    deixando as bordas inferiores das duas colunas na mesma reta (feedback do usuário). */
 .hoje-side { display: flex; flex-direction: column; gap: 16px; align-self: start; }
 /* "＋ Registrar sessão": link discreto no canto, acima dos anéis. */
-/* "Registrar sessão": na linha do título (canto superior direito), acima do grid —
-   para o TOPO do card de foco alinhar com o topo dos anéis (feedback do usuário). */
-.side-registrar { color: var(--text-2, var(--muted)); gap: 5px; flex-shrink: 0; }
-.side-registrar:hover { color: var(--primary); }
+/* Ações na linha do título (canto sup. dir., acima do grid): atalho "Abrir cronômetro" +
+   "Registrar sessão". Ficam aqui para o TOPO do card de foco alinhar com o topo dos anéis. */
+.hoje-head-acoes { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.side-crono, .side-registrar { color: var(--text-2, var(--muted)); gap: 5px; }
+.side-crono:hover, .side-registrar:hover { color: var(--primary); }
 .hoje-rings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 16px 18px; }
 .hr-item { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .hr-txt { min-width: 0; }
@@ -3382,14 +3383,10 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .revitem svg { width: 15px; height: 15px; color: var(--muted); }
 .revitem b { color: var(--text); font-variant-numeric: tabular-nums; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
-/* "Começar agora" + cronômetro COLADOS (split button): compartilham a sombra e a cor;
-   uma divisória fina os separa. O cronômetro abre a tela cheia p/ configurar/iniciar. */
-.foco-acoes .btn-split { display: inline-flex; align-items: stretch;
-  box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); border-radius: var(--radius-md); }
-.foco-acoes .btn-split .btn-foco { border-top-right-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
-.foco-acoes .btn-split .btn-crono { border-top-left-radius: 0; border-bottom-left-radius: 0; box-shadow: none;
-  padding-left: 15px; padding-right: 15px; border-left: 1px solid rgba(255, 255, 255, 0.28); }
-.foco-acoes .btn-split .btn-crono svg { width: 19px; height: 19px; }
+.foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
+/* Ícone de cronômetro SEPARADO no card de foco (abre a tela cheia p/ configurar/iniciar). */
+.foco-acoes .btn-crono { padding: 10px; width: 42px; height: 42px; justify-content: center; }
+.foco-acoes .btn-crono svg { width: 18px; height: 18px; }
 
 /* Registro de sessão premium (chips de disclosure) */
 .ses-sec { font-weight: 640; margin: 12px 0 8px; color: var(--text-2); font-size: var(--fs-sm); }
