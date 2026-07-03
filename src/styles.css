@@ -1049,18 +1049,23 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .crono-fab.crono-focus .crono-mini:hover { color: var(--text); border-color: var(--primary); }
 .crono-fab.crono-focus .crono-expandir { display: none; } /* já está no foco */
 
-/* Botões Zerar e Registrar do flutuante. Na PILL mostram só o ícone (compacto); na TELA
-   CHEIA mostram só o texto, sem ícone (pedido do usuário). */
-.crono-fab .crono-zerar, .crono-fab .crono-registrar { gap: 5px; padding: 6px 10px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 650; }
-.crono-fab .crono-registrar { color: var(--success, #16a34a); border: 1px solid color-mix(in srgb, var(--success, #16a34a) 42%, transparent); }
+/* Botão Registrar: na PILL só ícone (compacto); na TELA CHEIA só texto, sem ícone. */
+.crono-fab .crono-registrar { gap: 5px; padding: 6px 10px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 650;
+  color: var(--success, #16a34a); border: 1px solid color-mix(in srgb, var(--success, #16a34a) 42%, transparent); }
 .crono-fab .crono-registrar:hover { background: color-mix(in srgb, var(--success, #16a34a) 13%, transparent); }
-.crono-fab .crono-zerar { color: var(--muted); border: 1px solid var(--border); }
-.crono-fab .crono-zerar:hover { color: var(--text); border-color: var(--text-2, var(--muted)); }
 .crono-fab .crono-ic { display: inline-flex; align-items: center; }
-.crono-fab.crono-pill .crono-zerar, .crono-fab.crono-pill .crono-registrar { padding: 5px 7px; }
+.crono-fab.crono-pill .crono-registrar { padding: 5px 7px; }
 .crono-fab.crono-pill .crono-lbl { display: none; }   /* pill: só ícone */
 .crono-fab.crono-focus .crono-ic { display: none; }   /* tela cheia: só texto */
-.crono-fab.crono-focus .crono-zerar, .crono-fab.crono-focus .crono-registrar { padding: 9px 16px; border-radius: 11px; font-size: var(--fs-md); }
+.crono-fab.crono-focus .crono-registrar { padding: 9px 16px; border-radius: 11px; font-size: var(--fs-md); }
+/* Zerar = ÍCONE ao lado do play/pause (não é botão de texto). */
+.crono-play-row { display: inline-flex; align-items: center; gap: 6px; }
+.crono-zerar { color: var(--muted); }
+.crono-zerar:hover { color: var(--text); }
+.crono-fab.crono-focus .crono-play-row { order: 2; gap: 18px; }
+.crono-fab.crono-focus .crono-zerar { width: 54px; height: 54px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); color: var(--text-2); }
+.crono-fab.crono-focus .crono-zerar:hover { border-color: var(--primary); color: var(--text); }
+.crono-fab.crono-focus .crono-zerar svg { width: 22px; height: 22px; }
 
 /* Config do cronômetro (modo + bloco): só aparece no modo FOCO, sob o relógio grande. */
 .crono-config { display: none; }
@@ -3364,10 +3369,11 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .th-titulo-btn:hover { color: var(--primary); text-decoration: underline; }
 /* Revisões de hoje — cabeçalho de seção + chips, SEM card de fundo (igual "Plano de hoje",
    como no protótipo). Reusa .plano-h para o cabeçalho. */
-.revhub-sec { margin: 22px 0 0; }
+.revhub-sec { margin: 24px 0 18px; }
 .revhub-sec .revstrip { margin-top: 10px; }
+/* Vazia (só o cabeçalho): mais respiro até o "Plano de hoje" logo abaixo (evita grudar). */
+.revhub-vazia { margin-bottom: 28px; }
 .revhub-ok { display: inline-flex; align-items: center; gap: 6px; }
-.revhub-ok svg { width: 14px; height: 14px; color: var(--success); }
 .revstrip { display: flex; flex-wrap: wrap; gap: 8px; }
 .revitem { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: var(--fs-xs); font-family: inherit;

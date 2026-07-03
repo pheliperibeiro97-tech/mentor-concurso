@@ -417,8 +417,9 @@ function hubRevisoesHTML(store) {
   const cab = (dir) =>
     `<div class="plano-h"><h2>Revisões de hoje</h2>${total ? `<span class="cnt">${total}</span>` : ""}<span class="sp"></span>${dir}</div>`;
   if (!total) {
-    return `<section class="plano-sec revhub-sec">
-      ${cab(`<span class="revhub-ok muted small">${icone("check-check")} nada vence hoje — você está em dia</span>`)}
+    // Frase sempre verdadeira: cobre tanto "não havia revisões" quanto "já concluiu todas".
+    return `<section class="plano-sec revhub-sec revhub-vazia">
+      ${cab(`<span class="revhub-ok muted small">Você está em dia com as revisões</span>`)}
     </section>`;
   }
   const item = (n, ico, sing, plur, rota) =>

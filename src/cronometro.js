@@ -247,7 +247,10 @@ function montarWidget() {
   widget.id = "crono-fab";
   widget.className = "crono-fab crono-pill oculto";
   widget.innerHTML = `
-    <button class="crono-btn crono-toggle" title="Iniciar / pausar" aria-label="Iniciar ou pausar">${icone("play")}</button>
+    <div class="crono-play-row">
+      <button class="crono-btn crono-toggle" title="Iniciar / pausar" aria-label="Iniciar ou pausar">${icone("play")}</button>
+      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro">${icone("refresh-cw")}</button>
+    </div>
     <div class="crono-corpo">
       <div class="crono-time">00:00</div>
       <div class="crono-sub"></div>
@@ -260,7 +263,6 @@ function montarWidget() {
       </div>
     </div>
     <div class="crono-acoes">
-      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro"><span class="crono-ic">${icone("refresh-cw")}</span><span class="crono-lbl">Zerar</span></button>
       <button class="crono-btn crono-registrar" title="Registrar esta sessão" aria-label="Registrar sessão"><span class="crono-ic">${icone("check-check")}</span><span class="crono-lbl">Registrar sessão</span></button>
       <button class="crono-btn crono-mini crono-expandir" title="Ampliar (modo foco)" aria-label="Ampliar">${icone("maximize-2")}</button>
       <button class="crono-btn crono-mini crono-reduzir" title="Voltar ao tamanho normal" aria-label="Reduzir">${icone("minimize-2")}</button>
