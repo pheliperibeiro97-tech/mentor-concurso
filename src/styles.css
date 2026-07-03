@@ -1049,14 +1049,18 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .crono-fab.crono-focus .crono-mini:hover { color: var(--text); border-color: var(--primary); }
 .crono-fab.crono-focus .crono-expandir { display: none; } /* já está no foco */
 
-/* Botão "Registrar" do flutuante (verde discreto). Na pill mostra só o ícone; no foco, ícone + texto. */
-.crono-fab .crono-registrar { gap: 5px; padding: 6px 10px; border-radius: 10px;
-  color: var(--success, #16a34a); border: 1px solid color-mix(in srgb, var(--success, #16a34a) 42%, transparent);
-  font-size: var(--fs-2xs); font-weight: 650; }
+/* Botões Zerar e Registrar do flutuante. Na PILL mostram só o ícone (compacto); na TELA
+   CHEIA mostram só o texto, sem ícone (pedido do usuário). */
+.crono-fab .crono-zerar, .crono-fab .crono-registrar { gap: 5px; padding: 6px 10px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 650; }
+.crono-fab .crono-registrar { color: var(--success, #16a34a); border: 1px solid color-mix(in srgb, var(--success, #16a34a) 42%, transparent); }
 .crono-fab .crono-registrar:hover { background: color-mix(in srgb, var(--success, #16a34a) 13%, transparent); }
-.crono-fab.crono-pill .crono-registrar { padding: 5px 7px; }
-.crono-fab.crono-pill .crono-registrar .crono-registrar-t { display: none; }
-.crono-fab.crono-focus .crono-registrar { padding: 9px 16px; border-radius: 11px; font-size: var(--fs-md); }
+.crono-fab .crono-zerar { color: var(--muted); border: 1px solid var(--border); }
+.crono-fab .crono-zerar:hover { color: var(--text); border-color: var(--text-2, var(--muted)); }
+.crono-fab .crono-ic { display: inline-flex; align-items: center; }
+.crono-fab.crono-pill .crono-zerar, .crono-fab.crono-pill .crono-registrar { padding: 5px 7px; }
+.crono-fab.crono-pill .crono-lbl { display: none; }   /* pill: só ícone */
+.crono-fab.crono-focus .crono-ic { display: none; }   /* tela cheia: só texto */
+.crono-fab.crono-focus .crono-zerar, .crono-fab.crono-focus .crono-registrar { padding: 9px 16px; border-radius: 11px; font-size: var(--fs-md); }
 
 /* Config do cronômetro (modo + bloco): só aparece no modo FOCO, sob o relógio grande. */
 .crono-config { display: none; }
@@ -3254,6 +3258,8 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-selo { font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0; text-transform: none;
   color: var(--accent-d); display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
 .foco-selo svg { width: 13px; height: 13px; }
+/* "sua escolha" = você/o app → azul (contraste com o selo da IA, que é ciano). */
+.foco-selo-voce { color: var(--primary-d); }
 .foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
 .foco-topline .foco-topico-nome { margin: 0; flex: 1 1 auto; }
 .foco-trocar { flex: 0 0 auto; align-self: center; }
@@ -3295,8 +3301,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
    deixando as bordas inferiores das duas colunas na mesma reta (feedback do usuário). */
 .hoje-side { display: flex; flex-direction: column; gap: 16px; align-self: start; }
 /* "＋ Registrar sessão": link discreto no canto, acima dos anéis. */
-.side-top { display: flex; justify-content: flex-end; margin: -2px 0 -6px; }
-.side-registrar { color: var(--text-2, var(--muted)); gap: 5px; }
+/* "Registrar sessão": na linha do título (canto superior direito), acima do grid —
+   para o TOPO do card de foco alinhar com o topo dos anéis (feedback do usuário). */
+.side-registrar { color: var(--text-2, var(--muted)); gap: 5px; flex-shrink: 0; }
 .side-registrar:hover { color: var(--primary); }
 .hoje-rings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 16px 18px; }
 .hr-item { display: flex; align-items: center; gap: 11px; min-width: 0; }
@@ -3355,11 +3362,12 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .mh-rec-click:hover { background: var(--surface-2); }
 .th-titulo-btn { background: none; border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 0; }
 .th-titulo-btn:hover { color: var(--primary); text-decoration: underline; }
-/* Fase 3d: Revisões de hoje — faixa slim (era um card recolhível pesado) */
-.revhub { padding: 14px 17px; border-left: 3px solid var(--warn); }
-.revhub-h { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 700; margin-bottom: 11px; }
-.revhub-h svg { width: 16px; height: 16px; color: var(--warn); }
-.revhub-cnt { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--muted); background: var(--surface-3); border-radius: var(--radius-xs); padding: 1px 7px; }
+/* Revisões de hoje — cabeçalho de seção + chips, SEM card de fundo (igual "Plano de hoje",
+   como no protótipo). Reusa .plano-h para o cabeçalho. */
+.revhub-sec { margin: 22px 0 0; }
+.revhub-sec .revstrip { margin-top: 10px; }
+.revhub-ok { display: inline-flex; align-items: center; gap: 6px; }
+.revhub-ok svg { width: 14px; height: 14px; color: var(--success); }
 .revstrip { display: flex; flex-wrap: wrap; gap: 8px; }
 .revitem { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: var(--fs-xs); font-family: inherit;

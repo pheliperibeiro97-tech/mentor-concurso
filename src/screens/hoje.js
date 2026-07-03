@@ -64,6 +64,9 @@ export default function renderHoje(root, app) {
 
   const faseInfo = FASES[sel.fase] || plano.faseInfo;
   const topicoSel = st.topicos.find((t) => t.id === sel.topicoId) || plano.topico;
+  // O foco só é "sugerido pelo Mentor" quando o tópico atual É a sugestão (plano.topico).
+  // Se o usuário trocou o tópico manualmente, o foco é escolha dele (sincroniza selos e badges).
+  const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id);
 
   const cicloHTML = ORDEM_FASES.map((f) => {
     const info = FASES[f];
@@ -138,11 +141,11 @@ export default function renderHoje(root, app) {
       <div class="plano-blocos">
         ${
           topicoSel
-            ? `<div class="pb pb-ai" style="--c:var(--accent)" data-action="focar-topico" data-top="${topicoSel.id}" data-fase="${sel.fase}">
+            ? `<div class="pb pb-ai" style="--c:${focoEhSugestao ? "var(--accent)" : "var(--primary)"}" data-action="focar-topico" data-top="${topicoSel.id}" data-fase="${sel.fase}">
           <span class="pb-stripe"></span>
-          <div class="pb-top"><span class="pb-tag">Foco</span><span class="pb-src pb-ai-src">${icone("sparkles")} Mentor</span><span class="pb-tm">agora</span></div>
+          <div class="pb-top"><span class="pb-tag">Foco</span>${focoEhSugestao ? `<span class="pb-src pb-ai-src">${icone("sparkles")} Mentor</span>` : `<span class="pb-src pb-you">Você escolheu</span>`}<span class="pb-tm">agora</span></div>
           <h4>${esc(topicoSel.nome)}</h4>
-          <div class="pb-meta">${esc(faseInfo.nome)} · ~${st.config.pomodoroFoco || 25} min · sugerido do seu edital</div>
+          <div class="pb-meta">${esc(faseInfo.nome)} · ~${st.config.pomodoroFoco || 25} min${focoEhSugestao ? " · sugerido do seu edital" : ""}</div>
         </div>`
             : ""
         }
@@ -163,17 +166,20 @@ export default function renderHoje(root, app) {
   const ondePareiFase = ultimaSess ? (FASES[ultimaSess.fase] && FASES[ultimaSess.fase].nome) || "" : "";
 
   root.innerHTML = `
-    <div class="page-head hoje-head"><div>
-      <h1 class="hoje-hero">${topicoSel ? `Seu foco de hoje está <span class="g">pronto</span>.` : "Hoje"}</h1>
-      ${topicoSel ? "" : `<p class="sub">Seu dia de estudo, num relance.</p>`}
-    </div></div>
+    <div class="page-head hoje-head">
+      <div>
+        <h1 class="hoje-hero">${topicoSel ? `Seu foco de hoje está <span class="g">pronto</span>.` : "Hoje"}</h1>
+        ${topicoSel ? "" : `<p class="sub">Seu dia de estudo, num relance.</p>`}
+      </div>
+      <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões.">Registrar sessão</button>
+    </div>
 
     ${reta.ativo ? retaFinalHTML(metas) : ""}
 
     <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
       <div class="foco-top">
-        <div class="foco-eyebrow"><span class="orb orb-xs" aria-hidden="true"></span> Seu foco agora${topicoSel ? ` <span class="foco-selo">sugerido pelo Mentor</span>` : ""}</div>
+        <div class="foco-eyebrow"><span class="orb orb-xs" aria-hidden="true"></span> Seu foco agora${focoEhSugestao ? ` <span class="foco-selo">sugerido pelo Mentor</span>` : topicoSel ? ` <span class="foco-selo foco-selo-voce">sua escolha</span>` : ""}</div>
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
@@ -205,9 +211,6 @@ export default function renderHoje(root, app) {
       </div>
     </section>
       <aside class="hoje-side">
-        <div class="side-top">
-          <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões.">Registrar sessão</button>
-        </div>
         ${ringsHTML(store)}
         ${mentorVozHTML(store, st, topicoSel, pontoInsight ? pontoInsight.txt : "")}
       </aside>
@@ -409,20 +412,19 @@ function hubRevisoesHTML(store) {
   const res = store.resumosParaRevisar();
   const mapasRev = store.mapasParaRevisar();
   const total = fc + mem + top + res + mapasRev;
-  // Estado vazio informativo (pedido do usuário): mostra a seção mesmo sem nada vencendo —
-  // saber que está em dia com as revisões ajuda a decidir o dia.
+  // Mesmo padrão visual do "Plano de hoje" (cabeçalho de seção + chips), SEM card de fundo —
+  // como no protótipo. Estado vazio informativo (pedido do usuário): saber que está em dia ajuda.
+  const cab = (dir) =>
+    `<div class="plano-h"><h2>Revisões de hoje</h2>${total ? `<span class="cnt">${total}</span>` : ""}<span class="sp"></span>${dir}</div>`;
   if (!total) {
-    return `<section class="card revhub revhub-vazio">
-      <div class="revhub-h">${icone("repeat-2")} Revisões de hoje <span class="revhub-cnt">0</span>
-        <span class="spacer"></span><span class="muted small">${icone("check-check")} nada vence hoje — você está em dia</span></div>
+    return `<section class="plano-sec revhub-sec">
+      ${cab(`<span class="revhub-ok muted small">${icone("check-check")} nada vence hoje — você está em dia</span>`)}
     </section>`;
   }
-  // Faixa slim (não mais um card recolhível): tudo que vence hoje, num lugar só.
   const item = (n, ico, sing, plur, rota) =>
     n ? `<button class="revitem" data-action="hub-ir" data-rota="${rota}">${ico}<b>${n}</b> ${n === 1 ? sing : plur}</button>` : "";
-  return `<section class="card revhub">
-    <div class="revhub-h">${icone("repeat-2")} Revisões de hoje <span class="revhub-cnt">${total}</span>
-      <span class="spacer"></span><span class="muted small">tudo que vence hoje, num lugar só</span></div>
+  return `<section class="plano-sec revhub-sec">
+    ${cab(`<a data-action="hub-ir" data-rota="revtopico">abrir tudo →</a>`)}
     <div class="revstrip">
       ${item(fc, icone("layers"), "flashcard", "flashcards", "flashcards")}
       ${item(mem, icone("brain"), "item de lei seca", "itens de lei seca", "leiseca")}

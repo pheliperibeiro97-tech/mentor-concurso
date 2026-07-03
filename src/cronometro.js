@@ -260,7 +260,8 @@ function montarWidget() {
       </div>
     </div>
     <div class="crono-acoes">
-      <button class="crono-btn crono-registrar" title="Registrar esta sessão" aria-label="Registrar sessão">${icone("check-check")} <span class="crono-registrar-t">Registrar</span></button>
+      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro"><span class="crono-ic">${icone("refresh-cw")}</span><span class="crono-lbl">Zerar</span></button>
+      <button class="crono-btn crono-registrar" title="Registrar esta sessão" aria-label="Registrar sessão"><span class="crono-ic">${icone("check-check")}</span><span class="crono-lbl">Registrar sessão</span></button>
       <button class="crono-btn crono-mini crono-expandir" title="Ampliar (modo foco)" aria-label="Ampliar">${icone("maximize-2")}</button>
       <button class="crono-btn crono-mini crono-reduzir" title="Voltar ao tamanho normal" aria-label="Reduzir">${icone("minimize-2")}</button>
       <button class="crono-btn crono-mini crono-hoje" title="Abrir a tela Hoje" aria-label="Abrir Hoje">${icone("external-link")}</button>
@@ -275,6 +276,7 @@ function montarWidget() {
     if (aoPedirRegistro) aoPedirRegistro();
     else if (app) app.navigate("hoje");
   });
+  widget.querySelector(".crono-zerar").addEventListener("click", (e) => { e.stopPropagation(); zerar(); });
   // Config (só faz sentido no modo foco/tela cheia): trocar modo e ajustar o bloco.
   widget.querySelectorAll(".crono-modo-btn").forEach((b) =>
     b.addEventListener("click", (e) => {
@@ -374,6 +376,13 @@ function atualizarWidget() {
   const visivel = ativo() || s.modoTela === "focus";
   widget.classList.toggle("oculto", !visivel);
   if (!visivel) return;
+  // Zerar/Registrar só fazem sentido quando há tempo (rodando ou pausado com acúmulo).
+  // Na tela cheia OCIOSA (aberta p/ configurar) eles somem — sobra só play + config.
+  const temTempo = s.running || s.base > 0;
+  const zEl = widget.querySelector(".crono-zerar");
+  const rEl = widget.querySelector(".crono-registrar");
+  if (zEl) zEl.style.display = temTempo ? "" : "none";
+  if (rEl) rEl.style.display = temTempo ? "" : "none";
   // Config (visível só no modo foco via CSS): reflete o modo atual e o bloco alvo.
   widget.querySelectorAll(".crono-modo-btn").forEach((b) => b.classList.toggle("on", b.getAttribute("data-modo") === s.modo));
   const minEl = widget.querySelector(".crono-min");
