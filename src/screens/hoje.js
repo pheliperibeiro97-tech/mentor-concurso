@@ -162,27 +162,30 @@ export default function renderHoje(root, app) {
       }
     </section>`;
 
+  // Recomposição visual (gap nº1): o card de FOCO é o herói (topo). "Plano de hoje" e a
+  // ofensiva descem para depois do herói. Info a mais no card de foco (porquê + meta) que
+  // antes ficava espalhada — mesma informação, disposição diferente.
+  const porqueHoje = topicoSel ? porqueFoco(store, st, topicoSel) : "";
+  const dossieTop = topicoSel ? store.dossie(topicoSel.id) : null;
+  const dominio = dossieTop && dossieTop.totalTentativas > 0 ? Math.round((dossieTop.acertos / dossieTop.totalTentativas) * 100) : null;
+  const streakMini =
+    st.sessoes && st.sessoes.length
+      ? `<section class="card streak-mini" data-reveal>
+          <span class="streak-flame">${icone("flame")}</span>
+          <div class="streak-txt">${
+            ofensHoje.atual > 0
+              ? `<span class="streak-n">${ofensHoje.atual}</span><span class="streak-lbl">${ofensHoje.atual === 1 ? "dia seguido" : "dias seguidos"} de estudo${ofensHoje.recorde > ofensHoje.atual ? ` · recorde ${ofensHoje.recorde}` : ""}</span>`
+              : `<span class="streak-lbl">Comece sua ofensiva hoje${ofensHoje.recorde > 0 ? ` · recorde de ${plural(ofensHoje.recorde, "dia", "dias")}` : ""}</span>`
+          }</div>
+          <span class="spacer"></span>
+          <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">ver constância →</button>
+        </section>`
+      : "";
+
   root.innerHTML = `
     ${header("Hoje", "Seu dia de estudo, num relance.")}
 
     ${reta.ativo ? retaFinalHTML(metas) : ""}
-
-    ${mentorHoje}
-
-    ${
-      (st.sessoes && st.sessoes.length)
-        ? `<section class="card streak-mini" data-reveal>
-            <span class="streak-flame">${icone("flame")}</span>
-            <div class="streak-txt">${
-              ofensHoje.atual > 0
-                ? `<span class="streak-n">${ofensHoje.atual}</span><span class="streak-lbl">${ofensHoje.atual === 1 ? "dia seguido" : "dias seguidos"} de estudo${ofensHoje.recorde > ofensHoje.atual ? ` · recorde ${ofensHoje.recorde}` : ""}</span>`
-                : `<span class="streak-lbl">Comece sua ofensiva hoje${ofensHoje.recorde > 0 ? ` · recorde de ${plural(ofensHoje.recorde, "dia", "dias")}` : ""}</span>`
-            }</div>
-            <span class="spacer"></span>
-            <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">ver constância →</button>
-          </section>`
-        : ""
-    }
 
     <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
@@ -191,12 +194,21 @@ export default function renderHoje(root, app) {
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
-        <span class="muted small">bloco de ~${st.config.pomodoroFoco || 25} min</span>
       </div>
       <div class="foco-topline">
         <div class="foco-topico-nome">${topicoSel ? esc(rotuloTopico(st, topicoSel)) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
         ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico — você decide.">${icone("repeat-2")} Trocar tópico</button>` : ""}
       </div>
+      ${porqueHoje ? `<div class="foco-porque">${icone("sparkles")} ${porqueHoje}</div>` : ""}
+      ${
+        st.topicos.length
+          ? `<div class="foco-meta">
+        <div class="fm"><span class="fm-k">Bloco</span><span class="fm-v">${st.config.pomodoroFoco || 25} min</span></div>
+        ${dominio != null ? `<div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">${dominio}%</span></div>` : `<div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">—</span></div>`}
+        ${vencidos ? `<div class="fm"><span class="fm-k">Flashcards</span><span class="fm-v">${vencidos}</span></div>` : ""}
+      </div>`
+          : ""
+      }
       ${ondeParei ? `<div class="foco-retomar">Última sessão: <b>${ondeParei}</b></div>` : ""}
       <div class="foco-acoes">
         ${
@@ -210,11 +222,15 @@ export default function renderHoje(root, app) {
     </section>
       <aside class="hoje-side">
         ${ringsHTML(store)}
-        ${mentorVozHTML(store, st, topicoSel)}
+        ${mentorVozHTML(store, st, topicoSel, pontoInsight ? pontoInsight.txt : "")}
       </aside>
     </div>
 
     ${hubRevisoesHTML(store)}
+
+    ${mentorHoje}
+
+    ${streakMini}
 
     ${tarefasHojeHTML(store)}
 
@@ -720,14 +736,19 @@ function ringsHTML(store) {
     </section>`;
 }
 
-// Card do Mentor com voz: o "porquê" data-driven do foco + sugestões (propõe, não executa).
-function mentorVozHTML(store, st, topicoSel) {
-  const porque = topicoSel ? porqueFoco(store, st, topicoSel) : "";
+// Card do Mentor com voz: uma observação/ponto de atenção (o "porquê" do foco agora vive
+// DENTRO do card de foco) + sugestões (propõe, não executa).
+function mentorVozHTML(store, st, topicoSel, insightTxt) {
   const nomeTop = topicoSel ? rotuloTopico(st, topicoSel) : "";
   const sug = (q, lbl) => `<button class="chip hmv-sug" data-action="mentor-sug" data-q="${esc(q)}">${esc(lbl)}</button>`;
+  const txt = insightTxt
+    ? esc(insightTxt)
+    : topicoSel
+    ? "Peça questões, um resumo ou o replanejamento do dia — eu proponho, você aprova."
+    : "Escolha um tópico e eu ajudo com questões, resumo e plano.";
   return `<section class="card card-ia hoje-mentor-voz">
       <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">sugere</span></div>
-      <p class="hmv-porque${porque ? "" : " muted"}">${porque ? `${icone("sparkles")} ${porque}` : "Escolha um tópico e o Mentor explica por que focar nele hoje."}</p>
+      <p class="hmv-porque${insightTxt ? "" : " muted"}">${insightTxt ? `${icone("sparkles")} ${txt}` : txt}</p>
       <div class="hmv-sugs">
         ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
         ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}
