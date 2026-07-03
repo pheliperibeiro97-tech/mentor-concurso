@@ -1,7 +1,7 @@
 // Revisão de tópico (dir.2): curva do esquecimento do CONTEÚDO estudado (24h/7d/30d...).
 // Releitura/recordação das palavras-chave do tópico, com botões graduados (Esqueci/
 // Lembrei/Fácil) que movem a escada [1,7,15,30,60,120] — generaliza a "memória" de lei/juris.
-import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural, revelarTexto } from "../ui.js";
 import { esc, fmtData, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 
@@ -11,6 +11,7 @@ let revelado = false; // no modo escrever, já revelou o conteúdo para autoconf
 let recallFeedback = null; // feedback da IA sobre o brain-dump
 let avaliando = false; // chamada de IA em andamento
 let braindumpTexto = ""; // preserva o texto digitado entre re-renders
+let feedbackFalou = false; // stream do feedback da IA só 1x quando ele chega (não re-digita a cada re-render)
 
 export default function renderRevTopico(root, app) {
   const { store } = app;
@@ -29,6 +30,14 @@ export default function renderRevTopico(root, app) {
     }
     root.innerHTML = header("Revisão de Tópicos", "Revisão espaçada do conteúdo que você estudou (curva do esquecimento)") + reviewHTML(store, topico);
     bindReview(root, app, store, topico);
+    // A IA "fala": revela o feedback com efeito de digitação (1x quando ele chega; respeita
+    // reduced-motion). Preserva a formatação (negrito/quebras) restaurando o HTML ao final.
+    const corpoEl = root.querySelector(".revtop-feedback-corpo");
+    if (corpoEl && recallFeedback && !feedbackFalou) {
+      const htmlFinal = corpoEl.innerHTML;
+      revelarTexto(corpoEl, corpoEl.textContent, { cps: 220, aoFim: () => { corpoEl.innerHTML = htmlFinal; } });
+      feedbackFalou = true;
+    }
     return;
   }
 
@@ -56,7 +65,7 @@ export default function renderRevTopico(root, app) {
     }
 
     <section class="card revtop-hoje">
-      <h3>${icone("repeat-2")} Para revisar hoje <span class="revtop-contador">${vencidas.length}</span></h3>
+      <div class="plano-h"><h2>Para revisar hoje</h2>${vencidas.length ? `<span class="cnt">${vencidas.length}</span>` : ""}</div>
       ${
         vencidas.length
           ? `<ul class="revtop-lista">
@@ -152,7 +161,7 @@ function reviewHTML(store, topico) {
       ${
         recallFeedback
           ? `<div class="revtop-feedback">
-              <div class="revtop-feedback-titulo">${icone("sparkles")} Avaliação da IA <span class="selo selo-amarelo">${icone("bot")} confira</span></div>
+              <div class="revtop-feedback-titulo"><span class="orb orb-sm" aria-hidden="true"></span> <span class="txt-ia">Avaliação da IA</span> <span class="selo selo-amarelo">${icone("bot")} confira</span></div>
               <div class="revtop-feedback-corpo">${mdLeve(recallFeedback)}</div>
               <div class="revtop-export">
                 <span class="muted small">Aproveitar esta revisão:</span>
@@ -234,6 +243,7 @@ function bindReview(root, app, store, topico) {
       try {
         const res = await store.avaliarRecallTopico(topico.id, texto);
         recallFeedback = res.texto;
+        feedbackFalou = false; // novo feedback chegou → libera o stream (1x)
       } catch (e) {
         toast("Não consegui avaliar a sua recordação agora. Tente de novo em instantes.", "erro");
       }

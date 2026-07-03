@@ -3,12 +3,13 @@
 // questões e anotações de erro. Nada é aplicado sem APROVAÇÃO (checkbox + botão).
 // É o ponto onde o sistema conversa consigo mesmo: lê sessões, erros, observações,
 // cobertura, prova e metas, e devolve ações que voltam para as outras telas.
-import { bindActions, toast, header, avisoIA, seloBadge, imprimir, botaoImprimir, vazio, skeletonDoc, plural } from "../ui.js";
+import { bindActions, toast, header, avisoIA, seloBadge, imprimir, botaoImprimir, vazio, skeletonDoc, plural, revelarTexto } from "../ui.js";
 import { esc, fmtMin } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES } from "../ciclo.js";
 
 let plano = null; // resultado da última análise da IA (aguardando aprovação)
+let analiseStreamPlano = null; // objeto-plano cuja análise já foi "digitada" (stream 1x por análise)
 
 export default function renderMentor(root, app) {
   const { store } = app;
@@ -20,6 +21,9 @@ export default function renderMentor(root, app) {
   const ocultas = store.atencaoOcultas();
   const iaOn = store.iaDisponivel();
   const diasAnalise = store.diasDesdeAnaliseMentor();
+  // A análise "nasce" com o texto digitando (stream) 1x por análise; nas re-renderizações
+  // (aplicar itens, etc.) o texto já aparece inteiro. Respeita reduced-motion (via revelarTexto).
+  const streamAnalise = !!(plano && plano.analise && analiseStreamPlano !== plano);
 
   root.innerHTML = `
     ${header("Mentor IA", "O mentor analisa todo o seu progresso e propõe os próximos passos.", botaoImprimir(), { tituloClasse: "txt-ia" })}
@@ -27,9 +31,10 @@ export default function renderMentor(root, app) {
     ${panoramaHTML(snap, pontos, ocultas)}
 
     <section class="card mentor-ia">
-      <div class="barra-acoes">
-        <h3 style="margin:0;display:flex;align-items:center;gap:8px"><span class="orb orb-sm" aria-hidden="true"></span> Análise do progresso <span class="muted small" style="font-weight:500">(progresso geral → sugestões)</span></h3>
-        <span class="spacer"></span>
+      <div class="plano-h">
+        <h2 style="display:flex;align-items:center;gap:8px"><span class="orb orb-sm" aria-hidden="true"></span> Análise do progresso</h2>
+        <span class="muted small" style="font-weight:500">(progresso geral → sugestões)</span>
+        <span class="sp"></span>
         <button class="btn btn-ia" data-action="analisar" data-tip="A IA lê o panorama acima e sugere metas, tarefas, flashcards, questões, resumos e leituras para você aprovar.">${plano ? `${icone("refresh-cw")} Reanalisar` : `${icone("sparkles")} Analisar meu progresso`}</button>
       </div>
       ${iaOn ? `<p class="mentor-periodo muted small">${
@@ -41,7 +46,7 @@ export default function renderMentor(root, app) {
       }</p>` : ""}
       <div id="mentor-plano-slot">${
         plano
-          ? planoHTML(plano)
+          ? planoHTML(plano, streamAnalise)
           : iaOn
           ? vazio(
               "Pronto para sua primeira análise\nO mentor lê o panorama acima e propõe metas, tarefas, flashcards, questões e anotações, cada uma com seu selo de origem. Você aprova o que quiser antes de aplicar.",
@@ -110,6 +115,13 @@ export default function renderMentor(root, app) {
     },
     "aplicar-plano": () => aplicar(root, app),
   });
+
+  // Stream do texto da análise ("digitando") na 1ª pintura pós-análise; 1x por análise.
+  if (streamAnalise) {
+    const alvo = root.querySelector(".mentor-analise-txt");
+    if (alvo) revelarTexto(alvo, plano.analise);
+    analiseStreamPlano = plano;
+  }
 }
 
 // ---------- panorama offline (sempre disponível, sem IA) ----------
@@ -135,7 +147,7 @@ function panoramaHTML(snap, pontos, ocultas) {
 
   return `
     <section class="card mentor-panorama">
-      <h3>Panorama (o que precisa de atenção)</h3>
+      <div class="plano-h"><h2 style="display:flex;align-items:center;gap:8px"><span class="orb orb-sm" aria-hidden="true"></span> Panorama</h2><span class="muted small">(o que precisa de atenção)</span></div>
       <ul class="mentor-alertas">${itens}</ul>
       ${
         ocultas.length
@@ -200,11 +212,11 @@ function printMentor(snap, pontos, p) {
 }
 
 // ---------- plano da IA (com aprovação) ----------
-function planoHTML(p) {
+function planoHTML(p, stream = false) {
   const a = p.acoes;
   const blocos = [];
 
-  if (p.analise) blocos.push(`<div class="mentor-analise">${seloBadge("amarelo")}<p>${esc(p.analise)}</p></div>`);
+  if (p.analise) blocos.push(`<div class="mentor-analise"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="orb orb-sm" aria-hidden="true"></span>${seloBadge("amarelo")}</div><p class="mentor-analise-txt">${stream ? "" : esc(p.analise)}</p></div>`);
   if (p.atencao.length || p.melhorar.length) {
     blocos.push(`<div class="mentor-listas">
       ${p.atencao.length ? `<div><b>${icone("triangle-alert")} Atenção</b><ul>${p.atencao.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}

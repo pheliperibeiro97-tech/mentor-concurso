@@ -23,7 +23,7 @@ export default function renderComecar(root, app) {
   root.innerHTML = `
     ${header("Tudo pronto! Por onde começar?", `Um mapa rápido do Mentor para ${alvo}.`)}
 
-    <section class="card comecar-passo1">
+    <section class="card comecar-passo1" data-reveal>
       <div class="cp1-num">1</div>
       <div class="cp1-corpo">
         <h3>Monte seu Edital</h3>
@@ -33,15 +33,18 @@ export default function renderComecar(root, app) {
     </section>
 
     <h2 class="comecar-titulo">O que o Mentor faz</h2>
-    <div class="comecar-grid">
-      ${FUNCS.map(
-        (f) => `
-        <button class="card comecar-card" data-action="ir" data-rota="${f.rota}">
-          <span class="cc-ico">${f.ico}</span>
+    <div class="comecar-grid" data-reveal>
+      ${FUNCS.map((f) => {
+        // Mentor IA = território da IA: acento ciano (card-ia) + orb no lugar do ícone.
+        const ehIA = f.rota === "mentor";
+        const ico = ehIA ? `<span class="orb orb-xs" style="width:24px;height:24px" aria-hidden="true"></span>` : f.ico;
+        return `
+        <button class="card comecar-card${ehIA ? " card-ia" : ""}" data-action="ir" data-rota="${f.rota}">
+          <span class="cc-ico">${ico}</span>
           <span class="cc-nome">${esc(f.nome)}</span>
           <span class="cc-txt muted small">${esc(f.txt)}</span>
-        </button>`
-      ).join("")}
+        </button>`;
+      }).join("")}
     </div>
 
     <div class="comecar-rodape">

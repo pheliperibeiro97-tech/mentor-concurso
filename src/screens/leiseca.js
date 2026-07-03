@@ -630,7 +630,7 @@ function abrirMarcarPQ(app, tipo) {
 function pqImportHTML(tipo, corte = 30, sugerindo = false, analise = null) {
   const ondeBase = tipo === "juris" ? "Jurisprudência" : "Lei Seca";
   return `<div class="card pq-import">
-    <h3>${icone("star")} Marcar Prováveis Questões (PQ) <span class="muted small pq-info" data-tip-pos="bottom" data-tip="Pontos de alta incidência (o que mais cai) num tópico. A IA estima pelas suas referências de ${ondeBase}; ou importe/cole uma estatística. Você confirma antes de aplicar.">ⓘ</span></h3>
+    <h3><span class="orb orb-sm" aria-hidden="true" style="display:inline-block;vertical-align:middle"></span> ${icone("star")} Marcar Prováveis Questões (PQ) <span class="muted small pq-info" data-tip-pos="bottom" data-tip="Pontos de alta incidência (o que mais cai) num tópico. A IA estima pelas suas referências de ${ondeBase}; ou importe/cole uma estatística. Você confirma antes de aplicar.">${icone("info")}</span></h3>
 
     <div class="pq-acoes">
       <button class="btn btn-ia btn-sm" data-action="pq-ia-sugere" ${sugerindo ? "disabled" : ""}>${icone("sparkles")} ${sugerindo ? "Analisando…" : "Sugerir com IA"}</button>
@@ -700,7 +700,7 @@ function listaCorpoHTML(st, tipo, modo, lista, r) {
       );
   if (done.length) {
     html += `<div class="concluidas-head">
-        <button class="lnk" data-action="toggle-concluidas">${mostrarConcluidas[tipo] ? "▾" : "▸"} ${icone("check")} Concluídas (${done.length})</button>
+        <button class="lnk" data-action="toggle-concluidas">${mostrarConcluidas[tipo] ? icone("chevron-down") : icone("chevron-right")} ${icone("check")} Concluídas (<span class="num">${done.length}</span>)</button>
         <span class="spacer"></span>
         <button class="btn btn-ghost btn-sm" data-action="limpar-lidas" data-tip-pos="cima-dir" data-tip="Remove da lista as metas já concluídas.">${icone("trash-2")} Limpar concluídas</button>
       </div>

@@ -3,9 +3,13 @@
 // final e é COMPOSTO POR MATÉRIA (cotas: X questões de cada disciplina), como uma prova
 // real. Tem modos rápidos, tempo sugerido, embaralho das alternativas e resultado por
 // matéria. Cada resposta vira tentativa (Caderno de Erros + Diagnóstico).
-import { bindActions, toast, vazio, confirmar, seloBadge, imprimir, pedirNumero , plural } from "../ui.js";
+import { bindActions, toast, vazio, confirmar, seloBadge, imprimir, pedirNumero , plural, ativarCountUp } from "../ui.js";
 import { esc, fmtMMSS, fmtTempo, pct } from "../util.js";
 import { icone } from "../icones.js";
+
+// Count-up da nota-herói só na 1ª pintura do resultado por sessão (não re-anima a cada
+// re-render, ex.: ao ligar/desligar a correção Cebraspe).
+let notaAnimou = false;
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
 
 // Estado independente por formato.
@@ -172,7 +176,7 @@ function renderSetup(root, app, st, formato) {
                     const v = Math.min(c.disp, Math.max(0, cfg.cotas[c.key] || 0));
                     return `<tr>
                       <td>${esc(c.nome)}</td>
-                      <td class="sim-disp">${c.disp}</td>
+                      <td class="sim-disp"><span class="num">${c.disp}</span></td>
                       <td><input type="number" class="sim-cota" data-disc="${esc(c.key)}" min="0" max="${c.disp}" value="${v}" /> <button class="lnk" data-action="cota-max" data-disc="${esc(c.key)}" data-tip="Usar todas desta disciplina">tudo</button></td>
                     </tr>`;
                   })
@@ -488,7 +492,7 @@ function renderResultado(root, app, st, formato) {
             <input type="checkbox" data-action="toggle-cebraspe"${cebraspeAtivo ? " checked" : ""}>
             <span>Correção com desconto (estilo Cebraspe)</span>
           </label>
-          <span class="sim-ceb-info" data-tip="Cada erro anula um acerto; questões em branco não contam.">ⓘ</span>
+          <span class="sim-ceb-info" data-tip="Cada erro anula um acerto; questões em branco não contam.">${icone("info")}</span>
           <div class="muted small sim-ceb-aviso">Critério específico de bancas que descontam (Cebraspe/Cespe). Nem toda prova C/E usa esse critério.</div>
         </div>`
       : "";
@@ -496,9 +500,9 @@ function renderResultado(root, app, st, formato) {
   root.innerHTML = `
     <section class="card sim-resultado">
       <div class="muted small sim-resultado-rotulo">Seu desempenho</div>
-      <div class="sim-nota${notaNegativa ? " sim-nota-neg" : ""}" style="color:${cor}">${notaGrande}</div>
+      <div class="sim-nota${notaNegativa ? " sim-nota-neg" : ""}" style="color:${cor}"${!notaAnimou && !cebraspeAtivo ? ` data-count="${aproveitamento}" data-suf="%"` : ""}>${notaGrande}</div>
       <div class="sim-placar">${placar}</div>
-      <div class="muted small sim-resultado-meta">${r.respondidas}/${r.total} respondidas · ${fmtTempo(r.tempoSeg)} <span data-tip="Os erros foram salvos no Caderno de Erros e o tempo no Acompanhamento.">ⓘ</span></div>
+      <div class="muted small sim-resultado-meta"><span class="num">${r.respondidas}</span>/<span class="num">${r.total}</span> respondidas · <span class="num">${fmtTempo(r.tempoSeg)}</span> <span data-tip="Os erros foram salvos no Caderno de Erros e o tempo no Acompanhamento.">${icone("info")}</span></div>
       ${toggleCebraspeHTML}
       <div class="form-acoes" style="justify-content:center;margin-top:16px">
         <button class="btn btn-add btn-lg" data-action="novo">Novo simulado</button>
@@ -509,7 +513,7 @@ function renderResultado(root, app, st, formato) {
     ${
       mats.length > 1
         ? `<section class="card">
-            <h3>Aproveitamento por disciplina</h3>
+            <div class="plano-h"><h2>Aproveitamento por disciplina</h2><span class="cnt">${mats.length}</span><span class="sp"></span></div>
             <div class="sim-por-mat">
               ${mats
                 .map((m) => {
@@ -522,7 +526,7 @@ function renderResultado(root, app, st, formato) {
                     return `<div class="sim-mat-linha">
                       <span class="sim-mat-nome">${esc(m.nome)}</span>
                       <span class="sim-mat-barra"><span class="sim-mat-fill" style="width:${larg}%;background:${c}"></span></span>
-                      <span class="sim-mat-num"><b style="color:${c}">${fmtSinal(mPct)}%</b> · ${mLiquido} pts (${m.acertos}−${mErros})</span>
+                      <span class="sim-mat-num"><b class="num" style="color:${c}">${fmtSinal(mPct)}%</b> · <span class="num">${mLiquido}</span> pts (<span class="num">${m.acertos}−${mErros}</span>)</span>
                     </div>`;
                   }
                   const p = pct(m.acertos, m.total);
@@ -530,7 +534,7 @@ function renderResultado(root, app, st, formato) {
                   return `<div class="sim-mat-linha">
                       <span class="sim-mat-nome">${esc(m.nome)}</span>
                       <span class="sim-mat-barra"><span class="sim-mat-fill" style="width:${p}%;background:${c}"></span></span>
-                      <span class="sim-mat-num"><b style="color:${c}">${p}%</b> · ${m.acertos}/${m.total}</span>
+                      <span class="sim-mat-num"><b class="num" style="color:${c}">${p}%</b> · <span class="num">${m.acertos}/${m.total}</span></span>
                     </div>`;
                 })
                 .join("")}
@@ -539,7 +543,7 @@ function renderResultado(root, app, st, formato) {
         : ""
     }
 
-    <h3>Correção</h3>
+    <div class="plano-h"><h2>Correção</h2><span class="cnt">${r.itens.length}</span><span class="sp"></span></div>
     <div class="lista-questoes">
       ${r.itens
         .map((it, n) => {
@@ -553,6 +557,12 @@ function renderResultado(root, app, st, formato) {
         })
         .join("")}
     </div>`;
+
+  // Count-up da nota-herói (1ª pintura por sessão; respeita reduced-motion via ativarCountUp).
+  if (!notaAnimou) {
+    ativarCountUp(root);
+    notaAnimou = true;
+  }
 
   bindActions(root, {
     novo: () => {

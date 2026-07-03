@@ -2,12 +2,14 @@
 // (de um tópico, material ou tema livre) → você responde → a IA CORRIGE com feedback
 // rico (o que deveria constar, o que faltou, o que errou, como melhorar), com busca
 // na web opcional. Sem IA, ainda dá métricas estruturais offline.
-import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto } from "../ui.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 
 let tipo = "discursiva";
 let genFonte = "topico";
+// Stream ("digitando") do feedback do Mentor só na 1ª pintura por sessão (não re-anima a cada refresh).
+let feedbackRevelou = false;
 
 const NOTA_CLS = { boa: "nota-boa", média: "nota-media", baixa: "nota-baixa" };
 
@@ -73,10 +75,7 @@ export default function renderCorrecao(root, app) {
     </div>
 
     <div class="historico-correcoes">
-      <div class="hist-head">
-        <h3>Seu histórico</h3>
-        <span class="hist-count">${st.redacoes.length} ${st.redacoes.length === 1 ? "correção" : "correções"}</span>
-      </div>
+      <div class="plano-h"><h2>Seu histórico</h2>${st.redacoes.length ? `<span class="cnt">${st.redacoes.length}</span>` : ""}<span class="sp"></span></div>
       ${
         st.redacoes.length
           ? [...st.redacoes].reverse().map((r) => correcaoHTML(r)).join("")
@@ -121,6 +120,18 @@ export default function renderCorrecao(root, app) {
     genFonte = e.target.value;
     root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st);
   });
+
+  // Stream do feedback mais recente (o "digitando" do Mentor) na 1ª pintura por sessão:
+  // revela o texto puro e, ao fim, restaura o HTML formatado (negrito/quebras). Respeita
+  // reduced-motion (ativarCountUp/revelarTexto já cuidam disso).
+  if (!feedbackRevelou) {
+    const fbEl = root.querySelector(".cor-feedback-txt");
+    if (fbEl) {
+      const html = fbEl.innerHTML;
+      revelarTexto(fbEl, fbEl.textContent, { cps: 40, aoFim: () => { fbEl.innerHTML = html; } });
+      feedbackRevelou = true;
+    }
+  }
 
   bindActions(root, {
     // Modo comparativo: alterna sua resposta × correção da IA lado a lado (sem re-render).
@@ -288,7 +299,7 @@ function correcaoHTML(r) {
       ${
         fbTxt
           ? `<blockquote class="cor-feedback">
-              <span class="cor-feedback-selo" data-tip="Correção feita pela IA, no nível de um examinador.">${icone("bot")}</span>
+              <span class="cor-feedback-selo" data-tip="Correção feita pela IA, no nível de um examinador."><span class="orb orb-sm" aria-hidden="true"></span></span>
               <div class="cor-feedback-txt">${md(fbTxt)}</div>${fontes}
             </blockquote>`
           : ""

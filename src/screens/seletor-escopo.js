@@ -200,7 +200,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       const podeConhecimento = !temConteudo && estado.base === "edital" && estado.sel.length > 0;
 
       corpo.innerHTML = `
-        <p class="muted small" style="margin-top:0">Escolha a <b>base</b> e o escopo. A IA gera a partir desse conteúdo, vinculando a fonte ao tópico.</p>
+        <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>Escolha a <b>base</b> e o escopo. A IA gera a partir desse conteúdo, vinculando a fonte ao tópico.</span></p>
         <div class="tile-grid se-base-grid" role="tablist">
           <button class="tile-pick ${estado.base === "edital" ? "on" : ""}" data-se-base="edital" data-tip="Pelo edital: disciplina → tópico → aula → subtópico.">
             <span class="tile-ico">${icone("list-checks")}</span>

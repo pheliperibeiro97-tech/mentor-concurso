@@ -87,16 +87,30 @@ function qPreviewHTML(itens, ce, st) {
     `<option value="">— sem tópico —</option>` +
     (st ? st.topicos.map((t) => `<option value="${t.id}" ${sel === t.id ? "selected" : ""}>${esc(nomeTopico(st, t))}</option>`).join("") : "");
   // Linha de ORIGEM/metadados (visível: não é a resposta). Vêm preenchidos só na importação de arquivo.
-  const metaRow = (q, i) => `<div class="q-meta-row">
+  // Selo honesto do tópico: "sugerido" (ciano/IA) só enquanto o valor bater com a sugestão
+  // ORIGINAL do Mentor; ao trocar para outro tópico vira "sua escolha" (azul = você); ao voltar,
+  // restaura. A sugestão baseline é guardada por índice em data-sug e sobrevive a re-renders
+  // via q.topicoSugerido (preservado por lerPreviewQ). Sincroniza ao vivo em ligarSeloTopico.
+  const metaRow = (q, i) => {
+    const sug = q.topicoSugerido !== undefined ? q.topicoSugerido || "" : q.topicoId || "";
+    const cur = q.topicoId || "";
+    let seloHTML = "";
+    if (sug) {
+      if (cur === sug) seloHTML = `<span class="mini-tag q-top-selo" data-i="${i}" data-sug="${esc(sug)}" data-tip="Sugerido pelo assunto — confira.">sugerido</span>`;
+      else if (!cur) seloHTML = `<span class="mini-tag q-top-selo" data-i="${i}" data-sug="${esc(sug)}" data-tip="Sugerido pelo assunto — confira." hidden>sugerido</span>`;
+      else seloHTML = `<span class="mini-tag q-top-selo foco-selo-voce" data-i="${i}" data-sug="${esc(sug)}" data-tip="Você escolheu este tópico.">sua escolha</span>`;
+    }
+    return `<div class="q-meta-row">
       <input class="prev-inp q-ref" data-i="${i}" value="${esc(q.referencia || "")}" placeholder="Referência (cód.)" />
       <input class="prev-inp q-assunto" data-i="${i}" value="${esc(q.assunto || "")}" placeholder="Assunto" />
       <input class="prev-inp q-banca" data-i="${i}" value="${esc(q.banca || "")}" placeholder="Banca" />
       <input class="prev-inp q-ano" data-i="${i}" value="${esc(q.ano || "")}" placeholder="Ano" />
       <input class="prev-inp q-orgao" data-i="${i}" value="${esc(q.orgao || "")}" placeholder="Órgão/Prova" />
-      <label class="q-top-lbl">Tópico ${q.topicoId ? '<span class="mini-tag" data-tip="Sugerido pelo assunto — confira.">sugerido</span>' : ""}
+      <label class="q-top-lbl">Tópico ${seloHTML}
         <select class="q-topico" data-i="${i}">${topOpts(q.topicoId || "")}</select>
       </label>
     </div>`;
+  };
   const card = (q, i) => {
     if (ce) {
       return `<li class="prev-card m-pratica q-prev-card" data-i="${i}">
@@ -155,6 +169,7 @@ function lerPreviewQ(root, ce) {
   const val = (c, sel) => (c.querySelector(sel)?.value || "").trim() || null;
   return [...root.querySelectorAll(".q-prev-card")].map((c) => {
     const enunciado = c.querySelector(".q-enun")?.value || "";
+    const seloEl = c.querySelector(".q-top-selo");
     const meta = {
       referencia: val(c, ".q-ref"),
       assunto: val(c, ".q-assunto"),
@@ -162,6 +177,8 @@ function lerPreviewQ(root, ce) {
       ano: val(c, ".q-ano"),
       orgao: val(c, ".q-orgao"),
       topicoId: (c.querySelector(".q-topico")?.value || "") || null,
+      // Preserva a sugestão ORIGINAL do Mentor entre re-renders (não é o valor atual do select).
+      topicoSugerido: seloEl ? seloEl.getAttribute("data-sug") || "" : "",
     };
     if (ce) {
       return { enunciado, certo: (c.querySelector(".q-ce-gab")?.value || "C") === "C", justificativa: c.querySelector(".q-just")?.value || "", ...meta };
@@ -302,11 +319,11 @@ export function ligarAddQuestoesArquivo(root, app, formato) {
         if (area) area.value = texto;
         const linhas = (texto || "").split(/\r?\n/).filter((l) => l.trim()).length;
         status.className = texto.trim() ? "import-status ok" : "import-status erro";
-        status.textContent = texto.trim() ? `✓ ${f.name} — carregado (${linhas} linha${linhas === 1 ? "" : "s"})` : `${f.name} — sem texto reconhecido. Cole manualmente.`;
+        status.innerHTML = texto.trim() ? `${icone("check")} ${esc(f.name)} — carregado (${linhas} linha${linhas === 1 ? "" : "s"})` : `${esc(f.name)} — sem texto reconhecido. Cole manualmente.`;
       } catch (err) {
         console.error(err);
         status.className = "import-status erro";
-        status.textContent = err && err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `✗ ${f.name} — não consegui ler. Cole manualmente.`;
+        status.innerHTML = err && err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `${icone("x")} ${esc(f.name)} — não consegui ler. Cole manualmente.`;
       }
     });
   };
@@ -318,6 +335,35 @@ export function ligarAddQuestoesArquivo(root, app, formato) {
     "'Resumo relacionado' (textos de divulgação entre as questões).");
   wire("#prova-file", "#prova-texto", true, "as QUESTÕES de uma prova de concurso: o enunciado e as alternativas de cada questão, na ordem, com a numeração (sem o gabarito de respostas)");
   wire("#gab-file", "#gab-texto", true, "o GABARITO de uma prova: a lista de respostas corretas por número de questão (ex.: 1-A, 2-C, 3-E...), apenas o mapa de respostas");
+}
+
+// Sincroniza ao vivo o selo do tópico no preview: enquanto o select bate com a sugestão
+// original do Mentor (data-sug) mostra "sugerido"; ao trocar para outro tópico vira
+// "sua escolha" (azul); ao esvaziar, esconde; ao voltar à sugestão, restaura. Sem re-render
+// (não perde o foco). Chamado após cada render do fluxo modal.
+function ligarSeloTopico(corpo) {
+  corpo.querySelectorAll(".q-prev-card .q-topico").forEach((selEl) => {
+    const selo = selEl.parentElement.querySelector(".q-top-selo");
+    if (!selo) return; // sem sugestão original → nunca houve selo
+    const sug = selo.getAttribute("data-sug") || "";
+    if (!sug) return;
+    selEl.addEventListener("change", () => {
+      const val = selEl.value || "";
+      if (val === sug) {
+        selo.hidden = false;
+        selo.className = "mini-tag q-top-selo";
+        selo.textContent = "sugerido";
+        selo.setAttribute("data-tip", "Sugerido pelo assunto — confira.");
+      } else if (!val) {
+        selo.hidden = true;
+      } else {
+        selo.hidden = false;
+        selo.className = "mini-tag q-top-selo foco-selo-voce";
+        selo.textContent = "sua escolha";
+        selo.setAttribute("data-tip", "Você escolheu este tópico.");
+      }
+    });
+  });
 }
 
 // Handler do botão: abre a JANELA modal de adicionar (substitui o painel inline).
@@ -341,6 +387,7 @@ function abrirAddQuestoes(app, estado, formato) {
       const st = store.get();
       corpo.innerHTML = addQuestoesPanelHTML(st, estado, formato);
       ligarAddQuestoesArquivo(corpo, app, formato); // wira #q-add-file, #prova-file, #gab-file (no corpo)
+      ligarSeloTopico(corpo); // sincroniza o selo "sugerido"/"sua escolha" ao trocar o tópico no preview
     },
     handlers: ({ rerender, fechar, corpo }) => {
       // Fecha a janela e zera o transitório do fluxo.

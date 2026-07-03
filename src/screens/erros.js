@@ -39,7 +39,7 @@ export default function renderErros(root, app) {
     ${header("Caderno de Erros", `${plural(todos.length, "erro", "erros")} em todas as disciplinas`, botaoImprimir())}
 
     <div class="erros-resumo muted small">
-      <b>${todos.length}</b> ${todos.length === 1 ? "erro" : "erros"}${MOTIVOS.map((m) => (porMotivo[m] ? ` · ${porMotivo[m]} ${esc(m).toLowerCase()}` : "")).join("")}${semMotivo ? ` · ${semMotivo} não definido` : ""}
+      <b class="num">${todos.length}</b> ${todos.length === 1 ? "erro" : "erros"}${MOTIVOS.map((m) => (porMotivo[m] ? ` · <span class="num">${porMotivo[m]}</span> ${esc(m).toLowerCase()}` : "")).join("")}${semMotivo ? ` · <span class="num">${semMotivo}</span> não definido` : ""}
     </div>
 
     <div class="barra-acoes">
@@ -415,7 +415,7 @@ function erroHTML(st, e) {
               ${MOTIVOS.map((m) => `<option ${e.motivoErro === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
           </label>
-          ${!e.manual ? `<button class="btn btn-ghost btn-sm" data-action="comentar-ia" data-id="${e.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que você errou e como não repetir (com selo de origem).">${icone("sparkles")} Comentar com IA</button>` : ""}
+          ${!e.manual ? `<button class="btn btn-ghost btn-sm" data-action="comentar-ia" data-id="${e.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que você errou e como não repetir (com selo de origem)."><span class="orb orb-xs" aria-hidden="true"></span> Comentar com IA</button>` : ""}
           <button class="btn btn-ghost btn-sm" data-action="gerar-flashcard" data-id="${e.id}" data-manual="${e.manual}" data-tip="Cria um flashcard a partir deste erro, para revisar depois.">${icone("layers")} Flashcards</button>
         </div>
         ${comentarioHTML}

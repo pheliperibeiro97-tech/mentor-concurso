@@ -12,7 +12,7 @@ export function abrirGuia() {
       <button class="btn btn-ghost btn-sm" data-action="expandir-tudo">Expandir tudo</button>
       <button class="btn btn-ghost btn-sm" data-action="recolher-tudo">Recolher tudo</button>
     </div>
-    <p class="muted small ajuda-intro">Clique num título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com usam uma IA conectada (você liga em Configurações com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Assistente</b> (o botão ✨ no canto), que consulta este guia.</p>
+    <p class="muted small ajuda-intro">Clique num título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com ${icone("sparkles")} usam uma IA conectada (você liga em Configurações com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Assistente</b> (o botão ${icone("sparkles")} no canto), que consulta este guia.</p>
     ${secoesHTML()}`;
   abrirJanela({
     titulo: "Guia do sistema",
@@ -38,7 +38,7 @@ export default function renderAjuda(root, app) {
       <button class="btn btn-ghost btn-sm" data-action="recolher-tudo">Recolher tudo</button>
     </div>
 
-    <p class="muted small ajuda-intro">Clique num título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com usam uma IA conectada (você liga em Configurações com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Assistente</b> (o botão ✨ no canto), que consulta este guia.</p>
+    <p class="muted small ajuda-intro">Clique num título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com ${icone("sparkles")} usam uma IA conectada (você liga em Configurações com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Assistente</b> (o botão ${icone("sparkles")} no canto), que consulta este guia.</p>
 
     ${secoesHTML()}
   `;

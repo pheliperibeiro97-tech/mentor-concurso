@@ -17,6 +17,7 @@ let sessFiltroDisc = ""; // filtro de disciplina na tabela de sessões ("" = tod
 let sessFiltroFase = ""; // filtro de fase ("" = todas)
 let rolarParaSessoes = false; // ao trocar período/dia, rola até a lista de sessões
 let statsDetAbertas = false; // lembra se "Estatísticas detalhadas" está aberto (sobrevive ao re-render)
+let kpiAnimou = false; // count-up dos KPIs só na 1ª renderização da sessão (não re-anima a cada ação)
 const discAberta = new Set();
 const sessEdit = new Set(); // ids de sessões em edição
 
@@ -91,6 +92,10 @@ export default function renderDiagnostico(root, app) {
     ? Math.round(discComTop.reduce((a, l) => a + l.cobertura, 0) / discComTop.length)
     : null;
   const semanaSeg = hist.periodos.semana.tempoSeg;
+  // Guarda: os KPIs contam 0→N só ao ENTRAR na tela; nas re-renderizações (trocar período,
+  // ordenar, filtrar) emitem o valor final estático, sem re-animar (evita o "piscar").
+  const kpiAnima = !kpiAnimou;
+  kpiAnimou = true;
   root.innerHTML = `
     ${header("Acompanhamento", "Sua evolução, num relance.", `<button class="btn btn-ghost btn-sm" data-action="abrir-imprimir-acomp" data-tip="Escolha o que imprimir desta página">${icone("printer")} Imprimir</button>`)}
 
@@ -106,9 +111,9 @@ export default function renderDiagnostico(root, app) {
     }
 
     <section class="card constancia-card" data-print="constancia" data-print-label="Constância (heatmap)">
-      <div class="barra-acoes" style="margin-bottom:4px">
-        <h3 style="margin:0">${icone("flame")} Constância ${defMetrica("constancia")}</h3>
-        <span class="spacer"></span>
+      <div class="plano-h" style="margin-bottom:4px">
+        <h2>${icone("flame")} Constância</h2>${defMetrica("constancia")}
+        <span class="sp"></span>
         <span class="chip chip-count" style="cursor:default">${ofensivaTexto(ofens)}</span>
       </div>
       <p class="muted small" style="margin:2px 0 10px">Cada quadrado é um dia. Dia sem registro fica neutro — a régua aqui é a sua própria rotina.</p>
@@ -127,12 +132,12 @@ export default function renderDiagnostico(root, app) {
     <section class="scorecard stagger" data-print="kpis" data-print-label="Indicadores (cobertura, aproveitamento, prova)">
       <div class="sc-pilar">
         <span class="kpi-ico">${icone("list-checks")}</span>
-        <span class="sc-num" ${coberturaGeral === null ? "" : `data-count="${coberturaGeral}" data-suf="%"`}>${coberturaGeral === null ? "—" : coberturaGeral + "%"}</span>
+        <span class="sc-num" ${coberturaGeral === null || !kpiAnima ? "" : `data-count="${coberturaGeral}" data-suf="%"`}>${coberturaGeral === null ? "—" : coberturaGeral + "%"}</span>
         <span class="sc-rot">Cobertura do edital ${defMetrica("cobertura")}</span>
       </div>
       <div class="sc-pilar">
         <span class="kpi-ico">${icone("target")}</span>
-        <span class="sc-num ${perfClasse(store, diag.percentGeral)}" ${diag.percentGeral === null ? "" : `data-count="${diag.percentGeral}" data-suf="%"`}>${diag.percentGeral === null ? "—" : diag.percentGeral + "%"}</span>
+        <span class="sc-num ${perfClasse(store, diag.percentGeral)}" ${diag.percentGeral === null || !kpiAnima ? "" : `data-count="${diag.percentGeral}" data-suf="%"`}>${diag.percentGeral === null ? "—" : diag.percentGeral + "%"}</span>
         <span class="sc-rot">Aproveitamento ${defMetrica("aproveitamento")}</span>
       </div>
       <div class="sc-pilar" data-tip="Tempo em foco nos últimos 7 dias.">
@@ -144,7 +149,7 @@ export default function renderDiagnostico(root, app) {
         ${
           m.dataProva
             ? m.diasProva >= 0
-              ? `<span class="kpi-ico">${icone("calendar-days")}</span><span class="sc-num" data-count="${m.diasProva}">${m.diasProva}</span><span class="sc-rot">${m.diasProva === 1 ? "dia" : "dias"} até a prova · ${fmtData(m.dataProva)}</span>`
+              ? `<span class="kpi-ico">${icone("calendar-days")}</span><span class="sc-num" ${kpiAnima ? `data-count="${m.diasProva}"` : ""}>${m.diasProva}</span><span class="sc-rot">${m.diasProva === 1 ? "dia" : "dias"} até a prova · ${fmtData(m.dataProva)}</span>`
               : `<span class="kpi-ico">${icone("calendar-days")}</span><span class="sc-rot">Prova em ${fmtData(m.dataProva)} já passou</span>`
             : `<span class="kpi-ico">${icone("calendar-days")}</span><span class="sc-rot muted">Defina a data da prova em <b>Configurações</b></span>`
         }
@@ -152,7 +157,7 @@ export default function renderDiagnostico(root, app) {
     </section>
 
     <section class="card metas-card" data-print="metas" data-print-label="Metas">
-      <h3>${icone("target")} Metas</h3>
+      <div class="plano-h"><h2>${icone("target")} Metas</h2></div>
       ${barraMeta("Hoje", m.feitoHojeMin, m.metaDiariaMin)}
       ${barraMeta("Esta semana", m.feitoSemanaMin, m.metaSemanalMin)}
       ${barraMeta("Este mês", m.feitoMesMin, m.metaMensalMin)}
@@ -195,7 +200,7 @@ export default function renderDiagnostico(root, app) {
           </div>
         </div>
         ${pontosFracosHTML(store, diag.porDisciplina)}
-        <h3 style="margin-top:20px">${icone("library")} Por disciplina <span class="muted small" data-tip="Clique numa disciplina para abrir o painel: KPIs, semáforo por tópico e análise do Mentor.">ⓘ</span></h3>
+        <h3 style="margin-top:20px">${icone("library")} Por disciplina <span class="muted small" data-tip="Clique numa disciplina para abrir o painel: KPIs, semáforo por tópico e análise do Mentor.">${icone("info")}</span></h3>
         ${
           diag.porDisciplina.length
             ? `<div class="disc-grid stagger">${diag.porDisciplina.map((l) => cardDisciplina(l, store)).join("")}</div>
@@ -206,7 +211,7 @@ export default function renderDiagnostico(root, app) {
     </details>
 
     <section class="card" data-print="periodo" data-print-label="Por período">
-      <h3>${icone("bar-chart-3")} Por período <span class="muted small" data-tip="Clique em um período para filtrar as sessões abaixo.">ⓘ</span></h3>
+      <div class="plano-h"><h2>${icone("bar-chart-3")} Por período</h2><span class="muted small" data-tip="Clique em um período para filtrar as sessões abaixo.">${icone("info")}</span></div>
       <div class="periodos-grid">
         ${periodoBtn("hoje", "Hoje", hist.periodos.hoje)}
         ${periodoBtn("semana", "Últimos 7 dias", hist.periodos.semana)}
@@ -219,18 +224,18 @@ export default function renderDiagnostico(root, app) {
       <summary><span class="sum-tit">${icone("calendar-days")} Calendário</span><span class="sum-dica muted small">recolher/expandir</span></summary>
       <div class="plano-grid plano-grid-flat">
         <section class="card card-plano">
-          <h3>${icone("calendar-days")} Calendário <span class="muted small" data-tip="Clique em um dia para ver as sessões.">ⓘ</span></h3>
+          <h3>${icone("calendar-days")} Calendário <span class="muted small" data-tip="Clique em um dia para ver as sessões.">${icone("info")}</span></h3>
           ${calendarioHTML(store)}
         </section>
       </div>
     </details>
 
     <section class="card" id="sess-sec" data-print="sessoes" data-print-label="Histórico de sessões">
-      <div class="barra-acoes" style="margin-bottom:10px">
-        <h3 style="margin:0">${icone("clock-3")} ${esc(tituloSessoes)}</h3>
-        <span class="muted small">${plural(sessoesFiltradas.length, "sessão", "sessões")}</span>
+      <div class="plano-h" style="margin-bottom:10px">
+        <h2>${icone("clock-3")} ${esc(tituloSessoes)}</h2>
+        <span class="cnt">${plural(sessoesFiltradas.length, "sessão", "sessões")}</span>
         ${diaSel ? `<button class="btn btn-ghost btn-sm" data-action="limpar-dia">← Voltar ao período</button>` : ""}
-        <span class="spacer"></span>
+        <span class="sp"></span>
         <label class="inline small">Disciplina
           <select id="sess-f-disc">
             <option value="">Todas</option>
@@ -267,7 +272,7 @@ export default function renderDiagnostico(root, app) {
     </section>
 
     <section class="card diag-sugestoes">
-      <h3>${icone("lightbulb")} Sugestões</h3>
+      <div class="plano-h"><h2>${icone("lightbulb")} Sugestões</h2></div>
       ${diag.sugestoes.length ? `<ul>${diag.sugestoes.map((s) => `<li>${esc(s)}</li>`).join("")}</ul>` : `<p class="muted small">Sem alertas no momento. Continue o ciclo.</p>`}
       <button class="btn btn-ghost btn-sm" data-action="ir-mentor" data-tip="Ver o plano completo e aplicar ações sugeridas pela IA.">${icone("compass")} Abrir o Mentor IA</button>
     </section>
@@ -559,9 +564,9 @@ function calendarioHTML(store) {
 
   return `
     <div class="cal-head">
-      <button class="btn btn-ghost btn-sm" data-action="mes-prev" data-tip="Mês anterior">‹</button>
+      <button class="btn btn-ghost btn-sm" data-action="mes-prev" data-tip="Mês anterior">${icone("chevron-left")}</button>
       <div class="cal-mes">${esc(nomeMes)}</div>
-      <button class="btn btn-ghost btn-sm" data-action="mes-next" data-tip="Próximo mês">›</button>
+      <button class="btn btn-ghost btn-sm" data-action="mes-next" data-tip="Próximo mês">${icone("chevron-right")}</button>
       <button class="btn btn-ghost btn-sm" data-action="mes-hoje" data-tip="Voltar ao mês atual">hoje</button>
     </div>
     <div class="cal-grid cal-semana">${SEMANA.map((s) => `<div class="cal-wd">${s}</div>`).join("")}</div>
@@ -610,7 +615,7 @@ function thSort(col, label, extra = "") {
   const ativo = sessaoSort.col === col;
   const cls = `sortavel${extra}${ativo ? " ativo " + sessaoSort.dir : ""}`;
   return `<th class="${cls}" data-action="sort-sessao" data-col="${col}" data-tip="Ordenar por ${label.toLowerCase()}">
-    <span class="th-in"><span>${label}</span><span class="sort-ar"><b class="up">▲</b><b class="down">▼</b></span></span>
+    <span class="th-in"><span>${label}</span><span class="sort-ar"><b class="up">${icone("chevron-up")}</b><b class="down">${icone("chevron-down")}</b></span></span>
   </th>`;
 }
 
@@ -742,7 +747,7 @@ function linhaDisciplina(l, store) {
       ? l.topicos
           .map(
             (t) => `<tr class="topico-row">
-        <td class="topico-nome">↳ ${esc(t.nome)}</td>
+        <td class="topico-nome">${icone("corner-down-right")} ${esc(t.nome)}</td>
         <td colspan="2" class="muted">—</td>
         <td>${fmtTempoCurto(t.tempoSeg)}</td>
         <td>${t.ultimoEstudo ? `${fmtData(t.ultimoEstudo)} <span class="muted">(${haQuantoTempo(t.ultimoEstudo)})</span>` : `<span class="muted">nunca</span>`}</td>
@@ -819,7 +824,7 @@ function pontosFracosHTML(store, porDisciplina) {
     )
     .join("");
   return `
-    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas).">ⓘ</span></h3>
+    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas).">${icone("info")}</span></h3>
     <ul class="fracos-lista">${itens}</ul>`;
 }
 

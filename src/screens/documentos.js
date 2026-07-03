@@ -162,7 +162,7 @@ function estruturaResumoHTML(est, store, docId) {
     : `<span class="muted small">Os tópicos são aplicados ao salvar o material.</span>`;
   return `<details class="estr-card" open>
     <summary>${icone("files")} Estrutura — <b>${est.blocos.length}</b> ${est.blocos.length === 1 ? "bloco" : "blocos"} · ${comTopico}/${est.blocos.length} com tópico${aula}${avisoConf} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span></summary>
-    <p class="muted small" style="margin:6px 0">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique "" para conferir a página.</p>
+    <p class="muted small" style="margin:6px 0">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique ${icone("eye")} para conferir a página.</p>
     <ul class="estr-lista">${linhas}</ul>
     <div class="estr-acoes" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">${refino}${aplicar}</div>
   </details>`;
@@ -886,7 +886,7 @@ function buscaSemanticaHTML(store) {
     ? `Separados para busca por significado: <b>${s.indexadas}</b> de ${s.fontes} (${plural(s.chunks, "trecho", "trechos")})${s.pendentes ? ` · <b>${s.pendentes} para separar</b>` : ""}.`
     : `Nenhum material separado ainda (${plural(s.fontes, "disponível", "disponíveis")}) — separe para habilitar a busca por significado.`;
   const labelSeparar = semSelMostrar
-    ? "▾ Fechar"
+    ? `${icone("chevron-down")} Fechar`
     : s.temIndice
     ? s.pendentes
       ? `Separar (${plural(s.pendentes, "pendente", "pendentes")})`
@@ -911,7 +911,7 @@ function selecaoFontesHTML(store) {
   }
   const sel = semSel || new Set();
   const statusFonte = (f) =>
-    f.indexada ? `✓ separado (${plural(f.chunks, "trecho", "trechos")})` : f.emIndice ? "⟳ desatualizado (reprocessar)" : "ainda não separado";
+    f.indexada ? `${icone("check")} separado (${plural(f.chunks, "trecho", "trechos")})` : f.emIndice ? `${icone("refresh-cw")} desatualizado (reprocessar)` : "ainda não separado";
   return `
     <div class="sem-sel">
       <div class="sem-sel-top">
@@ -1005,7 +1005,7 @@ function resultadosSemHTML(res) {
           <div class="sem-item-trecho">${realcarTermos(r.trecho.length > 320 ? r.trecho.slice(0, 320) + "…" : r.trecho, semQuery)}</div>
           <div class="sem-item-meta">
             <span class="tag-topico">${esc(r.origem)}</span>
-            <span class="muted small">afinidade ${(r.score * 100).toFixed(0)}%</span>
+            <span class="muted small">afinidade <span class="num">${(r.score * 100).toFixed(0)}%</span></span>
             <span class="spacer"></span>
             <button class="lnk" data-action="result-flashcards" data-idx="${i}" data-tip="Criar flashcards (IA) a partir deste trecho.">${icone("layers")} Flashcards</button>
             <button class="lnk" data-action="result-questoes" data-idx="${i}" data-tip="Criar questões (IA) a partir deste trecho.">${icone("notebook-pen")} Questões</button>
@@ -1114,11 +1114,11 @@ function abrirImportarMaterial(app) {
               toast("Texto carregado. Confira e salve.", "ok");
             }
             docStatus.className = "import-status ok";
-            docStatus.textContent = `✓ ${f.name} — pronto`;
+            docStatus.innerHTML = `${icone("check")} ${esc(f.name)} — pronto`;
           } catch (err) {
             console.error(err);
             docStatus.className = "import-status erro";
-            docStatus.textContent = err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `✗ ${f.name} — não consegui ler.`;
+            docStatus.innerHTML = err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `${icone("x")} ${esc(f.name)} — não consegui ler.`;
             toast(err.code === "PDF_PROTEGIDO" ? err.message : "Não consegui ler este arquivo. Confira se ele não está protegido por senha e tente de novo, ou cole o texto manualmente.", "erro");
           }
         });
@@ -1230,7 +1230,7 @@ function docHTML(store, st, d, busca) {
           ${topicosDoc.map((t) => { const pg = d.topicoPaginas && d.topicoPaginas[t.id]; return `<span class="tag-topico">${esc(nomeTopico(st, t))}${pg ? ` <span class="tag-pag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span>`; }).join("")}
           ${pend ? `<span class="tag-ocr">${icone("hourglass")} ${pend} pág. p/ OCR</span>` : ""}
           ${d.binarioDescartado ? `<span class="muted small" data-tip="O PDF original foi descartado; o texto extraído foi mantido." data-tip-pos="cima-dir">${icone("file-text")} PDF descartado</span>` : ""}
-          <button class="lnk doc-acao-primaria" data-action="abrir" data-id="${d.id}">${aberto ? "▾ ocultar texto" : "▸ ver texto extraído"}</button>
+          <button class="lnk doc-acao-primaria" data-action="abrir" data-id="${d.id}">${aberto ? `${icone("chevron-down")} ocultar texto` : `${icone("chevron-right")} ver texto extraído`}</button>
           <details class="doc-mais">
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este material.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
@@ -1269,7 +1269,7 @@ function docHTML(store, st, d, busca) {
               const pageSel = porPagina
                 ? `<label class="inline small" style="margin-bottom:6px">${icone("file-text")} Página:
                     <select class="mk-pagina-sel" data-id="${d.id}" style="width:auto; margin-left:6px">
-                      ${pgs.map((p) => `<option value="${p.n}" ${String(marcarPagina[d.id] || pgs[0].n) === String(p.n) ? "selected" : ""}>${p.n}${p.temImagem ? " " : ""}</option>`).join("")}
+                      ${pgs.map((p) => `<option value="${p.n}" ${String(marcarPagina[d.id] || pgs[0].n) === String(p.n) ? "selected" : ""}>${p.n}${p.temImagem ? " (fig.)" : ""}</option>`).join("")}
                     </select>
                     <span class="muted">de ${pgs.length} · grife página por página (vira fonte da revisão)</span>
                    </label>`
@@ -1410,7 +1410,7 @@ function ocrPainelHTML(store, d) {
         ${
           iaOn
             ? `<select class="ocr-pag-sel" data-id="${d.id}" aria-label="Página para Visão">
-                 ${d.paginas.map((p) => `<option value="${p.n}">página ${p.n}${p.temImagem ? " figura" : ""}${p.ocr ? " " : ""}</option>`).join("")}
+                 ${d.paginas.map((p) => `<option value="${p.n}">página ${p.n}${p.temImagem ? " figura" : ""}${p.ocr ? " (Visão)" : ""}</option>`).join("")}
                </select>
                <button class="btn btn-ghost btn-sm" data-action="ocr-pagina-sel" data-id="${d.id}" data-tip-pos="cima-dir" data-tip="Substitui o texto da página escolhida pela transcrição da Visão (tabelas em Markdown, organogramas descritos).">${icone("search")} Visão nesta página</button>`
             : `<span class="muted small">Conecte o Gemini em Configurações para usar a Visão.</span>`

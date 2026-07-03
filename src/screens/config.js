@@ -29,7 +29,7 @@ let abaCfg = "estudo";
 
 // Texto de ajuda por provedor (onde pegar a chave grátis).
 const AJUDA_IA = {
-  gemini: 'Chave grátis no Google AI Studio (aistudio.google.com/apikey). Não precisa escolher o modelo: use <b>🔌 Testar conexão</b> que ele acha sozinho o melhor modelo grátis que sua chave aceita.',
+  gemini: 'Chave grátis no Google AI Studio (aistudio.google.com/apikey). Não precisa escolher o modelo: use <b>Testar conexão</b> que ele acha sozinho o melhor modelo grátis que sua chave aceita.',
   "claude-cli": 'Usa o <b>Claude Code instalado nesta máquina</b> (sua autenticação local) — <b>uso pessoal</b>, só no app <b>desktop</b>. Não precisa de chave. Atenção: consome o <b>limite da sua assinatura Claude</b>. A <b>busca semântica</b> (embeddings) continua exigindo o Gemini — sem ele, ela cai na busca por palavra exata. Modelo: <b>haiku</b> (econômico), <b>sonnet</b> ou <b>opus</b> (mais qualidade, mais custo).',
   offline: "Sem IA: o núcleo do app funciona, mas a geração de questões/flashcards, o comentário de erros, a correção de mérito e o chat elaborado ficam bloqueados.",
 };
@@ -49,11 +49,11 @@ export default function renderConfig(root, app) {
   const sy = cfg.sync || {};
   const syncSuporta = suportaSync();
   const syncStatus = sy.pendente
-    ? "⚠️ Decisão necessária"
+    ? `${icone("triangle-alert")} Decisão necessária`
     : sy.sincronizando
     ? "Sincronizando…"
     : sy.ultimoResultado === "erro"
-    ? "⚠️ Erro: " + esc(sy.erro || "falha")
+    ? `${icone("triangle-alert")} Erro: ` + esc(sy.erro || "falha")
     : sy.ultimaSync
     ? `Sincronizado ${icone("check")} ` + haQuanto(sy.ultimaSync)
     : "Ainda não sincronizado";
@@ -151,7 +151,7 @@ export default function renderConfig(root, app) {
     </section>
 
     <section class="card">
-      <h3>⏱ Som do alarme do cronômetro</h3>
+      <h3>${icone("alarm-clock")} Som do alarme do cronômetro</h3>
       <p class="muted small">Quando o tempo do bloco termina, o cronômetro toca um sinal e segue contando o tempo extra. Escolha a duração do som.</p>
       <label class="inline">Alarme:
         <select id="cfg-alarme" style="width:auto; margin-left:6px">
@@ -177,7 +177,7 @@ export default function renderConfig(root, app) {
           </label>`;
         }).join("")}
       </div>
-      <p class="muted small" style="margin:10px 0 0"><b>${7 - (cfg.diasFolga || []).length}</b> ${7 - (cfg.diasFolga || []).length === 1 ? "dia" : "dias"} de estudo por semana.</p>
+      <p class="muted small" style="margin:10px 0 0"><b class="num">${7 - (cfg.diasFolga || []).length}</b> ${7 - (cfg.diasFolga || []).length === 1 ? "dia" : "dias"} de estudo por semana.</p>
     </section>
 
     <section class="card">
@@ -210,7 +210,7 @@ export default function renderConfig(root, app) {
     <p class="cfg-grupo-sub">A camada de IA que orquestra questões, flashcards, correção e chat. O núcleo do app funciona sem ela.</p>
 
     <section class="card">
-      <h3>${icone("bot")} Camada de IA <span class="muted small" data-tip="O essencial funciona offline. A IA é só orquestradora (com selo de origem) e a chave fica salva apenas na sua máquina.">ⓘ</span></h3>
+      <h3>${icone("bot")} Camada de IA <span class="muted small" data-tip="O essencial funciona offline. A IA é só orquestradora (com selo de origem) e a chave fica salva apenas na sua máquina.">${icone("info")}</span></h3>
       <p class="muted small">Conecte uma chave para liberar os recursos de IA.</p>
       <p class="small">Status: ${iaDisponivel(cfg) ? '<b style="color:var(--success)">IA conectada</b> ' : '<b>Offline</b> (funções de IA bloqueadas)'}</p>
       <div class="form-row">
@@ -245,7 +245,7 @@ export default function renderConfig(root, app) {
       </label>
       ${
         cfg.iaProvider === "gemini"
-          ? `<label>Chave reserva <span class="muted small" data-tip="Opcional. Use uma 2ª chave grátis do Gemini (de outra conta Google). Ela só entra em ação automaticamente quando a chave principal estoura a cota diária (erro 429) — no uso normal, a principal é sempre usada.">ⓘ</span>
+          ? `<label>Chave reserva <span class="muted small" data-tip="Opcional. Use uma 2ª chave grátis do Gemini (de outra conta Google). Ela só entra em ação automaticamente quando a chave principal estoura a cota diária (erro 429) — no uso normal, a principal é sempre usada.">${icone("info")}</span>
         <input id="cfg-key2" type="password" value="${esc(cfg.iaKeyReserva || "")}" placeholder="opcional — entra só quando a principal esgota a cota" ${iaInativa ? "disabled" : ""} />
       </label>`
           : ""
@@ -318,8 +318,8 @@ export default function renderConfig(root, app) {
                   (a, i) => `<div class="atalho-row">
                     <span class="atalho-row-nome">${esc(a.icone)} ${esc(a.nome)} <span class="muted small">(${esc(rotuloTipo(a.tipo))})</span></span>
                     <span class="spacer"></span>
-                    <button class="lnk" data-action="atl-up" data-id="${a.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">↑</button>
-                    <button class="lnk" data-action="atl-down" data-id="${a.id}" ${i === cfg.atalhos.length - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">↓</button>
+                    <button class="lnk" data-action="atl-up" data-id="${a.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
+                    <button class="lnk" data-action="atl-down" data-id="${a.id}" ${i === cfg.atalhos.length - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>
                     <button class="lnk lnk-danger" data-action="del-atalho" data-id="${a.id}" data-tip="Remover atalho" data-tip-pos="cima-dir">${icone("x")}</button>
                   </div>`
                 )
@@ -380,7 +380,7 @@ export default function renderConfig(root, app) {
             ${
               sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small" style="margin:0 0 6px"><b>⚠️ A sincronização reduziria os seus dados</b> — aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>. Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
+                    <p class="small" style="margin:0 0 6px"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> — aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>. Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
                     <div class="form-acoes">
                       <button class="btn btn-primary btn-sm" data-action="sync-manter-local">Manter os daqui (enviar p/ a nuvem)</button>
                       <button class="btn btn-soft btn-sm" data-action="sync-usar-nuvem">Usar os da nuvem (substitui os daqui)</button>
@@ -391,7 +391,7 @@ export default function renderConfig(root, app) {
             ${
               sy.ultimoConflitoEm && !sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small" style="margin:0 0 6px"><b>⚠️ Conflito na última sincronização</b> — houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
+                    <p class="small" style="margin:0 0 6px"><b>${icone("triangle-alert")} Conflito na última sincronização</b> — houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
                     <div class="form-acoes">
                       <button class="btn btn-soft btn-sm" data-action="sync-baixar-backup">${icone("download")} Baixar cópia de segurança</button>
                       <button class="btn btn-ghost btn-sm" data-action="sync-dispensar-conflito">Dispensar aviso</button>
@@ -399,7 +399,7 @@ export default function renderConfig(root, app) {
                   </div>`
                 : ""
             }
-            <p class="muted small" style="margin:10px 0 0">⚠️ Use <b>um computador de cada vez</b> com o app aberto (deixe o Drive terminar de sincronizar antes de abrir na outra máquina). <b>Ao fechar o app, ele sincroniza sozinho.</b></p>`
+            <p class="muted small" style="margin:10px 0 0">${icone("triangle-alert")} Use <b>um computador de cada vez</b> com o app aberto (deixe o Drive terminar de sincronizar antes de abrir na outra máquina). <b>Ao fechar o app, ele sincroniza sozinho.</b></p>`
           : `<p class="muted small">Este ambiente não suporta a sincronização por arquivo. No <b>aplicativo instalado</b> (desktop) ela funciona.</p>`
       }
     </section>
@@ -408,11 +408,11 @@ export default function renderConfig(root, app) {
       <h3>${icone("database")} Dados</h3>
       <p class="muted small">Armazenamento: <b>${esc(backendName())}</b></p>
       <div class="dados-stats">
-        <span>${st.disciplinas.length} disciplinas</span>
-        <span>${st.topicos.length} tópicos</span>
-        <span>${st.documentos.length} materiais</span>
-        <span>${st.questoes.length} questões</span>
-        <span>${st.flashcards.length} flashcards</span>
+        <span><span class="num">${st.disciplinas.length}</span> disciplinas</span>
+        <span><span class="num">${st.topicos.length}</span> tópicos</span>
+        <span><span class="num">${st.documentos.length}</span> materiais</span>
+        <span><span class="num">${st.questoes.length}</span> questões</span>
+        <span><span class="num">${st.flashcards.length}</span> flashcards</span>
       </div>
       <div class="form-acoes">
         <button class="btn btn-ghost btn-sm" data-action="exportar-completo" data-tip="Inclui TUDO, inclusive seus materiais (PDF/texto). Use só localmente: NÃO compartilhe.">${icone("download")} Backup completo (local)</button>
@@ -602,7 +602,7 @@ export default function renderConfig(root, app) {
           setMsg("Conectou, mas a resposta foi inesperada.", "var(--danger)");
         }
       } catch (e) {
-        setMsg("❌ Falha: " + esc(e.message), "var(--danger)");
+        setMsg(`${icone("x")} Falha: ` + esc(e.message), "var(--danger)");
       } finally {
         el.disabled = false;
         el.textContent = txtOrig;
@@ -795,8 +795,8 @@ function botaoLinha(it, opts = {}) {
       fixo
         ? ""
         : `<label class="inline small" title="Mostrar na barra"><input type="checkbox" data-bv="${it.id}" ${oculto ? "" : "checked"} /> visível</label>
-           <button class="lnk" data-action="nav-up" data-id="${it.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">↑</button>
-           <button class="lnk" data-action="nav-down" data-id="${it.id}" ${i === total - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">↓</button>`
+           <button class="lnk" data-action="nav-up" data-id="${it.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
+           <button class="lnk" data-action="nav-down" data-id="${it.id}" ${i === total - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>`
     }
   </div>`;
 }

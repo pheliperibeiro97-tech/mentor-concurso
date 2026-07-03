@@ -25,6 +25,7 @@ let edModoIniciado = false; // ao abrir pela 1ª vez na sessão, respeita config
 let dossieTopicoId = null; // quando setado, o Edital mostra o DOSSIÊ do tópico (desdobramento)
 let dossieDiscId = null; // quando setado (e sem tópico aberto), mostra o PAINEL da disciplina
 let _lastParams = null; // identidade do objeto de params: distingue navegação de re-render
+let edCountAnimou = false; // count-up do anel de cobertura só na 1ª renderização da sessão (não re-anima a cada refresh)
 
 // Faixas de RELEVÂNCIA (incidência). Guardamos sempre o peso numérico (0–100), que
 // vem exato da importação; a UI seleciona por faixa. As faixas altas (81–90 e 91–100)
@@ -95,7 +96,7 @@ function sugIAHTML(store, carregando = "", rel = null) {
   const conc = st.concurso;
   const alvo = conc ? [conc.banca, conc.cargo].filter(Boolean).join(" · ") : "";
   return `<div class="card sug-rel">
-    <h3>${icone("sparkles")} Sugerir relevância (pesquisa)</h3>
+    <div class="plano-h"><span class="orb orb-sm" aria-hidden="true"></span><h2>Sugerir relevância</h2><span class="muted small">pesquisa</span></div>
     <p class="muted small">Aqui a IA <b>sugere</b> quais temas mais caem. São <b>estimativas conforme a pesquisa — confira antes de aplicar</b> (o Mentor sugere, você decide). Para o <b>melhor resultado</b>, importe suas <b>provas anteriores</b> em Questões ▸ "De uma prova anterior".</p>
     <div class="barra-acoes" style="margin-bottom:6px">
       <button class="btn ${nProvas ? "btn-primary" : "btn-ghost"} btn-sm" data-action="sug-provas" ${carregando || !nProvas ? "disabled" : ""} data-tip="${nProvas ? `Analisa as ${nProvas} questões das suas provas importadas (incidência real).` : "Importe provas anteriores para usar esta opção."}">${carregando === "provas" ? "Analisando…" : `Pelas minhas provas (${nProvas})`}</button>
@@ -183,7 +184,7 @@ function oficialHTML(store, recolar = false, diff = null) {
   }
   if (!r) {
     return `<div class="card oficial-card oficial-card-mini">
-      <h3>${icone("clipboard-list")} Checklist da banca <span class="muted small">(opcional)</span></h3>
+      <div class="plano-h"><h2>Checklist da banca</h2><span class="muted small">opcional</span></div>
       <p class="muted small">Tem o <b>edital da banca</b>? Cole abaixo para <b>validar a sua cobertura</b> (o que o seu edital já cobre e o que ficou de fora). <b>Não muda a sua estrutura</b>; é só uma conferência. O casamento é pelo nome + sinônimos () de cada tópico.</p>
       <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="Importar de PDF ou .txt. Pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
       <textarea id="oficial-texto" rows="5" placeholder="Cole o edital da banca (uma disciplina em MAIÚSCULAS ou terminada em ':', e os itens nas linhas/';' seguintes)…"></textarea>
@@ -203,13 +204,13 @@ function oficialHTML(store, recolar = false, diff = null) {
     ? `<div class="muted small" style="margin-top:10px">${icone("plus")} <b>Extras</b> — seus tópicos que não casam com nenhum item oficial (aprofundamento, ou nome diferente; se for o caso, adicione um sinônimo): ${r.extras.map((t) => esc(t.nome)).join(" · ")}</div>`
     : "";
   return `<div class="card oficial-card">
-    <h3>${icone("clipboard-list")} Checklist da banca</h3>
+    <div class="plano-h"><h2>Checklist da banca</h2></div>
     <p class="muted small">Você estuda pelo <b>seu edital</b>; aqui o app valida a cobertura contra o edital da banca. Resolva uma lacuna <b>vinculando</b> a um tópico seu (vira sinônimo) ou crie os tópicos faltantes.</p>
     <div class="oficial-kpis">
-      <span class="painel-num"><b style="color:${corPct}">${r.pct}%</b><span>cobertura</span></span>
-      <span class="painel-num"><b>${r.cobertos}</b><span>cobertos</span></span>
-      <span class="painel-num"><b>${r.lacunas.length}</b><span>lacunas</span></span>
-      <span class="painel-num"><b>${r.extras.length}</b><span>extras</span></span>
+      <span class="painel-num"><b class="num" style="color:${corPct}">${r.pct}%</b><span>cobertura</span></span>
+      <span class="painel-num"><b class="num">${r.cobertos}</b><span>cobertos</span></span>
+      <span class="painel-num"><b class="num">${r.lacunas.length}</b><span>lacunas</span></span>
+      <span class="painel-num"><b class="num">${r.extras.length}</b><span>extras</span></span>
     </div>
     ${r.multi ? `<p class="muted small" style="margin:0 0 8px">${icone("shuffle")} <b>${r.multi} ${r.multi === 1 ? "item" : "itens"}</b> do edital ${r.multi === 1 ? "está dividido" : "estão divididos"} em <b>vários tópicos</b> seus — a relevância/incidência desse item é <b>compartilhada</b> entre eles (não some nem é contada em dobro). Ao aplicar relevância, dá para <b>dividir</b> entre os tópicos do mesmo item.</p>` : ""}
     ${
@@ -280,7 +281,7 @@ function parseAulas(texto) {
 // Reusa a ação "importar-aulas-mais" (abre o importador completo) — sem novo handler.
 function aulasConviteHTML() {
   return `<div class="card cursinho-card cursinho-convite">
-    <h3>${icone("library")} Plano do cursinho <span class="muted small">(opcional)</span></h3>
+    <div class="plano-h"><h2>Plano do cursinho</h2><span class="muted small">opcional</span></div>
     <p class="muted small">Faz um <b>cursinho</b> e quer estudar pela <b>ordem das aulas</b>? Cole a divisão de aulas e o app monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão paralela. Sem isso, você segue normalmente pelo seu edital.</p>
     <div class="form-acoes" style="justify-content:flex-start"><button class="btn btn-primary" data-action="importar-aulas-mais">${icone("download")} Trazer a divisão do cursinho</button></div>
   </div>`;
@@ -318,7 +319,7 @@ function addDiscPanelHTML(texto = "") {
 function editalPreviewHTML(discs) {
   const totTop = discs.reduce((a, d) => a + (d.topicos || []).length, 0);
   return `<div class="card">
-    <h3>${icone("download")} Revisar ${plural(discs.length, "disciplina", "disciplinas")} e ${plural(totTop, "tópico", "tópicos")} antes de aplicar</h3>
+    <div class="plano-h"><h2>Revisar ${plural(discs.length, "disciplina", "disciplinas")} e ${plural(totTop, "tópico", "tópicos")} antes de aplicar</h2></div>
     <p class="muted small" style="margin:0 0 8px">Edite os nomes, remova (✕) o que não quiser e acrescente tópicos. Só o que estiver aqui será criado.</p>
     <div style="margin:0 0 10px"><button class="btn btn-ghost btn-sm" data-action="estruturar-edital-ia" data-tip="Reorganiza o edital com a IA — útil quando o texto veio bagunçado (OCR, 2 colunas, numeração). Não inventa tópicos.">${icone("sparkles")} Estruturar com IA</button> <span class="muted small">use se a separação automática não ficou boa</span></div>
     <div class="ed-prev-lista">
@@ -344,7 +345,7 @@ function editalPreviewHTML(discs) {
     </div>
     <button class="lnk" data-action="add-ed-disc" style="margin-top:8px">${icone("plus")} disciplina</button>
     <div class="form-acoes">
-      <button class="btn btn-ghost" data-action="voltar-ed" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">← Voltar para editar</button>
+      <button class="btn btn-ghost" data-action="voltar-ed" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost" data-action="descartar-ed">Descartar</button>
       <button class="btn btn-primary" data-action="aceitar-ed">Aplicar ao edital</button>
@@ -484,7 +485,7 @@ function abrirAddEdital(app) {
 // Preview EDITÁVEL das aulas do cursinho: cada aula é um card com nome + assuntos editáveis.
 function aulasPreviewHTML(aulas) {
   return `<div class="card cursinho-card">
-    <h3>${icone("download")} Revisar ${plural(aulas.length, "aula", "aulas")} antes de montar o plano</h3>
+    <div class="plano-h"><h2>Revisar ${plural(aulas.length, "aula", "aulas")} antes de montar o plano</h2></div>
     <p class="muted small" style="margin:0 0 10px">Edite o nome da aula e os assuntos; remova (✕) o que não quiser. Os assuntos serão ligados aos seus tópicos pelo nome (＋ sinônimos).</p>
     <div class="ed-prev-lista">
       ${aulas
@@ -508,7 +509,7 @@ function aulasPreviewHTML(aulas) {
         .join("")}
     </div>
     <div class="form-acoes">
-      <button class="btn btn-ghost" data-action="voltar-aulas" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">← Voltar para editar</button>
+      <button class="btn btn-ghost" data-action="voltar-aulas" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost" data-action="descartar-aulas">Descartar</button>
       <button class="btn btn-primary" data-action="aceitar-aulas">Montar plano do cursinho</button>
@@ -922,8 +923,8 @@ function aulasListaHTML(store, st) {
           <details class="doc-mais ed-top-mais">
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para esta aula.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
-              <button class="menu-item" data-action="aula-subir" data-id="${a.id}" ${custom && idx > 0 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">↑</span> Subir</button>
-              <button class="menu-item" data-action="aula-descer" data-id="${a.id}" ${custom && idx < aulas.length - 1 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">↓</span> Descer</button>
+              <button class="menu-item" data-action="aula-subir" data-id="${a.id}" ${custom && idx > 0 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-up")}</span> Subir</button>
+              <button class="menu-item" data-action="aula-descer" data-id="${a.id}" ${custom && idx < aulas.length - 1 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-down")}</span> Descer</button>
               <button class="menu-item" data-action="aula-renomear" data-id="${a.id}"><span class="menu-ico">${icone("square-pen")}</span> Renomear</button>
               <div class="menu-sep"></div>
               <button class="menu-item menu-item-danger" data-action="aula-remover" data-id="${a.id}"><span class="menu-ico">${icone("x")}</span> Remover aula</button>
@@ -1121,10 +1122,10 @@ export default function renderEdital(root, app) {
 
     <section class="card cobertura-edital">
       <div class="cob-edital-num">
-        ${progressRing(cob.pct, { size: 92, stroke: 9, grad: true })}
+        ${(() => { const anima = !edCountAnimou; edCountAnimou = true; return progressRing(cob.pct, { size: 92, stroke: 9, grad: true, count: anima }); })()}
         <div class="cob-edital-barra-wrap">
           <span class="cob-edital-rotulo">Cobertura do edital</span>
-          <span class="cob-edital-info muted small"><b>${cob.cobertos}</b> de <b>${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"} · o anel completa conforme você marca tópicos</span>
+          <span class="cob-edital-info muted small"><b class="num">${cob.cobertos}</b> de <b class="num">${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"} · o anel completa conforme você marca tópicos</span>
         </div>
       </div>
       ${

@@ -37,7 +37,7 @@ export function resumoTopicos(st, sel) {
 
 // Botão (vai na barra de filtros).
 export function filtroTopicosBotaoHTML(st, sel, aberto) {
-  return `<button class="btn btn-ghost btn-sm" data-ft="toggle" data-tip-pos="cima-esq" data-tip="Escolha vários tópicos ou disciplinas inteiras.">Tópicos: ${esc(resumoTopicos(st, sel))} ${aberto ? "▴" : "▾"}</button>`;
+  return `<button class="btn btn-ghost btn-sm" data-ft="toggle" data-tip-pos="cima-esq" data-tip="Escolha vários tópicos ou disciplinas inteiras.">Tópicos: ${esc(resumoTopicos(st, sel))} ${aberto ? icone("chevron-up") : icone("chevron-down")}</button>`;
 }
 
 // Painel de checkboxes (bloco; renderizar ABAIXO da barra de filtros).

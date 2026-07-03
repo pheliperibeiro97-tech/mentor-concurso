@@ -127,9 +127,9 @@ function renderTreino(root, app, formato) {
   root.innerHTML = `
     <div class="barra-acoes">
       ${addQuestoesBotaoHTML(s.addState.aberto, formato)}
-      <button class="btn btn-sm btn-treinar" data-action="treinar-erradas" ${nErradas ? "" : "disabled"} data-tip="Refaz, em branco, todas as que você errou. Cada uma sai da lista quando você acerta.">Treinar erros (${nErradas})</button>
+      <button class="btn btn-sm btn-treinar" data-action="treinar-erradas" ${nErradas ? "" : "disabled"} data-tip="Refaz, em branco, todas as que você errou. Cada uma sai da lista quando você acerta.">Treinar erros (<span class="num">${nErradas}</span>)</button>
       <span class="spacer"></span>
-      <button class="btn btn-sm btn-ghost lnk-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito.">${icone("trash-2")} Limpar (${questoes.length})</button>
+      <button class="btn btn-sm btn-ghost lnk-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito.">${icone("trash-2")} Limpar (<span class="num">${questoes.length}</span>)</button>
     </div>
 
     ${editObj ? editFormHTML(st, editObj, opcoesVincular, formato) : ""}
@@ -147,6 +147,7 @@ function renderTreino(root, app, formato) {
     </div>
     ${filtroTopicosPainelHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
 
+    ${totalFormato ? `<div class="plano-h"><h2>Suas questões</h2><span class="cnt">${questoes.length}</span><span class="sp"></span></div>` : ""}
     <div class="lista-questoes">
       ${
         questoes.length
@@ -382,7 +383,7 @@ function questaoHTML(st, q, formato, s) {
       feedback = `<div class="feedback ok">${icone("check")} Você acertou.</div>${justif}`;
       cardAcoes = `
         <div class="questao-rodape">
-          <button class="btn btn-ghost btn-sm" data-action="comentar-questao" data-q="${q.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito desta questão (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
+          <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito desta questão (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
           <button class="btn btn-ghost btn-sm" data-action="refazer" data-q="${q.id}" data-tip-pos="cima-esq" data-tip="Responder de novo, sem apagar o registro do acerto.">${icone("refresh-cw")} Refazer</button>
         </div>`;
     } else {
@@ -401,7 +402,7 @@ function questaoHTML(st, q, formato, s) {
           <div class="duvida-row">
             <input id="duv-${ultima.id}" type="text" placeholder="Anotar dúvida ou observação..." value="${esc(ultima.duvida || "")}" title="Anote a dúvida ou uma observação sobre o erro." />
             <button class="btn btn-ghost btn-sm" data-action="salvar-duvida" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="Salva a anotação neste erro (fica no Caderno de Erros).">Salvar</button>
-            <button class="btn btn-ghost btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e onde você se confundiu (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
+            <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e onde você se confundiu (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
           </div>
           ${explicacaoIAHTML(ultima.comentarioIA)}
         </div>`;
@@ -429,7 +430,7 @@ function questaoHTML(st, q, formato, s) {
       <div class="questao-alts">${altsHTML}</div>
       ${feedback}
       ${cardAcoes}
-      ${q.comentarioIA ? `<div class="ia-comentario">${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
+      ${q.comentarioIA ? `<div class="ia-comentario"><span class="orb orb-xs" aria-hidden="true"></span>${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
     </div>`;
 }
 

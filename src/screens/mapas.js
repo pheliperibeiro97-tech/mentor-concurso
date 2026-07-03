@@ -71,9 +71,9 @@ export default function renderMapas(root, app) {
       <div class="barra-acoes">
         <button class="btn btn-soft btn-sm" data-action="abrir" data-id="${m.id}">Abrir e revisar</button>
         <span class="spacer"></span>
-        <button class="btn btn-sm" data-action="rev-esqueci" data-id="${m.id}" data-tip="Reinicia a escada (revisar amanhã).">Esqueci</button>
-        <button class="btn btn-sm" data-action="rev-ok" data-id="${m.id}" data-tip="Sobe um degrau na escada da memória.">Lembrei</button>
-        <button class="btn btn-sm" data-action="rev-facil" data-id="${m.id}" data-tip="Sobe dois degraus.">Fácil</button>
+        <button class="btn-grad bg-esqueci" data-action="rev-esqueci" data-id="${m.id}" data-tip="Reinicia a escada (revisar amanhã).">Esqueci</button>
+        <button class="btn-grad bg-lembrei" data-action="rev-ok" data-id="${m.id}" data-tip="Sobe um degrau na escada da memória.">Lembrei</button>
+        <button class="btn-grad bg-facil" data-action="rev-facil" data-id="${m.id}" data-tip="Sobe dois degraus.">Fácil</button>
       </div>
     </div>`;
 
@@ -115,11 +115,12 @@ export default function renderMapas(root, app) {
 
   root.innerHTML = `
     ${header("Mapas mentais", "Suas ideias em árvore. Crie a partir de tópico, material, resumo, tema, arquivo ou do zero; revise na escada da memória e gere flashcards e questões a partir deles.", imprimirBtn)}
-    ${due.length ? `<h3 class="mapa-sec">${icone("repeat-2")} Para revisar hoje (${due.length})</h3>${due.map(cardRevisar).join("")}` : ""}
-    <div class="barra-acoes mapa-listhead">
-      <h3 class="mapa-sec" style="margin:0">Todos os mapas (${filtrados.length}${filtroTop ? ` de ${maps.length}` : ""})</h3>
+    ${due.length ? `<div class="plano-h"><h2>Para revisar hoje</h2><span class="cnt">${due.length}</span></div>${due.map(cardRevisar).join("")}` : ""}
+    <div class="plano-h mapa-listhead" style="align-items:center">
+      <h2>Todos os mapas</h2>
+      <span class="cnt">${filtrados.length}${filtroTop ? ` de ${maps.length}` : ""}</span>
+      <span class="sp"></span>
       ${maps.length ? filtroHTML : ""}
-      <span class="spacer"></span>
       ${gerarBtn}
     </div>
     ${filtrados.length ? filtrados.map(cardMapa).join("") : vazio(maps.length ? "Nenhum mapa neste filtro" : "Nenhum mapa mental ainda", maps.length ? "Troque o filtro ou gere um novo mapa." : "Clique em Gerar mapa mental (tópico, material, resumo, tema livre, arquivo ou estrutura escrita), ou gere pelo Dossiê/chat.", iconMapa)}

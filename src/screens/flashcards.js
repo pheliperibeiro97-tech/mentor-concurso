@@ -369,7 +369,7 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
              <div class="form-row" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
                ${
                  st.documentos.length || st.resumos.length
-                   ? `<button class="btn btn-ia btn-sm" data-action="gerar-escopo" data-tip="Escolha o tópico, a aula e (se houver índice) o subtópico; a IA gera a partir do material/resumo vinculado.">${icone("sparkles")} Gerar com IA</button>`
+                   ? `<button class="btn btn-ia btn-sm" data-action="gerar-escopo" data-tip="Escolha o tópico, a aula e (se houver índice) o subtópico; a IA gera a partir do material/resumo vinculado."><span class="orb orb-xs" aria-hidden="true"></span> Gerar com IA</button>`
                    : ""
                }
                ${
@@ -590,7 +590,7 @@ function cardRevisaoHTML(st, c) {
                }).join("")}
              </div>
              <div class="fc-extra">
-               <button class="fc-acao" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
+               <button class="fc-acao" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida."><span class="orb orb-xs" aria-hidden="true"></span> Comentar com IA</button>
                <button class="fc-acao ${cadernoErroId === c.id ? "on" : ""}" data-action="toggle-fc-erro" data-id="${c.id}" data-tip="Registra este card no Caderno de Erros para revisar lá também. As notas (Errei/Bom…) acima são da revisão; isto é à parte.">${icone("flag")} Caderno de Erros</button>
              </div>
              ${
@@ -639,7 +639,7 @@ function listaHTML(st) {
   const hojeISO = todayISO();
   return `
     <div class="lista-flashcards">
-      <h3 class="lista-fc-tit">Todos os flashcards (${contagem})</h3>
+      <div class="plano-h"><h2>Todos os flashcards</h2><span class="cnt">${contagem}</span></div>
       ${
         cards.length
           ? `<div class="fc-grid stagger">

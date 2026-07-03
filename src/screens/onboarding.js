@@ -92,7 +92,7 @@ export default function renderOnboarding(root, app) {
     const edital = montandoDe === "edital";
     root.innerHTML = `
       <div class="ob-card">
-        <div class="ob-logo ob-logo-spin">${icone("sparkles")}</div>
+        <div class="ob-logo"><span class="orb" style="width:56px;height:56px" aria-hidden="true"></span></div>
         <h1>${edital ? "Lendo seu edital…" : "Montando seu plano…"}</h1>
         <ul class="ob-load">
           ${edital
@@ -116,13 +116,13 @@ export default function renderOnboarding(root, app) {
     const r = planoResultado;
     root.innerHTML = `
       <div class="ob-card">
-        <div class="ob-logo ob-logo-ok">${icone("party-popper")}</div>
+        <div class="ob-logo"><span class="orb" style="width:56px;height:56px" aria-hidden="true"></span></div>
         <h1>Seu plano está pronto!</h1>
         <p class="ob-lead">Montamos um ponto de partida para <b>${esc(cargo)}</b>. Você já pode começar a estudar hoje — e ajustar tudo quando quiser no Edital.</p>
         <div class="ob-plano-kpis">
-          <div class="ob-kpi"><b>${r.disciplinas}</b><span>${r.disciplinas === 1 ? "matéria" : "matérias"}</span></div>
-          <div class="ob-kpi"><b>${r.topicos}</b><span>${r.topicos === 1 ? "tópico" : "tópicos"}</span></div>
-          ${dias != null ? `<div class="ob-kpi"><b>${dias}</b><span>${dias === 1 ? "dia p/ a prova" : "dias p/ a prova"}</span></div>` : ""}
+          <div class="ob-kpi"><b data-count="${r.disciplinas}">${r.disciplinas}</b><span>${r.disciplinas === 1 ? "matéria" : "matérias"}</span></div>
+          <div class="ob-kpi"><b data-count="${r.topicos}">${r.topicos}</b><span>${r.topicos === 1 ? "tópico" : "tópicos"}</span></div>
+          ${dias != null ? `<div class="ob-kpi"><b data-count="${dias}">${dias}</b><span>${dias === 1 ? "dia p/ a prova" : "dias p/ a prova"}</span></div>` : ""}
         </div>
         <div class="ob-final" style="border:0; justify-content:center; padding-top:6px">
           <button class="btn btn-ghost" data-action="ver-edital">Ver meu plano no Edital</button>
@@ -307,7 +307,9 @@ export default function renderOnboarding(root, app) {
 
   // -------- PASSO 3: IA (opcional) --------
   const prov = cfg.iaProvider || "offline";
-  const inativa = ["offline", "claude", "gemini-cli"].includes(prov);
+  // Provedores sem chave de API (desabilitam o campo): Offline e Claude Code local
+  // (usa a autenticação local do Claude Code, sem chave). Espelha o config.js.
+  const inativa = ["offline", "claude-cli"].includes(prov);
   root.innerHTML = `
     <div class="ob-card ob-wide">
       ${steps(3)}
@@ -320,8 +322,7 @@ export default function renderOnboarding(root, app) {
             <select id="ob-ia">
               <option value="offline" ${prov === "offline" ? "selected" : ""}>Offline (sem IA)</option>
               <option value="gemini" ${prov === "gemini" ? "selected" : ""}>Google Gemini (chave grátis)</option>
-              <option value="claude" ${prov === "claude" ? "selected" : ""}>Claude Code local (em breve)</option>
-              <option value="gemini-cli" ${prov === "gemini-cli" ? "selected" : ""}>Gemini CLI (em breve)</option>
+              <option value="claude-cli" ${prov === "claude-cli" ? "selected" : ""}>Claude Code local (pessoal · desktop)</option>
             </select>
           </label>
           <label>Chave de API

@@ -69,6 +69,7 @@ export default function renderResumos(root, app) {
     </div>
     ${filtroTopicosPainelHTML(st, filtroTop.sel, filtroTop.aberto)}
 
+    <div class="plano-h"><h2>Resumos</h2>${st.resumos.length ? `<span class="cnt">${st.resumos.length}</span>` : ""}</div>
     <div class="lista-resumos">
       ${
         lista.length
@@ -276,7 +277,7 @@ function gerarPanelHTML(st, aberto) {
   const opcoesTopico = `<option value="todos">Todos os tópicos</option>` + st.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`).join("");
   return `
     <div class="card gerar-panel" ${aberto ? "" : "hidden"}>
-      <h3>Gerar resumo a partir do seu conteúdo</h3>
+      <h3><span class="orb orb-sm" aria-hidden="true" style="display:inline-block;vertical-align:middle"></span> Gerar resumo a partir do seu conteúdo</h3>
       <p class="muted small">Reúne as fontes que você marcar, no escopo escolhido. Escolha como montar: <b>Compilar</b> (offline, fiel ao texto) ou <b>${icone("sparkles")} Sintetizar com IA</b> (condensa e organiza; com selo de origem, confira).</p>
       <div class="ger-fontes">
         ${FONTES_RESUMO.map(([v, n]) => `<label class="ger-fonte-chip"><input type="checkbox" class="ger-fonte" value="${v}" ${v === "material" ? "checked" : ""} /> ${n}</label>`).join("")}

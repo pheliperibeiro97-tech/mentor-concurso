@@ -82,7 +82,7 @@ export default function renderPlanejamento(root, app) {
     ${atrasadasHTML(st, store)}
 
     <section class="card">
-      <h3>${icone("repeat-2")} Próximas revisões <span class="muted small" style="font-weight:500" data-tip="Flashcards, tópicos e resumos com revisão agendada.">ⓘ</span></h3>
+      <div class="plano-h"><h2>Próximas revisões</h2>${datasRevisao.length ? `<span class="cnt">${datasRevisao.length}</span>` : ""}<span class="sp"></span><span class="muted small" data-tip="Flashcards, tópicos e resumos com revisão agendada." data-tip-pos="cima-dir">${icone("info")}</span></div>
       ${
         datasRevisao.length
           ? `<ul class="lista-simples">${datasRevisao
@@ -104,8 +104,10 @@ export default function renderPlanejamento(root, app) {
     </section>
 
     <section class="card reta-final-card">
-      <div class="reta-final-head">
-        <h3 style="margin:0">${icone("flag")} Modo Reta Final <span class="muted small" data-tip="Faltando pouco para a prova? Prioriza revisão (flashcards vencidos e caderno de erros) em vez de conteúdo novo." data-tip-pos="bottom">ⓘ</span></h3>
+      <div class="plano-h">
+        <h2>Modo Reta Final</h2>
+        <span class="muted small" data-tip="Faltando pouco para a prova? Prioriza revisão (flashcards vencidos e caderno de erros) em vez de conteúdo novo." data-tip-pos="bottom">${icone("info")}</span>
+        <span class="sp"></span>
         ${
           st.config.retaFinal
             ? `<button class="btn btn-primary" data-action="reta-ir" data-tip="Abrir o Hoje já com a fase de Revisão selecionada.">Ir para o foco em revisão →</button>`
@@ -123,7 +125,7 @@ export default function renderPlanejamento(root, app) {
     ${
       observacoes.length
         ? `<section class="card obs-card">
-            <h3>${icone("message-square")} Observações recentes <span class="muted small" data-tip="O que você anotou ao estudar. Leve em conta ao planejar.">ⓘ</span></h3>
+            <div class="plano-h"><h2>Observações recentes</h2>${observacoes.length ? `<span class="cnt">${observacoes.length}</span>` : ""}<span class="sp"></span><span class="muted small" data-tip="O que você anotou ao estudar. Leve em conta ao planejar." data-tip-pos="cima-dir">${icone("info")}</span></div>
             <ul class="obs-lista">
               ${observacoes
                 .map(
@@ -830,7 +832,7 @@ function atrasadasHTML(st, store) {
     .sort((a, b) => a.data.localeCompare(b.data));
   if (!atrasadas.length) return "";
   return `<section class="card atrasadas-card">
-    <h3 style="margin:0 0 4px">${icone("alarm-clock")} Tarefas atrasadas <span class="muted">(${atrasadas.length})</span></h3>
+    <div class="plano-h"><h2>Tarefas atrasadas</h2><span class="cnt">${atrasadas.length}</span></div>
     <p class="muted small" style="margin:0 0 10px">O Mentor não remarca sozinho. Decida tarefa por tarefa:</p>
     <ul class="atrasadas-lista">
       ${atrasadas
@@ -859,9 +861,10 @@ function atrasadasHTML(st, store) {
 // Mentor IA + Adicionar (digitar/colar/importar) — adaptados ao contexto da aba. ----
 function cronogramaCardHTML(st, store, opcoesTopico) {
   return `<section class="card cronograma-card cronograma-protag">
-    <div class="barra-acoes">
-      <h3 style="margin:0">${icone("calendar")} Agenda de estudos</h3>
-      <span class="muted small" data-tip="Escolha o destino (Semana = com dia · Tarefas avulsas = sem dia) e adicione como preferir. Nada é criado sem a sua aprovação.">ⓘ</span>
+    <div class="plano-h">
+      <h2>Agenda de estudos</h2>
+      <span class="sp"></span>
+      <span class="muted small" data-tip="Escolha o destino (Semana = com dia · Tarefas avulsas = sem dia) e adicione como preferir. Nada é criado sem a sua aprovação." data-tip-pos="cima-dir">${icone("info")}</span>
     </div>
 
     <div class="subtabs" style="margin:0 0 14px">
@@ -992,7 +995,7 @@ function extrairBoxHTML(opcoesTopico, store, texto = "", top = "", estim = "", e
     `value="${esc(top)}" selected`
   );
   return `<div class="extrair-box">
-    <div class="muted small" style="margin-bottom:8px">Tarefas <b>avulsas</b> (sem dia): uma por linha. <b>Tempo</b> opcional no fim, ex.: <code>(45 min)</code>, <code>(1h)</code>. <b>Observação</b> opcional após <code>//</code> (ex.: <code>Ler Lei 8.112 // focar arts. 116/117</code>). <span data-tip="Com IA conectada, além do “//”, a observação também é separada automaticamente da frase. Sem IA, use o “//” para separar a observação.">ⓘ</span>${iaOn ? "" : ' <i>(sem IA: cada linha vira uma tarefa; use “//” para a observação)</i>'}</div>
+    <div class="muted small" style="margin-bottom:8px">Tarefas <b>avulsas</b> (sem dia): uma por linha. <b>Tempo</b> opcional no fim, ex.: <code>(45 min)</code>, <code>(1h)</code>. <b>Observação</b> opcional após <code>//</code> (ex.: <code>Ler Lei 8.112 // focar arts. 116/117</code>). <span class="muted" data-tip="Com IA conectada, além do “//”, a observação também é separada automaticamente da frase. Sem IA, use o “//” para separar a observação.">${icone("info")}</span>${iaOn ? "" : ' <i>(sem IA: cada linha vira uma tarefa; use “//” para a observação)</i>'}</div>
     <label>Tarefas
       <textarea id="extrair-texto" rows="4" placeholder="Ex.: Ler a Lei 8.112 // atenção aos arts. 116 e 117 (45 min)&#10;Resolver 20 questões de licitações // focar na Lei 14.133 (30 min)">${esc(texto)}</textarea>
     </label>
@@ -1031,7 +1034,7 @@ function extrairPreviewHTML(st, itens) {
         .join("")}
     </ul>
     <div class="form-acoes plano-acoes">
-      <button class="btn btn-ghost" data-action="voltar-extrair" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e extrair de novo.">← Voltar para editar</button>
+      <button class="btn btn-ghost" data-action="voltar-extrair" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e extrair de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost" data-action="descartar-extrair">Descartar</button>
       <button class="btn btn-primary" data-action="aceitar-extrair" ${itens.length ? "" : "disabled"}>Adicionar (${itens.length})</button>
@@ -1044,7 +1047,7 @@ function extrairPreviewHTML(st, itens) {
 function importPanelHTML(st, store) {
   const iaOn = store.iaDisponivel();
   return `<div class="diag-box">
-    <label class="diag-disp-label"><span class="lbl-info-linha">Adicionar à semana <span class="muted small" style="font-weight:400" data-tip="Dia numa linha (Segunda ou Segunda-feira — tanto faz). Abaixo, UMA tarefa por linha (não precisa de “•”). Tempo opcional no fim entre parênteses: (50 min), (1h), (1h30). Observação opcional após “//”.">ⓘ</span></span>
+    <label class="diag-disp-label"><span class="lbl-info-linha">Adicionar à semana <span class="muted small" style="font-weight:400" data-tip="Dia numa linha (Segunda ou Segunda-feira — tanto faz). Abaixo, UMA tarefa por linha (não precisa de “•”). Tempo opcional no fim entre parênteses: (50 min), (1h), (1h30). Observação opcional após “//”.">${icone("info")}</span></span>
       <span class="muted small" style="display:block; font-weight:400; margin:2px 0 6px">
         <b>Dia:</b> uma linha só com o dia (“Segunda” ou “Segunda-feira”, tanto faz).
         <b>Tarefas:</b> uma por linha abaixo do dia (sem precisar de “•”).
@@ -1103,7 +1106,7 @@ function importPreviewHTML(st, store) {
         .join("")}
     </ul>
     <div class="form-acoes plano-acoes">
-      <button class="btn btn-ghost" data-action="voltar-import" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e estruturar de novo.">← Voltar para editar</button>
+      <button class="btn btn-ghost" data-action="voltar-import" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e estruturar de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost" data-action="descartar-import">Descartar</button>
       <button class="btn btn-primary" data-action="aceitar-import" ${itens.length ? "" : "disabled"}>Aceitar (${itens.length})</button>
@@ -1160,11 +1163,11 @@ function refinoHTML(refino) {
     const dia = a.dia != null && a.dia >= 0 && a.dia <= 6 ? DIAS_SEMANA_CURTO[a.dia] : null;
     if (a.acao === "remover") return `<span class="rf-acao rf-rem">${icone("minus")} Remover</span> “${esc(a.titulo)}”`;
     if (a.acao === "adicionar") return `<span class="rf-acao rf-add">${icone("plus")} Adicionar</span> “${esc(a.titulo)}”${a.categoria ? ` <span class="mini-tag">${esc(a.categoria)}</span>` : ""}${dia ? ` <span class="muted small">(${dia})</span>` : ""}`;
-    if (a.acao === "mover") return `<span class="rf-acao rf-mov">↪ Mover</span> “${esc(a.titulo)}”${dia ? ` <span class="muted small">→ ${dia}</span>` : ""}`;
+    if (a.acao === "mover") return `<span class="rf-acao rf-mov">${icone("corner-down-right")} Mover</span> “${esc(a.titulo)}”${dia ? ` <span class="muted small">→ ${dia}</span>` : ""}`;
     return esc(a.acao || "");
   };
   return `<div class="revtop-feedback plano-refino">
-    <div class="revtop-feedback-titulo">${icone("sparkles")} Refino do Mentor IA <span class="selo selo-amarelo">${icone("bot")} confira</span></div>
+    <div class="revtop-feedback-titulo"><span class="orb orb-sm" aria-hidden="true"></span> Refino do Mentor IA <span class="selo selo-amarelo">${icone("bot")} confira</span></div>
     ${refino.comentario ? `<div class="revtop-feedback-corpo">${mdLevePlano(refino.comentario)}</div>` : ""}
     ${
       ajustes.length
@@ -1200,14 +1203,14 @@ function previewHTML(st) {
   return `<div class="plano-preview">
     <div class="plano-macro-visual">
       <div class="plano-macro-cobertura">
-        <div class="pmc-rotulo"><span>${icone("library")} Cobertura do edital</span><b>${pct}%</b></div>
+        <div class="pmc-rotulo"><span>${icone("library")} Cobertura do edital</span><b class="num">${pct}%</b></div>
         <div class="pmc-barra"><div class="pmc-fill" style="width:${pct}%"></div></div>
-        <span class="muted small">${macro.cobertos}/${macro.totalTopicos} tópicos</span>
+        <span class="muted small"><span class="num">${macro.cobertos}/${macro.totalTopicos}</span> tópicos</span>
       </div>
       <div class="plano-macro-info">
         <span>${icone("calendar")} ${macroTxt}</span>
         <span>${icone("calendar-days")} ${plural(macro.diasEstudo, "dia", "dias")} de estudo esta semana · ~${fmtMin(macro.capDiaMin)}/dia</span>
-        ${macro.sobra > 0 ? `<span>↪ ${plural(macro.sobra, "tarefa", "tarefas")} ${macro.sobra === 1 ? "fica" : "ficam"} para as próximas semanas</span>` : ""}
+        ${macro.sobra > 0 ? `<span>${icone("corner-down-right")} ${plural(macro.sobra, "tarefa", "tarefas")} ${macro.sobra === 1 ? "fica" : "ficam"} para as próximas semanas</span>` : ""}
         ${macro.adiadas && macro.adiadas.length ? `<span>${icone("pause")} Adiadas (fora do plano): ${esc(macro.adiadas.join(", "))}</span>` : ""}
       </div>
     </div>
@@ -1292,7 +1295,7 @@ function soltasViewHTML(st) {
     ${
       concluidas.length
         ? `<div class="concluidas-head">
-            <button class="lnk" data-action="toggle-concluidas">${mostrarConcluidas ? "▾" : "▸"} ✓ Concluídas (${concluidas.length})</button>
+            <button class="lnk" data-action="toggle-concluidas">${mostrarConcluidas ? icone("chevron-down") : icone("chevron-right")} ${icone("check")} Concluídas (${concluidas.length})</button>
             <span class="spacer"></span>
             <button class="btn btn-ghost btn-sm" data-action="limpar-concluidas">${icone("trash-2")} Limpar concluídas</button>
           </div>
@@ -1373,7 +1376,7 @@ function semanaViewHTML(st, store) {
     </div>
     <div class="semana-lista">${grid}</div>
     <div class="rotina-head">
-      <button class="lnk" data-action="toggle-rotina-painel">${mostrarRotina ? "▾" : "▸"} Rotina semanal recorrente (${nRot})</button>
+      <button class="lnk" data-action="toggle-rotina-painel">${mostrarRotina ? icone("chevron-down") : icone("chevron-right")} Rotina semanal recorrente (${nRot})</button>
       <span class="muted small">tarefas que se repetem toda semana no mesmo dia</span>
     </div>
     ${mostrarRotina ? rotinaPainelHTML(st) : ""}
@@ -1406,7 +1409,7 @@ function diaItemHTML(st, it) {
   // Só tarefas datadas (missao) são arrastáveis entre dias; ocorrências de rotina ficam fixas.
   const arrastavel = it.tipo === "missao";
   return `<li class="dia-item m-${cls} ${it.concluida ? "feito" : ""} ${arrastavel ? "arrastavel" : ""}" data-id="${it.id}" ${arrastavel ? `draggable="true"` : ""}>
-    ${arrastavel ? `<span class="dia-grip" data-tip="Arraste para outro dia">⠿</span>` : ""}
+    ${arrastavel ? `<span class="dia-grip" data-tip="Arraste para outro dia">${icone("grip-vertical")}</span>` : ""}
     <input type="checkbox" class="missao-check" data-action="toggle-dia-item" data-tipo="${it.tipo}" data-id="${it.id}" data-data="${it.data}" ${it.concluida ? "checked" : ""} />
     <span class="dia-item-txt">${esc(it.titulo)}</span>
     ${it.estimMin ? `<span class="tarefa-tempo muted small" data-tip="Tempo só sugerido.">≈ ${fmtMin(it.estimMin)}</span>` : ""}
@@ -1495,7 +1498,7 @@ function missoesHTML(st, missoes, sortMode) {
         st.topicos.map((tt) => `<option value="${tt.id}" ${tt.id === m.topicoId ? "selected" : ""}>${esc(nomeTopico(st, tt))}</option>`).join("");
       const arrastavel = podeReordenar && !missEdit.has(m.id);
       return `<li class="missao-item m-${cls} ${arrastavel ? "arrastavel" : ""}" data-id="${m.id}" data-foco-id="${m.id}" ${arrastavel ? `draggable="true"` : ""}>
-        ${arrastavel ? `<span class="dia-grip miss-grip" data-tip="Arraste para reordenar">⠿</span>` : ""}
+        ${arrastavel ? `<span class="dia-grip miss-grip" data-tip="Arraste para reordenar">${icone("grip-vertical")}</span>` : ""}
         <input type="checkbox" class="missao-check" data-action="toggle-miss" data-id="${m.id}" ${m.concluida ? "checked" : ""} />
         <div class="missao-corpo">
           ${

@@ -25,8 +25,8 @@ export function dossieResumoHTML(store) {
   if (!st.disciplinas.length)
     return vazio(
       "Monte seu edital\nAdicione as disciplinas e tópicos para ver o dossiê de cada um.",
-      `<button class="btn btn-add" data-action="toggle-add-disc">＋ Adicionar ao edital</button>`,
-      "▤"
+      `<button class="btn btn-add" data-action="toggle-add-disc">${icone("plus")} Adicionar ao edital</button>`,
+      icone("library")
     );
   return st.disciplinas
     .map((d) => {
@@ -108,7 +108,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     if (!revTop) return "—";
     const m = { 1: "24h", 7: "7d", 15: "15d", 30: "30d", 60: "60d", 120: "120d" };
     const venc = revTop.proxima <= todayISO();
-    return `${venc ? "" : ""}${m[revTop.intervalo] || revTop.intervalo + "d"}`;
+    return `${venc ? `${icone("bell")} ` : ""}${m[revTop.intervalo] || revTop.intervalo + "d"}`;
   })();
 
   // ---- Cards do dossiê: cada um = um KPI clicável + a seção correspondente. A ordem e a
@@ -397,10 +397,10 @@ function ativarRecolhiveis(root) {
     corpo.classList.add("corpo-recolhivel");
     const btn = document.createElement("button");
     btn.className = "lnk dossie-vermais";
-    btn.textContent = "ver mais ▾";
+    btn.innerHTML = `ver mais ${icone("chevron-down")}`;
     btn.addEventListener("click", () => {
       const exp = corpo.classList.toggle("corpo-expandido");
-      btn.textContent = exp ? "ver menos ▴" : "ver mais ▾";
+      btn.innerHTML = exp ? `ver menos ${icone("chevron-up")}` : `ver mais ${icone("chevron-down")}`;
     });
     corpo.insertAdjacentElement("afterend", btn);
   });
@@ -442,8 +442,8 @@ function secaoWrap(card, key, podeSubir, podeDescer, retraida) {
     <div class="dossie-secao-head">
       <h4>${card.titulo}</h4>
       <div class="dossie-secao-ctrl">
-        <button class="lnk" data-action="dossie-subir" data-key="${key}" ${podeSubir ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para cima">↑</button>
-        <button class="lnk" data-action="dossie-descer" data-key="${key}" ${podeDescer ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para baixo">↓</button>
+        <button class="lnk" data-action="dossie-subir" data-key="${key}" ${podeSubir ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para cima">${icone("arrow-up")}</button>
+        <button class="lnk" data-action="dossie-descer" data-key="${key}" ${podeDescer ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para baixo">${icone("arrow-down")}</button>
         <button class="lnk olho-btn ${retraida ? "olho-fechado" : ""}" data-action="dossie-ocultar" data-key="${key}" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título e as funções"}">${icone("eye")}</button>
         ${printBtn}
       </div>
@@ -605,7 +605,7 @@ function thSess(col, label, extra = "") {
   const ativo = sessSort.col === col;
   const cls = `sortavel${extra}${ativo ? " ativo " + sessSort.dir : ""}`;
   return `<th class="${cls}" data-action="sort-sess" data-col="${col}" data-tip="Ordenar por ${label.toLowerCase()}">
-    <span class="th-in"><span>${label}</span><span class="sort-ar"><b class="up">▲</b><b class="down">▼</b></span></span>
+    <span class="th-in"><span>${label}</span><span class="sort-ar"><b class="up">${icone("chevron-up")}</b><b class="down">${icone("chevron-down")}</b></span></span>
   </th>`;
 }
 function sessoesSecaoHTML(st, dos, retraida) {
@@ -755,12 +755,18 @@ import { iaDisponivel as _iaOn, responderChat as _responderChat } from "../ia-pr
 import { fmtTempoCurto as _fmtTC } from "../util.js";
 
 let ddxOrd = "relevancia"; // relevancia | desempenho | tempo
+let ddxKpiAnimou = false; // count-up dos KPIs da disciplina só na 1ª renderização (não re-anima ao reordenar)
 const ddxAnaliseCache = {}; // { discId: { dia, texto } } — não re-consulta a IA à toa
 
 function ddxPerf(store, aprov, nTent) {
   if (aprov === null || nTent < 3) return { cls: "", banda: "ddx-neutro" }; // semáforo justo
   const cor = store.corDesempenho(aprov);
   return { cls: cor ? `perf-${cor}` : "", banda: cor ? `ddx-${cor}` : "ddx-neutro" };
+}
+// Cabeçalho do frame de análise do Mentor: orb (voz da IA) + rótulo. Inline flex para
+// alinhar o orb sem depender de CSS novo.
+function ddxAnaliseHeadHTML() {
+  return `<div class="ddx-analise-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="orb orb-sm" aria-hidden="true"></span><b class="txt-ia">Análise do Mentor</b></div>`;
 }
 
 export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTopico } = {}) {
@@ -812,15 +818,20 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
         <div class="ddx-linha-stats muted small">
           <span data-tip="tempo estudado">${icone("clock-3")} ${fmtTempo(i.tempoSeg)}</span>
           <span data-tip="último estudo">${i.ultimo ? fmtData(i.ultimo) : "—"}</span>
-          <span class="ddx-chev">›</span>
+          <span class="ddx-chev">${icone("chevron-right")}</span>
         </div>
       </button>`;
   };
 
+  // Guarda: os KPIs contam 0→N só ao ENTRAR na disciplina; ao reordenar/gerar análise
+  // exibem o valor final estático (evita re-animar a cada re-render).
+  const ddxAnima = !ddxKpiAnimou;
+  ddxKpiAnimou = true;
+
   const cacheA = ddxAnaliseCache[discId];
   const analiseHTML =
     cacheA && cacheA.dia === todayISO()
-      ? `<div class="ai-frame ddx-analise"><p class="ddx-analise-txt">${esc(cacheA.texto)}</p><p class="muted small" style="margin:6px 0 0">Análise do Mentor (hoje) — confira sempre.</p></div>`
+      ? `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt">${esc(cacheA.texto)}</p><p class="muted small" style="margin:6px 0 0">Gerada hoje — confira sempre.</p></div>`
       : "";
 
   root.innerHTML = `
@@ -841,12 +852,12 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
     <section class="scorecard stagger">
       <div class="sc-pilar">
         <span class="kpi-ico">${icone("target")}</span>
-        <span class="sc-num ${kpiPerf.cls}" ${linha.percentAcerto === null ? "" : `data-count="${linha.percentAcerto}" data-suf="%"`}>${linha.percentAcerto === null ? "—" : linha.percentAcerto + "%"}</span>
+        <span class="sc-num ${kpiPerf.cls}" ${linha.percentAcerto === null || !ddxAnima ? "" : `data-count="${linha.percentAcerto}" data-suf="%"`}>${linha.percentAcerto === null ? "—" : linha.percentAcerto + "%"}</span>
         <span class="sc-rot">Aproveitamento ${defMetrica("aproveitamento")}</span>
       </div>
       <div class="sc-pilar">
         <span class="kpi-ico">${icone("list-checks")}</span>
-        <span class="sc-num" data-count="${linha.cobertura}" data-suf="%">${linha.cobertura}%</span>
+        <span class="sc-num" ${ddxAnima ? `data-count="${linha.cobertura}" data-suf="%"` : ""}>${linha.cobertura}%</span>
         <span class="sc-rot">Cobertura ${defMetrica("cobertura")}</span>
       </div>
       <div class="sc-pilar" data-tip="Tempo total em foco nesta disciplina.">
@@ -864,9 +875,9 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
     <div id="ddx-analise-slot">${analiseHTML}</div>
 
     <section class="card" data-reveal>
-      <div class="barra-acoes" style="margin-bottom:10px">
-        <h3 style="margin:0">${icone("target")} Desempenho por tópico</h3>
-        <span class="spacer"></span>
+      <div class="plano-h" style="margin-bottom:10px">
+        <h2>${icone("target")} Desempenho por tópico</h2>
+        <span class="sp"></span>
         <div class="seg" role="tablist">
           <button class="${ddxOrd === "relevancia" ? "on" : ""}" data-action="ddx-ord" data-ord="relevancia" data-tip="Mais relevantes primeiro.">Relevância</button>
           <button class="${ddxOrd === "desempenho" ? "on" : ""}" data-action="ddx-ord" data-ord="desempenho" data-tip="Piores aproveitamentos primeiro.">Desempenho</button>
@@ -880,7 +891,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
     </section>
 
     <section class="card" data-reveal>
-      <h3>${icone("clock-3")} Histórico recente</h3>
+      <div class="plano-h"><h2>${icone("clock-3")} Histórico recente</h2></div>
       ${
         sessDisc.length
           ? `<div class="ddx-hist">${sessDisc
@@ -913,12 +924,12 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
         `Dados reais: aproveitamento geral ${linha.percentAcerto === null ? "sem questões" : linha.percentAcerto + "%"} em ${linha.totalTentativas} questões; cobertura ${linha.cobertura}%; tempo total ${_fmtTC(linha.tempoSeg || 0)}.\n` +
         (piores.length ? `Piores tópicos: ${piores.map((i) => `${i.t.nome} (${i.aprov}% em ${i.nTent})`).join("; ")}.\n` : "") +
         (semPratica.length ? `Sem prática ainda: ${semPratica.map((i) => i.t.nome).join("; ")}.` : "");
-      root.querySelector("#ddx-analise-slot").innerHTML = `<div class="ai-frame ddx-analise">${skeletonDoc(4)}</div>`;
+      root.querySelector("#ddx-analise-slot").innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}${skeletonDoc(4)}</div>`;
       try {
         const r = await _responderChat(st.config, { pergunta, fontes: [], web: false });
         ddxAnaliseCache[discId] = { dia: todayISO(), texto: (r.texto || "").trim() };
         const slot = root.querySelector("#ddx-analise-slot");
-        slot.innerHTML = `<div class="ai-frame ddx-analise"><p class="ddx-analise-txt"></p><p class="muted small" style="margin:6px 0 0">Análise do Mentor (hoje) — confira sempre.</p></div>`;
+        slot.innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt"></p><p class="muted small" style="margin:6px 0 0">Gerada hoje — confira sempre.</p></div>`;
         revelarTexto(slot.querySelector(".ddx-analise-txt"), ddxAnaliseCache[discId].texto);
         el.disabled = false;
         el.classList.remove("is-generating");

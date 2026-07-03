@@ -102,8 +102,14 @@ import arrowLeft from "lucide-static/icons/arrow-left.svg?raw";
 import arrowRight from "lucide-static/icons/arrow-right.svg?raw";
 import arrowUp from "lucide-static/icons/arrow-up.svg?raw";
 import arrowDown from "lucide-static/icons/arrow-down.svg?raw";
+import chevronUp from "lucide-static/icons/chevron-up.svg?raw";
+import info from "lucide-static/icons/info.svg?raw";
 import chevronDown from "lucide-static/icons/chevron-down.svg?raw";
 import chevronRight from "lucide-static/icons/chevron-right.svg?raw";
+import gripVertical from "lucide-static/icons/grip-vertical.svg?raw";
+import cornerDownRight from "lucide-static/icons/corner-down-right.svg?raw";
+import chevronLeft from "lucide-static/icons/chevron-left.svg?raw";
+import barChart3 from "lucide-static/icons/bar-chart-3.svg?raw";
 import ellipsis from "lucide-static/icons/ellipsis.svg?raw";
 import externalLink from "lucide-static/icons/external-link.svg?raw";
 import upload from "lucide-static/icons/upload.svg?raw";
@@ -215,7 +221,13 @@ const MAPA = {
   "arrow-up": arrowUp,
   "arrow-down": arrowDown,
   "chevron-down": chevronDown,
+  "chevron-up": chevronUp,
   "chevron-right": chevronRight,
+  info,
+  "grip-vertical": gripVertical,
+  "corner-down-right": cornerDownRight,
+  "chevron-left": chevronLeft,
+  "bar-chart-3": barChart3,
   ellipsis,
   "external-link": externalLink,
   upload,
