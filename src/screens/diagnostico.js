@@ -13,10 +13,12 @@ let periodoSel = "hoje"; // hoje | semana | mes | tudo
 let diaSel = null; // 'yyyy-mm-dd' quando um dia do calendário é clicado
 let mesCal = null; // 'yyyy-mm' em exibição no calendário
 let sessaoSort = { col: "data", dir: "desc" }; // ordenação da tabela de sessões
-// Filtros do histórico de sessões (painel "Filtros" + chips). Arrays vazios = sem filtro.
-let sessFiltroDiscs = []; // disciplinas (multi)
-let sessFiltroFases = []; // fases (multi)
-let sessFiltroTops = []; // tópicos (multi, contextual às disciplinas selecionadas)
+// Filtros do histórico de sessões (painel "Filtros" com campos rotulados + chips). "" = sem filtro.
+let sessFiltroDisc = ""; // disciplina (id) — "" = todas
+let sessFiltroFase = ""; // fase — "" = todas
+let sessFiltroTop = ""; // tópico (id, contextual à disciplina) — "" = todos
+let sessFiltroIni = ""; // data início (yyyy-mm-dd) do intervalo
+let sessFiltroFim = ""; // data fim (yyyy-mm-dd) do intervalo
 let sessFiltroObs = ""; // busca por texto na observação
 let sessFiltrosAbertos = false; // painel "Filtros" aberto/fechado
 let rolarParaSessoes = false; // ao trocar período/dia, rola até a lista de sessões
@@ -39,7 +41,15 @@ function haQuantoTempo(iso) {
   return `há ${n} dias`;
 }
 
-// Aplica os filtros do histórico de sessões (período/dia + fase/disciplina/tópico/observação) e ordena.
+// Rótulo do intervalo de datas ativo (para chip e título). Sem travessão: usa "a".
+function rotuloIntervalo() {
+  if (sessFiltroIni && sessFiltroFim) return `${fmtData(sessFiltroIni)} a ${fmtData(sessFiltroFim)}`;
+  if (sessFiltroIni) return `desde ${fmtData(sessFiltroIni)}`;
+  return `até ${fmtData(sessFiltroFim)}`;
+}
+
+// Aplica os filtros do histórico de sessões (data + fase/disciplina/tópico/observação) e ordena.
+// Prioridade da data: intervalo (Data início/fim do painel) > dia (calendário) > período (cards).
 function filtrarSessoes(store) {
   const todasSessoes = store.sessoesDetalhadas();
   const hoje = todayISO();
@@ -51,11 +61,24 @@ function filtrarSessoes(store) {
     tudo: () => true,
   };
   let ss, tituloSessoes;
-  if (diaSel) { ss = todasSessoes.filter((s) => s.data.slice(0, 10) === diaSel); tituloSessoes = `Sessões de ${fmtData(diaSel)}`; }
-  else { ss = todasSessoes.filter((s) => preds[periodoSel](s.data.slice(0, 10))); tituloSessoes = `Sessões · ${LABEL[periodoSel]}`; }
-  if (sessFiltroDiscs.length) ss = ss.filter((s) => sessFiltroDiscs.includes(s.disciplinaId));
-  if (sessFiltroFases.length) ss = ss.filter((s) => sessFiltroFases.includes(s.fase));
-  if (sessFiltroTops.length) ss = ss.filter((s) => s.topicoId && sessFiltroTops.includes(s.topicoId));
+  if (sessFiltroIni || sessFiltroFim) {
+    ss = todasSessoes.filter((s) => {
+      const d = s.data.slice(0, 10);
+      if (sessFiltroIni && d < sessFiltroIni) return false;
+      if (sessFiltroFim && d > sessFiltroFim) return false;
+      return true;
+    });
+    tituloSessoes = `Sessões · ${rotuloIntervalo()}`;
+  } else if (diaSel) {
+    ss = todasSessoes.filter((s) => s.data.slice(0, 10) === diaSel);
+    tituloSessoes = `Sessões de ${fmtData(diaSel)}`;
+  } else {
+    ss = todasSessoes.filter((s) => preds[periodoSel](s.data.slice(0, 10)));
+    tituloSessoes = `Sessões · ${LABEL[periodoSel]}`;
+  }
+  if (sessFiltroDisc) ss = ss.filter((s) => s.disciplinaId === sessFiltroDisc);
+  if (sessFiltroFase) ss = ss.filter((s) => s.fase === sessFiltroFase);
+  if (sessFiltroTop) ss = ss.filter((s) => s.topicoId === sessFiltroTop);
   const q = sessFiltroObs.trim().toLowerCase();
   if (q) ss = ss.filter((s) => (s.comentario || "").toLowerCase().includes(q));
   ss = ordenarSessoes(ss, sessaoSort);
@@ -65,39 +88,63 @@ function filtrarSessoes(store) {
 // Chips dos filtros ativos (com × individual) + "limpar tudo".
 function sessChipsHTML(st) {
   const nomeDisc = (id) => (st.disciplinas.find((d) => d.id === id) || {}).nome || "?";
+  const nomeTop = (id) => (st.topicos.find((t) => t.id === id) || {}).nome || "?";
   const chip = (label, tipo, val) => `<span class="sess-chip">${esc(label)}<button class="sess-chip-x" data-action="sess-chip-remover" data-tipo="${tipo}" data-val="${val || ""}" aria-label="Remover filtro">${icone("x")}</button></span>`;
   const chips = [];
-  if (diaSel) chips.push(chip(fmtData(diaSel), "dia"));
+  if (sessFiltroIni || sessFiltroFim) chips.push(chip(rotuloIntervalo(), "data"));
+  else if (diaSel) chips.push(chip(fmtData(diaSel), "dia"));
   else if (periodoSel !== "tudo") chips.push(chip(LABEL[periodoSel], "periodo"));
-  sessFiltroDiscs.forEach((id) => chips.push(chip(nomeDisc(id), "disc", id)));
-  sessFiltroFases.forEach((f) => chips.push(chip(FASES[f].nome, "fase", f)));
-  if (sessFiltroTops.length) chips.push(chip(plural(sessFiltroTops.length, "tópico", "tópicos"), "tops"));
+  if (sessFiltroDisc) chips.push(chip(nomeDisc(sessFiltroDisc), "disc"));
+  if (sessFiltroFase) chips.push(chip(FASES[sessFiltroFase].nome, "fase"));
+  if (sessFiltroTop) chips.push(chip(nomeTop(sessFiltroTop), "top"));
   if (sessFiltroObs.trim()) chips.push(chip(`"${sessFiltroObs.trim()}"`, "obs"));
   if (!chips.length) return "";
   return `<div class="sess-chips">${chips.join("")}<button class="lnk small sess-limpar" data-action="sess-limpar-tudo">limpar tudo</button></div>`;
 }
 
-// Painel de filtros (abre abaixo do botão; a tabela continua visível e atualiza ao vivo).
+// Painel de filtros: card de campos rotulados (disciplina, tópico, datas, fase + busca).
+// Abre abaixo do botão "Filtros"; a tabela continua visível e atualiza ao vivo.
 function sessPainelHTML(st) {
   if (!sessFiltrosAbertos) return "";
-  const check = (attr, val, rot, on) => `<label class="sff-check"><input type="checkbox" data-${attr}="${val}" ${on ? "checked" : ""} /> ${rot}</label>`;
-  const periodos = ["hoje", "semana", "mes", "tudo"].map((p) => `<button class="chip ${!diaSel && periodoSel === p ? "on" : ""}" data-action="sess-set-periodo" data-p="${p}">${LABEL[p]}</button>`).join("");
-  const fases = ORDEM_FASES.map((f) => check("sff-fase", f, esc(FASES[f].nome), sessFiltroFases.includes(f))).join("");
-  const discs = st.disciplinas.length ? st.disciplinas.map((d) => check("sff-disc", d.id, esc(d.nome), sessFiltroDiscs.includes(d.id))).join("") : `<span class="muted small">Nenhuma disciplina cadastrada.</span>`;
-  const discsTop = sessFiltroDiscs.length ? st.disciplinas.filter((d) => sessFiltroDiscs.includes(d.id)) : st.disciplinas;
-  const tops = discsTop
-    .map((d) => {
-      const ts = st.topicos.filter((t) => t.disciplinaId === d.id);
-      if (!ts.length) return "";
-      return `<div class="sff-top-grupo"><div class="sff-top-disc">${esc(d.nome)}</div>${ts.map((t) => check("sff-top", t.id, esc(t.nome), sessFiltroTops.includes(t.id))).join("")}</div>`;
-    })
-    .join("") || `<span class="muted small">Nenhum tópico ${sessFiltroDiscs.length ? "nas disciplinas selecionadas" : "cadastrado"}.</span>`;
-  return `<div class="card sess-filtros-painel">
-      <div class="sff-sec"><div class="sff-rot">Período</div><div class="sff-periodos">${periodos}</div><span class="muted small">ou clique num dia no Calendário abaixo.</span></div>
-      <div class="sff-sec"><div class="sff-rot">Fase</div><div class="sff-checks">${fases}</div></div>
-      <div class="sff-sec"><div class="sff-rot">Disciplina</div><div class="sff-checks">${discs}</div></div>
-      <div class="sff-sec sff-sec-tops"><div class="sff-rot">Tópico <span class="muted small">${sessFiltroDiscs.length ? "(das disciplinas selecionadas)" : "(todas as disciplinas)"}</span></div><div class="sff-checks sff-tops">${tops}</div></div>
-      <div class="sff-sec"><div class="sff-rot">Observação</div><input id="sess-busca" type="search" class="busca-input" placeholder="Buscar no texto da observação…" value="${esc(sessFiltroObs)}" /></div>
+  const semDisc = !st.disciplinas.length;
+  const discOpts = st.disciplinas.map((d) => `<option value="${d.id}" ${sessFiltroDisc === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
+  // Tópico contextual: disciplina selecionada → só os tópicos dela; senão → todos, agrupados por disciplina.
+  let topOpts;
+  if (sessFiltroDisc) {
+    topOpts = st.topicos.filter((t) => t.disciplinaId === sessFiltroDisc).map((t) => `<option value="${t.id}" ${sessFiltroTop === t.id ? "selected" : ""}>${esc(t.nome)}</option>`).join("");
+  } else {
+    topOpts = st.disciplinas
+      .map((d) => {
+        const ts = st.topicos.filter((t) => t.disciplinaId === d.id);
+        if (!ts.length) return "";
+        return `<optgroup label="${esc(d.nome)}">${ts.map((t) => `<option value="${t.id}" ${sessFiltroTop === t.id ? "selected" : ""}>${esc(t.nome)}</option>`).join("")}</optgroup>`;
+      })
+      .join("");
+  }
+  const faseOpts = ORDEM_FASES.map((f) => `<option value="${f}" ${sessFiltroFase === f ? "selected" : ""}>${esc(FASES[f].nome)}</option>`).join("");
+  const temFiltro = sessFiltroDisc || sessFiltroFase || sessFiltroTop || sessFiltroIni || sessFiltroFim || sessFiltroObs.trim() || periodoSel !== "tudo" || diaSel;
+  const campoSel = (id, label, inner, dis) => `<label class="sff-field">
+        <span class="sff-lbl">${label}</span>
+        <select id="${id}" class="sff-input sff-input-sel" ${dis ? "disabled" : ""}>${inner}</select>
+      </label>`;
+  const campoData = (id, label, val) => `<label class="sff-field">
+        <span class="sff-lbl">${label}</span>
+        <input type="date" id="${id}" class="sff-input sff-date" value="${val || ""}" />
+      </label>`;
+  return `<div class="sess-filtros-painel" role="region" aria-label="Filtros do histórico">
+      <div class="sff-head">
+        <span class="sff-tit">${icone("list-filter")} Filtros</span>
+        <span class="sff-sub">Refine o histórico de sessões</span>
+        ${temFiltro ? `<button class="sff-limpar" data-action="sess-limpar-tudo">${icone("rotate-ccw")} Limpar filtros</button>` : ""}
+      </div>
+      <div class="sff-grid">
+        ${campoSel("sess-f-disc", "Disciplina", `<option value="">Todas as disciplinas</option>${discOpts}`, semDisc)}
+        ${campoSel("sess-f-top", "Tópico", `<option value="">Todos os tópicos</option>${topOpts}`, semDisc)}
+        ${campoData("sess-f-ini", "Data início", sessFiltroIni)}
+        ${campoData("sess-f-fim", "Data fim", sessFiltroFim)}
+        ${campoSel("sess-f-fase", "Fase", `<option value="">Todas as fases</option>${faseOpts}`, false)}
+      </div>
+      <div class="sff-busca">${icone("search")}<input id="sess-busca" type="search" class="sff-busca-input" placeholder="Buscar nas observações…" value="${esc(sessFiltroObs)}" /></div>
     </div>`;
 }
 
@@ -117,16 +164,19 @@ export default function renderDiagnostico(root, app) {
     app.params.focoSessaoId = null;
     periodoSel = "tudo";
     diaSel = null;
-    sessFiltroDiscs = [];
-    sessFiltroFases = [];
-    sessFiltroTops = [];
+    sessFiltroDisc = "";
+    sessFiltroFase = "";
+    sessFiltroTop = "";
+    sessFiltroIni = "";
+    sessFiltroFim = "";
     sessFiltroObs = "";
   }
 
   // ----- histórico de sessões: filtros (período/dia + fase/disciplina/tópico/observação) -----
   const { todasSessoes, sessoesFiltradas, tituloSessoes } = filtrarSessoes(store);
+  const dateAtiva = !!(sessFiltroIni || sessFiltroFim || diaSel || periodoSel !== "tudo");
   const nCatFiltros =
-    sessFiltroDiscs.length + sessFiltroFases.length + (sessFiltroTops.length ? 1 : 0) + ((periodoSel !== "tudo" || diaSel) ? 1 : 0) + (sessFiltroObs.trim() ? 1 : 0);
+    (dateAtiva ? 1 : 0) + (sessFiltroDisc ? 1 : 0) + (sessFiltroFase ? 1 : 0) + (sessFiltroTop ? 1 : 0) + (sessFiltroObs.trim() ? 1 : 0);
 
   const m = store.metas();
   const observacoes = store.observacoesRecentes();
@@ -470,6 +520,8 @@ export default function renderDiagnostico(root, app) {
     periodo: (el) => {
       periodoSel = el.getAttribute("data-p");
       diaSel = null;
+      sessFiltroIni = "";
+      sessFiltroFim = "";
       rolarParaSessoes = true;
       app.refresh();
     },
@@ -492,6 +544,8 @@ export default function renderDiagnostico(root, app) {
     dia: (el) => {
       const d = el.getAttribute("data-dia");
       diaSel = diaSel === d ? null : d;
+      sessFiltroIni = "";
+      sessFiltroFim = "";
       if (diaSel) rolarParaSessoes = true;
       app.refresh();
     },
@@ -540,15 +594,12 @@ export default function renderDiagnostico(root, app) {
       sessFiltrosAbertos = !sessFiltrosAbertos;
       app.refresh();
     },
-    "sess-set-periodo": (el) => {
-      periodoSel = el.getAttribute("data-p");
-      diaSel = null;
-      app.refresh();
-    },
     "sess-limpar-tudo": () => {
-      sessFiltroDiscs = [];
-      sessFiltroFases = [];
-      sessFiltroTops = [];
+      sessFiltroDisc = "";
+      sessFiltroFase = "";
+      sessFiltroTop = "";
+      sessFiltroIni = "";
+      sessFiltroFim = "";
       sessFiltroObs = "";
       periodoSel = "tudo";
       diaSel = null;
@@ -556,17 +607,12 @@ export default function renderDiagnostico(root, app) {
     },
     "sess-chip-remover": (el) => {
       const tipo = el.getAttribute("data-tipo");
-      const val = el.getAttribute("data-val");
-      if (tipo === "dia") diaSel = null;
+      if (tipo === "data") { sessFiltroIni = ""; sessFiltroFim = ""; }
+      else if (tipo === "dia") diaSel = null;
       else if (tipo === "periodo") periodoSel = "tudo";
-      else if (tipo === "disc") {
-        sessFiltroDiscs = sessFiltroDiscs.filter((x) => x !== val);
-        if (sessFiltroDiscs.length) {
-          const validos = st.topicos.filter((t) => sessFiltroDiscs.includes(t.disciplinaId)).map((t) => t.id);
-          sessFiltroTops = sessFiltroTops.filter((id) => validos.includes(id));
-        }
-      } else if (tipo === "fase") sessFiltroFases = sessFiltroFases.filter((x) => x !== val);
-      else if (tipo === "tops") sessFiltroTops = [];
+      else if (tipo === "disc") { sessFiltroDisc = ""; sessFiltroTop = ""; }
+      else if (tipo === "fase") sessFiltroFase = "";
+      else if (tipo === "top") sessFiltroTop = "";
       else if (tipo === "obs") sessFiltroObs = "";
       app.refresh();
     },
@@ -581,40 +627,36 @@ export default function renderDiagnostico(root, app) {
     app.refresh();
   });
 
+  // Filtros do histórico de sessões (selects/datas do painel + busca com foco preservado).
   root.querySelector("#sess-f-disc")?.addEventListener("change", (e) => {
     sessFiltroDisc = e.target.value;
+    // Se o tópico selecionado não pertence à nova disciplina, limpa.
+    if (sessFiltroDisc && sessFiltroTop) {
+      const t = st.topicos.find((x) => x.id === sessFiltroTop);
+      if (!t || t.disciplinaId !== sessFiltroDisc) sessFiltroTop = "";
+    }
+    app.refresh();
+  });
+  root.querySelector("#sess-f-top")?.addEventListener("change", (e) => {
+    sessFiltroTop = e.target.value;
     app.refresh();
   });
   root.querySelector("#sess-f-fase")?.addEventListener("change", (e) => {
     sessFiltroFase = e.target.value;
     app.refresh();
   });
-  // Filtros do histórico de sessões (checkboxes do painel + busca com foco preservado).
-  root.querySelectorAll("[data-sff-fase]").forEach((cb) =>
-    cb.addEventListener("change", () => {
-      const f = cb.getAttribute("data-sff-fase");
-      sessFiltroFases = cb.checked ? [...new Set([...sessFiltroFases, f])] : sessFiltroFases.filter((x) => x !== f);
-      app.refresh();
-    })
-  );
-  root.querySelectorAll("[data-sff-disc]").forEach((cb) =>
-    cb.addEventListener("change", () => {
-      const id = cb.getAttribute("data-sff-disc");
-      sessFiltroDiscs = cb.checked ? [...new Set([...sessFiltroDiscs, id])] : sessFiltroDiscs.filter((x) => x !== id);
-      if (sessFiltroDiscs.length) {
-        const validos = st.topicos.filter((t) => sessFiltroDiscs.includes(t.disciplinaId)).map((t) => t.id);
-        sessFiltroTops = sessFiltroTops.filter((tid) => validos.includes(tid));
-      }
-      app.refresh();
-    })
-  );
-  root.querySelectorAll("[data-sff-top]").forEach((cb) =>
-    cb.addEventListener("change", () => {
-      const id = cb.getAttribute("data-sff-top");
-      sessFiltroTops = cb.checked ? [...new Set([...sessFiltroTops, id])] : sessFiltroTops.filter((x) => x !== id);
-      app.refresh();
-    })
-  );
+  root.querySelector("#sess-f-ini")?.addEventListener("change", (e) => {
+    sessFiltroIni = e.target.value;
+    periodoSel = "tudo";
+    diaSel = null;
+    app.refresh();
+  });
+  root.querySelector("#sess-f-fim")?.addEventListener("change", (e) => {
+    sessFiltroFim = e.target.value;
+    periodoSel = "tudo";
+    diaSel = null;
+    app.refresh();
+  });
   // Busca na observação: atualiza SÓ o corpo da tabela + contagem (não re-renderiza, preserva o foco/cursor).
   root.querySelector("#sess-busca")?.addEventListener("input", (e) => {
     sessFiltroObs = e.target.value;

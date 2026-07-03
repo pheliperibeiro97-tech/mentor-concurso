@@ -19,3 +19,7 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# protótipos de design (não versionar)
+public/hoje-v3.html
+public/hoje-v3-refinado.html

@@ -3491,16 +3491,38 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .sess-chip-x:hover { opacity: 1; background: color-mix(in srgb, var(--primary) 18%, transparent); }
 .sess-chip-x svg { width: 12px; height: 12px; }
 .sess-chips .sess-limpar { margin-left: 4px; }
-.sess-filtros-painel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px 22px;
-  padding: 16px 18px; margin-bottom: 12px; align-items: start; }
-.sess-filtros-painel .sff-sec-tops { grid-column: 1 / -1; }
-.sff-rot { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
-.sff-rot .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
-.sff-periodos { display: flex; flex-wrap: wrap; gap: 6px; }
-.sff-checks { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
-.sff-tops { flex-direction: row; flex-wrap: wrap; gap: 10px 24px; max-height: 240px; }
-.sff-check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; }
-.sff-check input { accent-color: var(--primary); flex: none; }
-.sff-top-grupo { min-width: 150px; }
-.sff-top-disc { font-size: var(--fs-2xs); font-weight: 700; color: var(--text); margin-bottom: 5px; }
-.sess-filtros-painel .busca-input { width: 100%; }
+/* Painel de campos rotulados (disciplina · tópico · datas · fase + busca), premium/coerente. */
+.sess-filtros-painel { margin: -2px 0 14px; padding: 16px 18px 18px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm);
+  animation: sffIn .18s ease; }
+@keyframes sffIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+.sff-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.sff-tit { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: var(--fs-md); color: var(--text); }
+.sff-tit svg { width: 16px; height: 16px; color: var(--primary); }
+.sff-sub { color: var(--muted); font-size: var(--fs-sm); }
+.sff-limpar { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; border: none; background: none;
+  cursor: pointer; color: var(--muted); font-size: var(--fs-xs); font-weight: 600; padding: 4px 7px; border-radius: var(--radius-xs); }
+.sff-limpar:hover { color: var(--primary-d); background: var(--primary-soft); }
+.sff-limpar svg { width: 13px; height: 13px; }
+.sff-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 12px 14px; }
+.sff-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.sff-lbl { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 700; }
+/* background-COLOR (não shorthand): preserva o chevron global de <select> (background-image). */
+.sff-input { width: 100%; height: 40px; box-sizing: border-box; padding: 0 12px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); background-color: var(--surface-2); color: var(--text); font-size: var(--fs-sm); font-family: inherit;
+  transition: border-color .15s, box-shadow .15s, background-color .15s; }
+.sff-input-sel { padding-right: 34px; } /* espaço para o chevron do app */
+.sff-input:hover:not(:disabled) { border-color: var(--muted); }
+.sff-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); background-color: var(--surface); }
+.sff-input:disabled { opacity: .5; cursor: not-allowed; }
+.sff-date { cursor: pointer; }
+.sff-date::-webkit-calendar-picker-indicator { opacity: .55; cursor: pointer; }
+.sff-date::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+.sff-busca { position: relative; margin-top: 12px; }
+.sff-busca > svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--muted); pointer-events: none; }
+.sff-busca-input { width: 100%; box-sizing: border-box; height: 42px; padding: 0 14px 0 40px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text); font-size: var(--fs-sm); font-family: inherit;
+  transition: border-color .15s, box-shadow .15s, background .15s; }
+.sff-busca-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); background: var(--surface); }
+.sff-busca-input::placeholder { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .sess-filtros-painel { animation: none; } }
