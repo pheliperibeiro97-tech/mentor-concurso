@@ -3207,6 +3207,20 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-topico-nome { font-size: var(--fs-2xl); font-weight: 760; letter-spacing: -0.024em; color: var(--text);
   line-height: 1.2; margin: 4px 0 10px; }
 .foco-fase-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+/* Fase 3a: selo "sugerido pelo Mentor" (voz da IA = ciano), topline (tópico + Trocar tópico) */
+.foco-selo { font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--accent-d); display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+.foco-selo svg { width: 13px; height: 13px; }
+.foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.foco-topline .foco-topico-nome { margin: 0; flex: 1 1 auto; }
+.foco-trocar { flex: 0 0 auto; align-self: center; }
+/* Seletor de disciplina → tópico (dentro da janela modal) */
+.seltop { display: flex; flex-direction: column; gap: 16px; }
+.seltop-disc-nome { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: var(--fs-sm); margin-bottom: 8px; color: var(--text); }
+.seltop-tops { display: flex; flex-direction: column; gap: 4px; }
+.seltop-top { text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 9px 12px; cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-family: inherit; transition: border-color .14s, color .14s, background .14s; }
+.seltop-top:hover { border-color: var(--primary); color: var(--text); background: var(--surface); }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
 .foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
 

@@ -1,7 +1,7 @@
 // Tela "Hoje": conduz o ciclo do dia + cronômetro Pomodoro + lançamento manual.
 // Cronômetro com dois modos: REGRESSIVO (conta para baixo de um tempo definível) e
 // PROGRESSIVO (conta para cima até você interromper).
-import { bindActions, toast, header, escolher, faixaIA, confetti, plural } from "../ui.js";
+import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela } from "../ui.js";
 
 // Comemora (confete) quando uma sessão faz o tempo do dia CRUZAR a meta diária.
 function celebrarMeta(store, antes) {
@@ -182,19 +182,18 @@ export default function renderHoje(root, app) {
     }
 
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
-      <div class="foco-eyebrow">Seu foco agora</div>
-      <div class="foco-topico-nome">${topicoSel ? esc(rotuloTopico(st, topicoSel)) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
+      <div class="foco-eyebrow">Seu foco agora${topicoSel ? ` <span class="foco-selo">${icone("sparkles")} sugerido pelo Mentor</span>` : ""}</div>
       <div class="foco-fase-linha">
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
         <span class="muted small">bloco de ~${st.config.pomodoroFoco || 25} min</span>
       </div>
-      ${st.topicos.length ? `
-      <div class="foco-topico">
-        <select id="sel-topico" aria-label="Tópico" data-tip="Tópico em foco — troque livremente.">${opcoesTopico || '<option>—</option>'}</select>
-      </div>` : ""}
-      ${ondeParei ? `<div class="foco-retomar">Onde parei: <b>${ondeParei}</b></div>` : ""}
+      <div class="foco-topline">
+        <div class="foco-topico-nome">${topicoSel ? esc(rotuloTopico(st, topicoSel)) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
+        ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico — você decide.">${icone("repeat-2")} Trocar tópico</button>` : ""}
+      </div>
+      ${ondeParei ? `<div class="foco-retomar">Última sessão: <b>${ondeParei}</b></div>` : ""}
       <div class="foco-acoes">
         ${
           st.topicos.length
@@ -495,6 +494,13 @@ export default function renderHoje(root, app) {
       crono.iniciar();
       app.refresh();
       requestAnimationFrame(() => root.querySelector(".crono-card")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    },
+    // Trocar o tópico em foco: seletor disciplina → tópico (o usuário escolhe, não o sistema).
+    "trocar-topico": () => {
+      abrirSeletorTopico(store, (topId) => {
+        sel.topicoId = topId;
+        app.refresh();
+      });
     },
     // Marca/desmarca uma tarefa de hoje como feita (missão ou ocorrência de rotina).
     "th-toggle": (el) => {
@@ -829,6 +835,41 @@ function retaFinalHTML(m) {
 function rotuloTopico(st, t) {
   const d = st.disciplinas.find((x) => x.id === t.disciplinaId);
   return `${d ? d.nome + " · " : ""}${t.nome}`;
+}
+
+// Seletor de foco: lista as DISCIPLINAS e, sob cada uma, os TÓPICOS — o usuário escolhe
+// (não é sugestão automática). Reaproveita a janela modal premium (abrirJanela).
+function abrirSeletorTopico(store, onPick) {
+  const st = store.get();
+  const grupos = st.disciplinas
+    .map((d) => ({ d, tops: ordenarTopicosPorBase(st, st.topicos.filter((t) => t.disciplinaId === d.id)) }))
+    .filter((g) => g.tops.length);
+  const soltos = ordenarTopicosPorBase(st, st.topicos.filter((t) => !st.disciplinas.some((d) => d.id === t.disciplinaId)));
+  if (soltos.length) grupos.push({ d: { id: "", nome: "Sem disciplina" }, tops: soltos });
+  const corpo = `<div class="seltop">
+    ${grupos
+      .map(
+        ({ d, tops }) => `<div class="seltop-disc">
+          <div class="seltop-disc-nome"><span class="disc-cor" style="background:${d.id ? store.corDisciplina(d.id) : "var(--border-strong)"}"></span>${esc(d.nome)}</div>
+          <div class="seltop-tops">
+            ${tops.map((t) => `<button class="seltop-top" data-top="${t.id}">${esc(t.nome)}</button>`).join("")}
+          </div>
+        </div>`
+      )
+      .join("")}
+  </div>`;
+  abrirJanela({
+    titulo: "Escolher disciplina e tópico",
+    corpoHTML: corpo,
+    aoMontar: (el, fechar) => {
+      el.querySelectorAll("[data-top]").forEach((b) =>
+        b.addEventListener("click", () => {
+          onPick(b.getAttribute("data-top"));
+          fechar();
+        })
+      );
+    },
+  });
 }
 function dataHoje() {
   return new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
