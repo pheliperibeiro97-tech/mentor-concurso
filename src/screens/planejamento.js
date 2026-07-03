@@ -1266,7 +1266,6 @@ function soltasViewHTML(st) {
     <div class="missoes-barra">
       <span class="missoes-stats muted">${plural(pendentes.length, "pendente", "pendentes")} · ${plural(concluidas.length, "concluída", "concluídas")}</span>
       <span class="spacer"></span>
-      ${soltas.length ? `<button class="btn btn-ghost btn-sm" data-action="limpar-avulsas" data-tip-pos="cima-dir" data-tip="Remove todas as tarefas avulsas (sem dia). Não mexe nas tarefas datadas da semana.">${icone("trash-2")} Limpar avulsas</button>` : ""}
       <label class="inline">Ordenar por:
         <select id="miss-sort" style="width:150px;padding:5px 10px;font-size:0.82rem">
           <option value="custom" ${missSort === "custom" ? "selected" : ""}>Minha ordem</option>
@@ -1280,6 +1279,7 @@ function soltasViewHTML(st) {
       <span class="muted small">Categoria (cor da borda):</span>
       ${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}
       <span class="spacer"></span>
+      ${soltas.length ? `<button class="btn btn-ghost btn-sm" data-action="limpar-avulsas" data-tip-pos="cima-dir" data-tip="Remove todas as tarefas avulsas (sem dia). Não mexe nas tarefas datadas da semana.">${icone("trash-2")} Limpar avulsas</button>` : ""}
       ${exportBarHTML("avulsas")}
     </div>
     ${

@@ -124,6 +124,7 @@ import underline from "lucide-static/icons/underline.svg?raw";
 import strikethrough from "lucide-static/icons/strikethrough.svg?raw";
 import list from "lucide-static/icons/list.svg?raw";
 import listOrdered from "lucide-static/icons/list-ordered.svg?raw";
+import listFilter from "lucide-static/icons/list-filter.svg?raw";
 import indentIncrease from "lucide-static/icons/indent-increase.svg?raw";
 import indentDecrease from "lucide-static/icons/indent-decrease.svg?raw";
 import heading from "lucide-static/icons/heading.svg?raw";
@@ -241,6 +242,7 @@ const MAPA = {
   strikethrough,
   list,
   "list-ordered": listOrdered,
+  "list-filter": listFilter,
   "indent-increase": indentIncrease,
   "indent-decrease": indentDecrease,
   heading,

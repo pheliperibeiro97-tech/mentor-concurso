@@ -13,8 +13,12 @@ let periodoSel = "hoje"; // hoje | semana | mes | tudo
 let diaSel = null; // 'yyyy-mm-dd' quando um dia do calendário é clicado
 let mesCal = null; // 'yyyy-mm' em exibição no calendário
 let sessaoSort = { col: "data", dir: "desc" }; // ordenação da tabela de sessões
-let sessFiltroDisc = ""; // filtro de disciplina na tabela de sessões ("" = todas)
-let sessFiltroFase = ""; // filtro de fase ("" = todas)
+// Filtros do histórico de sessões (painel "Filtros" + chips). Arrays vazios = sem filtro.
+let sessFiltroDiscs = []; // disciplinas (multi)
+let sessFiltroFases = []; // fases (multi)
+let sessFiltroTops = []; // tópicos (multi, contextual às disciplinas selecionadas)
+let sessFiltroObs = ""; // busca por texto na observação
+let sessFiltrosAbertos = false; // painel "Filtros" aberto/fechado
 let rolarParaSessoes = false; // ao trocar período/dia, rola até a lista de sessões
 let statsDetAbertas = false; // lembra se "Estatísticas detalhadas" está aberto (sobrevive ao re-render)
 let kpiAnimou = false; // count-up dos KPIs só na 1ª renderização da sessão (não re-anima a cada ação)
@@ -35,6 +39,68 @@ function haQuantoTempo(iso) {
   return `há ${n} dias`;
 }
 
+// Aplica os filtros do histórico de sessões (período/dia + fase/disciplina/tópico/observação) e ordena.
+function filtrarSessoes(store) {
+  const todasSessoes = store.sessoesDetalhadas();
+  const hoje = todayISO();
+  const mesAtual = hoje.slice(0, 7);
+  const preds = {
+    hoje: (d) => d === hoje,
+    semana: (d) => { const n = daysBetween(d, hoje); return n >= 0 && n < 7; },
+    mes: (d) => d.slice(0, 7) === mesAtual,
+    tudo: () => true,
+  };
+  let ss, tituloSessoes;
+  if (diaSel) { ss = todasSessoes.filter((s) => s.data.slice(0, 10) === diaSel); tituloSessoes = `Sessões de ${fmtData(diaSel)}`; }
+  else { ss = todasSessoes.filter((s) => preds[periodoSel](s.data.slice(0, 10))); tituloSessoes = `Sessões · ${LABEL[periodoSel]}`; }
+  if (sessFiltroDiscs.length) ss = ss.filter((s) => sessFiltroDiscs.includes(s.disciplinaId));
+  if (sessFiltroFases.length) ss = ss.filter((s) => sessFiltroFases.includes(s.fase));
+  if (sessFiltroTops.length) ss = ss.filter((s) => s.topicoId && sessFiltroTops.includes(s.topicoId));
+  const q = sessFiltroObs.trim().toLowerCase();
+  if (q) ss = ss.filter((s) => (s.comentario || "").toLowerCase().includes(q));
+  ss = ordenarSessoes(ss, sessaoSort);
+  return { todasSessoes, sessoesFiltradas: ss, tituloSessoes };
+}
+
+// Chips dos filtros ativos (com × individual) + "limpar tudo".
+function sessChipsHTML(st) {
+  const nomeDisc = (id) => (st.disciplinas.find((d) => d.id === id) || {}).nome || "?";
+  const chip = (label, tipo, val) => `<span class="sess-chip">${esc(label)}<button class="sess-chip-x" data-action="sess-chip-remover" data-tipo="${tipo}" data-val="${val || ""}" aria-label="Remover filtro">${icone("x")}</button></span>`;
+  const chips = [];
+  if (diaSel) chips.push(chip(fmtData(diaSel), "dia"));
+  else if (periodoSel !== "tudo") chips.push(chip(LABEL[periodoSel], "periodo"));
+  sessFiltroDiscs.forEach((id) => chips.push(chip(nomeDisc(id), "disc", id)));
+  sessFiltroFases.forEach((f) => chips.push(chip(FASES[f].nome, "fase", f)));
+  if (sessFiltroTops.length) chips.push(chip(plural(sessFiltroTops.length, "tópico", "tópicos"), "tops"));
+  if (sessFiltroObs.trim()) chips.push(chip(`"${sessFiltroObs.trim()}"`, "obs"));
+  if (!chips.length) return "";
+  return `<div class="sess-chips">${chips.join("")}<button class="lnk small sess-limpar" data-action="sess-limpar-tudo">limpar tudo</button></div>`;
+}
+
+// Painel de filtros (abre abaixo do botão; a tabela continua visível e atualiza ao vivo).
+function sessPainelHTML(st) {
+  if (!sessFiltrosAbertos) return "";
+  const check = (attr, val, rot, on) => `<label class="sff-check"><input type="checkbox" data-${attr}="${val}" ${on ? "checked" : ""} /> ${rot}</label>`;
+  const periodos = ["hoje", "semana", "mes", "tudo"].map((p) => `<button class="chip ${!diaSel && periodoSel === p ? "on" : ""}" data-action="sess-set-periodo" data-p="${p}">${LABEL[p]}</button>`).join("");
+  const fases = ORDEM_FASES.map((f) => check("sff-fase", f, esc(FASES[f].nome), sessFiltroFases.includes(f))).join("");
+  const discs = st.disciplinas.length ? st.disciplinas.map((d) => check("sff-disc", d.id, esc(d.nome), sessFiltroDiscs.includes(d.id))).join("") : `<span class="muted small">Nenhuma disciplina cadastrada.</span>`;
+  const discsTop = sessFiltroDiscs.length ? st.disciplinas.filter((d) => sessFiltroDiscs.includes(d.id)) : st.disciplinas;
+  const tops = discsTop
+    .map((d) => {
+      const ts = st.topicos.filter((t) => t.disciplinaId === d.id);
+      if (!ts.length) return "";
+      return `<div class="sff-top-grupo"><div class="sff-top-disc">${esc(d.nome)}</div>${ts.map((t) => check("sff-top", t.id, esc(t.nome), sessFiltroTops.includes(t.id))).join("")}</div>`;
+    })
+    .join("") || `<span class="muted small">Nenhum tópico ${sessFiltroDiscs.length ? "nas disciplinas selecionadas" : "cadastrado"}.</span>`;
+  return `<div class="card sess-filtros-painel">
+      <div class="sff-sec"><div class="sff-rot">Período</div><div class="sff-periodos">${periodos}</div><span class="muted small">ou clique num dia no Calendário abaixo.</span></div>
+      <div class="sff-sec"><div class="sff-rot">Fase</div><div class="sff-checks">${fases}</div></div>
+      <div class="sff-sec"><div class="sff-rot">Disciplina</div><div class="sff-checks">${discs}</div></div>
+      <div class="sff-sec sff-sec-tops"><div class="sff-rot">Tópico <span class="muted small">${sessFiltroDiscs.length ? "(das disciplinas selecionadas)" : "(todas as disciplinas)"}</span></div><div class="sff-checks sff-tops">${tops}</div></div>
+      <div class="sff-sec"><div class="sff-rot">Observação</div><input id="sess-busca" type="search" class="busca-input" placeholder="Buscar no texto da observação…" value="${esc(sessFiltroObs)}" /></div>
+    </div>`;
+}
+
 export default function renderDiagnostico(root, app) {
   const { store } = app;
   const st = store.get();
@@ -51,35 +117,16 @@ export default function renderDiagnostico(root, app) {
     app.params.focoSessaoId = null;
     periodoSel = "tudo";
     diaSel = null;
-    sessFiltroDisc = "";
-    sessFiltroFase = "";
+    sessFiltroDiscs = [];
+    sessFiltroFases = [];
+    sessFiltroTops = [];
+    sessFiltroObs = "";
   }
 
-  // ----- sessões filtradas por período OU por dia selecionado -----
-  const todasSessoes = store.sessoesDetalhadas();
-  const hoje = todayISO();
-  const mesAtual = hoje.slice(0, 7);
-  const preds = {
-    hoje: (d) => d === hoje,
-    semana: (d) => {
-      const n = daysBetween(d, hoje);
-      return n >= 0 && n < 7;
-    },
-    mes: (d) => d.slice(0, 7) === mesAtual,
-    tudo: () => true,
-  };
-  let sessoesFiltradas;
-  let tituloSessoes;
-  if (diaSel) {
-    sessoesFiltradas = todasSessoes.filter((s) => s.data.slice(0, 10) === diaSel);
-    tituloSessoes = `Sessões de ${fmtData(diaSel)}`;
-  } else {
-    sessoesFiltradas = todasSessoes.filter((s) => preds[periodoSel](s.data.slice(0, 10)));
-    tituloSessoes = `Sessões · ${LABEL[periodoSel]}`;
-  }
-  if (sessFiltroDisc) sessoesFiltradas = sessoesFiltradas.filter((s) => s.disciplinaId === sessFiltroDisc);
-  if (sessFiltroFase) sessoesFiltradas = sessoesFiltradas.filter((s) => s.fase === sessFiltroFase);
-  sessoesFiltradas = ordenarSessoes(sessoesFiltradas, sessaoSort);
+  // ----- histórico de sessões: filtros (período/dia + fase/disciplina/tópico/observação) -----
+  const { todasSessoes, sessoesFiltradas, tituloSessoes } = filtrarSessoes(store);
+  const nCatFiltros =
+    sessFiltroDiscs.length + sessFiltroFases.length + (sessFiltroTops.length ? 1 : 0) + ((periodoSel !== "tudo" || diaSel) ? 1 : 0) + (sessFiltroObs.trim() ? 1 : 0);
 
   const m = store.metas();
   const observacoes = store.observacoesRecentes();
@@ -233,22 +280,13 @@ export default function renderDiagnostico(root, app) {
     <section class="card" id="sess-sec" data-print="sessoes" data-print-label="Histórico de sessões">
       <div class="plano-h" style="margin-bottom:10px">
         <h2>${icone("clock-3")} ${esc(tituloSessoes)}</h2>
-        <span class="cnt">${plural(sessoesFiltradas.length, "sessão", "sessões")}</span>
+        <span class="cnt" id="sess-count">${plural(sessoesFiltradas.length, "sessão", "sessões")}</span>
         ${diaSel ? `<button class="btn btn-ghost btn-sm" data-action="limpar-dia">← Voltar ao período</button>` : ""}
         <span class="sp"></span>
-        <label class="inline small">Disciplina
-          <select id="sess-f-disc">
-            <option value="">Todas</option>
-            ${st.disciplinas.map((d) => `<option value="${d.id}" ${sessFiltroDisc === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
-          </select>
-        </label>
-        <label class="inline small">Fase
-          <select id="sess-f-fase">
-            <option value="">Todas</option>
-            ${ORDEM_FASES.map((f) => `<option value="${f}" ${sessFiltroFase === f ? "selected" : ""}>${FASES[f].nome}</option>`).join("")}
-          </select>
-        </label>
+        <button class="btn btn-ghost btn-sm ${sessFiltrosAbertos || nCatFiltros ? "on" : ""}" data-action="sess-filtros-toggle" data-tip="Filtrar por data, fase, disciplina, tópico ou observação.">${icone("list-filter")} Filtros${nCatFiltros ? ` <span class="cnt">${nCatFiltros}</span>` : ""}</button>
       </div>
+      ${sessChipsHTML(st)}
+      ${sessPainelHTML(st)}
       ${
         sessoesFiltradas.length
           ? `<table class="tabela tabela-sessoes">
@@ -498,6 +536,40 @@ export default function renderDiagnostico(root, app) {
         toast("Sessão apagada.");
       }
     },
+    "sess-filtros-toggle": () => {
+      sessFiltrosAbertos = !sessFiltrosAbertos;
+      app.refresh();
+    },
+    "sess-set-periodo": (el) => {
+      periodoSel = el.getAttribute("data-p");
+      diaSel = null;
+      app.refresh();
+    },
+    "sess-limpar-tudo": () => {
+      sessFiltroDiscs = [];
+      sessFiltroFases = [];
+      sessFiltroTops = [];
+      sessFiltroObs = "";
+      periodoSel = "tudo";
+      diaSel = null;
+      app.refresh();
+    },
+    "sess-chip-remover": (el) => {
+      const tipo = el.getAttribute("data-tipo");
+      const val = el.getAttribute("data-val");
+      if (tipo === "dia") diaSel = null;
+      else if (tipo === "periodo") periodoSel = "tudo";
+      else if (tipo === "disc") {
+        sessFiltroDiscs = sessFiltroDiscs.filter((x) => x !== val);
+        if (sessFiltroDiscs.length) {
+          const validos = st.topicos.filter((t) => sessFiltroDiscs.includes(t.disciplinaId)).map((t) => t.id);
+          sessFiltroTops = sessFiltroTops.filter((id) => validos.includes(id));
+        }
+      } else if (tipo === "fase") sessFiltroFases = sessFiltroFases.filter((x) => x !== val);
+      else if (tipo === "tops") sessFiltroTops = [];
+      else if (tipo === "obs") sessFiltroObs = "";
+      app.refresh();
+    },
   });
 
   root.querySelector("#stats-det")?.addEventListener("toggle", (e) => {
@@ -516,6 +588,44 @@ export default function renderDiagnostico(root, app) {
   root.querySelector("#sess-f-fase")?.addEventListener("change", (e) => {
     sessFiltroFase = e.target.value;
     app.refresh();
+  });
+  // Filtros do histórico de sessões (checkboxes do painel + busca com foco preservado).
+  root.querySelectorAll("[data-sff-fase]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      const f = cb.getAttribute("data-sff-fase");
+      sessFiltroFases = cb.checked ? [...new Set([...sessFiltroFases, f])] : sessFiltroFases.filter((x) => x !== f);
+      app.refresh();
+    })
+  );
+  root.querySelectorAll("[data-sff-disc]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      const id = cb.getAttribute("data-sff-disc");
+      sessFiltroDiscs = cb.checked ? [...new Set([...sessFiltroDiscs, id])] : sessFiltroDiscs.filter((x) => x !== id);
+      if (sessFiltroDiscs.length) {
+        const validos = st.topicos.filter((t) => sessFiltroDiscs.includes(t.disciplinaId)).map((t) => t.id);
+        sessFiltroTops = sessFiltroTops.filter((tid) => validos.includes(tid));
+      }
+      app.refresh();
+    })
+  );
+  root.querySelectorAll("[data-sff-top]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      const id = cb.getAttribute("data-sff-top");
+      sessFiltroTops = cb.checked ? [...new Set([...sessFiltroTops, id])] : sessFiltroTops.filter((x) => x !== id);
+      app.refresh();
+    })
+  );
+  // Busca na observação: atualiza SÓ o corpo da tabela + contagem (não re-renderiza, preserva o foco/cursor).
+  root.querySelector("#sess-busca")?.addEventListener("input", (e) => {
+    sessFiltroObs = e.target.value;
+    const { sessoesFiltradas: ss } = filtrarSessoes(store);
+    const tbody = root.querySelector(".tabela-sessoes tbody");
+    if (tbody)
+      tbody.innerHTML = ss.length
+        ? ss.map((s) => linhaSessao(s, st, sessEdit.has(s.id))).join("")
+        : `<tr><td colspan="9" class="muted small" style="text-align:center;padding:14px">Nenhuma sessão com esse texto.</td></tr>`;
+    const cnt = root.querySelector("#sess-count");
+    if (cnt) cnt.textContent = plural(ss.length, "sessão", "sessões");
   });
 }
 

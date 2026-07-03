@@ -3479,3 +3479,28 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .buscas-recolhida[open] > .buscas-summary::before, .resumo-leia[open] > summary::before,
 .mm-arvore details[open] > summary::before, .lancamento-manual[open] > .lm-sum::before {
   content: ""; transform: rotate(90deg); }
+
+/* ===== Fase 4: filtros do Histórico de sessões (botão "Filtros" + chips + painel live) ===== */
+.plano-h .btn-ghost.on { color: var(--primary-d); background: var(--primary-soft); border-color: var(--primary-soft-border); }
+.sess-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: -2px 0 12px; }
+.sess-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 11px; border-radius: 999px;
+  background: var(--primary-soft); color: var(--primary-d); border: 1px solid var(--primary-soft-border);
+  font-size: var(--fs-xs); font-weight: 600; }
+.sess-chip-x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px;
+  border: none; background: none; color: inherit; cursor: pointer; border-radius: 50%; opacity: .7; padding: 0; }
+.sess-chip-x:hover { opacity: 1; background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.sess-chip-x svg { width: 12px; height: 12px; }
+.sess-chips .sess-limpar { margin-left: 4px; }
+.sess-filtros-painel { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px 22px;
+  padding: 16px 18px; margin-bottom: 12px; align-items: start; }
+.sess-filtros-painel .sff-sec-tops { grid-column: 1 / -1; }
+.sff-rot { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin-bottom: 8px; }
+.sff-rot .muted { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.sff-periodos { display: flex; flex-wrap: wrap; gap: 6px; }
+.sff-checks { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+.sff-tops { flex-direction: row; flex-wrap: wrap; gap: 10px 24px; max-height: 240px; }
+.sff-check { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; }
+.sff-check input { accent-color: var(--primary); flex: none; }
+.sff-top-grupo { min-width: 150px; }
+.sff-top-disc { font-size: var(--fs-2xs); font-weight: 700; color: var(--text); margin-bottom: 5px; }
+.sess-filtros-painel .busca-input { width: 100%; }
