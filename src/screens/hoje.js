@@ -1,7 +1,7 @@
 // Tela "Hoje": conduz o ciclo do dia + cronômetro Pomodoro + lançamento manual.
 // Cronômetro com dois modos: REGRESSIVO (conta para baixo de um tempo definível) e
 // PROGRESSIVO (conta para cima até você interromper).
-import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela, ativarCountUp } from "../ui.js";
+import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela, ativarCountUp, revelarTexto } from "../ui.js";
 
 // Comemora (confete) quando uma sessão faz o tempo do dia CRUZAR a meta diária.
 function celebrarMeta(store, antes) {
@@ -20,6 +20,7 @@ import { progressRing } from "../viz.js";
 let sel = { fase: null, topicoId: null };
 let cronoAberto = false; // mantém o bloco do cronômetro aberto entre re-renders (ex.: trocar modo)
 let anelAnimou = false; // count-up dos anéis só na 1ª renderização da sessão (não re-anima a cada ação)
+let mentorFalou = false; // streaming do texto do Mentor só uma vez por sessão (não re-digita a cada ação)
 
 // "Por quê" data-driven do foco de hoje (voz de IA de verdade, não filler): usa SÓ sinais
 // que existem no app — revisão vencida, desempenho fraco, flashcards vencidos, relevância.
@@ -170,19 +171,6 @@ export default function renderHoje(root, app) {
   const dossieTop = topicoSel ? store.dossie(topicoSel.id) : null;
   const dominio = dossieTop && dossieTop.totalTentativas > 0 ? Math.round((dossieTop.acertos / dossieTop.totalTentativas) * 100) : null;
   const discFoco = topicoSel ? st.disciplinas.find((d) => d.id === topicoSel.disciplinaId) : null;
-  const streakMini =
-    st.sessoes && st.sessoes.length
-      ? `<section class="card streak-mini" data-reveal>
-          <span class="streak-flame">${icone("flame")}</span>
-          <div class="streak-txt">${
-            ofensHoje.atual > 0
-              ? `<span class="streak-n">${ofensHoje.atual}</span><span class="streak-lbl">${ofensHoje.atual === 1 ? "dia seguido" : "dias seguidos"} de estudo${ofensHoje.recorde > ofensHoje.atual ? ` · recorde ${ofensHoje.recorde}` : ""}</span>`
-              : `<span class="streak-lbl">Comece sua ofensiva hoje${ofensHoje.recorde > 0 ? ` · recorde de ${plural(ofensHoje.recorde, "dia", "dias")}` : ""}</span>`
-          }</div>
-          <span class="spacer"></span>
-          <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">ver constância →</button>
-        </section>`
-      : "";
 
   root.innerHTML = `
     ${header("Hoje", "Seu dia de estudo, num relance.")}
@@ -232,8 +220,6 @@ export default function renderHoje(root, app) {
     ${hubRevisoesHTML(store)}
 
     ${mentorHoje}
-
-    ${streakMini}
 
     ${tarefasHojeHTML(store)}
 
@@ -396,6 +382,14 @@ export default function renderHoje(root, app) {
   if (!anelAnimou) {
     ativarCountUp(root);
     anelAnimou = true;
+  }
+  // Streaming do texto do Mentor (efeito "digitando", 1x por sessão; respeita reduced-motion).
+  if (!mentorFalou) {
+    const mv = root.querySelector(".hmv-txt[data-stream]");
+    if (mv) {
+      revelarTexto(mv, mv.textContent, { cps: 35 });
+      mentorFalou = true;
+    }
   }
 
   function atualizaVinculo() {
@@ -758,7 +752,7 @@ function mentorVozHTML(store, st, topicoSel, insightTxt) {
     : "Escolha um tópico e eu ajudo com questões, resumo e plano.";
   return `<section class="card card-ia hoje-mentor-voz">
       <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">sugere</span></div>
-      <p class="hmv-porque${insightTxt ? "" : " muted"}">${insightTxt ? `${icone("sparkles")} ${txt}` : txt}</p>
+      <p class="hmv-porque${insightTxt ? "" : " muted"}">${insightTxt ? `${icone("sparkles")} <span class="hmv-txt" data-stream>${txt}</span>` : `<span class="hmv-txt">${txt}</span>`}</p>
       <div class="hmv-sugs">
         ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
         ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}

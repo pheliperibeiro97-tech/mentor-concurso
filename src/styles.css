@@ -423,7 +423,10 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible, .subtab:focu
 .tb-cargo { color: var(--text-2); }
 .tb-sp { flex: 1; }
 .tb-chip { display: inline-flex; align-items: center; gap: 6px; padding: 7px 11px; border-radius: var(--radius-sm);
-  font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); white-space: nowrap; flex: none; }
+  font-size: var(--fs-xs); font-weight: 600; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border);
+  white-space: nowrap; flex: none; font-family: inherit; }
+button.tb-chip { cursor: pointer; transition: border-color .14s, color .14s; }
+button.tb-chip:hover { border-color: var(--border-hover); color: var(--text); }
 .tb-chip svg { width: 15px; height: 15px; color: var(--muted); }
 .tb-chip b { color: var(--text); font-variant-numeric: tabular-nums; }
 .tb-streak svg { color: var(--warn); }

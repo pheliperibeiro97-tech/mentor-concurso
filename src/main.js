@@ -274,7 +274,7 @@ function topbarHTML(store) {
   try {
     const ofe = store.ofensiva ? store.ofensiva() : null;
     if (ofe && ofe.atual > 0)
-      streakChip = `<div class="tb-chip tb-streak" data-tip="Dias seguidos de estudo">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</div>`;
+      streakChip = `<button type="button" class="tb-chip tb-streak" data-nav="diagnostico" data-tip="Dias seguidos de estudo — ver constância">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</button>`;
   } catch (_) {}
   return `
     <header class="topbar">
@@ -378,6 +378,8 @@ function render(preservarScroll = true) {
   });
   // Barra de comando no topo: abre a mesma paleta do atalho Ctrl/⌘+K.
   root.querySelector("[data-cmdk]")?.addEventListener("click", () => abrirPaleta(app));
+  // Chips do topbar que navegam (ex.: ofensiva → constância).
+  root.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => app.navigate(b.getAttribute("data-nav"))));
 
   root.querySelector("[data-mbb-mais]")?.addEventListener("click", () => document.body.classList.toggle("nav-aberta"));
   root.querySelector("#nav-backdrop")?.addEventListener("click", fecharDrawer);
