@@ -3137,9 +3137,15 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 /* Orb do Mentor IA (assinatura de marca) */
 .orb { width:28px; height:28px; border-radius:50%; background: var(--ai-grad); background-size:150% 150%;
   box-shadow: var(--ai-glow); flex-shrink:0;
-  animation: orbPulse 4.4s cubic-bezier(.45,0,.55,1) infinite, aiGradShift 6s ease infinite; }
+  /* "vivo": além do pulso e do gradiente, a forma respira organicamente (blob) — sutil. */
+  animation: orbPulse 4.4s cubic-bezier(.45,0,.55,1) infinite, aiGradShift 6s ease infinite, orbMorph 8s ease-in-out infinite; }
 @keyframes orbPulse { 0%,100% { transform: scale(1); box-shadow: var(--ai-glow); } 50% { transform: scale(1.035); box-shadow: 0 0 0 1px rgba(37,99,235,.45), 0 10px 30px -6px rgba(6,182,212,.7); } }
-.orb.is-thinking { animation-duration: 1.4s, 3s; }
+@keyframes orbMorph {
+  0%,100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  33%     { border-radius: 57% 43% 52% 48% / 49% 57% 43% 51%; }
+  66%     { border-radius: 45% 55% 47% 53% / 55% 46% 54% 45%; }
+}
+.orb.is-thinking { animation-duration: 1.4s, 3s, 3.4s; }
 .orb-sm { width:18px; height:18px; }
 .orb-xs { width:16px; height:16px; }
 
@@ -3240,7 +3246,7 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-selo { font-size: var(--fs-2xs); font-weight: 600; letter-spacing: 0; text-transform: none;
   color: var(--accent-d); display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
 .foco-selo svg { width: 13px; height: 13px; }
-.foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 20px; }
 .foco-topline .foco-topico-nome { margin: 0; flex: 1 1 auto; }
 .foco-trocar { flex: 0 0 auto; align-self: center; }
 /* #1 Título-herói editorial com palavra em gradiente (azul = marca) */
@@ -3251,18 +3257,18 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .hoje-hero .g::selection, .txt-ia::selection { -webkit-text-fill-color: #fff; color: #fff; }
 .hoje-hero .g::-moz-selection, .txt-ia::-moz-selection { -webkit-text-fill-color: #fff; color: #fff; }
 /* Eyebrow + abas na MESMA linha (abas à direita, como no protótipo) */
-.foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
 .foco-top .foco-eyebrow { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
 .foco-eyebrow .orb-xs { width: 15px; height: 15px; flex: none; }
 .foco-top .seg-fases { margin-left: auto; }
 /* Disciplina como rótulo pequeno acima do tópico (como no protótipo) */
-.foco-disc { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+.foco-disc { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 /* Fase 3-visual gap#1/#2: porquê (voz da IA) + linha de meta DENTRO do card de foco */
-.foco-porque { display: flex; gap: 9px; align-items: flex-start; padding: 11px 14px; border-radius: var(--radius-sm);
-  margin: 2px 0 14px; background: var(--ai-grad-soft); border: 1px solid var(--primary-soft-border);
+.foco-porque { display: flex; gap: 9px; align-items: flex-start; padding: 12px 15px; border-radius: var(--radius-sm);
+  margin: 0 0 20px; background: var(--ai-grad-soft); border: 1px solid var(--primary-soft-border);
   font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; }
 .foco-porque svg { width: 16px; height: 16px; color: var(--accent); flex: none; margin-top: 1px; }
-.foco-meta { display: flex; gap: 26px; flex-wrap: wrap; margin: 2px 0 12px; }
+.foco-meta { display: flex; gap: 30px; flex-wrap: wrap; margin: 0 0 22px; }
 .foco-meta .fm { display: flex; flex-direction: column; gap: 2px; }
 .foco-meta .fm-k { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
 .foco-meta .fm-v { font-family: var(--font-mono); font-size: var(--fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.1; }

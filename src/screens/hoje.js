@@ -205,7 +205,7 @@ export default function renderHoje(root, app) {
     </section>
       <aside class="hoje-side">
         <div class="side-top">
-          <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões."><span class="side-registrar-pl">＋</span> Registrar sessão</button>
+          <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões.">Registrar sessão</button>
         </div>
         ${ringsHTML(store)}
         ${mentorVozHTML(store, st, topicoSel, pontoInsight ? pontoInsight.txt : "")}
