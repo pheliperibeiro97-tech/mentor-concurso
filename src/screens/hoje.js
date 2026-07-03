@@ -13,12 +13,37 @@ function celebrarMeta(store, antes) {
 }
 import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO } from "../util.js";
 import { icone } from "../icones.js";
-import { heatmapConstancia } from "../viz.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";
 import * as crono from "../cronometro.js";
 
 let sel = { fase: null, topicoId: null };
 let cronoAberto = false; // mantém o bloco do cronômetro aberto entre re-renders (ex.: trocar modo)
+
+// "Por quê" data-driven do foco de hoje (voz de IA de verdade, não filler): usa SÓ sinais
+// que existem no app — revisão vencida, desempenho fraco, flashcards vencidos, relevância.
+// Degrada para "" quando não há sinal (usuário novo/base vazia) — a lição do redesign revertido:
+// NUNCA inventar dado nem mostrar caixa vazia. Combina no máximo 2 sinais, do mais urgente ao menos.
+function porqueFoco(store, st, topico) {
+  if (!topico) return "";
+  const hoje = todayISO();
+  const sinais = [];
+  const rev = store.revisaoTopicoDe(topico.id);
+  if (rev && rev.proxima && rev.proxima <= hoje) sinais.push("a revisão dele vence hoje");
+  const d = store.dossie(topico.id);
+  if (d && d.totalTentativas >= 3 && d.acertos / d.totalTentativas < 0.6)
+    sinais.push(`você acertou ${d.acertos} de ${plural(d.totalTentativas, "questão", "questões")} dele`);
+  if (sinais.length < 2) {
+    const fc = store.flashcardsVencidos().filter((f) => f.topicoId === topico.id).length;
+    if (fc) sinais.push(`${plural(fc, "flashcard vencido", "flashcards vencidos")} esperando`);
+  }
+  if (sinais.length < 2) {
+    if (topico.peso > 0) sinais.push(`cai bastante na sua banca (~${topico.peso}%)`);
+    else if (topico.maisCai) sinais.push("é dos temas que mais caem");
+  }
+  if (!sinais.length) return "";
+  const frase = sinais.slice(0, 2).join(" e ");
+  return frase.charAt(0).toUpperCase() + frase.slice(1) + ".";
+}
 
 export default function renderHoje(root, app) {
   const { store } = app;
@@ -94,11 +119,13 @@ export default function renderHoje(root, app) {
   // que o app já sabe (pontos de atenção, tópico sugerido, revisões, prova). Cada um
   // com um botão que EXECUTA (não é aviso decorativo). Substitui a faixinha discreta.
   const recs = [];
-  if (topicoSel)
+  if (topicoSel) {
+    const porque = porqueFoco(store, st, topicoSel);
     recs.push({
-      txt: `Estude <b>${esc(rotuloTopico(st, topicoSel))}</b> — ${esc(faseInfo.nome.toLowerCase())}, ~${st.config.pomodoroFoco || 25} min`,
+      txt: `Estude <b>${esc(rotuloTopico(st, topicoSel))}</b> — ${esc(faseInfo.nome.toLowerCase())}, ~${st.config.pomodoroFoco || 25} min${porque ? `<div class="mh-porque">${icone("sparkles")} ${porque}</div>` : ""}`,
       botao: `<button class="btn btn-primary btn-sm" data-action="foco-comecar">${icone("play")} Começar</button>`,
     });
+  }
   if (pontoInsight)
     recs.push({
       txt: esc(pontoInsight.txt),
@@ -141,15 +168,15 @@ export default function renderHoje(root, app) {
 
     ${
       (st.sessoes && st.sessoes.length)
-        ? `<section class="card home-constancia" data-reveal>
-            <div class="hc-head">
-              <b>${icone("flame")} Sua constância</b>
-              ${ofensHoje.atual > 0 ? `<span class="chip chip-streak" style="cursor:default">${plural(ofensHoje.atual, "dia seguido", "dias seguidos")}</span>` : ""}
-              ${ofensHoje.recorde > 1 && ofensHoje.recorde > ofensHoje.atual ? `<span class="muted small">recorde: ${ofensHoje.recorde}</span>` : ""}
-              <span class="spacer"></span>
-              <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">ver tudo →</button>
-            </div>
-            ${heatmapConstancia(st.sessoes, { folgaDias: st.config.diasFolga || [], semanas: 18 })}
+        ? `<section class="card streak-mini" data-reveal>
+            <span class="streak-flame">${icone("flame")}</span>
+            <div class="streak-txt">${
+              ofensHoje.atual > 0
+                ? `<span class="streak-n">${ofensHoje.atual}</span><span class="streak-lbl">${ofensHoje.atual === 1 ? "dia seguido" : "dias seguidos"} de estudo${ofensHoje.recorde > ofensHoje.atual ? ` · recorde ${ofensHoje.recorde}` : ""}</span>`
+                : `<span class="streak-lbl">Comece sua ofensiva hoje${ofensHoje.recorde > 0 ? ` · recorde de ${plural(ofensHoje.recorde, "dia", "dias")}` : ""}</span>`
+            }</div>
+            <span class="spacer"></span>
+            <button class="lnk small" data-action="hub-ir" data-rota="diagnostico">ver constância →</button>
           </section>`
         : ""
     }

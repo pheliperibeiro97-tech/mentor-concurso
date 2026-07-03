@@ -1,6 +1,7 @@
 // Tela Edital: gerenciar disciplinas, tópicos e destaques a qualquer momento
 // (o onboarding monta a estrutura inicial; aqui você acrescenta/edita depois).
 import { bindActions, toast, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural } from "../ui.js";
+import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 import { separarEdital } from "../ia.js";
@@ -1120,11 +1121,10 @@ export default function renderEdital(root, app) {
 
     <section class="card cobertura-edital">
       <div class="cob-edital-num">
-        <span class="cob-edital-pct">${cob.pct}%</span>
+        ${progressRing(cob.pct, { size: 92, stroke: 9, grad: true })}
         <div class="cob-edital-barra-wrap">
           <span class="cob-edital-rotulo">Cobertura do edital</span>
-          <div class="barra"><div class="barra-fill ${cob.pct >= 70 ? "bom" : cob.pct >= 40 ? "medio" : "ruim"}" style="width:${cob.pct}%"></div></div>
-          <span class="cob-edital-info muted small"><b>${cob.cobertos}</b> de <b>${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"}</span>
+          <span class="cob-edital-info muted small"><b>${cob.cobertos}</b> de <b>${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"} · o anel completa conforme você marca tópicos</span>
         </div>
       </div>
       ${

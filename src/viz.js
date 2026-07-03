@@ -21,16 +21,28 @@ const MES_CURTO = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set"
 
 // Anel de progresso (0–100%) em SVG — generaliza o donut para KPIs/cards.
 // A cor é passada por quem chama (semáforo). O trilho vem do CSS (.pring-bg).
-export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)", sub = "" } = {}) {
+// Anel de progresso 0–100% em SVG. `grad:true` pinta o arco com o gradiente de marca
+// (azul→ciano, via classes CSS que respeitam o tema) — ideal p/ métrica de PROGRESSO
+// (cobertura). Para métrica de DESEMPENHO use `cor` semântica (verde/âmbar/vermelho),
+// não gradiente. O trilho de fundo (.pring-bg) SEMPRE aparece — a 0% mostra o anel
+// vazio COM contexto (o "0%" no centro), nunca um círculo quebrado.
+let _pringSeq = 0;
+export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)", sub = "", grad = false } = {}) {
   const p = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)));
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   const off = c * (1 - p / 100);
   const cx = size / 2;
+  const gid = grad ? `prg${++_pringSeq}` : null;
+  const defs = gid
+    ? `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="1" y2="1"><stop class="pring-g0" offset="0"/><stop class="pring-g1" offset="1"/></linearGradient></defs>`
+    : "";
+  const traco = gid ? `url(#${gid})` : cor;
   return `<div class="pring" style="width:${size}px;height:${size}px">
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+      ${defs}
       <circle class="pring-bg" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke-width="${stroke}"></circle>
-      <circle class="pring-val" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${cor}" stroke-width="${stroke}"
+      <circle class="pring-val" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${traco}" stroke-width="${stroke}"
         stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
         transform="rotate(-90 ${cx} ${cx})"></circle>
     </svg>

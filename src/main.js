@@ -251,6 +251,23 @@ function navHTML() {
     </aside>`;
 }
 
+// Barra de comando no topo: gatilho VISÍVEL da paleta ⌘K (navegar + perguntar à IA).
+// Não recria um input próprio — clicar (ou Ctrl/⌘+K) abre a paleta, que já tem o campo real
+// e reusa 100% o motor do chat (interpretar → propor → confirmar → executar).
+const EH_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || "");
+function topbarHTML() {
+  return `
+    <header class="topbar">
+      <div class="topbar-inner">
+        <button class="cmdbar" data-cmdk type="button" aria-label="Abrir paleta de comando (navegar ou perguntar à IA)">
+          ${icone("sparkles")}
+          <span class="cmdbar-ph">Pergunte ou faça um comando…</span>
+          <kbd class="cmdbar-kbd">${EH_MAC ? "⌘K" : "Ctrl K"}</kbd>
+        </button>
+      </div>
+    </header>`;
+}
+
 // Barra inferior do mobile: as 4 áreas conceituais + "Mais" (abre a sidebar como drawer).
 // Sempre no DOM; só aparece via CSS abaixo do breakpoint.
 function bottomBarHTML() {
@@ -300,7 +317,10 @@ function render(preservarScroll = true) {
   root.innerHTML = `
     <div class="shell">
       ${navHTML()}
-      <main class="content" id="content"></main>
+      <div class="main-col">
+        ${topbarHTML()}
+        <main class="content" id="content"></main>
+      </div>
     </div>
     <div class="nav-backdrop" id="nav-backdrop"></div>
     ${bottomBarHTML()}`;
@@ -331,6 +351,8 @@ function render(preservarScroll = true) {
     abrirNovidades(store);
     render(); // some o badge após ver
   });
+  // Barra de comando no topo: abre a mesma paleta do atalho Ctrl/⌘+K.
+  root.querySelector("[data-cmdk]")?.addEventListener("click", () => abrirPaleta(app));
 
   root.querySelector("[data-mbb-mais]")?.addEventListener("click", () => document.body.classList.toggle("nav-aberta"));
   root.querySelector("#nav-backdrop")?.addEventListener("click", fecharDrawer);
