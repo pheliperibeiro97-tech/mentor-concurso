@@ -6,10 +6,12 @@ import { esc, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 import { testarConexao, iaDisponivel } from "../ia-provider.js";
 import { AREAS, resumoArea } from "../areas.js";
+import { arquivoParaBase64 } from "../pdf.js";
 
 let passo = 1; // 1..4 | "montando" | "pronto"
 let temaOb = null; // tema escolhido no onboarding (persistido ao avançar do passo 1)
 let planoResultado = null; // { origem, disciplinas, topicos } — alimenta a tela "Plano pronto"
+let montandoDe = "area"; // "area" | "edital" — muda o texto da tela de loading
 
 // Indicador de etapas (done / atual / futura). "Montar plano" é o passo que ENTREGA o plano.
 function steps(atual) {
@@ -51,9 +53,10 @@ export default function renderOnboarding(root, app) {
     app.navigate("comecar");
   };
 
-  // Monta o plano do caminho escolhido, com uma tela de loading progressivo antes de
-  // apresentar o "Plano pronto". O trabalho é síncrono e rápido; o delay é só p/ o feedback.
+  // Monta o plano do caminho de ÁREA (offline), com loading progressivo antes do "Plano pronto".
+  // O trabalho é síncrono e rápido; o delay é só p/ o feedback.
   const montarPlano = (origem, areaId) => {
+    montandoDe = "area";
     passo = "montando";
     app.refresh();
     setTimeout(() => {
@@ -63,17 +66,44 @@ export default function renderOnboarding(root, app) {
     }, 950);
   };
 
+  // Importa o EDITAL (PDF) do usuário via Visão→JSON (Gemini) e monta o plano a partir dele.
+  // Só é oferecido quando a IA (Gemini) está conectada; senão o tile vira o fallback offline.
+  const importarEdital = async (file) => {
+    if (!file) return;
+    montandoDe = "edital";
+    passo = "montando";
+    app.refresh();
+    try {
+      const b64 = await arquivoParaBase64(file);
+      const estrutura = await store.estruturarEditalDePDF(b64, file.type || "application/pdf");
+      if (!estrutura || !estrutura.length) throw new Error("estrutura vazia");
+      planoResultado = store.montarPlanoInicial({ origem: "edital", estrutura });
+      passo = "pronto";
+      app.refresh();
+    } catch (e) {
+      passo = 4;
+      app.refresh();
+      toast("Não consegui ler este edital agora (PDF protegido/escaneado ou instabilidade da IA). Tente outro PDF ou escolha uma área.", "erro");
+    }
+  };
+
   // -------- LOADING: montando o plano --------
   if (passo === "montando") {
+    const edital = montandoDe === "edital";
     root.innerHTML = `
       <div class="ob-card">
         <div class="ob-logo ob-logo-spin">${icone("sparkles")}</div>
-        <h1>Montando seu plano…</h1>
+        <h1>${edital ? "Lendo seu edital…" : "Montando seu plano…"}</h1>
         <ul class="ob-load">
-          <li style="--i:0">${icone("check")}<span>Criando as matérias</span></li>
-          <li style="--i:1">${icone("check")}<span>Adicionando os tópicos base</span></li>
-          <li style="--i:2">${icone("check")}<span>Preparando seu ponto de partida</span></li>
+          ${edital
+            ? `<li style="--i:0">${icone("check")}<span>Lendo o PDF com a IA</span></li>
+               <li style="--i:1">${icone("check")}<span>Estruturando as disciplinas e tópicos</span></li>
+               <li style="--i:2">${icone("check")}<span>Montando seu plano</span></li>`
+            : `<li style="--i:0">${icone("check")}<span>Criando as matérias</span></li>
+               <li style="--i:1">${icone("check")}<span>Adicionando os tópicos base</span></li>
+               <li style="--i:2">${icone("check")}<span>Preparando seu ponto de partida</span></li>`}
         </ul>
+        ${edital ? `<p class="muted small" style="margin-top:14px">Isso pode levar alguns segundos.</p>` : ""}
       </div>`;
     return;
   }
@@ -108,6 +138,12 @@ export default function renderOnboarding(root, app) {
 
   // -------- PASSO 4: Montar seu plano --------
   if (passo === 4) {
+    // Import de edital por PDF exige a Visão do Gemini (lê inclusive escaneado). Sem IA,
+    // o tile vira o fallback offline (abre o importador do Edital, onde há OCR/colar texto).
+    const iaPdf = iaDisponivel(cfg) && cfg.iaProvider === "gemini";
+    const editalBtn = iaPdf
+      ? `<label class="btn btn-ghost btn-file" data-tip="Lê o PDF do seu edital com a IA (inclusive escaneado) e monta o plano">${icone("upload")} Importar edital (PDF)<input id="ob-edital-file" type="file" accept=".pdf,application/pdf" hidden /></label>`
+      : `<button class="btn btn-ghost" data-action="importar-edital" data-tip="Conecte o Gemini (passo anterior) para o Mentor ler o PDF automaticamente">${icone("upload")} Importar edital (PDF)</button>`;
     root.innerHTML = `
       <div class="ob-card ob-wide">
         ${steps(4)}
@@ -127,7 +163,7 @@ export default function renderOnboarding(root, app) {
         <div class="ob-final">
           <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
           <div style="display:flex; gap:8px; flex-wrap:wrap">
-            <button class="btn btn-ghost" data-action="importar-edital">${icone("upload")} Importar edital (PDF)</button>
+            ${editalBtn}
             <button class="btn btn-ghost" data-action="zero">Começar do zero</button>
           </div>
         </div>
@@ -141,6 +177,11 @@ export default function renderOnboarding(root, app) {
         app.navigate("edital");
       },
       zero: () => irComecar(),
+    });
+    // Import inline do edital (quando a IA está conectada).
+    root.querySelector("#ob-edital-file")?.addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (f) importarEdital(f);
     });
     return;
   }
