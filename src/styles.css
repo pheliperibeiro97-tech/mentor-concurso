@@ -3229,6 +3229,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .hoje-hero { text-wrap: balance; }
 .hoje-hero .g { background: linear-gradient(120deg, var(--primary-l), var(--primary) 55%, var(--primary-d));
   -webkit-background-clip: text; background-clip: text; color: transparent; }
+/* Texto em gradiente some ao ser SELECIONADO (o fill transparente + realce). Cor sólida no ::selection. */
+.hoje-hero .g::selection, .txt-ia::selection { -webkit-text-fill-color: #fff; color: #fff; }
+.hoje-hero .g::-moz-selection, .txt-ia::-moz-selection { -webkit-text-fill-color: #fff; color: #fff; }
 /* Eyebrow + abas na MESMA linha (abas à direita, como no protótipo) */
 .foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .foco-top .foco-eyebrow { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
