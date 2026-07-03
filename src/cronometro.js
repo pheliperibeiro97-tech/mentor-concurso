@@ -279,6 +279,10 @@ function montarWidget() {
     else if (app) app.navigate("hoje");
   });
   widget.querySelector(".crono-zerar").addEventListener("click", (e) => { e.stopPropagation(); zerar(); });
+  // ESC sai da tela cheia (modo foco) e volta ao flutuante pequeno.
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && s.modoTela === "focus") setModoTela("pill");
+  });
   // Config (só faz sentido no modo foco/tela cheia): trocar modo e ajustar o bloco.
   widget.querySelectorAll(".crono-modo-btn").forEach((b) =>
     b.addEventListener("click", (e) => {

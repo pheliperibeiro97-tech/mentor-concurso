@@ -172,7 +172,7 @@ export default function renderHoje(root, app) {
         ${topicoSel ? "" : `<p class="sub">Seu dia de estudo, num relance.</p>`}
       </div>
       <div class="hoje-head-acoes">
-        <button class="btn btn-ghost btn-sm side-crono" data-action="abrir-crono" data-tip="Abrir o cronômetro de foco — definir o tempo e iniciar quando quiser.">${icone("clock-3")} Abrir cronômetro</button>
+        <button class="btn btn-ghost btn-sm side-crono" data-action="abrir-crono" data-tip="Abrir o cronômetro de foco — definir o tempo e iniciar quando quiser.">Cronômetro</button>
         <button class="btn btn-ghost btn-sm side-registrar" data-action="abrir-registro" data-tip="Lançar uma sessão de estudo (com ou sem cronômetro), páginas ou questões.">Registrar sessão</button>
       </div>
     </div>
@@ -206,7 +206,6 @@ export default function renderHoje(root, app) {
         ${
           st.topicos.length
             ? `<button class="btn btn-primary btn-lg btn-foco" data-action="foco-comecar">${icone("play")} Começar agora</button>
-        <button class="btn btn-ghost btn-crono" data-action="abrir-crono" data-tip="Abrir o cronômetro de foco — definir o tempo e iniciar quando quiser." aria-label="Abrir cronômetro">${icone("clock-3")}</button>
         <button class="btn btn-ghost" data-action="ir-pratica" data-tip="Praticar questões deste tópico.">Questões</button>
         <button class="btn btn-ghost" data-action="ir-flashcards" data-tip="Revisar flashcards vencidos.">Revisar${vencidos ? ` · ${vencidos}` : ""}</button>`
             : `<button class="btn btn-primary btn-lg" data-action="hub-ir" data-rota="edital">Montar meu edital →</button>`
