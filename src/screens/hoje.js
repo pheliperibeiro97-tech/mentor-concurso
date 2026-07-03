@@ -64,9 +64,10 @@ export default function renderHoje(root, app) {
 
   const faseInfo = FASES[sel.fase] || plano.faseInfo;
   const topicoSel = st.topicos.find((t) => t.id === sel.topicoId) || plano.topico;
-  // O foco só é "sugerido pelo Mentor" quando o tópico atual É a sugestão (plano.topico).
-  // Se o usuário trocou o tópico manualmente, o foco é escolha dele (sincroniza selos e badges).
-  const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id);
+  // O foco só é "sugerido pelo Mentor" quando FASE **e** TÓPICO batem com a sugestão
+  // (plano.fase + plano.topico). Trocar a aba (Estudo/Prática/Revisão) OU o tópico já é
+  // escolha do usuário — senão o selo afirmaria uma sugestão que o Mentor não fez.
+  const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id && sel.fase === plano.fase);
 
   const cicloHTML = ORDEM_FASES.map((f) => {
     const info = FASES[f];
