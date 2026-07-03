@@ -121,47 +121,40 @@ export default function renderHoje(root, app) {
   // "Plano de hoje do Mentor": o mentor FALA na Home — 2 a 4 acionáveis derivados do
   // que o app já sabe (pontos de atenção, tópico sugerido, revisões, prova). Cada um
   // com um botão que EXECUTA (não é aviso decorativo). Substitui a faixinha discreta.
-  const recs = [];
-  if (topicoSel) {
-    const porque = porqueFoco(store, st, topicoSel);
-    recs.push({
-      txt: `Estude <b>${esc(rotuloTopico(st, topicoSel))}</b> — ${esc(faseInfo.nome.toLowerCase())}, ~${st.config.pomodoroFoco || 25} min${porque ? `<div class="mh-porque">${icone("sparkles")} ${porque}</div>` : ""}`,
-      botao: `<button class="btn btn-primary btn-sm" data-action="foco-comecar">${icone("play")} Começar</button>`,
-      foco: { top: topicoSel.id, fase: sel.fase },
-    });
-  }
-  if (pontoInsight)
-    recs.push({
-      txt: esc(pontoInsight.txt),
-      botao: `<button class="btn btn-ghost btn-sm" data-action="hub-ir" data-rota="${esc(pontoInsight.acao ? pontoInsight.acao.rota : "mentor")}">${esc(pontoInsight.acao ? pontoInsight.acao.label : "ver plano")} →</button>`,
-    });
-  if (vencidos)
-    recs.push({
-      txt: `<b>${vencidos}</b> ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} esperando revisão`,
-      botao: `<button class="btn btn-ghost btn-sm" data-action="ir-flashcards">Revisar →</button>`,
-    });
-  if (tarefasHojePend.length)
-    recs.push({
-      txt: `<b>${tarefasHojePend.length}</b> ${tarefasHojePend.length === 1 ? "tarefa planejada" : "tarefas planejadas"} para hoje`,
-      botao: `<button class="btn btn-ghost btn-sm" data-action="hub-ir" data-rota="planejamento">ver →</button>`,
-    });
-  const mentorHoje = `
-    <section class="card card-ia mentor-hoje">
-      <div class="mentor-hoje-head">
-        <span class="orb orb-sm" aria-hidden="true"></span>
-        <b>Plano de hoje</b>
-        <span class="spacer"></span>
-        ${metas && typeof metas.diasProva === "number" && metas.diasProva >= 0 ? `<span class="chip chip-count" style="cursor:default">${plural(metas.diasProva, "dia", "dias")} p/ prova</span>` : ""}
+  // "Plano de hoje" em BLOCOS: Foco sugerido (Mentor) + tarefas planejadas (você) + adicionar.
+  // Absorve as tarefas e o "adicionar" num painel só (como no protótipo). As linhas-rec antigas
+  // (ponto de atenção, flashcards, contagem de tarefas) já vivem no card do Mentor / faixa de Revisões.
+  const tarefasDia = store.tarefasDoDia(todayISO());
+  const nPlano = (topicoSel ? 1 : 0) + tarefasDia.length;
+  const minPlano = (topicoSel ? st.config.pomodoroFoco || 25 : 0) + tarefasDia.reduce((a, x) => a + (x.estimMin || 0), 0);
+  const pbTask = (it) => {
+    const cor = it.tipo === "rotina" ? "#f472b6" : "#818cf8";
+    return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${it.topicoId && !it.concluida ? ` data-action="focar-topico" data-top="${it.topicoId}"` : ""}>
+        <span class="pb-stripe"></span>
+        <div class="pb-top"><span class="pb-tag">${it.tipo === "rotina" ? "Rotina" : "Tarefa"}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : "Você planejou"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}</div>
+        <h4><span class="pb-chk" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}"${it.concluida ? " data-on" : ""}></span>${esc(it.titulo)}</h4>
+      </div>`;
+  };
+  const planoSec = `
+    <section class="plano-sec">
+      <div class="plano-h"><h2>Plano de hoje</h2>${nPlano ? `<span class="cnt">${plural(nPlano, "item", "itens")}${minPlano ? ` · ${fmtMin(minPlano)}` : ""}</span>` : ""}<span class="sp"></span><a data-action="hub-ir" data-rota="planejamento">Ver semana →</a></div>
+      <p class="plano-note muted small">${icone("sparkles")} <b>Mentor sugere</b> · o resto é o que você planejou — comece pelo que quiser.</p>
+      <div class="plano-blocos">
+        ${
+          topicoSel
+            ? `<div class="pb pb-ai" style="--c:var(--accent)" data-action="focar-topico" data-top="${topicoSel.id}" data-fase="${sel.fase}">
+          <span class="pb-stripe"></span>
+          <div class="pb-top"><span class="pb-tag">Foco</span><span class="pb-src pb-ai-src">${icone("sparkles")} Mentor</span><span class="pb-tm">agora</span></div>
+          <h4>${esc(topicoSel.nome)}</h4>
+          <div class="pb-meta">${esc(faseInfo.nome)} · ~${st.config.pomodoroFoco || 25} min · sugerido do seu edital</div>
+        </div>`
+            : ""
+        }
+        ${tarefasDia.map(pbTask).join("")}
+        <button class="pb pb-add" data-action="hub-ir" data-rota="planejamento">
+          <span class="pb-add-pl">＋</span><span class="pb-add-t">Adicionar ao dia</span><span class="pb-add-m">Outra matéria, tarefa ou sessão</span>
+        </button>
       </div>
-      <p class="mentor-hoje-nota muted small">Sugestão do Mentor ${icone("sparkles")} — você é livre para estudar outra coisa. Clique num item para torná-lo o seu foco; o que você planejou aparece logo abaixo.</p>
-      ${
-        recs.length
-          ? `<div class="mentor-hoje-recs stagger">${recs
-              .slice(0, 4)
-              .map((r) => `<div class="mh-rec${r.foco ? " mh-rec-click" : ""}"${r.foco ? ` data-action="focar-topico" data-top="${r.foco.top}" data-fase="${r.foco.fase}"` : ""}><span class="mh-txt">${r.txt}</span>${r.botao}</div>`)
-              .join("")}</div>`
-          : `<p class="muted small" style="margin:6px 0 0">Tudo em dia. Siga o ritmo do seu ciclo.</p>`
-      }
     </section>`;
 
   // Recomposição visual (gap nº1): o card de FOCO é o herói (topo). "Plano de hoje" e a
@@ -219,9 +212,7 @@ export default function renderHoje(root, app) {
 
     ${hubRevisoesHTML(store)}
 
-    ${mentorHoje}
-
-    ${tarefasHojeHTML(store)}
+    ${planoSec}
 
       <details class="card crono-card hoje-recolhe" ${cronoAberto || cr.running || cr.elapsed > 0 ? "open" : ""}>
         <summary class="hoje-recolhe-sum">${icone("clock-3")} Cronômetro de foco <span class="muted small" style="font-weight:400">— ${cr.running ? "em andamento" : "clique para abrir"}</span></summary>

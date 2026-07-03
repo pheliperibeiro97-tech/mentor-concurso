@@ -3263,6 +3263,42 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .hmv-porque svg { width: 14px; height: 14px; color: var(--accent); vertical-align: -2px; }
 .hmv-sugs { display: flex; flex-wrap: wrap; gap: 7px; }
 .hmv-nota { margin-top: 11px; }
+/* Grupo B (#2): "Plano de hoje" em BLOCOS (Foco ✦Mentor + tarefas + adicionar) */
+.plano-sec { margin-top: 8px; }
+.plano-h { display: flex; align-items: baseline; gap: 11px; margin: 0 0 3px; }
+.plano-h h2 { font-size: var(--fs-lg); font-weight: 700; letter-spacing: -0.01em; margin: 0; }
+.plano-h .cnt { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--muted); background: var(--surface-3); border-radius: var(--radius-xs); padding: 1px 7px; }
+.plano-h .sp { flex: 1; }
+.plano-h a { font-size: var(--fs-xs); color: var(--muted); text-decoration: none; font-weight: 550; cursor: pointer; }
+.plano-h a:hover { color: var(--text); }
+.plano-note { margin: 0 0 12px; }
+.plano-note svg { width: 13px; height: 13px; color: var(--accent); vertical-align: -2px; }
+.plano-blocos { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
+.pb { position: relative; border-radius: var(--radius); padding: 15px 15px 15px 17px; cursor: pointer; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); text-align: left; font-family: inherit; width: 100%;
+  transition: transform 0.16s var(--ease-std), border-color 0.16s, box-shadow 0.16s; }
+.pb:hover { transform: translateY(-2px); border-color: var(--border-hover); box-shadow: var(--elev-1); }
+.pb-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c, var(--primary)); }
+.pb-ai .pb-stripe { background: var(--ai-grad); }
+.pb-top { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; }
+.pb-tag { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: var(--radius-xs); color: var(--c, var(--primary)); background: color-mix(in srgb, var(--c, var(--primary)) 15%, transparent); }
+.pb-src { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 7px; border-radius: var(--radius-xs); }
+.pb-ai-src { color: var(--accent-d); background: var(--accent-soft); display: inline-flex; align-items: center; gap: 3px; }
+.pb-ai-src svg { width: 11px; height: 11px; }
+.pb-you { color: var(--muted); background: var(--surface-3); }
+.pb-tm { margin-left: auto; font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--muted); }
+.pb h4 { font-size: var(--fs-sm); font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; margin: 0 0 4px; display: flex; align-items: flex-start; gap: 8px; color: var(--text); }
+.pb-meta { font-size: var(--fs-2xs); color: var(--muted); }
+.pb-chk { width: 16px; height: 16px; border-radius: 5px; border: 2px solid var(--border-strong); flex: none; margin-top: 1px; display: grid; place-items: center; transition: 0.14s; cursor: pointer; }
+.pb-chk[data-on] { background: var(--success); border-color: var(--success); }
+.pb-chk[data-on]::after { content: "✓"; color: #fff; font-size: 10px; font-weight: 800; }
+.pb-done { opacity: 0.55; }
+.pb-done h4 { text-decoration: line-through; text-decoration-color: var(--muted); }
+.pb-add { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 4px; border-style: dashed; background: transparent; min-height: 96px; color: var(--muted); }
+.pb-add:hover { color: var(--text); border-color: var(--primary); transform: none; }
+.pb-add-pl { font-size: 18px; line-height: 1; }
+.pb-add-t { font-size: var(--fs-sm); font-weight: 600; }
+.pb-add-m { font-size: var(--fs-2xs); color: var(--muted); }
 /* Fase 3c: "Plano de hoje" (Mentor + você) — nota + itens clicáveis viram foco */
 .mentor-hoje-nota { margin: 4px 0 12px; line-height: 1.45; }
 .mentor-hoje-nota svg { width: 13px; height: 13px; color: var(--accent); vertical-align: -2px; }
