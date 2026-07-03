@@ -3246,6 +3246,18 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .mh-rec-click:hover { background: var(--surface-2); }
 .th-titulo-btn { background: none; border: none; font: inherit; color: inherit; text-align: left; cursor: pointer; padding: 0; }
 .th-titulo-btn:hover { color: var(--primary); text-decoration: underline; }
+/* Fase 3d: Revisões de hoje — faixa slim (era um card recolhível pesado) */
+.revhub { padding: 14px 17px; border-left: 3px solid var(--warn); }
+.revhub-h { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 700; margin-bottom: 11px; }
+.revhub-h svg { width: 16px; height: 16px; color: var(--warn); }
+.revhub-cnt { font-family: var(--font-mono); font-size: var(--fs-2xs); color: var(--muted); background: var(--surface-3); border-radius: var(--radius-xs); padding: 1px 7px; }
+.revstrip { display: flex; flex-wrap: wrap; gap: 8px; }
+.revitem { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: var(--fs-xs); font-family: inherit;
+  transition: border-color 0.14s ease, color 0.14s ease, background 0.14s ease; }
+.revitem:hover { border-color: var(--warn-line); color: var(--text); background: var(--warn-soft); }
+.revitem svg { width: 15px; height: 15px; color: var(--muted); }
+.revitem b { color: var(--text); font-variant-numeric: tabular-nums; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
 .foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
 

@@ -745,24 +745,20 @@ function hubRevisoesHTML(store) {
   const mapasRev = store.mapasParaRevisar();
   const total = fc + mem + top + res + mapasRev;
   if (!total) return "";
-  const item = (cond, ico, txt, rota) =>
-    cond
-      ? `<button class="hub-rev-item" data-action="hub-ir" data-rota="${rota}">
-          <span class="hub-rev-txt">${ico} ${txt}</span>
-          <span class="hub-rev-cta">abrir →</span>
-        </button>`
-      : "";
-  return `<details class="card hub-rev-card hoje-recolhe">
-    <summary class="hoje-recolhe-sum">${icone("repeat-2")} Revisões de hoje <span class="muted">(${total})</span></summary>
-    <p class="muted small" style="margin:8px 0 10px">Tudo que vence hoje, num lugar só. Cada item abre a sua tela.</p>
-    <div class="hub-rev-lista">
-      ${item(fc, icone("layers"), `${plural(fc, "flashcard vencido", "flashcards vencidos")}`, "flashcards")}
-      ${item(mem, icone("brain"), `${plural(mem, "item", "itens")} de memória (lei seca / jurisprudência)`, "leiseca")}
-      ${item(top, icone("repeat-2"), `${plural(top, "revisão", "revisões")} de tópico`, "revtopico")}
-      ${item(res, icone("file-text"), `${plural(res, "resumo", "resumos")} para revisar`, "resumos")}
-      ${item(mapasRev, icone("network"), `${plural(mapasRev, "mapa mental", "mapas mentais")} para revisar`, "mapas")}
+  // Faixa slim (não mais um card recolhível): tudo que vence hoje, num lugar só.
+  const item = (n, ico, sing, plur, rota) =>
+    n ? `<button class="revitem" data-action="hub-ir" data-rota="${rota}">${ico}<b>${n}</b> ${n === 1 ? sing : plur}</button>` : "";
+  return `<section class="card revhub">
+    <div class="revhub-h">${icone("repeat-2")} Revisões de hoje <span class="revhub-cnt">${total}</span>
+      <span class="spacer"></span><span class="muted small">tudo que vence hoje, num lugar só</span></div>
+    <div class="revstrip">
+      ${item(fc, icone("layers"), "flashcard", "flashcards", "flashcards")}
+      ${item(mem, icone("brain"), "item de lei seca", "itens de lei seca", "leiseca")}
+      ${item(top, icone("repeat-2"), "revisão de tópico", "revisões de tópico", "revtopico")}
+      ${item(res, icone("file-text"), "resumo", "resumos", "resumos")}
+      ${item(mapasRev, icone("network"), "mapa mental", "mapas mentais", "mapas")}
     </div>
-  </details>`;
+  </section>`;
 }
 
 // Tarefas planejadas para hoje (datadas + rotinas). É SUGESTÃO: marca/conclui, aponta o
