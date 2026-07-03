@@ -287,7 +287,7 @@ function topbarHTML(store) {
         ${streakChip}
         <button class="cmdbar" data-cmdk type="button" aria-label="Abrir paleta de comando (navegar ou perguntar à IA)">
           ${icone("sparkles")}
-          <span class="cmdbar-ph">Pergunte ou faça um comando…</span>
+          <span class="cmdbar-ph">Buscar ou perguntar ao Mentor…</span>
           <kbd class="cmdbar-kbd">${EH_MAC ? "⌘K" : "Ctrl K"}</kbd>
         </button>
         <button class="tb-tema" data-toggle-tema type="button" data-tip="Alternar tema (claro/escuro)" aria-label="Alternar tema">

@@ -273,11 +273,14 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible, .subtab:focu
 .btn:hover { background: var(--surface-2); border-color: var(--border-hover); transform: translateY(-1px); box-shadow: var(--elev-2), var(--gloss-top); }
 .btn:active { transform: translateY(0) scale(0.985); box-shadow: var(--elev-1); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; transform: none; }
-.btn-primary { color: #fff; border-color: var(--primary);
-  background: linear-gradient(180deg, var(--primary-l) 0%, var(--primary) 42%, var(--primary-d) 100%);
-  box-shadow: 0 1px 1px rgba(29,78,216,0.18), 0 6px 16px -6px rgba(29, 78, 216, 0.55); }
-.btn-primary:hover { filter: brightness(1.06); transform: translateY(-1px);
-  box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 10px 22px -6px rgba(29, 78, 216, 0.6); }
+/* CTA primário suavizado (feedback: o azul glossy + glow forte destoava). Gradiente sutil de
+   2 paradas e sombra leve (neutra + um toque de azul) — mais plano e premium, mantendo o
+   azul-de-ação. (No Hoje, o "Começar agora" ainda sobrescreve com a cor da fase.) */
+.btn-primary { color: #fff; border-color: var(--primary-d);
+  background: linear-gradient(180deg, var(--primary) 0%, var(--primary-d) 100%);
+  box-shadow: 0 1px 2px rgba(15,23,42,0.12), 0 4px 10px -6px color-mix(in srgb, var(--primary) 42%, transparent); }
+.btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(15,23,42,0.14), 0 8px 16px -8px color-mix(in srgb, var(--primary) 52%, transparent); }
 .btn-primary:active { transform: scale(0.975); }
 .btn-success { background: var(--success); color: #fff; border-color: var(--success);
   box-shadow: 0 1px 1px rgba(13,155,108,0.18), 0 6px 16px -6px rgba(13, 155, 108, 0.5); }
