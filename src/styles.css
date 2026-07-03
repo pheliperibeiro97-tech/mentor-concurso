@@ -802,7 +802,9 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .crono-sum { cursor: pointer; padding: 15px 22px; list-style: none; user-select: none;
   display: flex; align-items: center; gap: 6px; border-radius: var(--radius); }
 .crono-sum::-webkit-details-marker { display: none; }
-.crono-sum::before { content: "▸"; color: var(--muted); font-size: var(--fs-xs); transition: transform 0.14s; }
+.crono-sum::before { content: ""; width: 0; height: 0; flex: none; align-self: center;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform 0.14s; }
 .crono-card[open] .crono-sum::before { transform: rotate(90deg); }
 .crono-sum:hover { background: var(--surface-2); }
 .crono-card[open] .crono-sum { border-bottom: 1px solid var(--border); }
@@ -858,7 +860,10 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
   padding: 12px 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
   color: var(--text-2); font-weight: 600; transition: background .14s, border-color .14s; }
 .bloco-recolhe > summary::-webkit-details-marker { display: none; }
-.bloco-recolhe > summary::before { content: "▸"; color: var(--muted); transition: transform .14s; }
+/* Caret puro-CSS (triângulo por bordas) no lugar do glifo "▸" — coerente com "zero glifos". */
+.bloco-recolhe > summary::before { content: ""; width: 0; height: 0; align-self: center; flex: none;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .16s var(--ease-decel, ease); }
 .bloco-recolhe[open] > summary::before { transform: rotate(90deg); }
 .bloco-recolhe > summary:hover { background: var(--surface-3); border-color: var(--border-strong); }
 .bloco-recolhe[open] > summary { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
@@ -1181,7 +1186,9 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 details.ajuda-sec { padding: 0; margin-bottom: 10px; overflow: hidden; }
 details.ajuda-sec > summary { cursor: pointer; padding: 14px 16px; font-weight: 600; list-style: none; display: flex; align-items: center; gap: 8px; }
 details.ajuda-sec > summary::-webkit-details-marker { display: none; }
-details.ajuda-sec > summary::before { content: "▸"; color: var(--muted, #94a3b8); transition: transform .15s ease; }
+details.ajuda-sec > summary::before { content: ""; width: 0; height: 0; flex: none; align-self: center;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s ease; }
 details.ajuda-sec[open] > summary::before { transform: rotate(90deg); }
 details.ajuda-sec[open] > summary { border-bottom: 1px solid var(--borda, #e5e7eb); }
 .ajuda-sec-corpo { padding: 12px 16px 16px; line-height: 1.6; }
@@ -1594,7 +1601,9 @@ details.ajuda-sec[open] > summary { border-bottom: 1px solid var(--borda, #e5e7e
 .erro-analise > summary { cursor: pointer; list-style: none; user-select: none; font-size: var(--fs-xs);
   font-weight: 560; color: var(--muted); padding: 2px 0; display: flex; align-items: center; gap: 6px; }
 .erro-analise > summary::-webkit-details-marker { display: none; }
-.erro-analise > summary::before { content: "▸"; color: var(--muted); transition: transform .15s ease; }
+.erro-analise > summary::before { content: ""; width: 0; height: 0; flex: none; align-self: center;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s ease; }
 .erro-analise[open] > summary::before { transform: rotate(90deg); }
 .erro-analise[open] > summary { color: var(--primary); margin-bottom: 8px; }
 
@@ -1959,7 +1968,9 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .hoje-recolhe > summary.hoje-recolhe-sum { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 9px;
   font-size: var(--fs-base); font-weight: 600; color: var(--text-2); }
 .hoje-recolhe-sum::-webkit-details-marker { display: none; }
-.hoje-recolhe-sum::before { content: "▸"; color: var(--muted); font-size: 0.8em; transition: transform .15s; }
+.hoje-recolhe-sum::before { content: ""; width: 0; height: 0; flex: none; align-self: center;
+  border-left: 5px solid var(--muted); border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s; }
 .hoje-recolhe[open] > .hoje-recolhe-sum::before { transform: rotate(90deg); }
 .hoje-recolhe[open] > .hoje-recolhe-sum { color: var(--text); margin-bottom: 2px; }
 .hoje-recolhe > summary .spacer { flex: 1; }
@@ -3454,3 +3465,17 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 @keyframes barGrow { from { transform: scaleX(0); } }
 .donut-svg { transform-box: fill-box; transform-origin: 50% 50%; animation: donutIn .8s var(--ease-decel) both; }
 @keyframes donutIn { from { opacity: 0; transform: rotate(-70deg) scale(.9); } }
+
+/* ===== Fase 4: unifica TODOS os carets de <details> no triângulo puro-CSS (sem glifo ▸/▾) =====
+   Bloco no fim para vencer, por cascata, as regras que ainda usavam content:"▸ "/"▾ ". */
+.plano-ciclo-det > summary::before, .exportar-det > summary::before, .cfg-acordeao > summary::before,
+.ses-extra > summary::before, .ia-coment-det > summary::before, .buscas-summary::before,
+.resumo-leia > summary::before, .mm-arvore summary::before, .lm-sum::before {
+  content: ""; width: 0; height: 0; flex: none; align-self: center;
+  border-left: 5px solid currentColor; border-top: 4px solid transparent; border-bottom: 4px solid transparent;
+  transition: transform .15s ease; }
+.plano-ciclo-det[open] > summary::before, .exportar-det[open] > summary::before, .cfg-acordeao[open] > summary::before,
+.ses-extra[open] > summary::before, .ia-coment-det[open] > summary::before,
+.buscas-recolhida[open] > .buscas-summary::before, .resumo-leia[open] > summary::before,
+.mm-arvore details[open] > summary::before, .lancamento-manual[open] > .lm-sum::before {
+  content: ""; transform: rotate(90deg); }
