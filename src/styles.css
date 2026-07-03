@@ -334,6 +334,10 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible, .subtab:focu
 .chip-reta.on, .chip-reta { border-color: #fcd34d; }
 
 /* ===== Layout shell ===== */
+/* Fundo plexus animado (v3): atrás do conteúdo; mais presente no escuro. */
+#app-plexus { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.6; }
+[data-tema="claro"] #app-plexus { opacity: 0.34; }
+#app { position: relative; z-index: 1; }
 .shell { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); height: 100vh; }
 .sidebar {
   background: linear-gradient(190deg, var(--side-bg-1) 0%, var(--side-bg-2) 100%);
@@ -3221,6 +3225,10 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .foco-topline { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
 .foco-topline .foco-topico-nome { margin: 0; flex: 1 1 auto; }
 .foco-trocar { flex: 0 0 auto; align-self: center; }
+/* #1 Título-herói editorial com palavra em gradiente (azul = marca) */
+.hoje-hero { text-wrap: balance; }
+.hoje-hero .g { background: linear-gradient(120deg, var(--primary-l), var(--primary) 55%, var(--primary-d));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
 /* Eyebrow + abas na MESMA linha (abas à direita, como no protótipo) */
 .foco-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .foco-top .foco-eyebrow { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }

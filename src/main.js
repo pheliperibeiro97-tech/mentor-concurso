@@ -299,6 +299,70 @@ function topbarHTML(store) {
     </header>`;
 }
 
+// Fundo "plexus" animado (rede neural sutil = dados/IA) atrás do conteúdo. Atmosfera do
+// redesign v3. Criado UMA vez (fora do #app). Respeita reduced-motion e pausa com a aba oculta.
+function montarPlexus() {
+  if (document.getElementById("app-plexus")) return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const cv = document.createElement("canvas");
+  cv.id = "app-plexus";
+  cv.setAttribute("aria-hidden", "true");
+  document.body.appendChild(cv);
+  const ctx = cv.getContext("2d");
+  const D = Math.min(window.devicePixelRatio || 1, 2);
+  let pts = [];
+  let raf = 0;
+  let rodando = true;
+  function init() {
+    cv.width = window.innerWidth * D;
+    cv.height = window.innerHeight * D;
+    ctx.setTransform(D, 0, 0, D, 0, 0);
+    const n = Math.min(54, Math.floor(window.innerWidth / 34));
+    pts = Array.from({ length: n }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.12,
+      vy: (Math.random() - 0.5) * 0.12,
+    }));
+  }
+  function loop() {
+    if (!rodando) return;
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.clearRect(0, 0, W, H);
+    for (const p of pts) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
+    }
+    for (let i = 0; i < pts.length; i++)
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i], b = pts[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (d < 132) {
+          ctx.strokeStyle = "rgba(96,140,220," + (0.13 * (1 - d / 132)).toFixed(3) + ")";
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+    ctx.fillStyle = "rgba(110,150,225,.5)";
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.3, 0, 7);
+      ctx.fill();
+    }
+    raf = requestAnimationFrame(loop);
+  }
+  init();
+  window.addEventListener("resize", init);
+  document.addEventListener("visibilitychange", () => {
+    rodando = !document.hidden;
+    if (rodando) { cancelAnimationFrame(raf); loop(); }
+  });
+  loop();
+}
+
 // Barra inferior do mobile: as 4 áreas conceituais + "Mais" (abre a sidebar como drawer).
 // Sempre no DOM; só aparece via CSS abaixo do breakpoint.
 function bottomBarHTML() {
@@ -475,6 +539,7 @@ async function bootstrap() {
     }
   });
   montarCronometro(app); // mini-relógio global que acompanha o usuário entre as telas
+  montarPlexus(); // malha "plexus" animada de fundo (atmosfera); respeita reduced-motion
   initTooltips(); // tooltips via portal (imunes a overflow:hidden dos ancestrais)
   setEstiloAlarme(store.get().config.somAlarme); // aplica a preferência de som do alarme
   // Re-render em qualquer mudança de estado.

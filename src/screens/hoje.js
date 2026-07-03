@@ -167,7 +167,10 @@ export default function renderHoje(root, app) {
   const ondePareiFase = ultimaSess ? (FASES[ultimaSess.fase] && FASES[ultimaSess.fase].nome) || "" : "";
 
   root.innerHTML = `
-    ${header("Hoje", "Seu dia de estudo, num relance.")}
+    <div class="page-head hoje-head"><div>
+      <h1 class="hoje-hero">${topicoSel ? `Seu foco de hoje está <span class="g">pronto</span>.` : "Hoje"}</h1>
+      ${topicoSel ? "" : `<p class="sub">Seu dia de estudo, num relance.</p>`}
+    </div></div>
 
     ${reta.ativo ? retaFinalHTML(metas) : ""}
 
