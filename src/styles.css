@@ -140,6 +140,9 @@ body {
 }
 /* Utilitário: números que não "dançam" ao trocar (sem forçar a fonte mono). */
 .nums { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+/* Número "tecnológico" (KPI/contagem/percentual): mono + tabular. Envolver números soltos
+   em contagens/subtítulos/percentuais com <span class="num"> para bater com o Hoje (Fase 4). */
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
 /* Placares/pílulas numéricas que ainda não tinham tabular-nums. */
 .ed-sem, .painel-num, .oficial-kpis b, .mentor-kpis-slim b, .chip-count, .revtop-contador, .sub-badge { font-variant-numeric: tabular-nums; }
 
@@ -491,7 +494,7 @@ button.tb-chip:hover { border-color: var(--border-hover); color: var(--text); }
 /* ===== Cabeçalho de página ===== */
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; gap: 16px;
   padding-bottom: 18px; border-bottom: 1px solid var(--border); }
-.page-head h1 { line-height: 1.06; font-size: clamp(1.7rem, 2.4vw, 2.05rem); letter-spacing: -0.035em; font-weight: 800; }
+.page-head h1 { line-height: 1.06; font-size: clamp(1.7rem, 2.4vw, 2.05rem); letter-spacing: -0.035em; font-weight: 800; text-wrap: balance; }
 .page-head .sub { margin: 8px 0 0; color: var(--muted); font-size: var(--fs-sm); }
 .page-head-extra { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
 
@@ -1362,7 +1365,7 @@ details.ajuda-sec[open] > summary { border-bottom: 1px solid var(--borda, #e5e7e
 .alt.selected, .sim-alt.selected { background: var(--primary-soft); border-color: var(--primary); font-weight: 500; }
 .alt.selected .alt-letra, .sim-alt.selected .alt-letra { background: var(--primary); color: #fff; border-color: var(--primary); }
 .sim-resultado { text-align: center; }
-.sim-nota { font-size: 3.2rem; font-weight: 820; letter-spacing: -0.03em; }
+.sim-nota { font-size: 3.2rem; font-weight: 820; letter-spacing: -0.03em; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .sim-placar { font-size: var(--fs-xl); margin-bottom: 4px; }
 .sim-status { font-size: var(--fs-2xs); padding: 2px 9px; border-radius: var(--radius-pill); margin-left: 6px; font-weight: 600; }
 .sim-status.ok { background: var(--success-soft); color: var(--success-ink); }
