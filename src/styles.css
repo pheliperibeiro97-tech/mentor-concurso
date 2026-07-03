@@ -3373,7 +3373,7 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .revhub-sec .revstrip { margin-top: 10px; }
 /* Vazia (só o cabeçalho): mais respiro até o "Plano de hoje" logo abaixo (evita grudar). */
 .revhub-vazia { margin-bottom: 28px; }
-.revhub-ok { display: inline-flex; align-items: center; gap: 6px; }
+.revhub-ok { margin: 10px 0 0; }
 .revstrip { display: flex; flex-wrap: wrap; gap: 8px; }
 .revitem { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: var(--radius-sm); cursor: pointer;
   background: var(--surface-2); border: 1px solid var(--border); color: var(--text-2); font-size: var(--fs-xs); font-family: inherit;
@@ -3382,10 +3382,14 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .revitem svg { width: 15px; height: 15px; color: var(--muted); }
 .revitem b { color: var(--text); font-variant-numeric: tabular-nums; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
-.foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
-/* Ícone de cronômetro no card de foco (abre a tela cheia p/ configurar/iniciar). */
-.foco-acoes .btn-crono { padding: 10px; width: 42px; height: 42px; justify-content: center; }
-.foco-acoes .btn-crono svg { width: 18px; height: 18px; }
+/* "Começar agora" + cronômetro COLADOS (split button): compartilham a sombra e a cor;
+   uma divisória fina os separa. O cronômetro abre a tela cheia p/ configurar/iniciar. */
+.foco-acoes .btn-split { display: inline-flex; align-items: stretch;
+  box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); border-radius: var(--radius-md); }
+.foco-acoes .btn-split .btn-foco { border-top-right-radius: 0; border-bottom-right-radius: 0; box-shadow: none; }
+.foco-acoes .btn-split .btn-crono { border-top-left-radius: 0; border-bottom-left-radius: 0; box-shadow: none;
+  padding-left: 15px; padding-right: 15px; border-left: 1px solid rgba(255, 255, 255, 0.28); }
+.foco-acoes .btn-split .btn-crono svg { width: 19px; height: 19px; }
 
 /* Registro de sessão premium (chips de disclosure) */
 .ses-sec { font-weight: 640; margin: 12px 0 8px; color: var(--text-2); font-size: var(--fs-sm); }
