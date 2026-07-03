@@ -197,6 +197,7 @@ export default function renderHoje(root, app) {
         ${
           st.topicos.length
             ? `<button class="btn btn-primary btn-lg btn-foco" data-action="foco-comecar">${icone("play")} Começar agora</button>
+        <button class="btn btn-ghost btn-crono" data-action="abrir-crono" data-tip="Abrir o cronômetro de foco — definir o tempo e iniciar quando quiser." aria-label="Cronômetro de foco">${icone("clock-3")}</button>
         <button class="btn btn-ghost" data-action="ir-pratica" data-tip="Praticar questões deste tópico.">Questões</button>
         <button class="btn btn-ghost" data-action="ir-flashcards" data-tip="Revisar flashcards vencidos.">Revisar${vencidos ? ` · ${vencidos}` : ""}</button>`
             : `<button class="btn btn-primary btn-lg" data-action="hub-ir" data-rota="edital">Montar meu edital →</button>`
@@ -273,6 +274,9 @@ export default function renderHoje(root, app) {
       crono.iniciar();
       crono.setModoTela("focus");
     },
+    // Ícone de cronômetro: abre a tela cheia SEM iniciar — o usuário define modo/tempo e
+    // dá play ali (deixa o cronômetro visível/acessível de novo, sem forçar o início).
+    "abrir-crono": () => crono.setModoTela("focus"),
     // Abre a janela de registro de sessão (manual) já apontada para o foco atual.
     "abrir-registro": () => abrirRegistroSessao(store, app, { modo: "manual", fasePadrao: sel.fase, topicoPadrao: sel.topicoId }),
     // Trocar o tópico em foco: seletor disciplina → tópico (o usuário escolhe, não o sistema).
@@ -405,7 +409,14 @@ function hubRevisoesHTML(store) {
   const res = store.resumosParaRevisar();
   const mapasRev = store.mapasParaRevisar();
   const total = fc + mem + top + res + mapasRev;
-  if (!total) return "";
+  // Estado vazio informativo (pedido do usuário): mostra a seção mesmo sem nada vencendo —
+  // saber que está em dia com as revisões ajuda a decidir o dia.
+  if (!total) {
+    return `<section class="card revhub revhub-vazio">
+      <div class="revhub-h">${icone("repeat-2")} Revisões de hoje <span class="revhub-cnt">0</span>
+        <span class="spacer"></span><span class="muted small">${icone("check-check")} nada vence hoje — você está em dia</span></div>
+    </section>`;
+  }
   // Faixa slim (não mais um card recolhível): tudo que vence hoje, num lugar só.
   const item = (n, ico, sing, plur, rota) =>
     n ? `<button class="revitem" data-action="hub-ir" data-rota="${rota}">${ico}<b>${n}</b> ${n === 1 ? sing : plur}</button>` : "";

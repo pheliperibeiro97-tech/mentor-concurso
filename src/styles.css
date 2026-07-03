@@ -811,7 +811,10 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .foco-hero { padding: 30px 32px; border: 1px solid color-mix(in srgb, var(--cor, var(--primary)) 22%, var(--border));
   border-left: 4px solid var(--cor, var(--primary));
   box-shadow: 0 2px 6px rgba(15,23,42,0.06), 0 24px 48px -20px color-mix(in srgb, var(--cor, var(--primary)) 45%, transparent);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--cor, var(--primary)) 9%, var(--surface)), var(--surface) 68%); }
+  background: linear-gradient(135deg, color-mix(in srgb, var(--cor, var(--primary)) 9%, var(--surface)), var(--surface) 68%);
+  display: flex; flex-direction: column; }
+/* Ações vão para o rodapé do card quando ele estica (mantém as bordas alinhadas com a lateral). */
+.foco-hero .foco-acoes { margin-top: auto; padding-top: 4px; }
 .foco-eyebrow { font-size: var(--fs-2xs); font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cor, var(--muted)); }
 .foco-fase { font-size: var(--fs-3xl); font-weight: 780; letter-spacing: -0.035em; color: var(--text); line-height: 1.08; margin-top: 4px; }
 .foco-desc { color: var(--text-2); margin: 6px 0 18px; max-width: 54ch; font-size: var(--fs-base); }
@@ -3146,6 +3149,11 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
   66%     { border-radius: 45% 55% 47% 53% / 55% 46% 54% 45%; }
 }
 .orb.is-thinking { animation-duration: 1.4s, 3s, 3.4s; }
+/* Orb "vivo" em canvas (plasma orgânico, portado do protótipo): o canvas assume o desenho;
+   o elemento vira transparente e sem animação CSS (o RAF do canvas faz o movimento). Mantém
+   o glow (box-shadow) da marca. */
+.orb--canvas { background: none !important; animation: none !important; position: relative; overflow: visible; }
+.orb-cv { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .orb-sm { width:18px; height:18px; }
 .orb-xs { width:16px; height:16px; }
 
@@ -3281,9 +3289,11 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
   padding: 9px 12px; cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-family: inherit; transition: border-color .14s, color .14s, background .14s; }
 .seltop-top:hover { border-color: var(--primary); color: var(--text); background: var(--surface); }
 /* Fase 3b: grid (herói | lateral) + anéis + card do Mentor com voz */
-.hoje-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.hoje-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 @media (max-width: 1080px) { .hoje-grid { grid-template-columns: 1fr; } }
-.hoje-side { display: flex; flex-direction: column; gap: 16px; }
+/* A lateral fica na sua altura natural; o card de foco ESTICA até a mesma altura,
+   deixando as bordas inferiores das duas colunas na mesma reta (feedback do usuário). */
+.hoje-side { display: flex; flex-direction: column; gap: 16px; align-self: start; }
 /* "＋ Registrar sessão": link discreto no canto, acima dos anéis. */
 .side-top { display: flex; justify-content: flex-end; margin: -2px 0 -6px; }
 .side-registrar { color: var(--text-2, var(--muted)); gap: 5px; }
@@ -3359,6 +3369,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .revitem b { color: var(--text); font-variant-numeric: tabular-nums; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
 .foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
+/* Ícone de cronômetro no card de foco (abre a tela cheia p/ configurar/iniciar). */
+.foco-acoes .btn-crono { padding: 10px; width: 42px; height: 42px; justify-content: center; }
+.foco-acoes .btn-crono svg { width: 18px; height: 18px; }
 
 /* Registro de sessão premium (chips de disclosure) */
 .ses-sec { font-weight: 640; margin: 12px 0 8px; color: var(--text-2); font-size: var(--fs-sm); }

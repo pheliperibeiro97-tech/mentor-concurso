@@ -20,6 +20,7 @@ import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
 import { initTooltips } from "./tooltip.js";
+import { montarOrbs } from "./orb.js";
 
 iniciarCapturaErros(); // captura erros não tratados desde o início (para o relatório de diagnóstico)
 
@@ -481,6 +482,7 @@ function render(preservarScroll = true) {
   ligarFaixasIA(content, app); // camada de IA contextual: ativa faixas de insight da tela
   ativarReveal(content); // FASE 0: revela seções [data-reveal] ao entrarem na viewport
   ativarCountUp(content); // FASE 0: anima números [data-count] (KPIs)
+  montarOrbs(document); // orb "vivo" (plasma canvas) em todo .orb novo; ignora os já montados
   if (scrollAnterior) {
     // Reforça a restauração em vários momentos: imediato, próximos frames e um tick.
     // Evita o "pulo para o topo" quando o conteúdo recém-renderizado ainda não foi

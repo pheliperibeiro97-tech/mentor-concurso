@@ -369,7 +369,9 @@ function ligarArrasto(el) {
 function atualizarWidget() {
   if (!widget) return;
   // O flutuante acompanha o usuário em QUALQUER tela (a Home não tem mais relógio inline).
-  const visivel = ativo();
+  // A tela cheia (foco) também aparece quando OCIOSA — para configurar o tempo e dar play
+  // (aberta pelo ícone de cronômetro no card de foco).
+  const visivel = ativo() || s.modoTela === "focus";
   widget.classList.toggle("oculto", !visivel);
   if (!visivel) return;
   // Config (visível só no modo foco via CSS): reflete o modo atual e o bloco alvo.
@@ -402,6 +404,12 @@ function atualizarWidget() {
 // A tela "Hoje" avisa quando está visível para evitar dois relógios na tela.
 export function setTelaHoje(v) {
   naTelaHoje = !!v;
+  // Ao SAIR da Home com o foco aberto mas OCIOSO (usuário abriu o cronômetro e não iniciou),
+  // colapsa para pill — evita a tela cheia "presa" cobrindo as outras telas.
+  if (!v && !ativo() && s.modoTela === "focus") {
+    s.modoTela = "pill";
+    salvar();
+  }
   atualizarWidget();
 }
 
