@@ -3221,6 +3221,24 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .seltop-top { text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 9px 12px; cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-family: inherit; transition: border-color .14s, color .14s, background .14s; }
 .seltop-top:hover { border-color: var(--primary); color: var(--text); background: var(--surface); }
+/* Fase 3b: grid (herói | lateral) + anéis + card do Mentor com voz */
+.hoje-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .hoje-grid { grid-template-columns: 1fr; } }
+.hoje-side { display: flex; flex-direction: column; gap: 16px; }
+.hoje-rings { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 16px 18px; }
+.hr-item { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.hr-txt { min-width: 0; }
+.hr-txt .hr-k { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; line-height: 1.25; }
+.hr-txt .hr-s { font-size: var(--fs-2xs); color: var(--muted); opacity: 0.85; margin-top: 1px; }
+.hoje-mentor-voz { padding: 15px 17px; }
+.hmv-head { display: flex; align-items: center; gap: 9px; font-size: var(--fs-md); margin-bottom: 9px; }
+.hmv-head .orb-sm { width: 22px; height: 22px; }
+.hmv-head .hmv-badge { margin-left: auto; font-size: var(--fs-2xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 3px 9px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-d); }
+.hmv-porque { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.5; margin: 0 0 12px; }
+.hmv-porque svg { width: 14px; height: 14px; color: var(--accent); vertical-align: -2px; }
+.hmv-sugs { display: flex; flex-wrap: wrap; gap: 7px; }
+.hmv-nota { margin-top: 11px; }
 .seg-fases > button.on { color: var(--cor); box-shadow: inset 0 -2px 0 var(--cor), var(--shadow-sm); }
 .foco-acoes .btn-lg { box-shadow: 0 2px 3px rgba(29,78,216,0.22), 0 14px 30px -8px rgba(29, 78, 216, 0.55); }
 

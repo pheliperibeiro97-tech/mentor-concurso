@@ -15,6 +15,7 @@ import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";
 import * as crono from "../cronometro.js";
+import { progressRing } from "../viz.js";
 
 let sel = { fase: null, topicoId: null };
 let cronoAberto = false; // mantém o bloco do cronômetro aberto entre re-renders (ex.: trocar modo)
@@ -181,6 +182,7 @@ export default function renderHoje(root, app) {
         : ""
     }
 
+    <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
       <div class="foco-eyebrow">Seu foco agora${topicoSel ? ` <span class="foco-selo">${icone("sparkles")} sugerido pelo Mentor</span>` : ""}</div>
       <div class="foco-fase-linha">
@@ -204,6 +206,11 @@ export default function renderHoje(root, app) {
         }
       </div>
     </section>
+      <aside class="hoje-side">
+        ${ringsHTML(store)}
+        ${mentorVozHTML(store, st, topicoSel)}
+      </aside>
+    </div>
 
     ${hubRevisoesHTML(store)}
 
@@ -502,6 +509,12 @@ export default function renderHoje(root, app) {
         app.refresh();
       });
     },
+    // Sugestões do card do Mentor: repassa ao chat (propõe → confirma → executa).
+    "mentor-sug": (el) => {
+      const q = el.getAttribute("data-q") || "";
+      if (typeof app.perguntarNoChat === "function") app.perguntarNoChat(q);
+      else app.navigate("mentor");
+    },
     // Marca/desmarca uma tarefa de hoje como feita (missão ou ocorrência de rotina).
     "th-toggle": (el) => {
       const id = el.getAttribute("data-id");
@@ -678,6 +691,46 @@ export default function renderHoje(root, app) {
 
 // Hub unificado "Revisões de hoje" (dir.2+3): junta flashcards + memória lei/juris +
 // revisão de tópico num só lugar; cada item leva à sua tela.
+// Anéis de progresso (KPIs num relance) — reusa os mesmos números do Acompanhamento
+// (store.diagnostico + store.metas). Degrada com contexto quando não há dado (usuário novo).
+function ringsHTML(store) {
+  const m = store.metas();
+  let diag;
+  try { diag = store.diagnostico(); } catch (_) { diag = { porDisciplina: [], percentGeral: null }; }
+  const discComTop = (diag.porDisciplina || []).filter((l) => l.topicos && l.topicos.length);
+  const cob = discComTop.length ? Math.round(discComTop.reduce((a, l) => a + l.cobertura, 0) / discComTop.length) : 0;
+  const aprov = diag.percentGeral;
+  const metaSem = m.metaSemanalMin > 0 ? Math.min(100, Math.round((m.feitoSemanaMin / m.metaSemanalMin) * 100)) : null;
+  const metaDia = m.metaDiariaMin > 0 ? Math.min(100, Math.round((m.feitoHojeMin / m.metaDiariaMin) * 100)) : null;
+  const ring = (pct, rot, sub) => `<div class="hr-item">
+      ${progressRing(pct == null ? 0 : pct, { size: 52, stroke: 6, grad: true })}
+      <div class="hr-txt"><div class="hr-k">${rot}</div>${sub ? `<div class="hr-s">${esc(sub)}</div>` : ""}</div>
+    </div>`;
+  return `<section class="card hoje-rings">
+      ${ring(cob, "Edital coberto", cob ? "" : "marque tópicos")}
+      ${ring(aprov, "Aproveitamento", aprov == null ? "sem questões" : "")}
+      ${ring(metaSem, "Meta da semana", metaSem == null ? "defina em Config" : `${m.feitoSemanaMin} / ${m.metaSemanalMin} min`)}
+      ${ring(metaDia, "Meta do dia", metaDia == null ? "defina em Config" : `${m.feitoHojeMin} / ${m.metaDiariaMin} min`)}
+    </section>`;
+}
+
+// Card do Mentor com voz: o "porquê" data-driven do foco + sugestões (propõe, não executa).
+function mentorVozHTML(store, st, topicoSel) {
+  const porque = topicoSel ? porqueFoco(store, st, topicoSel) : "";
+  const nomeTop = topicoSel ? rotuloTopico(st, topicoSel) : "";
+  const sug = (q, lbl) => `<button class="chip hmv-sug" data-action="mentor-sug" data-q="${esc(q)}">${esc(lbl)}</button>`;
+  return `<section class="card card-ia hoje-mentor-voz">
+      <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">sugere</span></div>
+      <p class="hmv-porque${porque ? "" : " muted"}">${porque ? `${icone("sparkles")} ${porque}` : "Escolha um tópico e o Mentor explica por que focar nele hoje."}</p>
+      <div class="hmv-sugs">
+        ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
+        ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}
+        ${sug("Refaça meu plano de estudos de hoje", "Refazer meu plano")}
+      </div>
+      <div class="hmv-nota muted small">O Mentor propõe; você aprova antes de qualquer ação.</div>
+    </section>`;
+}
+
 function hubRevisoesHTML(store) {
   const fc = store.flashcardsVencidos().length;
   const mem = store.memoriasParaRevisar();
