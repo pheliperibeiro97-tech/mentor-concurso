@@ -99,7 +99,7 @@ export default function renderPlanejamento(root, app) {
                 return `<li>${fmtData(d)} <span class="muted">(${quando})</span> · ${partes.join(" · ")}</li>`;
               })
               .join("")}</ul>`
-          : `<p class="muted">Nenhuma revisão agendada (flashcards, tópicos ou resumos).</p>`
+          : `<p class="muted">Nenhuma revisão agendada.</p>`
       }
     </section>
 
@@ -808,14 +808,14 @@ function exportBarHTML(escopo) {
   const ics =
     escopo === "avulsas"
       ? ""
-      : `<button class="lnk" data-action="exp-crono-ics" data-escopo="${escopo}" data-tip-pos="cima-esq" data-tip="Arquivo .ics para importar no Google Agenda / calendário do celular.">${icone("calendar")} .ics</button>`;
-  return `<details class="exportar-det">
-    <summary>Exportar</summary>
-    <div class="exportar-crono">
+      : `<button class="menu-item" data-action="exp-crono-ics" data-escopo="${escopo}" data-tip="Arquivo .ics para o Google Agenda / celular.">${icone("calendar")} Calendário (.ics)</button>`;
+  return `<details class="doc-mais exportar-menu">
+    <summary data-tip="Exportar a agenda (.ics/.csv/.json) ou imprimir." data-tip-pos="cima-dir">${icone("download")} Exportar</summary>
+    <div class="doc-mais-pop">
       ${ics}
-      <button class="lnk" data-action="exp-crono-csv" data-escopo="${escopo}" data-tip-pos="cima-esq" data-tip="Planilha .csv (Excel/Sheets).">${icone("bar-chart-3")} .csv</button>
-      <button class="lnk" data-action="exp-crono-json" data-escopo="${escopo}" data-tip-pos="cima-esq" data-tip="Arquivo .json (dados estruturados).">{ } .json</button>
-      <button class="lnk" data-action="exp-crono-print" data-escopo="${escopo}" data-tip-pos="cima-esq" data-tip="Imprimir ou salvar em PDF.">${iconImprimir} imprimir</button>
+      <button class="menu-item" data-action="exp-crono-csv" data-escopo="${escopo}">${icone("table")} Planilha (.csv)</button>
+      <button class="menu-item" data-action="exp-crono-json" data-escopo="${escopo}">${icone("file-text")} Dados (.json)</button>
+      <button class="menu-item" data-action="exp-crono-print" data-escopo="${escopo}">${iconImprimir} Imprimir / PDF</button>
     </div>
   </details>`;
 }
@@ -1279,6 +1279,8 @@ function soltasViewHTML(st) {
     <div class="cat-legenda">
       <span class="muted small">Categoria (cor da borda):</span>
       ${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}
+      <span class="spacer"></span>
+      ${exportBarHTML("avulsas")}
     </div>
     ${
       soltas.length
@@ -1301,8 +1303,7 @@ function soltasViewHTML(st) {
           </div>
           ${mostrarConcluidas ? missoesHTML(st, concluidas, missSort) : ""}`
         : ""
-    }
-    ${exportBarHTML("avulsas")}`;
+    }`;
 }
 
 // ---- Visão "Semana": grade Seg→Dom da semana corrente + rotina recorrente. ----
@@ -1373,14 +1374,14 @@ function semanaViewHTML(st, store) {
       <span class="spacer"></span>
       <span class="muted small nota-folga" data-tip-pos="cima-dir" data-tip="Marque um dia como folga no próprio dia, ou defina todos de uma vez em Configurações ▸ Dias de estudo. As duas telas usam a mesma configuração.">${icone("moon")} sobre folgas</span>
       <button class="btn btn-ghost btn-sm" data-action="limpar-semana" data-tip-pos="cima-dir" data-tip="Remove as tarefas datadas desta semana (Seg→Dom). Não mexe na rotina recorrente nem nas avulsas.">${icone("trash-2")} Limpar semana</button>
+      ${exportBarHTML("semana")}
     </div>
     <div class="semana-lista">${grid}</div>
     <div class="rotina-head">
       <button class="lnk" data-action="toggle-rotina-painel">${mostrarRotina ? icone("chevron-down") : icone("chevron-right")} Rotina semanal recorrente (${nRot})</button>
       <span class="muted small">tarefas que se repetem toda semana no mesmo dia</span>
     </div>
-    ${mostrarRotina ? rotinaPainelHTML(st) : ""}
-    ${exportBarHTML("semana")}`;
+    ${mostrarRotina ? rotinaPainelHTML(st) : ""}`;
 }
 
 function diaItemHTML(st, it) {
