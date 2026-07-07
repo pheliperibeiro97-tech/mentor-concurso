@@ -168,7 +168,7 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("calendar-check")} Dias de estudo</h3>
-      <p class="muted small">Marque os dias da semana em que você pretende estudar. Os dias desmarcados são considerados <b>folga</b>: somem da agenda do Planejamento e não interrompem a sua sequência de dias seguidos (🔥). O contador "${esc("X/N")}" do Hoje usa o total de dias marcados aqui.</p>
+      <p class="muted small">Marque os dias da semana em que você pretende estudar. Os dias desmarcados são considerados <b>folga</b>: somem da agenda do Planejamento e não interrompem a sua sequência de dias seguidos (a ofensiva). O contador "${esc("X/N")}" do Hoje usa o total de dias marcados aqui.</p>
       <div class="dias-estudo-grid">
         ${DIAS_SEMANA.map((nome, d) => {
           const estuda = !store.diaEhFolga(d);
@@ -270,7 +270,7 @@ export default function renderConfig(root, app) {
 
     <details class="cfg-acordeao">
       <summary>${icone("puzzle")} Botões da barra (ordem e visibilidade)</summary>
-      <p class="muted small">Reordene os botões com <b>↑/↓</b> dentro de cada grupo e desmarque <b>"visível"</b> para ocultar os que não usa. Ocultar não apaga nada: é só esconder, e você reexibe quando quiser. A ordem dos grupos é fixa (<b>HOJE</b> sempre no topo, <b>Configurações</b> sempre por último).</p>
+      <p class="muted small">Reordene os botões com as <b>setas</b> dentro de cada grupo e desmarque <b>"visível"</b> para ocultar os que não usa. Ocultar não apaga nada: é só esconder, e você reexibe quando quiser. A ordem dos grupos é fixa (<b>HOJE</b> sempre no topo, <b>Configurações</b> sempre por último).</p>
       <div class="botoes-ordem">
         ${gruposNav(cfg)
           .map((g) => {
@@ -290,21 +290,22 @@ export default function renderConfig(root, app) {
 
     <details class="cfg-acordeao">
       <summary>${icone("star")} Atalhos rápidos</summary>
-      <p class="muted small">Crie botões de acesso rápido para o que você mais usa: uma tela (inclusive o <b>Acompanhamento</b>, com suas estatísticas), uma disciplina do edital, o dossiê de um tópico ou o Simulado (abre Questões já na aba Simulado). Defina o <b>nome</b>, o <b>ícone</b> e o <b>destino</b>. O atalho aparece na <b>barra lateral</b>.</p>
+      <p class="muted small">Crie botões de acesso rápido para o que você mais usa: uma <b>tela</b> (inclusive Acompanhamento e Central de Revisões), uma <b>disciplina</b> do edital, o <b>dossiê de um tópico</b> ou <b>Questões filtradas por tópico</b> (treinar um tema num clique). Defina o <b>nome</b>, o <b>ícone</b> e o <b>destino</b>. O atalho aparece na <b>barra lateral</b>.</p>
       <div class="form-row">
-        <label style="width:64px">Ícone <input id="atl-icone" type="text" maxlength="2" value="⭐" /></label>
         <label style="flex:1">Nome <input id="atl-nome" type="text" placeholder="Ex.: Português" /></label>
         <label>Tipo
           <select id="atl-tipo">
             <option value="tela">Tela</option>
             <option value="disciplina">Disciplina (edital)</option>
             <option value="topico">Tópico (dossiê)</option>
-            <option value="simulado">Simulado (Questões)</option>
+            <option value="questoes">Questões (por tópico)</option>
           </select>
         </label>
         <label style="flex:1">Destino <select id="atl-alvo">${alvoOptions("tela", st)}</select></label>
       </div>
-      <div class="emoji-palette">${EMOJIS_ATALHO.map((e) => `<button type="button" class="emoji-btn${e === "⭐" ? " sel" : ""}" data-action="atl-emoji" data-emoji="${e}">${e}</button>`).join("")}</div>
+      <input id="atl-icone" type="hidden" value="star" />
+      <div class="atl-ico-lbl muted small">Ícone</div>
+      <div class="ico-palette">${ICONES_ATALHO.map((n) => `<button type="button" class="ico-btn${n === "star" ? " sel" : ""}" data-action="atl-emoji" data-emoji="${n}" title="${n}" aria-label="${n}">${icone(n)}</button>`).join("")}</div>
       <div class="form-row" style="align-items:center">
         <span class="muted small">Aparece na barra lateral.</span>
         <span class="spacer"></span>
@@ -316,7 +317,7 @@ export default function renderConfig(root, app) {
             ? cfg.atalhos
                 .map(
                   (a, i) => `<div class="atalho-row">
-                    <span class="atalho-row-nome">${esc(a.icone)} ${esc(a.nome)} <span class="muted small">(${esc(rotuloTipo(a.tipo))})</span></span>
+                    <span class="atalho-row-nome"><span class="atalho-row-ic">${icone(a.icone) || icone("star")}</span> ${esc(a.nome)} <span class="muted small">(${esc(rotuloTipo(a.tipo))})</span></span>
                     <span class="spacer"></span>
                     <button class="lnk" data-action="atl-up" data-id="${a.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
                     <button class="lnk" data-action="atl-down" data-id="${a.id}" ${i === cfg.atalhos.length - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>
@@ -662,7 +663,7 @@ export default function renderConfig(root, app) {
       const nome = root.querySelector("#atl-nome").value.trim();
       const tipo = root.querySelector("#atl-tipo").value;
       const alvo = root.querySelector("#atl-alvo").value;
-      const icone = root.querySelector("#atl-icone").value.trim() || "⭐";
+      const icone = root.querySelector("#atl-icone").value.trim() || "star";
       if (!nome) return toast("Dê um nome ao atalho.", "erro");
       if (!alvo) return toast("Escolha o destino.", "erro");
       // Atalhos sempre aparecem na barra lateral (a opção "Hoje" foi removida).
@@ -677,8 +678,8 @@ export default function renderConfig(root, app) {
     "atl-emoji": (el) => {
       const inp = root.querySelector("#atl-icone");
       if (inp) inp.value = el.getAttribute("data-emoji");
-      // Destaca o emoji escolhido na paleta (sem re-render).
-      root.querySelectorAll(".emoji-btn.sel").forEach((b) => b.classList.remove("sel"));
+      // Destaca o ícone escolhido na paleta (sem re-render).
+      root.querySelectorAll(".ico-btn.sel").forEach((b) => b.classList.remove("sel"));
       el.classList.add("sel");
     },
     "exportar-completo": () => exportarJSON(store.snapshotExport(true), "completo"),
@@ -709,11 +710,6 @@ export default function renderConfig(root, app) {
 
   root.querySelector("#atl-tipo")?.addEventListener("change", (e) => {
     root.querySelector("#atl-alvo").innerHTML = alvoOptions(e.target.value, store.get());
-  });
-  // Mantém a paleta de emojis em sincronia se o usuário digitar o ícone à mão.
-  root.querySelector("#atl-icone")?.addEventListener("input", (e) => {
-    const v = e.target.value.trim();
-    root.querySelectorAll(".emoji-btn").forEach((b) => b.classList.toggle("sel", b.getAttribute("data-emoji") === v));
   });
 
   root.querySelectorAll("[data-bv]").forEach((el) =>
@@ -762,7 +758,9 @@ export default function renderConfig(root, app) {
 }
 
 // Emojis sugeridos para os atalhos (clique para preencher; ou digite o seu).
-const EMOJIS_ATALHO = ["⭐", "📚", "✎", "📖", "⚖", "§", "▦", "✍", "⟳", "⚑", "🎯", "📅", "🔁", "💡", "📊", "🏛", "📝", "⏱"];
+// Ícones de atalho = nomes Lucide (renderizados por icone()), coerentes com a barra lateral.
+// (Antes era uma paleta de emojis coloridos que destoava dos ícones Lucide da navegação.)
+const ICONES_ATALHO = ["star", "book-open", "pencil-line", "scroll-text", "scale", "file-text", "layers", "square-pen", "repeat-2", "flag", "target", "calendar-days", "refresh-cw", "lightbulb", "trending-up", "landmark", "clipboard-list", "clock-3"];
 
 // Dias da semana (0=Dom ... 6=Sáb), coerente com store.diaEhFolga/toggleDiaFolga.
 const DIAS_SEMANA = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
@@ -815,7 +813,7 @@ function campoHM(idBase, totalMin, disabled) {
 }
 
 function rotuloTipo(t) {
-  return t === "disciplina" ? "disciplina" : t === "topico" ? "tópico" : t === "simulado" ? "simulado" : "tela";
+  return t === "disciplina" ? "disciplina" : t === "topico" ? "tópico" : t === "questoes" ? "questões" : t === "simulado" ? "simulado" : "tela";
 }
 
 // Opções de destino do atalho conforme o tipo.
@@ -824,7 +822,7 @@ function alvoOptions(tipo, st) {
   if (tipo === "simulado") return `<option value="pratica">Simulado · Questões (múltipla escolha)</option><option value="pratica-ce">Simulado · Questões Certo/Errado</option>`;
   if (tipo === "disciplina")
     return st.disciplinas.map((d) => `<option value="${d.id}">${esc(d.nome)}</option>`).join("") || `<option value="">(sem disciplinas)</option>`;
-  if (tipo === "topico")
+  if (tipo === "topico" || tipo === "questoes")
     return (
       st.topicos
         .map((t) => {

@@ -257,6 +257,15 @@ export default function renderPlanejamento(root, app) {
       }
       app.refresh();
     },
+    "adaptar-atrasadas": async () => {
+      const n = store.tarefasAtrasadas().length;
+      if (!n) return;
+      const ok = await confirmar(`Adaptar a agenda: mover ${n} ${n === 1 ? "tarefa atrasada" : "tarefas atrasadas"} para os próximos dias disponíveis (pulando folgas)?`, { okLabel: "Adaptar", titulo: "Adaptar com o Mentor" });
+      if (!ok) return;
+      const movidas = store.redistribuirAtrasadas();
+      toast(`${movidas} ${movidas === 1 ? "tarefa remanejada" : "tarefas remanejadas"} para esta semana.`, "ok");
+      app.refresh();
+    },
     "cancelar-plano": () => {
       mostrarDiag = false;
       app.refresh();
@@ -887,6 +896,7 @@ function blocoSemanaHTML(st, store) {
         : `<div class="add-toolbar">
             <button class="btn btn-add btn-sm" data-action="abrir-import" data-tip="Digite, cole (uma por linha) ou importe um arquivo. A IA detecta os dias e data as tarefas.">${icone("square-pen")} Adicionar tarefas</button>
             <button class="btn btn-ia btn-sm" data-action="pedir-plano" data-tip="O Mentor monta a semana inteira (tarefas datadas por dia), respeitando seu tempo e folgas.">${icone("bot")} Montar com o Mentor</button>
+            ${store.tarefasAtrasadas().length ? `<button class="btn btn-soft btn-sm" data-action="adaptar-atrasadas" data-tip="Redistribui as tarefas atrasadas pelos próximos dias disponíveis (pulando folgas). Você confirma antes.">${icone("calendar-days")} Adaptar atrasadas (${store.tarefasAtrasadas().length})</button>` : ""}
           </div>`
     }
     ${importando ? `<section class="card"><div class="ai-frame">${skeletonDoc(5)}</div></section>` : mostrarDiag ? diagHTML(st) : planoPreview ? previewHTML(st) : mostrarImport ? importPanelHTML(st, store) : importPreview ? importPreviewHTML(st, store) : ""}

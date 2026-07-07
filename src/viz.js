@@ -46,7 +46,7 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
       ${defs}
       <circle class="pring-bg" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke-width="${stroke}"></circle>
-      <circle class="pring-val" cx="${cx}" cy="${cx}" r="${r}" fill="none" stroke="${traco}" stroke-width="${stroke}"
+      <circle class="pring-val" cx="${cx}" cy="${cx}" r="${r}" fill="none" style="stroke:${traco}" stroke-width="${stroke}"
         stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
         transform="rotate(-90 ${cx} ${cx})"></circle>
     </svg>
@@ -54,7 +54,7 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
   </div>`;
 }
 
-export function heatmapConstancia(sessoes, { semanas = 26, folgaDias = [] } = {}) {
+export function heatmapConstancia(sessoes, { semanas = 13, folgaDias = [] } = {}) {
   const porDia = {};
   for (const s of sessoes || []) {
     const d = (s.data || "").slice(0, 10);
@@ -99,7 +99,7 @@ export function heatmapConstancia(sessoes, { semanas = 26, folgaDias = [] } = {}
       const tip = seg
         ? `${dataBr} · ${fmtTempoCurto(seg)} de estudo`
         : ehFolga
-        ? `${dataBr} · folga (não conta contra você)`
+        ? `${dataBr} · folga`
         : `${dataBr} · sem registro`;
       células += `<i class="hm-d l${n} ${ehFolga ? "hm-folga" : ""} ${iso === hoje ? "hm-hoje" : ""}" data-tip="${esc(tip)}" data-tip-pos="cima-esq"></i>`;
     }
@@ -111,6 +111,57 @@ export function heatmapConstancia(sessoes, { semanas = 26, folgaDias = [] } = {}
       <div class="hm-legenda muted small">
         <span data-tip="A cor indica quanto TEMPO você estudou no dia (mais escuro = mais tempo). Dia sem estudo fica claro e não pune.">menos</span><i class="hm-d l0"></i><i class="hm-d l1"></i><i class="hm-d l2"></i><i class="hm-d l3"></i><i class="hm-d l4"></i><span data-tip="A cor indica quanto TEMPO você estudou no dia (mais escuro = mais tempo).">mais tempo/dia</span>
         <span class="hm-leg-sep">·</span><i class="hm-d hm-folga" data-tip="Dia de folga configurado (Configurações › Dias de estudo): não conta como falta."></i><span>folga</span>
+      </div>
+    </div>`;
+}
+
+// Constância como LINHA do mês atual (estilo MEI/Estudei): uma célula por dia do mês,
+// colorida pela intensidade de estudo, clicável (reusa a ação "dia" → filtra o Histórico
+// de sessões). Mesma escala de cor do heatmap. Dias futuros ficam vazios (tracejado).
+const MES_LONGO = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+export function linhaConstanciaMes(sessoes, { folgaDias = [] } = {}) {
+  const porDia = {};
+  for (const s of sessoes || []) {
+    const d = (s.data || "").slice(0, 10);
+    if (!d) continue;
+    porDia[d] = (porDia[d] || 0) + (s.tempoSeg || 0);
+  }
+  const hoje = todayISO();
+  const [a, m] = hoje.split("-").map(Number);
+  const diasNoMes = new Date(a, m, 0).getDate();
+  const mm = String(m).padStart(2, "0");
+  // Limiares a partir dos dias COM estudo (todo o histórico) — cor consistente com o ritmo.
+  const valores = Object.values(porDia).filter((v) => v > 0).sort((x, y) => x - y);
+  const q = (p) => (valores.length ? valores[Math.min(valores.length - 1, Math.floor(valores.length * p))] : 0);
+  const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+  const nivel = (seg) => (!seg ? 0 : seg <= t1 ? 1 : seg <= t2 ? 2 : seg <= t3 ? 3 : 4);
+  let cels = "";
+  for (let dia = 1; dia <= diasNoMes; dia++) {
+    const dd = String(dia).padStart(2, "0");
+    const iso = `${a}-${mm}-${dd}`;
+    if (iso > hoje) {
+      cels += `<span class="ml-d ml-futuro" aria-hidden="true"></span>`;
+      continue;
+    }
+    const seg = porDia[iso] || 0;
+    const n = nivel(seg);
+    const wd = new Date(iso + "T12:00:00").getDay();
+    const ehFolga = !seg && folgaDias.includes(wd);
+    const dataBr = `${dd}/${mm}`;
+    const tip = seg
+      ? `${dataBr} · ${fmtTempoCurto(seg)} de estudo — ver sessões`
+      : ehFolga
+      ? `${dataBr} · folga`
+      : `${dataBr} · sem registro`;
+    cels += `<button class="ml-d l${n} ${ehFolga ? "ml-folga" : ""} ${iso === hoje ? "ml-hoje" : ""}" data-action="dia" data-dia="${iso}" data-tip="${esc(tip)}" data-tip-pos="cima">${dia}</button>`;
+  }
+  return `
+    <div class="mes-linha" role="img" aria-label="Constância de ${MES_LONGO[m - 1]}">
+      <div class="ml-mes muted small">${MES_LONGO[m - 1]}</div>
+      <div class="ml-dias">${cels}</div>
+      <div class="hm-legenda muted small">
+        <span data-tip="A cor indica quanto TEMPO você estudou no dia. Clique num dia para ver as sessões.">menos</span><i class="hm-d l0"></i><i class="hm-d l1"></i><i class="hm-d l2"></i><i class="hm-d l3"></i><i class="hm-d l4"></i><span>mais tempo/dia</span>
+        <span class="hm-leg-sep">·</span><i class="hm-d hm-folga"></i><span>folga</span>
       </div>
     </div>`;
 }

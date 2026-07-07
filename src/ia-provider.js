@@ -4,10 +4,9 @@
 // gerado aqui carrega selo 🤖 (confira) e é SEMPRE ancorado no material do usuário.
 //
 // Provedores suportados:
-//   • gemini  — Google Gemini (chave grátis no Google AI Studio). PADRÃO recomendado.
-//   • groq    — API OpenAI-compatível (Llama), também com plano grátis.
-//   • claude  — Claude Code local (reservado para o futuro; ainda NÃO ligado aqui).
-//   • offline — sem IA; o núcleo do app continua funcionando sem este módulo.
+//   • gemini     — Google Gemini (chave grátis no Google AI Studio). PADRÃO recomendado.
+//   • claude-cli — Claude Code local (uso pessoal · desktop; usa a auth local do dono).
+//   • offline    — sem IA; o núcleo do app continua funcionando sem este módulo.
 //
 // Para "enlatar" o app, cada usuário cola a própria chave grátis em Configurações.
 
@@ -15,7 +14,6 @@ export const MODELO_PADRAO = {
   // gemini-3.1-flash-lite: maior cota grátis observada (≈500 req/dia no free tier) e rápido,
   // dá conta das tarefas do app (extração/geração/Visão). Confirme o ID em AI Studio se mudar.
   gemini: "gemini-3.1-flash-lite",
-  groq: "llama-3.3-70b-versatile",
   // Claude Code local: alias "haiku" (mais econômico p/ a assinatura). sonnet/opus dão mais
   // qualidade a um custo maior. O Claude Code aceita os atalhos haiku/sonnet/opus em --model.
   "claude-cli": "haiku",
@@ -31,13 +29,12 @@ export function iaDisponivel(cfg) {
   if (!p || p === "offline") return false;
   if (p === "claude") return false; // (API Anthropic paga) — removida do app
   if (p === "claude-cli") return ehTauri(); // Claude Code LOCAL: só no desktop (Tauri), usa a auth local
-  return !!(cfg.iaKey && cfg.iaKey.trim()); // gemini/groq exigem chave
+  return !!(cfg.iaKey && cfg.iaKey.trim()); // gemini exige chave
 }
 
 export function provedorRotulo(cfg) {
   const p = cfg && cfg.iaProvider;
   if (p === "gemini") return "Google Gemini";
-  if (p === "groq") return "Groq (Llama)";
   if (p === "claude-cli") return "Claude Code local";
   return "Offline";
 }
@@ -54,7 +51,6 @@ async function chamar(cfg, { system, user, json = false, temperature = 0.4 }) {
   }
   const provider = cfg.iaProvider;
   if (provider === "gemini") return chamarGemini(cfg, { system, user, json, temperature });
-  if (provider === "groq") return chamarGroq(cfg, { system, user, json, temperature });
   if (provider === "claude-cli") return chamarClaude(cfg, { system, user, json });
   throw new Error("Provedor de IA não suportado: " + provider);
 }
@@ -257,35 +253,6 @@ async function chamarGeminiRaw(cfg, { system, user, json, temperature }) {
   return json ? parseJSON(texto) : texto.trim();
 }
 
-// Groq usa a API compatível com OpenAI (chat/completions).
-async function chamarGroq(cfg, { system, user, json, temperature }) {
-  const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.groq;
-  const url = "https://api.groq.com/openai/v1/chat/completions";
-  const body = {
-    model: modelo,
-    temperature,
-    messages: [
-      ...(system ? [{ role: "system", content: system }] : []),
-      { role: "user", content: user },
-    ],
-    ...(json ? { response_format: { type: "json_object" } } : {}),
-  };
-  const resp = await fetchIA(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${cfg.iaKey.trim()}`,
-    },
-    body: JSON.stringify(body),
-  }, "Groq");
-  const data = await resp.json();
-  const texto = data && data.choices && data.choices[0] && data.choices[0].message
-    ? data.choices[0].message.content || ""
-    : "";
-  if (!texto) throw new Error("A IA não retornou conteúdo.");
-  return json ? parseJSON(texto) : texto.trim();
-}
-
 async function mensagemErro(resp, nome) {
   let raw = "";
   let detalhe = "";
@@ -481,6 +448,50 @@ export async function gerarQuestoesCE(cfg, { texto, contexto, n = 6, dificuldade
     `Formato EXATO: {"itens":[{"afirmacao":"...","gabarito":"certo|errado","justificativa":"..."}]}`;
   const out = await chamar(cfg, { system, user, json: true, temperature: 0.5 });
   return normalizaCE(Array.isArray(out) ? out : out.itens, () => "amarelo");
+}
+
+// DRILL "letra da lei": gera itens CERTO/ERRADO a partir do TEXTO OFICIAL de um dispositivo
+// (artigo/súmula/tese), à moda das bancas: nos ERRADOS, altera UM ponto e devolve o trecho
+// original (copiado literal) e o alterado — para o app pintar o diff (verde=correto, vermelho=trocado).
+// Para jurisprudência não-literal (informativo/paráfrase), altera o TERMO/RESULTADO-chave.
+export async function gerarLeiSecaCE(cfg, { texto, referencia, tipo = "lei", literal = true, n = 6, dificuldade = "medio", banca, cargo, topico }) {
+  const ehJuris = tipo === "juris";
+  const rotulo = ehJuris ? "súmula/tese de jurisprudência" : "dispositivo de lei";
+  const comoErrar = literal
+    ? "troque UM ÚNICO ponto à moda das bancas: verbo de comando (poderá↔deverá), prazo/numeral, quórum, " +
+      "'vedado↔permitido', 'absolutamente↔relativamente', o sujeito, ou inclua/exclua uma exceção"
+    : "altere UM ÚNICO termo ou resultado-chave (ex.: é possível↔é vedado, a competência, o prazo, o sujeito); " +
+      "como o texto é paráfrase, foque no SENTIDO, não na palavra exata";
+  const regraTrecho = literal
+    ? "(4) para cada ERRADO devolva trechoOriginal (copiado LITERAL do texto, o pedaço que foi mudado) e trechoAlterado " +
+      "(como ficou na afirmação); nos CERTO deixe ambos vazios;"
+    : "(4) como o texto é PARÁFRASE (não é a letra oficial), NÃO force diff de palavra: deixe trechoOriginal e " +
+      "trechoAlterado VAZIOS e faça uma afirmação CONCEITUAL sobre a tese (verdadeira ou falsa quanto ao sentido);";
+  const system =
+    `Você elabora itens CERTO/ERRADO de decoreba da ${rotulo}, no estilo Cebraspe, a partir do TEXTO OFICIAL fornecido. ` +
+    "Regras: (1) use SOMENTE o texto dado; (2) metade CERTO (afirmação FIEL ao texto, no máximo uma leve reformulação " +
+    "que preserve o sentido) e metade ERRADO; (3) no ERRADO, " + comoErrar + " — e NÃO altere mais de um ponto; " +
+    regraTrecho + " (5) justificativa curta apontando o certo. Responda só em JSON válido." +
+    diretrizesIA({ banca, cargo, topico, dificuldade });
+  const user =
+    `Referência: ${referencia || "(sem referência)"}\n\n` +
+    `Crie ${n} itens Certo/Errado a partir do TEXTO OFICIAL abaixo.\n\n` +
+    `TEXTO:\n"""\n${corta(texto, 4000)}\n"""\n\n` +
+    `Formato EXATO: {"itens":[{"afirmacao":"...","gabarito":"certo|errado","trechoOriginal":"...","trechoAlterado":"...","justificativa":"..."}]}`;
+  const out = await chamar(cfg, { system, user, json: true, temperature: 0.5 });
+  const arr = Array.isArray(out) ? out : out.itens || [];
+  return arr
+    .map((x) => {
+      const certo = /^\s*certo\s*$/i.test(String(x.gabarito || "")) || x.gabarito === true;
+      return {
+        afirmacao: String(x.afirmacao || "").trim(),
+        certo,
+        trechoOriginal: certo ? "" : String(x.trechoOriginal || "").trim(),
+        trechoAlterado: certo ? "" : String(x.trechoAlterado || "").trim(),
+        justificativa: String(x.justificativa || "").trim(),
+      };
+    })
+    .filter((x) => x.afirmacao);
 }
 
 // EXTRAI itens CERTO/ERRADO que JÁ EXISTEM no material (não inventa).
@@ -789,31 +800,36 @@ export async function corrigirTexto(cfg, { texto, tipo, enunciado }) {
 // Resposta do mentor (chat), ancorada nos trechos do material do usuário.
 // Com web=true e provedor Gemini, usa BUSCA NA WEB ao vivo (Google Search grounding)
 // e devolve as fontes web (fontesWeb). Em outros provedores, o web é ignorado.
-export async function responderChat(cfg, { pergunta, fontes, web }) {
+export async function responderChat(cfg, { pergunta, fontes, web, perfil }) {
   const contexto = (fontes || [])
     .map((f, i) => `[${i + 1}] (${f.origem})\n${f.trecho}`)
     .join("\n\n");
   const ancora = contexto
     ? `TRECHOS DO MATERIAL DO USUÁRIO:\n${corta(contexto, 6000)}`
     : "(Sem trechos relevantes no material do usuário.)";
+  // Perfil curto do aluno (concurso, dias p/ prova, cobertura, pontos fracos) para personalizar
+  // a resposta — sem isso o chat responde "no vácuo", sem saber o contexto do aluno.
+  const perfilLinha = perfil ? `PERFIL DO ALUNO (para personalizar; não repita literalmente): ${perfil}\n\n` : "";
 
   if (web && cfg.iaProvider === "gemini") {
     const system =
       "Você é o mentor de estudos do usuário. Responda à pergunta usando BUSCA NA WEB quando " +
-      "ajudar, e também os trechos do material dele. Cite as fontes. IMPORTANTE: para concursos, " +
+      "ajudar, e também os trechos do material dele. Adapte a resposta ao PERFIL do aluno (concurso, " +
+      "prova, pontos fracos) quando fizer sentido. Cite as fontes. IMPORTANTE: para concursos, " +
       "leis e prazos mudam — avise que a resposta pode estar desatualizada e oriente conferir a " +
       "fonte oficial (lei, edital, site do tribunal). Seja direto e didático. Texto corrido.";
-    const user = `PERGUNTA: ${pergunta}\n\n${ancora}`;
+    const user = `${perfilLinha}PERGUNTA: ${pergunta}\n\n${ancora}`;
     return responderChatWebGemini(cfg, { system, user });
   }
 
   const system =
     "Você é o mentor de estudos do usuário. Responda à pergunta APOIANDO-SE nos trechos do " +
-    "material dele (fornecidos abaixo). Se os trechos bastarem, responda com base neles e cite " +
+    "material dele (fornecidos abaixo). Adapte a resposta ao PERFIL do aluno (concurso, prova, " +
+    "pontos fracos) quando fizer sentido. Se os trechos bastarem, responda com base neles e cite " +
     "a fonte entre colchetes, ex.: [1]. Se não bastarem, responda com seu conhecimento geral, mas " +
     "AVISE explicitamente que é conhecimento geral (não do material dele, e não é busca na web) e " +
     "sugira o que estudar. Seja direto e didático. Texto corrido.";
-  const user = `PERGUNTA: ${pergunta}\n\n${ancora}`;
+  const user = `${perfilLinha}PERGUNTA: ${pergunta}\n\n${ancora}`;
   const texto = await chamar(cfg, { system, user, json: false, temperature: 0.4 });
   return { texto: String(texto).trim(), selo: "amarelo", fontesWeb: [] };
 }
@@ -1071,6 +1087,26 @@ export async function adaptarCronograma(cfg, { texto, contexto }) {
 // ESTRUTURAR um cronograma/lista de LEI SECA ou JURISPRUDÊNCIA colado pelo aluno em itens
 // {referencia, texto, observacao}. Lida com TABELAS achatadas (colunas Artigo/Trecho/Observação
 // viram linhas separadas) e cabeçalhos. NÃO inventa conteúdo — só reorganiza o que está no texto.
+// K — Extrai as TESES/ENTENDIMENTOS de um INFORMATIVO de jurisprudência (narrativa) em itens.
+// Diferente de estruturarLeiSeca (que só reorganiza listas): aqui a tese É o conteúdo do julgado.
+export async function extrairTesesInformativo(cfg, { texto, n = 20 }) {
+  const system =
+    "Você extrai as TESES/ENTENDIMENTOS firmados em um informativo de jurisprudência. Para cada julgado relevante, " +
+    "devolva: referencia (curta e identificável: tribunal + nº do tema/súmula/recurso quando houver, ex.: 'Tema 1234 STJ', " +
+    "'RE 999 STF', 'Info - HC 123 STJ'), texto (a TESE em 1–2 frases, FIEL ao entendimento, sem inventar), tribunal " +
+    "(sigla: STF/STJ/TST/...; \"\" se não houver) e categoria ('Súmula'/'Tema repetitivo'/'Precedente obrigatório' quando " +
+    "aplicável; \"\" caso contrário). NÃO invente teses que não estejam no texto; ignore relatório/ementa acessória. Responda só JSON.";
+  const user =
+    `Extraia até ${n} teses do INFORMATIVO abaixo (uma por julgado relevante).\n\n` +
+    `INFORMATIVO:\n"""\n${corta(texto, 12000)}\n"""\n\n` +
+    `Formato EXATO: {"itens":[{"referencia":"...","texto":"...","tribunal":"...","categoria":"..."}]}`;
+  const out = await chamar(cfg, { system, user, json: true, temperature: 0.2 });
+  const arr = Array.isArray(out) ? out : out.itens || [];
+  return arr
+    .map((x) => ({ referencia: String(x.referencia || "").trim(), texto: String(x.texto || "").trim(), tribunal: String(x.tribunal || "").trim() || null, categoria: String(x.categoria || "").trim() || null }))
+    .filter((x) => x.referencia || x.texto);
+}
+
 export async function estruturarLeiSeca(cfg, { texto, tipo }) {
   const ehJuris = tipo === "juris";
   const alvo = ehJuris ? "súmulas, temas repetitivos e precedentes (ex.: 'Súmula 473 STF', 'Tema 1234 STJ')" : "dispositivos de lei (ex.: 'Art. 37, CF', 'Art. 1º ao 10', 'Art. 21')";
@@ -1239,7 +1275,15 @@ export async function analisarProgresso(cfg, snapshot) {
     "erros e as observações do aluno. RESPEITE a BASE DE ESTUDO (campo baseEstudo): se for " +
     "'cursinho', PRIORIZE e ORDENE as sugestões e as missões seguindo a SEQUÊNCIA DAS AULAS " +
     "(campo sequenciaCursinho: Aula 1 → 2 → ...), avançando a partir de onde o aluno parou; se for " +
-    "'edital', priorize por matéria, relevância e cobertura. NÃO invente dados fora do panorama. As ações (flashcards/" +
+    "'edital', priorize por matéria, relevância e cobertura. " +
+    "CONSIDERE a CENTRAL DE REVISÕES (campo revisao): se houver revisões atrasadas/para hoje (revisao.atrasadas, revisao.vencidasPorTipo por tópico/resumo/mapa/lei/juris/flashcards), TRATE-AS como prioridade e reflita isso em 'atencao' e nas missões de categoria 'Revisão'. " +
+    "USE o desempenho POR TÓPICO (disciplinas[].topicos[].percentAcerto e questoes): mire os TÓPICOS específicos mais fracos, não só a disciplina. " +
+    "NÃO proponha missões que DUPLIQUEM o que o aluno JÁ planejou (campo planejado.hoje/totalSemana); complemente, não repita, e respeite a carga já agendada. " +
+    "CONSIDERE o COMPORTAMENTO (campo comportamento): quando houver, sugira aproveitar o melhor dia/faixa do dia (comportamento.melhorDia/melhorFaixa) para as tarefas mais difíceis, e reforce a constância (comportamento.ofensivaDias). " +
+    "CONSIDERE os SIMULADOS (campo simulados: total, media, melhor, ultimo): se a última nota (simulados.ultimo.aproveitamento) estiver abaixo da média (simulados.media), aponte a queda e onde revisar; se não houver simulados (simulados.total=0) e a prova estiver próxima, sugira fazer um simulado diagnóstico. Compare também com a meta diária (metas.feitoHojeMin × metas.diariaMin). " +
+    "CONSIDERE a LEI SECA/JURISPRUDÊNCIA (campo leiSeca): se houver pontos de ALTA INCIDÊNCIA sem treinar (leiSeca.pqNaoTreinada/pqNaoTreinadaEx) ou dispositivos FRACOS no drill (leiSeca.dispositivosFracos/dispositivosFracosEx), destaque em 'atencao' e sugira treinar a letra desses dispositivos. Também considere: novidade legislativa a revisar (leiSeca.novidadeLei/novidadeJuris), vigência não conferida há muito tempo (leiSeca.vigenciaPendente), entendimentos antigos (leiSeca.jurisAntigas) e metas de leitura pendentes (leiSeca.metasLeituraPendentes). " +
+    "CONSIDERE os LEMBRETES vencidos (campo lembretesVencidos: recados que o próprio aluno deixou, com data já passada): se houver, mencione-os em 'atencao' de forma acolhedora (ex.: 'você anotou X para o dia tal'). " +
+    "NÃO invente dados fora do panorama. As ações (flashcards/" +
     "questões) são auxiliares de estudo (selo amarelo) e serão REVISADAS pelo aluno. Responda " +
     "exclusivamente em JSON válido.";
   const user =
@@ -1752,9 +1796,10 @@ export async function interpretarComando(cfg, { pergunta, topicos = [], materiai
     "então É UM COMANDO — escolha a ação correspondente e NUNCA responda como se fosse pergunta. Exemplos: " +
     '"resuma o tópico X" → criar_resumo; "gere 5 questões de Y" → criar_questoes; "faça flashcards de Z" → criar_flashcards.\n' +
     "Se for COMANDO, escolha UMA ação e extraia os parâmetros. AÇÕES:\n" +
-    "- criar_flashcards {origem:'topico'|'material'|'resumo', alvo:<nome>, n:<1-20>, dificuldade:'facil'|'medio'|'dificil'}\n" +
-    "- criar_questoes {origem:'topico'|'material'|'resumo', alvo:<nome>, n:<1-20>, dificuldade, formato:'mc'|'ce'}\n" +
+    "- criar_flashcards {origem:'topico'|'material'|'resumo'|'lei'|'juris', alvo:<nome do tópico/material/resumo OU a referência do dispositivo, ex.: 'art. 37 CF' | 'Súmula 473 STF'>, n:<1-20>, dificuldade:'facil'|'medio'|'dificil'}\n" +
+    "- criar_questoes {origem:'topico'|'material'|'resumo'|'lei'|'juris', alvo:<nome ou referência do dispositivo>, n:<1-20>, dificuldade, formato:'mc'|'ce'}\n" +
     "- criar_resumo {origem:'material'|'flashcards'|'erros'|'lei'|'juris', alvo:<nome do tópico ou 'todos'>}\n" +
+    "- criar_meta_leitura {tipo:'lei'|'juris', referencia:<texto, ex.: 'ler art. 1º a 20 da CF' | 'ler os informativos 810-815 do STJ'>} (cria uma meta de leitura na aba Metas, que vira tarefa no Planejamento)\n" +
     "- criar_mapa_mental {alvo:<nome do tópico>}\n" +
     "- adicionar_tarefa {titulo:<texto>, dia:<0=Dom..6=Sáb ou null>, categoria:<'Materiais'|'Prática'|'Revisão'|'Lei Seca'|'Jurisprudência' ou null>, topico:<nome ou null>}\n" +
     "- agendar_revisao {topico:<nome>}\n" +
@@ -1764,7 +1809,10 @@ export async function interpretarComando(cfg, { pergunta, topicos = [], materiai
     "- definir_metas {diariaMin:<int ou null>, semanalMin:<int ou null>, mensalMin:<int ou null>}\n" +
     "- definir_data_prova {data:'yyyy-mm-dd'}\n" +
     "- adicionar_erro {descricao:<texto>, correto:<texto ou null>, topico:<nome ou null>}\n" +
+    "- criar_lembrete {texto:<texto do recado>, data:'yyyy-mm-dd' ou null} (recado livre — o app lembra; use data quando o usuário citar um prazo/dia)\n" +
     "- abrir {tela:'hoje'|'planejamento'|'diagnostico'|'mentor'|'edital'|'documentos'|'leiseca'|'jurisprudencia'|'pratica'|'pratica-ce'|'correcao'|'flashcards'|'revtopico'|'erros'|'resumos'|'config'}\n" +
+    "- estudar_letra {dominio:'lei'|'juris'} (abre a aba Estudar: praticar a letra — Certo/Errado, completar a letra (cloze), revisar o que vence, refazer erros; na jurisprudência também a súmula-duelo)\n" +
+    "- ler_letra {dominio:'lei'|'juris'} (abre a aba Ler: a letra dos artigos/súmulas, com a incidência do que mais cai inline)\n" +
     "- analisar_progresso {}\n" +
     `TÓPICOS existentes: ${lista(topicos)}\n` +
     `MATERIAIS existentes: ${lista(materiais)}\n` +

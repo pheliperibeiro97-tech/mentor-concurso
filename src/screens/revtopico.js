@@ -155,7 +155,7 @@ function reviewHTML(store, topico) {
         <textarea id="revtop-braindump" rows="6" placeholder="Despeje tudo o que vier à cabeça, sem consultar...">${esc(braindumpTexto)}</textarea>
       </label>
       <div class="revtop-bd-acoes">
-        ${revelado ? "" : `<button class="btn btn-ghost btn-sm" data-action="revelar">Revelar conteúdo para conferir →</button>`}
+        ${revelado ? "" : `<button class="btn btn-ghost btn-sm" data-action="revelar">Revelar conteúdo para conferir ${icone("arrow-right")}</button>`}
         <button class="btn btn-ghost btn-sm" data-action="avaliar-ia" ${avaliando ? "disabled" : ""} data-tip="${iaOn ? "A IA compara o que você escreveu com o conteúdo e dá um feedback do que acertou e faltou." : "Conecte a IA nas Configurações para usar (opcional)."}">${avaliando ? "Avaliando…" : "Avaliar com IA"}</button>
       </div>
       ${
@@ -200,7 +200,7 @@ function reviewHTML(store, topico) {
           <div class="muted small">Revisando o tópico</div>
           <h3 style="margin:2px 0 0">${esc(nomeTopico(st, topico))}</h3>
         </div>
-        <button class="btn btn-ghost btn-sm" data-action="voltar">← Voltar</button>
+        <button class="btn btn-ghost btn-sm" data-action="voltar">${icone("arrow-left")} Voltar</button>
       </div>
       ${escolherModo}
       ${painel}

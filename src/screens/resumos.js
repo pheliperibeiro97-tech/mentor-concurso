@@ -17,12 +17,13 @@ let busca = "";
 let revModo = {}; // resumoId -> "reler" | "recordar" (modo da revisão vencida)
 let revRevelado = new Set(); // ids revelados no modo "recordar" (active recall)
 
+// Cores de TEXTO legíveis nos DOIS temas (antes havia "preto" #111827, que sumia no tema
+// escuro). Sem preto: o texto sem cor já usa var(--text), que acompanha o tema.
 const CORES_TEXTO = [
-  ["#111827", "preto"],
-  ["#dc2626", "vermelho"],
-  ["#2563eb", "azul"],
+  ["#ef4444", "vermelho"],
+  ["#3b82f6", "azul"],
   ["#16a34a", "verde"],
-  ["#9333ea", "roxo"],
+  ["#a855f7", "roxo"],
 ];
 const CORES_MARCA = [
   ["#fff3a0", "amarelo"],
@@ -41,6 +42,11 @@ export default function renderResumos(root, app) {
     app.params.focoResumoId = null;
     busca = "";
     filtroTop.sel = [];
+  }
+  // Escopo vindo do "Hoje" (Revisar → deste tópico): pré-filtra pelo tópico.
+  if (app.params && app.params.topicoId) {
+    filtroTop.sel = [app.params.topicoId];
+    app.params.topicoId = null;
   }
   // Abrir a marcação direto (vindo do dossiê de marcações).
   if (app.params && app.params.marcarId) {
@@ -64,7 +70,7 @@ export default function renderResumos(root, app) {
       <input id="res-busca" type="search" class="busca-input" placeholder="Buscar nos resumos..." value="${esc(busca)}" title="Busca por texto no título e no conteúdo dos seus resumos (correspondência literal, não semântica)." />
       ${filtroTopicosBotaoHTML(st, filtroTop.sel, filtroTop.aberto)}
       <span class="spacer"></span>
-      <button class="btn btn-ia btn-sm" data-action="toggle-gerar" data-tip="Compila do seu material/flashcards/erros/lei/juris, ou a IA sintetiza por tópico, aula e subtópico.">Gerar resumo de…</button>
+      <button class="btn btn-add btn-sm" data-action="toggle-gerar" data-tip="Compila do seu material/flashcards/erros/lei/juris, ou a IA sintetiza por tópico, aula e subtópico.">${icone("plus")} Gerar resumo de…</button>
       <button class="btn btn-add btn-sm" data-action="novo">Novo resumo</button>
     </div>
     ${filtroTopicosPainelHTML(st, filtroTop.sel, filtroTop.aberto)}
@@ -106,6 +112,12 @@ export default function renderResumos(root, app) {
 
   bindActions(root, {
     novo: () => abrirEditarResumo(app),
+    // Clicar no título abre/fecha a leitura do resumo (o mesmo que "Ler resumo").
+    "ler-resumo": (el) => {
+      const card = el.closest(".resumo-item");
+      const det = card && card.querySelector(".resumo-leia");
+      if (det) det.open = !det.open;
+    },
     "toggle-marcar": (el) => {
       const id = el.getAttribute("data-id");
       if (marcarAberto.has(id)) marcarAberto.delete(id);
@@ -127,7 +139,7 @@ export default function renderResumos(root, app) {
       const id = el.getAttribute("data-id");
       if (id) {
         const r = st.resumos.find((x) => x.id === id);
-        if (r) imprimir(`Resumo — ${r.titulo}`, `<div class="print-meta">${esc(vinculoNome(st, r))}</div>${r.conteudoHTML}`);
+        if (r) imprimir(`Resumo — ${r.titulo}`, `<div class="print-meta">${esc(vinculoNome(st, r))}</div><div class="resumo-corpo">${sanitize(r.conteudoHTML || "")}</div>`);
         return;
       }
       // Botão do topo: imprime os resumos do filtro/busca atuais.
@@ -427,7 +439,7 @@ function resumoHTML(st, r) {
   return `
     <div class="card resumo-item ${vencida ? "resumo-revisar" : ""}" data-foco-id="${r.id}">
       <div class="resumo-head">
-        <b class="resumo-titulo" title="${esc(r.titulo)}">${esc(r.titulo)}</b>
+        <b class="resumo-titulo" data-action="ler-resumo" data-id="${r.id}" role="button" tabindex="0" title="Abrir/fechar a leitura do resumo">${esc(r.titulo)}</b>
         ${r.origem && r.origem.tipo === "ia-sintese" ? `<span class="selo selo-amarelo">${icone("bot")} síntese IA · confira</span>` : r.origem && (r.origem.tipo === "ia" || r.origem.tipo === "compilado") ? `<span class="selo selo-amarelo">${icone("bot")} rascunho · confira</span>` : ""}
         ${vinc}
         <span class="spacer"></span>
@@ -521,7 +533,7 @@ function printResumos(st, lista) {
       (r) => `<div class="print-item">
         <h3 style="margin:0 0 2px">${esc(r.titulo)}</h3>
         <div class="print-meta">${esc(vinculoNome(st, r))} · ${fmtData(r.data)}</div>
-        <div>${r.conteudoHTML || ""}</div>
+        <div class="resumo-corpo">${sanitize(r.conteudoHTML || "")}</div>
       </div>`
     )
     .join("");

@@ -184,12 +184,33 @@ fn now_millis() -> u128 {
         .unwrap_or(0)
 }
 
+// Salva bytes (base64) num arquivo escolhido pelo usuário na CAIXA DE SALVAR NATIVA.
+// Usa std::fs direto (sem plugin-fs), então não depende de escopo. Retorna o caminho salvo,
+// ou None se o usuário cancelar. Usado pelo "Baixar PNG" do mapa mental (e reaproveitável).
+#[tauri::command]
+async fn save_bytes(app: tauri::AppHandle, name: String, data: String) -> Result<Option<String>, String> {
+    use base64::Engine;
+    use tauri_plugin_dialog::DialogExt;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data.as_bytes())
+        .map_err(|e| format!("base64 inválido: {}", e))?;
+    match app.dialog().file().set_file_name(&name).blocking_save_file() {
+        Some(fp) => {
+            let path = fp.into_path().map_err(|e| e.to_string())?;
+            std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let dir = app
                 .path()
@@ -209,7 +230,8 @@ pub fn run() {
             get_license,
             set_license,
             sair_do_app,
-            claude_prompt
+            claude_prompt,
+            save_bytes
         ])
         .run(tauri::generate_context!())
         .expect("erro ao iniciar o Mentor Concurso");

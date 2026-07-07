@@ -15,7 +15,7 @@ const NOME_TELA = {
   pratica: "Questões", "pratica-ce": "Questões C/E", correcao: "Discursiva", flashcards: "Flashcards",
   revtopico: "Revisão de Tópicos", erros: "Caderno de Erros", resumos: "Resumos", config: "Configurações",
 };
-const FASE_NOME = { E: "Estudo", A: "Aprofundamento", R: "Revisão" };
+const FASE_NOME = { E: "Estudo", A: "Prática", R: "Revisão" };
 
 function clampInt(v, min, max, pad) {
   const n = parseInt(v, 10);
@@ -45,10 +45,28 @@ function resumoDe(store, alvo) {
   return (store.get().resumos || []).find((r) => (r.titulo || "").toLowerCase().includes(low)) || null;
 }
 
+// Acha um dispositivo de Lei Seca/Jurisprudência pela referência (ex.: "art 37 CF", "Súmula 473").
+function normRef(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[^a-z0-9]/g, ""); }
+function indicacaoDe(store, alvo, tipo) {
+  const alvoN = normRef(alvo);
+  if (!alvoN) return null;
+  const inds = store.get().indicacoes.filter((i) => i.tipo === tipo && !i.metaLeitura && !i.revogado && (i.texto || "").trim());
+  return inds.find((i) => { const r = normRef(i.referencia); return r.includes(alvoN) || alvoN.includes(r); }) || null;
+}
+
 async function gerar(store, p, tipo) {
   // tipo: "fc" | "mc" | "ce"
   const n = clampInt(p.n, 1, 20, tipo === "fc" ? 6 : 5);
   const d = dif(p.dificuldade);
+  // origem lei/juris → gera a partir de UM dispositivo (artigo/súmula) pela referência.
+  if (p.origem === "lei" || p.origem === "juris") {
+    const ind = indicacaoDe(store, p.alvo, p.origem === "juris" ? "juris" : "lei");
+    if (!ind) throw new Error(`Não encontrei "${p.alvo || "?"}" na ${p.origem === "juris" ? "Jurisprudência" : "Lei Seca"}. Adicione o dispositivo (com o texto) e tente de novo.`);
+    let itens;
+    if (tipo === "fc") itens = store.iaDisponivel() ? await store.gerarFlashcardsIADeIndicacao(ind.id, n, d) : [store.gerarFlashcardDeIndicacao(ind.id)].filter(Boolean);
+    else itens = await store.gerarQuestoesDeIndicacao(ind.id, n, d, tipo === "ce" ? "ce" : "mc");
+    return Array.isArray(itens) ? itens.length : 0;
+  }
   const r = p.origem === "resumo" ? resumoDe(store, p.alvo) : null;
   const doc = p.origem === "resumo" ? null : docDe(store, p.alvo, p.origem);
   if (!doc && !r) {
@@ -170,6 +188,32 @@ export async function executarComando(store, app, acao, params = {}) {
     case "analisar_progresso": {
       app.navigate("mentor");
       return `Abri o Mentor IA — clique em "Analisar meu progresso" para a análise.`;
+    }
+    case "criar_lembrete": {
+      const texto = (p.texto || "").trim();
+      if (!texto) throw new Error("O que você quer lembrar?");
+      const data = /^\d{4}-\d{2}-\d{2}$/.test(p.data || "") ? p.data : null;
+      store.addLembrete(texto, data);
+      return `Lembrete criado${data ? ` para ${data}` : ""}: "${texto}".`;
+    }
+    case "criar_meta_leitura": {
+      const juris = p.tipo === "juris";
+      const ref = (p.referencia || "").trim();
+      if (!ref) throw new Error("O que você quer ler? (ex.: 'ler art. 1º a 20 da CF')");
+      store.criarMetaLeitura({ tipo: juris ? "juris" : "lei", referencia: ref });
+      return `Meta de leitura criada na ${juris ? "Jurisprudência" : "Lei Seca"}: "${ref}". Virou tarefa no Planejamento.`;
+    }
+    case "estudar_letra":
+    case "treinar_letra": { // treinar_letra = alias legado (a antiga aba Treinar virou Estudar)
+      const juris = p.dominio === "juris";
+      app.navigate(juris ? "jurisprudencia" : "leiseca", { aba: "estudar" });
+      return `Abrindo o Estudar da ${juris ? "Jurisprudência" : "Lei Seca"} (Certo/Errado, completar a letra, revisar, refazer erros${juris ? ", súmula-duelo" : ""}).`;
+    }
+    case "ler_letra":
+    case "raiox_letra": { // raiox_letra = alias legado (o Raio-X virou a incidência inline na aba Ler)
+      const juris = p.dominio === "juris";
+      app.navigate(juris ? "jurisprudencia" : "leiseca", { aba: "ler" });
+      return `Abrindo a aba Ler da ${juris ? "Jurisprudência" : "Lei Seca"} (a letra, com a incidência do que mais cai).`;
     }
     default:
       throw new Error("Não entendi a ação solicitada.");

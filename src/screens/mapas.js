@@ -58,13 +58,29 @@ function parseOutline(texto) {
 export default function renderMapas(root, app) {
   const { store } = app;
   const st = store.get();
+  // Escopo vindo do "Hoje" (Revisar → deste tópico): pré-filtra pelo tópico.
+  if (app.params && app.params.topicoId) {
+    filtroTop = app.params.topicoId;
+    app.params.topicoId = null;
+  }
   const hoje = todayISO();
   const maps = st.mapasMentais.slice().sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
   const due = maps.filter((m) => m.revisao && m.revisao.proxima <= hoje);
-  const filtrados = maps.filter((m) => (filtroTop === "" ? true : filtroTop === "sem" ? !m.topicoId : m.topicoId === filtroTop));
+  const filtrados = maps.filter((m) => {
+    if (filtroTop === "") return true;
+    if (filtroTop === "sem") return !m.topicoId;
+    if (filtroTop.startsWith("disc:")) { // toda a disciplina
+      const did = filtroTop.slice(5);
+      const t = m.topicoId ? st.topicos.find((x) => x.id === m.topicoId) : null;
+      return t ? t.disciplinaId === did : false;
+    }
+    return m.topicoId === filtroTop;
+  });
 
   const sub = (m) => (nomeTop(st, m) ? ` <span class="muted small">${esc(nomeTop(st, m))}</span>` : "");
   const seloOrig = (m) => ((m.imgData || m.pdfData) && !m.binarioDescartado ? ` <span class="muted small" data-tip="Tem a imagem/PDF original (ver dentro do mapa).">${icone("image")} original</span>` : "");
+  // Vínculo a tópico como CHIP clicável (mostra o tópico atual, ou "vincular a tópico" se não houver).
+  const vincChip = (m) => `<button class="lnk mapa-vinc" data-action="vincular-topico" data-id="${m.id}" data-tip="Vincular ou alterar o tópico deste mapa.">${icone("link")} ${nomeTop(st, m) ? esc(nomeTop(st, m)) : "vincular a tópico"}</button>`;
 
   const cardRevisar = (m) => `<div class="card mapa-card">
       <div class="mapa-card-top"><b>${esc(m.titulo)}</b>${sub(m)}</div>
@@ -80,10 +96,10 @@ export default function renderMapas(root, app) {
   const cardMapa = (m) => `<div class="card mapa-card">
       <div class="mapa-card-top">
         <input type="checkbox" class="mapa-chk" data-id="${m.id}" title="Selecionar para imprimir" />
-        <b>${esc(m.titulo)}</b>${sub(m)}${seloOrig(m)}${m.revisao ? ` <span class="muted small">· próxima revisão ${fmtData(m.revisao.proxima)}</span>` : ""}
+        <b class="mapa-titulo" data-action="abrir" data-id="${m.id}" role="button" tabindex="0" data-tip="Abrir o mapa (imprimir, agendar revisão, gerar flashcards/questões).">${esc(m.titulo)}<span class="mapa-abrir-ico">${icone("external-link")}</span></b>${seloOrig(m)}${m.revisao ? ` <span class="muted small">· próxima revisão ${fmtData(m.revisao.proxima)}</span>` : ""}
       </div>
       <div class="barra-acoes">
-        <button class="btn btn-soft btn-sm" data-action="abrir" data-id="${m.id}" data-tip="Abrir o mapa (lá dentro: imprimir, agendar revisão, gerar flashcards/questões).">Abrir</button>
+        ${vincChip(m)}
         <span class="spacer"></span>
         <button class="lnk lnk-danger" data-action="remover" data-id="${m.id}">${icone("x")} Remover</button>
       </div>
@@ -96,7 +112,7 @@ export default function renderMapas(root, app) {
     .map((d) => {
       const tops = porDisc[d.id] || [];
       if (!tops.length) return "";
-      return `<optgroup label="${esc(d.nome)}">${tops.map((t) => `<option value="${t.id}" ${filtroTop === t.id ? "selected" : ""}>${esc(t.nome)}</option>`).join("")}</optgroup>`;
+      return `<optgroup label="${esc(d.nome)}"><option value="disc:${d.id}" ${filtroTop === "disc:" + d.id ? "selected" : ""}>Toda a disciplina (${esc(d.nome)})</option>${tops.map((t) => `<option value="${t.id}" ${filtroTop === t.id ? "selected" : ""}>${esc(t.nome)}</option>`).join("")}</optgroup>`;
     })
     .join("");
   const filtroHTML = `<label class="inline">Filtrar:
@@ -107,11 +123,12 @@ export default function renderMapas(root, app) {
       </select>
     </label>`;
 
-  // Topo: IMPRIMIR (seleção/todos) — onde o Gerar estava antes.
-  const imprimirBtn = `<button class="btn btn-ghost btn-sm" data-action="imprimir-mapas" data-tip-pos="bottom" data-tip="Imprime os mapas marcados (ou todos do filtro atual, se nenhum marcado).">${icone("printer")} Imprimir</button>
+  // Topo: IMPRIMIR — abre o MODO SELEÇÃO (os checkboxes só aparecem aí; fora disso ficam ocultos).
+  const btnImprimirPadrao = `<button class="btn btn-ghost btn-sm" data-action="imprimir-modo" data-tip-pos="bottom" data-tip="Selecionar mapas para imprimir (ou todos do filtro).">${icone("printer")} Imprimir</button>`;
+  const imprimirBtn = `<span class="mapa-print-actions">${btnImprimirPadrao}</span>
     <input id="mapa-file" type="file" accept=".pdf,image/*,application/pdf" hidden />`;
   // Gerar fica na MESMA LINHA de "Todos os mapas".
-  const gerarBtn = `<button class="btn btn-ia btn-sm" data-action="gerar-mapa" data-tip="Criar um mapa mental: por IA (tópico/material/resumo/tema/arquivo) ou colando uma estrutura escrita.">${icone("sparkles")} Gerar mapa mental</button>`;
+  const gerarBtn = `<button class="btn btn-add btn-sm" data-action="gerar-mapa" data-tip="Criar um mapa mental: por IA (tópico/material/resumo/tema/arquivo) ou colando uma estrutura escrita.">${icone("plus")} Gerar mapa mental</button>`;
 
   root.innerHTML = `
     ${header("Mapas mentais", "Suas ideias em árvore. Crie a partir de tópico, material, resumo, tema, arquivo ou do zero; revise na escada da memória e gere flashcards e questões a partir deles.", imprimirBtn)}
@@ -148,14 +165,47 @@ export default function renderMapas(root, app) {
     });
   }
 
+  const sairSelecao = () => {
+    root.classList.remove("mapas-sel");
+    root.querySelectorAll(".mapa-chk:checked").forEach((c) => (c.checked = false));
+    const cont = root.querySelector(".mapa-print-actions");
+    if (cont) cont.innerHTML = btnImprimirPadrao;
+  };
   bindActions(root, {
     abrir: (el) => abrir(el.getAttribute("data-id")),
     "print-um": (el) => { const m = store.get().mapasMentais.find((x) => x.id === el.getAttribute("data-id")); if (m) imprimir(`Mapa mental — ${m.titulo}`, arvoreParaHTML(m)); },
-    "imprimir-mapas": () => {
+    // MODO SELEÇÃO: 1º clique revela os checkboxes; depois "Imprimir marcados" (ou Cancelar).
+    "imprimir-modo": () => {
+      root.classList.add("mapas-sel");
+      const cont = root.querySelector(".mapa-print-actions");
+      if (cont) cont.innerHTML = `<button class="btn btn-ghost btn-sm" data-action="marcar-todos">Marcar todos</button> <button class="btn btn-primary btn-sm" data-action="imprimir-fazer">${icone("printer")} Imprimir marcados</button> <button class="btn btn-ghost btn-sm" data-action="imprimir-cancelar">Cancelar</button>`;
+      toast("Marque os mapas e clique em Imprimir marcados (nenhum marcado = todos do filtro).");
+    },
+    "imprimir-fazer": () => {
       const marcados = [...root.querySelectorAll(".mapa-chk:checked")].map((c) => c.getAttribute("data-id"));
       const alvo = marcados.length ? filtrados.filter((m) => marcados.includes(m.id)) : filtrados;
       if (!alvo.length) return toast("Nada para imprimir.", "erro");
       imprimir(`Mapas mentais (${alvo.length})`, alvo.map(arvoreParaHTML).join('<hr class="print-sep"/>'));
+      sairSelecao();
+    },
+    "imprimir-cancelar": () => sairSelecao(),
+    "marcar-todos": (el) => {
+      const chks = [...root.querySelectorAll(".mapa-chk")];
+      const todosMarcados = chks.length > 0 && chks.every((c) => c.checked);
+      chks.forEach((c) => (c.checked = !todosMarcados));
+      el.textContent = todosMarcados ? "Marcar todos" : "Desmarcar todos";
+    },
+    "vincular-topico": async (el) => {
+      const id = el.getAttribute("data-id");
+      const opcoes = [{ value: "__none__", label: "— Sem tópico —" }].concat(
+        st.topicos.map((t) => ({ value: t.id, label: nomeTop(st, { topicoId: t.id }) || t.nome }))
+      );
+      if (opcoes.length === 1) return toast("Você ainda não tem tópicos cadastrados.", "erro");
+      const escolhido = await escolher("Vincular a qual tópico?", opcoes.slice(0, 300), { lista: true });
+      if (escolhido == null) return; // cancelou
+      store.setTopicoMapa(id, escolhido === "__none__" ? null : escolhido);
+      toast("Vínculo de tópico atualizado.");
+      app.refresh();
     },
     "gerar-mapa": async () => {
       let fonte = await escolher("Criar mapa mental a partir de quê?", [

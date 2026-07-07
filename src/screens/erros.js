@@ -23,6 +23,11 @@ export default function renderErros(root, app) {
     filtroTop.sel = [];
     ordenar = "recente";
   }
+  // Escopo vindo do "Hoje" (Revisar → deste tópico): pré-filtra pelo tópico.
+  if (app.params && app.params.topicoId) {
+    filtroTop.sel = [app.params.topicoId];
+    app.params.topicoId = null;
+  }
   const todos = store.cadernoErros();
   let erros = todos;
   if (filtroMotivo !== "todos") {
@@ -35,6 +40,10 @@ export default function renderErros(root, app) {
   for (const m of MOTIVOS) porMotivo[m] = todos.filter((e) => e.motivoErro === m).length;
   const semMotivo = todos.filter((e) => !e.motivoErro).length;
 
+  // Ids únicos das QUESTÕES erradas no filtro atual (para "Refazer em foco" — reaproveita
+  // o Modo Foco de Questões, com correção item a item). Erros manuais/flashcard ficam fora.
+  const refazerIds = [...new Set(erros.filter((e) => e.questao && e.questao.alternativas).map((e) => e.questao.id))];
+
   root.innerHTML = `
     ${header("Caderno de Erros", `${plural(todos.length, "erro", "erros")} em todas as disciplinas`, botaoImprimir())}
 
@@ -44,6 +53,7 @@ export default function renderErros(root, app) {
 
     <div class="barra-acoes">
       <button class="btn btn-add btn-sm" data-action="toggle-add" data-tip-pos="cima-esq" data-tip="Digite um erro ou cole vários (um por linha).">Adicionar erro</button>
+      <button class="btn btn-sm fc-foco-btn" data-action="refazer-erros-foco" ${refazerIds.length ? "" : "disabled"} data-tip="Refaz as questões erradas (deste filtro) uma a uma, em tela cheia, com correção item a item.">${icone("expand")} Refazer em foco (<span class="num">${refazerIds.length}</span>)</button>
     </div>
 
     <div class="barra-acoes filtro-bar">
@@ -113,6 +123,11 @@ export default function renderErros(root, app) {
       imprimir("Caderno de Erros — Mentor Concurso", printErros(st, erros, op));
     },
     "toggle-add": () => abrirAdicionarErro(app),
+    "refazer-erros-foco": () => {
+      if (!refazerIds.length) return;
+      // Abre o Modo Foco de Questões já com a fila = questões erradas (MC e/ou C/E).
+      app.navigate("pratica", { focoErrosIds: refazerIds });
+    },
     "salvar-erro": (el) => salvarErro(root, store, el.getAttribute("data-id")),
     "editar-erro": (el) => {
       const e = store.get().errosManuais.find((x) => x.id === el.getAttribute("data-id"));
@@ -415,7 +430,7 @@ function erroHTML(st, e) {
               ${MOTIVOS.map((m) => `<option ${e.motivoErro === m ? "selected" : ""}>${m}</option>`).join("")}
             </select>
           </label>
-          ${!e.manual ? `<button class="btn btn-ghost btn-sm" data-action="comentar-ia" data-id="${e.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que você errou e como não repetir (com selo de origem)."><span class="orb orb-xs" aria-hidden="true"></span> Comentar com IA</button>` : ""}
+          ${!e.manual ? `<button class="btn btn-ia btn-sm" data-action="comentar-ia" data-id="${e.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que você errou e como não repetir (com selo de origem).">${icone("sparkles")} Comentar com IA</button>` : ""}
           <button class="btn btn-ghost btn-sm" data-action="gerar-flashcard" data-id="${e.id}" data-manual="${e.manual}" data-tip="Cria um flashcard a partir deste erro, para revisar depois.">${icone("layers")} Flashcards</button>
         </div>
         ${comentarioHTML}

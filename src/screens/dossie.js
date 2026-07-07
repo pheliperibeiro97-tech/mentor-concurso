@@ -2,11 +2,11 @@
 // edital. Cada item abre a respectiva tela já apontando para ele (deep-link via focarItem).
 // NÃO é rota própria: vive embutido no Edital. Exporta dossieResumoHTML (visão de todo o
 // edital) e renderDossieDetalhe (a pasta viva de um tópico).
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, confirmar, escolher, iconImprimir, skeletonDoc , plural, defMetrica } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, confirmar, escolher, iconImprimir, skeletonDoc , plural, defMetrica, ligarArrastar } from "../ui.js";
 import { esc, fmtTempo, pct, fmtData, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { progressRing } from "../viz.js";
-import { relSelectHTML, relBandClass, relLabel, relValor, aplicarRelValor } from "./edital.js";
+import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, relNamedValor, relNamedNome } from "./edital.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { gerarEAbrirMapa, abrirMapaCompleto } from "../mapa-mental.js";
 
@@ -16,6 +16,8 @@ let sessSort = { col: "data", dir: "desc" };
 let sessEditId = null;
 let sessFiltroFase = "";
 let aliasAberto = false; // editor de "também conhecido como" (sinônimos) do tópico aberto
+let dossieRevelar = new Set(); // seções vazias que o usuário optou por revelar (para adicionar)
+let dossieEscondido = new Set(); // seções que o usuário tirou do dossiê (voltam para "Adicionar")
 
 // Visão de TODO o edital: cards por tópico (agrupados por disciplina) com as
 // estatísticas resumidas. Reutilizado pelo Edital (modo "Resumo"). Cada card usa
@@ -31,25 +33,37 @@ export function dossieResumoHTML(store) {
   return st.disciplinas
     .map((d) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
+      const cor = store.corDisciplina(d.id);
+      const concl = tops.filter((t) => t.concluido).length;
       return `
         <div class="dossie-disc">
-          <h3 class="ddx-disc-tit"><button class="lnk" data-action="ir-dossie-disc" data-id="${d.id}" data-tip="Abrir o painel da disciplina: KPIs, semáforo por tópico e histórico." data-tip-pos="bottom-esq">${esc(d.nome)}</button><span class="ddx-disc-hint muted small">${icone("table")} painel →</span></h3>
+          <h3 class="ddx-disc-tit">
+            <span class="cur-dot" style="background:${cor}"></span>
+            <button class="lnk" data-action="ir-dossie-disc" data-id="${d.id}" data-tip="Abrir o painel da disciplina: KPIs, semáforo por tópico e histórico." data-tip-pos="bottom-esq">${esc(d.nome)} <span class="mapa-abrir-ico">${icone("external-link")}</span></button>
+            <span class="ddx-disc-cont">${concl}/${tops.length}</span>
+          </h3>
           <div class="dossie-tops">
             ${
               tops.length
                 ? tops
                     .map((t) => {
                       const dos = store.dossie(t.id);
-                      const rel = relLabel(t);
+                      const aprov = dos.totalTentativas ? pct(dos.acertos, dos.totalTentativas) : null;
+                      const apCls = aprov === null ? "z" : aprov < 50 ? "r" : aprov < 75 ? "y" : "g";
+                      const relV = relNamedValor(t);
                       return `
-                  <button class="dossie-card ${relBandClass(t)}" data-action="ir-dossie" data-id="${t.id}">
-                    <div class="dossie-card-nome">${t.concluido ? `${icone("check")} ` : ""}${esc(t.nome)}${rel ? ` <span class="dossie-card-rel">${esc(rel)}</span>` : ""}</div>
+                  <button class="dossie-card ${t.concluido ? "ddx-done" : ""}" data-action="ir-dossie" data-id="${t.id}">
+                    <div class="ddx-card-top">
+                      <span class="dossie-card-nome">${t.concluido ? `${icone("check")} ` : ""}${esc(t.nome)}</span>
+                      <span class="mapa-abrir-ico">${icone("external-link")}</span>
+                    </div>
                     <div class="dossie-card-stats">
-                      <span data-tip="materiais">${icone("library")} ${dos.documentos.length}</span>
-                      <span data-tip="questões">${icone("square-pen")} ${dos.questoes.length}</span>
-                      <span data-tip="erros">${icone("flag")} ${dos.erros.length}</span>
-                      <span data-tip="flashcards">${icone("layers")} ${dos.flashcards.length}</span>
-                      <span data-tip="tempo">${icone("clock-3")} ${fmtTempo(dos.tempoSeg)}</span>
+                      ${relV !== "nd" ? `<span class="rel-pill relp-${relV} ddx-relpill">${relNamedNome(t)}</span>` : ""}
+                      ${aprov !== null ? `<span class="ddx-ap ds-${apCls}" data-tip="Aproveitamento nas questões">${aprov}%</span>` : ""}
+                      <span data-tip="Materiais"><span class="ddx-stat-lbl">Mat.</span> ${dos.documentos.length}</span>
+                      <span data-tip="Questões"><span class="ddx-stat-lbl">Quest.</span> ${dos.questoes.length}</span>
+                      <span data-tip="Flashcards"><span class="ddx-stat-lbl">Flash.</span> ${dos.flashcards.length}</span>
+                      <span data-tip="Tempo estudado">${icone("clock-3")} ${fmtTempo(dos.tempoSeg)}</span>
                     </div>
                   </button>`;
                     })
@@ -171,41 +185,51 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   // "Ocultar" agora RETRAI o conteúdo no lugar (título + funções continuam); não some.
   const retraida = (k) => store.dossieOculta(k);
 
-  // KPI chip (clicável). action padrão = ir-secao (rola até a seção).
-  const chip = ({ val, label, tip, action = "ir-secao", sec = "", cls = "" }) =>
-    `<button class="painel-num ${cls}" data-action="${action}"${sec ? ` data-sec="${sec}"` : ""} data-tip="${esc(tip)}"><b>${val}</b><span>${label}</span></button>`;
-  // KPIs: cada seção na ordem; "aproveitamento" SEMPRE logo após "questões" (refere-se a ela);
-  // "revisão" e "tempo" (status) ao final. Lista montada como array para balancear as linhas.
-  const kpis = [];
-  for (const k of ordemDossie) {
-    kpis.push(chip({ ...CARDS[k].kpi, sec: k }));
-    if (k === "questoes") kpis.push(chip({ val: aprov === null ? "—" : aprov + "%", label: "aproveit.", tip: "Ver questões e desempenho", sec: "questoes" }));
-  }
-  kpis.push(chip({ val: revLabel, label: "revisão", tip: revTop ? "Abrir a revisão deste tópico" : "Tópico fora da curva de revisão", action: "ir-revtopico", cls: revTop && revTop.proxima <= todayISO() ? "painel-due" : "" }));
-  kpis.push(chip({ val: fmtTempo(dos.tempoSeg), label: "tempo", tip: "Ver as sessões", sec: "sessoes" }));
-  // Colunas = metade do total (arredondado p/ cima) → duas linhas o mais equilibradas possível.
-  const colunas = Math.max(1, Math.ceil(kpis.length / 2));
-  const painelHTML = `<div class="dossie-painel" style="grid-template-columns:repeat(${colunas},minmax(0,1fr))">${kpis.join("")}</div>`;
+  // Faixa COMPACTA de stats (no lugar dos ~14 tiles): só o essencial — aproveitamento,
+  // questões feitas, tempo e nº de vezes estudado. Cada uma rola até a seção relacionada.
+  const vezesTop = st.sessoes.filter((s) => s.topicoId === topicoId);
+  const nVezes = vezesTop.length;
+  const ultimaData = vezesTop.reduce((m, s) => (s.data > m ? s.data : m), "");
+  const apClass = aprov === null ? "z" : aprov < 50 ? "r" : aprov < 75 ? "y" : "g";
+  const dstat = (val, label, sec, cls = "") =>
+    `<button class="dstat" data-action="ir-secao" data-sec="${sec}"><b class="${cls}">${val}</b><span>${label}</span></button>`;
+  const painelHTML = `<div class="dossie-stats">
+    ${dstat(dos.totalTentativas || 0, "Questões feitas", "questoes")}
+    ${dstat(aprov === null ? "—" : aprov + "%", "Aproveitamento", "questoes", "ds-" + apClass)}
+    ${dstat(fmtTempo(dos.tempoSeg), "Tempo estudado", "sessoes")}
+    ${dstat(nVezes ? nVezes + "×" : "0", nVezes ? "Estudado · últ. " + fmtData(ultimaData) : "Nunca estudado", "sessoes")}
+  </div>`;
 
-  // Seções na ordem escolhida; cabeçalho com mover (↑/↓), retrair () e imprimir.
-  const secoesHTML = ordemDossie
-    .map((k, idx) => secaoWrap(CARDS[k], k, idx > 0, idx < ordemDossie.length - 1, retraida(k)))
+  // Só as seções COM conteúdo (ou reveladas) e NÃO escondidas viram cards. As demais ficam
+  // dobradas num "Adicionar ao dossiê" — acaba o paredão de "Nenhum registro". "Histórico de
+  // sessões" entra no mesmo sistema (chave "sessoes").
+  const valDe = (k) => (k === "sessoes" ? dos.sessoes.length : CARDS[k].kpi.val || 0);
+  const tituloDe = (k) => (k === "sessoes" ? "Histórico de sessões" : CARDS[k].titulo);
+  const TODAS_KEYS = [...ordemDossie, "sessoes"];
+  const mostra = (k) => (valDe(k) > 0 || dossieRevelar.has(k)) && !dossieEscondido.has(k);
+  const cheias = ordemDossie.filter(mostra);
+  const mostraSessoes = mostra("sessoes");
+  const escondidas = TODAS_KEYS.filter((k) => !mostra(k));
+  const secoesHTML = cheias
+    .map((k, idx) => secaoWrap(CARDS[k], k, idx > 0, idx < cheias.length - 1, retraida(k)))
     .join("");
+  const addStripHTML = escondidas.length
+    ? `<div class="dossie-add"><span class="dossie-add-lbl">Adicionar ao dossiê</span>${escondidas.map((k) => `<button class="dossie-add-chip" data-action="dossie-revelar" data-key="${k}">${icone("plus")} ${tituloDe(k)}</button>`).join("")}</div>`
+    : "";
 
   root.innerHTML = `
     ${header(
       t.nome,
       disc ? disc.nome : "",
-      `${t.selo === "verde" ? seloBadge("verde") : ""} ${botaoImprimir()} <button class="btn btn-ghost btn-sm" data-action="voltar">← Todos os tópicos</button>`
+      `${botaoImprimir()} <button class="btn btn-ghost btn-sm" data-action="voltar">← Todos os tópicos</button>`
     )}
 
     <div class="dossie-acoes-topo">
       <button class="chip ${t.concluido ? "on" : ""}" data-action="concluir" data-tip="${t.concluido ? "Tópico concluído — clique para desmarcar." : "Marcar este tópico como concluído (já estudei)."}">${t.concluido ? `${icone("check")} Concluído` : "Concluir"}</button>
-      <label class="ed-nivel" data-tip="Relevância: o quanto o tema cai. Sincronizada com o Edital. 'Mais cai (sem %)' marca como relevante quando o percentual é desconhecido.">
+      <label class="ed-nivel dossie-rel" data-tip="Relevância: o quanto o tema cai na sua banca. Sincronizada com o Edital.">
         <span class="muted">Relevância:</span>
-        ${relSelectHTML(t, "rel-sel-dossie")}
+        ${relPillSelectHTML(t)}
       </label>
-      <button class="btn btn-ghost btn-sm" data-action="alias-toggle" data-tip="Outros nomes deste tópico (no edital, no cursinho, antigos). Ajudam a casar relevância, provas e detecção de material quando o nome usado lá é diferente.">${icone("tag")} Nomes relacionados${(t.aliases || []).length ? ` (${t.aliases.length})` : ""}</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-action="praticar" data-tip-pos="bottom" data-tip="Abre a tela de Questões já filtrada por este tópico, para treinar.">Praticar</button>
       <button class="btn btn-ghost btn-sm" data-action="estudar" data-tip-pos="bottom-dir" data-tip="Vai para o Hoje, onde você inicia o cronômetro ou registra uma sessão de estudo.">Estudar agora</button>
@@ -225,7 +249,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
         : ""
     }
 
-    <p class="muted small dossie-ajuda">Pasta viva do tópico: tudo o que você tem sobre o assunto, reunido. <b>Clique em qualquer item</b> (material, questão, erro, flashcard, resumo, lei seca, jurisprudência, tarefa, sessão) para abri-lo na tela dele. A <b>relevância</b> acima fica sincronizada com o Edital. As <b>leituras a cumprir</b> aparecem em Tarefas; em Lei Seca e Jurisprudência você grava o que precisa <b>memorizar</b>.</p>
+    <p class="muted small dossie-ajuda">Pasta viva do tópico: tudo o que você reuniu sobre o assunto. <b>Clique em qualquer item</b> para abri-lo; a <b>relevância</b> fica sincronizada com o Edital.</p>
 
     ${(() => {
       const maps = st.mapasMentais.filter((m) => m.topicoId === topicoId);
@@ -239,14 +263,18 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
       ${secoesHTML}
     </div>
 
-    ${sessoesSecaoHTML(st, dos, store.dossieOculta("sessoes"))}`;
+    ${mostraSessoes ? sessoesSecaoHTML(st, dos, store.dossieOculta("sessoes")) : ""}
+
+    ${addStripHTML}`;
 
   bindActions(root, {
     "dossie-mapa": () => gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeTopico(topicoId)),
     "abrir-mapa": (el) => { const m = store.get().mapasMentais.find((x) => x.id === el.getAttribute("data-id")); if (m) abrirMapaCompleto(store, app, m); },
     imprimir: async () => {
       // Impressão SELETIVA: o usuário escolhe as seções; cada uma sai INTEGRAL (sem recolher).
-      const secoes = secoesDossieImprimir(st, dos, meusErros, marc);
+      // Só oferece seções COM conteúdo (as vazias sairiam como "—" no papel).
+      const secoes = secoesDossieImprimir(st, dos, meusErros, marc).filter((s) => !s.vazia);
+      if (!secoes.length) return toast("Este tópico ainda não tem conteúdo para imprimir.", "erro");
       const sel = await escolherSecoesImpressao(secoes);
       if (!sel) return;
       if (!sel.length) return toast("Selecione ao menos uma seção.", "erro");
@@ -267,7 +295,14 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     praticar: () => app.navigate("pratica", { topicoId }),
     estudar: () => app.navigate("hoje"),
     "ir-secao": (el) => {
-      const alvo = root.querySelector(`.dossie-secao[data-sec="${el.getAttribute("data-sec")}"]`);
+      const sec = el.getAttribute("data-sec");
+      // Se a seção está dobrada (esperando em "Adicionar ao dossiê"), revela antes de rolar.
+      if (!root.querySelector(`.dossie-secao[data-sec="${sec}"]`)) {
+        dossieRevelar.add(sec);
+        dossieEscondido.delete(sec);
+        app.refresh();
+      }
+      const alvo = root.querySelector(`.dossie-secao[data-sec="${sec}"]`);
       if (alvo) {
         alvo.scrollIntoView({ behavior: "smooth", block: "start" });
         alvo.classList.add("item-foco");
@@ -277,6 +312,8 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     "dossie-subir": (el) => store.moverDossieSecao(el.getAttribute("data-key"), "cima", ORDER_KEYS),
     "dossie-descer": (el) => store.moverDossieSecao(el.getAttribute("data-key"), "baixo", ORDER_KEYS),
     "dossie-ocultar": (el) => store.toggleDossieOculta(el.getAttribute("data-key")),
+    "dossie-revelar": (el) => { const k = el.getAttribute("data-key"); dossieRevelar.add(k); dossieEscondido.delete(k); app.refresh(); },
+    "dossie-remover": (el) => { const k = el.getAttribute("data-key"); dossieEscondido.add(k); dossieRevelar.delete(k); app.refresh(); },
     "abrir-sessao": (el) => app.navigate("diagnostico", { focoSessaoId: el.getAttribute("data-id") }),
     "abrir-doc": (el) => app.navigate("documentos", { focoDocId: el.getAttribute("data-id") }),
     "abrir-questao": (el) => {
@@ -373,8 +410,9 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   });
 
   // Relevância: sincronizada com o Edital (mesmo store.setRelevancia).
-  root.querySelector("select[data-nivel]")?.addEventListener("change", (e) => {
-    aplicarRelValor(store, topicoId, e.target.value);
+  root.querySelector("select[data-nivel-named]")?.addEventListener("change", (e) => {
+    aplicarRelNamed(store, topicoId, e.target.value);
+    app.refresh();
   });
   root.querySelectorAll('[data-action="toggle-ind"]').forEach((el) =>
     el.addEventListener("change", () => store.toggleIndicacaoLida(el.getAttribute("data-id")))
@@ -382,6 +420,11 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   root.querySelectorAll('[data-action="toggle-miss"]').forEach((el) =>
     el.addEventListener("change", () => store.toggleMissao(el.getAttribute("data-id")))
   );
+  // Arrastar-para-reordenar as seções do dossiê.
+  ligarArrastar(root.querySelector(".dossie-secoes"), ".dossie-secao[data-drag-id]", (dragKey, alvoKey) => {
+    store.reordenarDossieSecao(dragKey, alvoKey, ORDER_KEYS);
+    app.refresh();
+  });
 
   // Blocos altos do dossiê: recolhe à altura padrão com "ver mais/menos" na tela.
   // (A impressão usa printDossieSelecionado e ignora isso: conteúdo sempre integral.)
@@ -437,16 +480,23 @@ function corpoIndicacoes(itens, tipo) {
 // Envolve um card como uma SEÇÃO: cabeçalho (título + controles) e o corpo. Quando RETRAÍDA,
 // só o cabeçalho fica (o título e as funções permanecem no lugar); o retrai/expande.
 function secaoWrap(card, key, podeSubir, podeDescer, retraida) {
-  const printBtn = card.print ? `<button class="lnk dossie-print" data-action="${card.print}" data-tip-pos="cima-dir" data-tip="Imprimir esta seção">${iconImprimir}</button>` : "";
-  return `<section class="dossie-secao ${retraida ? "dossie-retraida" : ""}" data-sec="${key}">
+  const printItem = card.print ? `<button class="menu-item" data-action="${card.print}"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button>` : "";
+  return `<section class="dossie-secao ${retraida ? "dossie-retraida" : ""}" data-sec="${key}" data-drag-id="${key}">
     <div class="dossie-secao-head">
+      <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
+      <button class="dossie-sec-chev" data-action="dossie-ocultar" data-key="${key}" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título"}">${icone("chevron-down")}</button>
       <h4>${card.titulo}</h4>
-      <div class="dossie-secao-ctrl">
-        <button class="lnk" data-action="dossie-subir" data-key="${key}" ${podeSubir ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para cima">${icone("arrow-up")}</button>
-        <button class="lnk" data-action="dossie-descer" data-key="${key}" ${podeDescer ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Mover esta seção para baixo">${icone("arrow-down")}</button>
-        <button class="lnk olho-btn ${retraida ? "olho-fechado" : ""}" data-action="dossie-ocultar" data-key="${key}" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título e as funções"}">${icone("eye")}</button>
-        ${printBtn}
-      </div>
+      <span class="spacer"></span>
+      <details class="doc-mais dossie-sec-mais">
+        <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações desta seção.">${icone("ellipsis")}</summary>
+        <div class="doc-mais-pop" role="menu">
+          <button class="menu-item" data-action="dossie-subir" data-key="${key}" ${podeSubir ? "" : "disabled"}><span class="menu-ico">${icone("arrow-up")}</span> Subir</button>
+          <button class="menu-item" data-action="dossie-descer" data-key="${key}" ${podeDescer ? "" : "disabled"}><span class="menu-ico">${icone("arrow-down")}</span> Descer</button>
+          ${printItem}
+          <div class="menu-sep"></div>
+          <button class="menu-item" data-action="dossie-remover" data-key="${key}"><span class="menu-ico">${icone("minus")}</span> Ocultar seção</button>
+        </div>
+      </details>
     </div>
     ${retraida ? "" : `<div class="dossie-secao-corpo">${card.corpo}</div>`}
   </section>`;
@@ -510,25 +560,28 @@ function secoesDossieImprimir(st, dos, meusErros, marc) {
   const memJuris = dos.indicacoes.filter((i) => i.tipo === "juris" && i.modo === "memoria");
   const pq = dos.indicacoes.filter((i) => i.pq).sort((a, b) => (b.pqIncidencia || 0) - (a.pqIncidencia || 0));
   const pendentes = dos.missoes.filter((m) => !m.concluida);
+  // `vazia` marca as seções sem conteúdo neste tópico → a impressão as omite do seletor
+  // (antes oferecia todas marcadas, imprimindo cabeçalhos com "—").
   return [
-    { key: "material", titulo: "Material", html: lista(dos.documentos, (d) => `<li>${esc(d.titulo)}</li>`) },
-    { key: "resumos", titulo: "Resumos", html: lista(dos.resumos, (r) => `<li>${esc(r.titulo)}</li>`) },
-    { key: "marcacoes", titulo: "Marcações", html: marcacoesDossieHTML(marc, true) },
-    { key: "pq", titulo: "Pontos prováveis (PQ)", html: lista(pq, (i) => `<li>${esc(i.referencia)}${i.pqIncidencia ? ` (${i.pqIncidencia})` : ""}</li>`) },
-    { key: "lei", titulo: "Lei Seca (memória)", html: lista(memLei, (i) => `<li>${esc(i.referencia)}</li>`) },
-    { key: "juris", titulo: "Jurisprudência (memória)", html: lista(memJuris, (i) => `<li>${esc(i.referencia)}</li>`) },
-    { key: "questoes", titulo: "Questões", html: lista(dos.questoes, (q) => `<li>${esc(q.enunciado)}</li>`) },
+    { key: "material", titulo: "Material", vazia: !dos.documentos.length, html: lista(dos.documentos, (d) => `<li>${esc(d.titulo)}</li>`) },
+    { key: "resumos", titulo: "Resumos", vazia: !dos.resumos.length, html: lista(dos.resumos, (r) => `<li>${esc(r.titulo)}</li>`) },
+    { key: "marcacoes", titulo: "Marcações", vazia: !marc.total, html: marcacoesDossieHTML(marc, true) },
+    { key: "pq", titulo: "Pontos prováveis (PQ)", vazia: !pq.length, html: lista(pq, (i) => `<li>${esc(i.referencia)}${i.pqIncidencia ? ` (${i.pqIncidencia})` : ""}</li>`) },
+    { key: "lei", titulo: "Lei Seca (memória)", vazia: !memLei.length, html: lista(memLei, (i) => `<li>${esc(i.referencia)}</li>`) },
+    { key: "juris", titulo: "Jurisprudência (memória)", vazia: !memJuris.length, html: lista(memJuris, (i) => `<li>${esc(i.referencia)}</li>`) },
+    { key: "questoes", titulo: "Questões", vazia: !dos.questoes.length, html: lista(dos.questoes, (q) => `<li>${esc(q.enunciado)}</li>`) },
     {
       key: "erros",
       titulo: "Caderno de Erros",
+      vazia: !meusErros.length,
       html: lista(meusErros, (e) => {
         const txt = e.manual ? e.descricao : e.questao ? e.questao.enunciado : "";
         return `<li>${esc((txt || "").slice(0, 90))}${e.motivoErro ? ` (${esc(e.motivoErro)})` : ""}</li>`;
       }),
     },
-    { key: "flashcards", titulo: "Flashcards", html: lista(dos.flashcards, (f) => `<li><b>${esc(f.frente)}</b><br>${esc(f.verso)}</li>`) },
-    { key: "tarefas", titulo: "Tarefas pendentes", html: lista(pendentes, (m) => `<li>${esc(m.titulo)}</li>`) },
-    { key: "sessoes", titulo: "Sessões", html: printSecSessoes(st, dos.sessoes) },
+    { key: "flashcards", titulo: "Flashcards", vazia: !dos.flashcards.length, html: lista(dos.flashcards, (f) => `<li><b>${esc(f.frente)}</b><br>${esc(f.verso)}</li>`) },
+    { key: "tarefas", titulo: "Tarefas pendentes", vazia: !pendentes.length, html: lista(pendentes, (m) => `<li>${esc(m.titulo)}</li>`) },
+    { key: "sessoes", titulo: "Sessões", vazia: !dos.sessoes.length, html: printSecSessoes(st, dos.sessoes) },
   ];
 }
 // Monta o HTML de impressão só com as seções selecionadas (sempre integrais), com o cabeçalho.
@@ -639,7 +692,20 @@ function sessoesSecaoHTML(st, dos, retraida) {
     : "";
   const printBtn = `<button class="lnk dossie-print" data-action="print-sessoes" data-tip-pos="cima-dir" data-tip="Imprimir esta seção">${iconImprimir}</button>`;
   return `<section class="dossie-secao dossie-sessoes ${retraida ? "dossie-retraida" : ""}" data-sec="sessoes">
-    <div class="dossie-secao-head"><h4>Sessões${contagem}</h4><div class="sess-head-ctrl dossie-secao-ctrl">${retraida ? "" : faseSel}<button class="lnk olho-btn ${retraida ? "olho-fechado" : ""}" data-action="dossie-ocultar" data-key="sessoes" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título e as funções"}">${icone("eye")}</button>${printBtn}</div></div>
+    <div class="dossie-secao-head">
+      <button class="dossie-sec-chev" data-action="dossie-ocultar" data-key="sessoes" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título"}">${icone("chevron-down")}</button>
+      <h4>Histórico de sessões${contagem}</h4>
+      <span class="spacer"></span>
+      ${retraida ? "" : faseSel}
+      <details class="doc-mais dossie-sec-mais">
+        <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações desta seção.">${icone("ellipsis")}</summary>
+        <div class="doc-mais-pop" role="menu">
+          <button class="menu-item" data-action="print-sessoes"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button>
+          <div class="menu-sep"></div>
+          <button class="menu-item" data-action="dossie-remover" data-key="sessoes"><span class="menu-ico">${icone("minus")}</span> Ocultar seção</button>
+        </div>
+      </details>
+    </div>
     ${retraida ? "" : `<div class="dossie-secao-corpo">${corpo}</div>`}</section>`;
 }
 // Opções de tarefa para vincular a uma sessão: pendentes + a já vinculada (mesmo concluída).
@@ -662,7 +728,7 @@ function linhaSessaoDossie(st, s) {
   const tq = (s.qAcertos || 0) + (s.qErros || 0);
   const q = tq ? `${s.qAcertos}/${tq} (${Math.round((s.qAcertos / tq) * 100)}%)` : traco;
   const fi = FASES[s.fase];
-  const cor = fi ? fi.cor : "#94a3b8";
+  const cor = fi ? fi.cor : "var(--muted)";
   const pagTd = s.paginaInicial && s.paginaFinal ? `${s.paginaInicial}–${s.paginaFinal} (${s.paginas})` : s.paginas ? `${s.paginas}` : traco;
   const obsTd = s.comentario
     ? `<span class="sess-obs" data-tip="${esc(s.comentario)}">${icone("message-square")} ${esc(s.comentario.length > 40 ? s.comentario.slice(0, 40) + "…" : s.comentario)}</span>`
@@ -706,12 +772,12 @@ function secao(titulo, conteudo, sec = "", printAcao = "") {
 // Conteúdo da seção "Marcações" do dossiê: grifos agrupados por cor + comentários,
 // cada item com a fonte (Lei Seca / Jurisprudência / Resumo / Material). `print`=versão simples.
 const MK_ROTULOS = {
-  amarelo: { emoji: "🟡", nome: "palavras-chave" },
-  azul: { emoji: "🔵", nome: "prazos e valores" },
-  vermelho: { emoji: "🔴", nome: "restritivas" },
-  verde: { emoji: "🟢", nome: "marcações livres" },
-  roxo: { emoji: "🟣", nome: "marcações livres" },
-  laranja: { emoji: "🟠", nome: "marcações livres" },
+  amarelo: { nome: "palavras-chave" },
+  azul: { nome: "prazos e valores" },
+  vermelho: { nome: "restritivas" },
+  verde: { nome: "marcações livres" },
+  roxo: { nome: "marcações livres" },
+  laranja: { nome: "marcações livres" },
 };
 function marcacoesDossieHTML(marc, print = false) {
   if (!marc.total) {
@@ -726,7 +792,7 @@ function marcacoesDossieHTML(marc, print = false) {
     if (!itens || !itens.length) continue;
     const r = MK_ROTULOS[cor];
     html += print
-      ? `<h3>${r.emoji} ${r.nome}</h3><ul>${itens.map((i) => `<li>${esc(i.texto)} <i>(${esc(i.fonte.tipo)}: ${esc(i.fonte.titulo)})</i></li>`).join("")}</ul>`
+      ? `<h3><i class="mk-dot mk-${cor}"></i> ${r.nome}</h3><ul>${itens.map((i) => `<li>${esc(i.texto)} <i>(${esc(i.fonte.tipo)}: ${esc(i.fonte.titulo)})</i></li>`).join("")}</ul>`
       : `<div class="mk-dossie-grupo">
           <div class="mk-dossie-cor"><i class="mk-dot mk-${cor}"></i>${r.nome} <span class="muted small">(${itens.length})</span></div>
           ${itens.map((i) => `<button class="mk-dossie-item mk-dossie-link mk-${cor}-borda" ${abre(i)}><span class="mk-dossie-txt">${esc(i.texto)}</span><span class="mk-dossie-fonte muted small">${esc(i.fonte.tipo)} · ${esc(i.fonte.titulo)} ›</span></button>`).join("")}
@@ -806,7 +872,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
   const linhaTopico = (i) => {
     const p = ddxPerf(store, i.aprov, i.nTent);
     const rel = relLabel(i.t);
-    const corAnel = { ruim: "#dc2626", regular: "#d97706", bom: "#16a34a" }[store.corDesempenho(i.aprov)] || "var(--muted)";
+    const corAnel = { ruim: "var(--danger)", regular: "var(--warn)", bom: "var(--success)" }[store.corDesempenho(i.aprov)] || "var(--muted)";
     const meio =
       i.aprov === null || i.nTent < 3
         ? `<span class="muted small">${i.nTent ? `${plural(i.nTent, "questão", "questões")} — resolva ≥3 p/ medir` : i.nQ ? `${plural(i.nQ, "questão à espera", "questões à espera")}` : "não praticado"}</span>`
@@ -926,7 +992,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
         (semPratica.length ? `Sem prática ainda: ${semPratica.map((i) => i.t.nome).join("; ")}.` : "");
       root.querySelector("#ddx-analise-slot").innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}${skeletonDoc(4)}</div>`;
       try {
-        const r = await _responderChat(st.config, { pergunta, fontes: [], web: false });
+        const r = await _responderChat(st.config, { pergunta, fontes: [], web: false, perfil: store.contextoAlunoCurto() });
         ddxAnaliseCache[discId] = { dia: todayISO(), texto: (r.texto || "").trim() };
         const slot = root.querySelector("#ddx-analise-slot");
         slot.innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt"></p><p class="muted small" style="margin:6px 0 0">Gerada hoje — confira sempre.</p></div>`;

@@ -6,11 +6,11 @@ import "@fontsource-variable/jetbrains-mono/wght.css";
 import { store } from "./store.js";
 import { backendName } from "./persistence.js";
 import { toast, plural } from "./ui.js";
-import { esc } from "./util.js";
+import { esc, fmtMMSS } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
 import { abrirPaleta } from "./paleta.js";
 import { ligarFaixasIA, ativarReveal, ativarCountUp } from "./ui.js";
-import { montarCronometro, setEstiloAlarme, montarCronoMini, setAoPedirRegistro } from "./cronometro.js";
+import { montarCronometro, setEstiloAlarme, montarCronoMini, setAoPedirRegistro, snapshot as cronoSnapshot, setModoTela as cronoFoco, onTick as cronoOnTick } from "./cronometro.js";
 import { abrirRegistroSessao } from "./registro-sessao.js";
 import { iniciarCapturaErros } from "./erro-log.js";
 import { dispararNotificacoesDevidas, iniciarAgendadorDiario } from "./notificacoes.js";
@@ -19,6 +19,7 @@ import { verificarAtualizacao } from "./updater.js";
 import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "./sync.js";
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
+import { montarLembretesFab } from "./lembretes.js";
 import { initTooltips } from "./tooltip.js";
 import { montarOrbs } from "./orb.js";
 
@@ -30,6 +31,8 @@ import renderHoje from "./screens/hoje.js";
 import renderPratica, { renderPraticaCE } from "./screens/pratica.js";
 import renderErros from "./screens/erros.js";
 import renderFlashcards from "./screens/flashcards.js";
+import renderCentralRevisoes from "./screens/central-revisoes.js";
+import renderSimulados from "./screens/simulados.js";
 import renderResumos from "./screens/resumos.js";
 import renderDocumentos from "./screens/documentos.js";
 import { renderLeiSeca, renderJurisprudencia } from "./screens/leiseca.js";
@@ -59,7 +62,9 @@ const ROTAS = [
   { id: "pratica", label: "Questões", icone: "pencil-line", cor: "#059669", grupo: "Prática", render: renderPratica },
   { id: "pratica-ce", label: "Questões C/E", icone: "check-check", cor: "#0d9488", grupo: "Prática", render: renderPraticaCE },
   { id: "correcao", label: "Discursiva e redação", icone: "square-pen", cor: "#10b981", grupo: "Prática", render: renderCorrecao },
+  { id: "simulados", label: "Simulados", icone: "clipboard-list", cor: "#047857", grupo: "Prática", render: renderSimulados },
 
+  { id: "revisoes", label: "Central de Revisões", icone: "calendar-check", cor: "#f59e0b", grupo: "Revisão", render: renderCentralRevisoes },
   { id: "flashcards", label: "Flashcards", icone: "layers", cor: "#fbbf24", grupo: "Revisão", render: renderFlashcards },
   { id: "revtopico", label: "Revisão de Tópicos", icone: "repeat-2", cor: "#f59e0b", grupo: "Revisão", render: renderRevTopico },
   { id: "erros", label: "Caderno de Erros", icone: "flag", cor: "#f59e0b", grupo: "Revisão", render: renderErros },
@@ -140,8 +145,10 @@ function navegarAtalho(a) {
   if (!a) return;
   if (a.tipo === "disciplina") app.navigate("edital", { focoDisciplinaId: a.alvo });
   else if (a.tipo === "topico") app.navigate("edital", { dossieTopicoId: a.alvo });
-  // Atalho de Simulado: abre Questões (MC) ou Questões C/E já na subaba Simulado (a tela lê params.sub).
-  else if (a.tipo === "simulado") app.navigate(a.alvo === "pratica-ce" ? "pratica-ce" : "pratica", { sub: "simulado" });
+  // Atalho de Questões: abre a tela de Questões já filtrada pelo tópico escolhido.
+  else if (a.tipo === "questoes") app.navigate("pratica", { topicoId: a.alvo });
+  // Atalho de Simulado (legado): abre a tela de Simulados.
+  else if (a.tipo === "simulado") app.navigate("simulados");
   else app.navigate(a.alvo);
 }
 
@@ -177,7 +184,7 @@ function navHTML() {
       atalhosNav
         .map(
           (a) => `<button class="nav-item" data-atalho="${a.id}">
-            <span class="nav-ico">${esc(a.icone || "⭐")}</span><span>${esc(a.nome)}</span>
+            <span class="nav-ico">${icone(a.icone) || icone("star")}</span><span>${esc(a.nome)}</span>
           </button>`
         )
         .join("")
@@ -278,6 +285,9 @@ function topbarHTML(store) {
     if (ofe && ofe.atual > 0)
       streakChip = `<button type="button" class="tb-chip tb-streak" data-nav="diagnostico" data-tip="Dias seguidos de estudo — ver constância">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</button>`;
   } catch (_) {}
+  // Cronômetro e lembretes saíram do topo: agora são botões FLUTUANTES (cronometro.js e
+  // lembretes.js), presentes em todas as telas inclusive no foco. Aqui no topo ficam prova
+  // e ofensiva.
   return `
     <header class="topbar">
       <div class="topbar-inner">
@@ -406,6 +416,8 @@ function render(preservarScroll = true) {
   // --sidebar-w, então acompanha a largura automaticamente.
   document.body.classList.toggle("nav-rail", !store.get().config.navFixa);
 
+  // No onboarding não há app ainda: esconde o cronômetro flutuante (o chat já some via JS).
+  document.body.classList.toggle("onboarding", !store.isOnboarded());
   atualizarChatVisibilidade(store.isOnboarded());
   if (!store.isOnboarded()) {
     cleanupAtual = renderOnboardingFull(root);
@@ -541,8 +553,9 @@ async function bootstrap() {
       abrirPaleta(app);
     }
   });
-  montarCronometro(app); // mini-relógio global que acompanha o usuário entre as telas
-  // O botão "Registrar" do flutuante/tela cheia abre a janela de registro (modo cronômetro).
+  montarCronometro(app); // cronômetro flutuante global (FAB único) que acompanha entre telas
+  montarLembretesFab(store); // FAB de lembretes (acima do cronômetro), presente em todas as telas
+  // O botão "Registrar" do flutuante abre a janela de registro (modo cronômetro).
   setAoPedirRegistro(() => abrirRegistroSessao(store, app, { modo: "crono" }));
   montarPlexus(); // malha "plexus" animada de fundo (atmosfera); respeita reduced-motion
   initTooltips(); // tooltips via portal (imunes a overflow:hidden dos ancestrais)

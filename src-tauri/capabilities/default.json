@@ -11,6 +11,7 @@
     "core:webview:allow-create-webview-window",
     "updater:default",
     "process:default",
+    "dialog:default",
     {
       "identifier": "http:default",
       "allow": [

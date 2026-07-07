@@ -15,7 +15,7 @@ const ehCE = (formato) => formato === "ce";
 export function addQuestoesBotaoHTML(aberto, formato) {
   // Sempre "Adicionar…": o fluxo virou JANELA MODAL (tem o próprio fechar). O rótulo
   // "Fechar" era do antigo painel inline e ficava preso quando o modal fechava pelo X.
-  const rotulo = ehCE(formato) ? "Adicionar itens" : "Adicionar questões";
+  const rotulo = "Adicionar questões";
   return `<button class="btn btn-add btn-sm" data-action="toggle-addq" data-tip-pos="cima-esq" data-tip="Digite ou cole, importe um arquivo, extraia do material ou gere com IA.">${rotulo}</button>`;
 }
 
@@ -24,9 +24,10 @@ export function addQuestoesPanelHTML(st, estado, formato) {
   if (!aberto) return "";
   const ce = ehCE(formato);
   if (estado.preview) return qPreviewHTML(estado.preview, ce, st);
+  const vinc = estado.vincularTop || "";
   const opcoesVincular =
     `<option value="">— sem tópico —</option>` +
-    st.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`).join("");
+    st.topicos.map((t) => `<option value="${t.id}" ${vinc === t.id ? "selected" : ""}>${esc(nomeTopico(st, t))}</option>`).join("");
   const opcoesDocs = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");
   const temDocs = !!st.documentos.length;
 
@@ -42,7 +43,7 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
 
   return `
     <div class="card form-questao">
-      <h3>${ce ? "Adicionar itens Certo/Errado" : "Adicionar questões"}</h3>
+      <h3>${ce ? "Adicionar questões Certo / errado" : "Adicionar questões"}</h3>
       <p class="muted small" style="margin:0 0 12px">Três jeitos de adicionar — escolha um abaixo.</p>
 
       <div class="add-via">
@@ -382,12 +383,15 @@ function abrirAddQuestoes(app, estado, formato) {
   const ce = ehCE(formato);
   estado.aberto = true; // addQuestoesPanelHTML só renderiza com aberto=true
   abrirJanelaFluxo({
-    titulo: ce ? "Adicionar itens Certo/Errado" : "Adicionar questões",
+    titulo: ce ? "Adicionar questões Certo / errado" : "Adicionar questões",
     render: (corpo) => {
       const st = store.get();
       corpo.innerHTML = addQuestoesPanelHTML(st, estado, formato);
       ligarAddQuestoesArquivo(corpo, app, formato); // wira #q-add-file, #prova-file, #gab-file (no corpo)
       ligarSeloTopico(corpo); // sincroniza o selo "sugerido"/"sua escolha" ao trocar o tópico no preview
+      // Persiste o "Vincular todas ao tópico" no estado do fluxo, para sobreviver a re-renders
+      // (ex.: abrir/fechar seções) e ser aplicado a cada questão ao revisar.
+      corpo.querySelector("#q-add-top")?.addEventListener("change", (e) => { estado.vincularTop = e.target.value || ""; });
     },
     handlers: ({ rerender, fechar, corpo }) => {
       // Fecha a janela e zera o transitório do fluxo.
@@ -395,6 +399,7 @@ function abrirAddQuestoes(app, estado, formato) {
         estado.aberto = false;
         estado.preview = null;
         estado.textoSalvo = "";
+        estado.vincularTop = "";
         estado.processando = false;
         estado.provaAberto = false;
         estado.provaForm = null;
@@ -407,7 +412,7 @@ function abrirAddQuestoes(app, estado, formato) {
         // Determinístico p/ texto `|`; PDF de banca → extração rica por IA (ref/assunto/banca/ano/órgão + gabarito final).
         "adicionar-questoes": async () => {
           const texto = corpo.querySelector("#q-add-texto").value;
-          const top = corpo.querySelector("#q-add-top").value || null;
+          const top = estado.vincularTop || corpo.querySelector("#q-add-top").value || null;
           if (!texto.trim()) return toast(ce ? "Digite ou cole ao menos um item." : "Digite ou cole ao menos uma questão.", "erro");
           estado.processando = true;
           rerender();
@@ -428,6 +433,9 @@ function abrirAddQuestoes(app, estado, formato) {
               const sug = store.sugerirTopicoPorAssunto(it.assunto, "");
               if (sug) it.topicoId = sug.topicoId;
             }
+            // "Vincular todas ao tópico": pré-preenche cada item que ficou sem tópico, para o
+            // preview já mostrar o vínculo escolhido (o usuário ainda pode trocar por item).
+            if (top && (it.topicoId === undefined || it.topicoId === null || it.topicoId === "")) it.topicoId = top;
           }
           estado.previewTop = top;
           estado.textoSalvo = texto;

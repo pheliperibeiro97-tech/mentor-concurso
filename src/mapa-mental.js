@@ -57,7 +57,7 @@ export function abrirMapaCompleto(store, app, mapa, opts = {}) {
         },
       },
       {
-        label: "↺ Agendar revisão",
+        label: "Agendar revisão",
         fn: async () => {
           const r = await pedirNumero("Revisar este mapa daqui a quantos dias?", { padrao: 1, min: 1, max: 365, presets: [1, 7, 15], rotuloOk: "Agendar" });
           if (!r) return;

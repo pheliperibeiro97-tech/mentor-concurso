@@ -15,13 +15,30 @@ export const SELO = {
 // ---------- 1. Separar edital em disciplinas e tópicos ----------
 // Heurística: cabeçalhos (linha curta em CAIXA ALTA ou terminando em ':') viram
 // disciplina; o conteúdo é quebrado por ';', por numeração (1. 2.) ou por linha.
+// Title-case em pt-BR: só normaliza strings que vieram TODAS em MAIÚSCULAS (cabeçalhos de
+// edital como "DIREITO ADMINISTRATIVO" → "Direito Administrativo"); respeita o que o usuário
+// digitou em caixa mista. Mantém conectores minúsculos (de, do, da, e…) e preserva siglas
+// curtas isoladas (TI, RLM, ICMS).
+const PALAVRINHAS = new Set(["de", "do", "da", "dos", "das", "e", "em", "a", "o", "à", "às", "ao", "aos", "com", "para", "por", "no", "na", "nos", "nas", "que", "sobre", "entre"]);
+export function tituloPt(s) {
+  const str = String(s || "").trim();
+  const letras = str.replace(/[^A-Za-zÀ-ÿ]/g, "");
+  if (letras.length < 3 || str !== str.toLocaleUpperCase("pt-BR")) return str; // caixa mista: respeita
+  if (!/\s/.test(str) && letras.length <= 5) return str; // sigla curta isolada (TI/RLM/ICMS)
+  return str.toLocaleLowerCase("pt-BR").replace(/\S+/g, (w, i) => {
+    const bare = w.replace(/[^0-9a-zà-ÿ]/gi, "");
+    if (i > 0 && PALAVRINHAS.has(bare)) return w;
+    return w.charAt(0).toLocaleUpperCase("pt-BR") + w.slice(1);
+  });
+}
+
 export function separarEdital(texto) {
   const disciplinas = [];
   let atual = null;
 
   const garanteDisciplina = (nome, header) => {
     const limpo = (nome || "").replace(/\s*\(?\s*\d+\s*\)?\s*quest(ões|oes)?\s*\)?\s*:?\s*$/i, "").replace(/:\s*$/, "").trim();
-    atual = { nome: limpo || "Geral", topicos: [], _header: !!header };
+    atual = { nome: tituloPt(limpo) || "Geral", topicos: [], _header: !!header };
     disciplinas.push(atual);
     return atual;
   };
@@ -114,7 +131,7 @@ export function separarEdital(texto) {
       // 3) cada frase: o ';' é tratado como SUBTÓPICO (não fragmenta), e limpa o ruído.
       for (const frase of frases) {
         for (const p of dividirPontoEVirgula(frase)) {
-          const t = limparRuidoTopico(p.replace(/[.;:]\s*$/, ""));
+          const t = tituloPt(limparRuidoTopico(p.replace(/[.;:]\s*$/, "")));
           if (t.length >= 2) atual.topicos.push(t);
         }
       }

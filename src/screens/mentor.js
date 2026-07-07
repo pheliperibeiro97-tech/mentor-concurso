@@ -26,14 +26,14 @@ export default function renderMentor(root, app) {
   const streamAnalise = !!(plano && plano.analise && analiseStreamPlano !== plano);
 
   root.innerHTML = `
-    ${header("Mentor IA", "O mentor analisa todo o seu progresso e propõe os próximos passos.", botaoImprimir(), { tituloClasse: "txt-ia" })}
+    ${header("Mentor IA", "Seu treinador de estudos: analisa todo o seu progresso e propõe um plano para você aprovar.", botaoImprimir(), { tituloClasse: "txt-ia" })}
 
     ${panoramaHTML(snap, pontos, ocultas)}
 
     <section class="card mentor-ia">
       <div class="plano-h">
-        <h2 style="display:flex;align-items:center;gap:8px"><span class="orb orb-sm" aria-hidden="true"></span> Análise do progresso</h2>
-        <span class="muted small" style="font-weight:500">(progresso geral → sugestões)</span>
+        <h2 class="mentor-sec-t"><span class="orb orb-sm" aria-hidden="true"></span> Análise do progresso</h2>
+        <span class="muted small mentor-sec-sub">(progresso geral → sugestões)</span>
         <span class="sp"></span>
         <button class="btn btn-ia" data-action="analisar" data-tip="A IA lê o panorama acima e sugere metas, tarefas, flashcards, questões, resumos e leituras para você aprovar.">${plano ? `${icone("refresh-cw")} Reanalisar` : `${icone("sparkles")} Analisar meu progresso`}</button>
       </div>
@@ -59,7 +59,9 @@ export default function renderMentor(root, app) {
               icone("bot")
             )
       }</div>
-    </section>`;
+    </section>
+
+    <p class="mentor-cross muted small">${icone("sparkles")} Para <b>perguntas ou ações rápidas</b> em qualquer tela (criar um flashcard, resumir um tópico, abrir uma tela), use o <b>Assistente inteligente</b> — o botão flutuante no canto inferior direito.</p>`;
 
   bindActions(root, {
     imprimir: () => imprimir("Mentor IA — Mentor Concurso", printMentor(snap, pontos, plano)),
@@ -86,7 +88,11 @@ export default function renderMentor(root, app) {
     "ponto-acao": (el) => {
       const rota = el.getAttribute("data-rota");
       const disc = el.getAttribute("data-disc");
-      app.navigate(rota, disc ? { focoDisciplinaId: disc } : {});
+      const aba = el.getAttribute("data-aba");
+      const params = {};
+      if (disc) params.focoDisciplinaId = disc;
+      if (aba) params.aba = aba;
+      app.navigate(rota, params);
     },
     "ir-kpi": (el) => app.navigate(el.getAttribute("data-rota")),
     analisar: async (el) => {
@@ -122,6 +128,13 @@ export default function renderMentor(root, app) {
     if (alvo) revelarTexto(alvo, plano.analise);
     analiseStreamPlano = plano;
   }
+
+  // Auto-disparo da reanálise quando se chega aqui pelo "Refazer meu plano" (Hoje).
+  if (app.params && app.params.autoAnalisar) {
+    app.params.autoAnalisar = null;
+    if (store.iaDisponivel()) root.querySelector('[data-action="analisar"]')?.click();
+    else avisoIA(app, "A análise do mentor");
+  }
 }
 
 // ---------- panorama offline (sempre disponível, sem IA) ----------
@@ -136,9 +149,11 @@ function panoramaHTML(snap, pontos, ocultas) {
           (p) => `<li>
             <span class="ponto-txt">${esc(p.txt)}</span>
             <span class="ponto-acoes">
-              ${p.acao ? `<button class="lnk ponto-cta" data-action="ponto-acao" data-rota="${esc(p.acao.rota)}" data-disc="${esc(p.acao.disc || "")}" data-tip="Ir resolver isso agora.">→ ${esc(p.acao.label)}</button>` : ""}
-              <button class="lnk" data-action="adiar-atencao" data-key="${esc(p.key)}" data-dias="7" data-tip-pos="cima-dir" data-tip="Lembrar de novo daqui a 7 dias.">adiar 7d</button>
-              <button class="lnk lnk-danger" data-action="dispensar-atencao" data-key="${esc(p.key)}" data-tip-pos="cima-dir" data-tip="Não mostrar mais (você pode reexibir depois).">dispensar</button>
+              ${p.acao ? `<button class="lnk ponto-cta" data-action="ponto-acao" data-rota="${esc(p.acao.rota)}" data-disc="${esc(p.acao.disc || "")}" data-aba="${esc(p.acao.aba || "")}" data-tip="Ir resolver isso agora.">${icone("arrow-right")} ${esc(p.acao.label)}</button>` : ""}
+              <span class="ponto-sec">
+                <button class="lnk" data-action="adiar-atencao" data-key="${esc(p.key)}" data-dias="7" data-tip-pos="cima-dir" data-tip="Lembrar de novo daqui a 7 dias.">adiar 7d</button>
+                <button class="lnk lnk-danger" data-action="dispensar-atencao" data-key="${esc(p.key)}" data-tip-pos="cima-dir" data-tip="Não mostrar mais (você pode reexibir depois).">dispensar</button>
+              </span>
             </span>
           </li>`
         )
@@ -147,7 +162,7 @@ function panoramaHTML(snap, pontos, ocultas) {
 
   return `
     <section class="card mentor-panorama">
-      <div class="plano-h"><h2 style="display:flex;align-items:center;gap:8px"><span class="orb orb-sm" aria-hidden="true"></span> Panorama</h2><span class="muted small">(o que precisa de atenção)</span></div>
+      <div class="plano-h"><h2 class="mentor-sec-t"><span class="orb orb-sm" aria-hidden="true"></span> Panorama</h2><span class="muted small mentor-sec-sub">(o que precisa de atenção)</span></div>
       <ul class="mentor-alertas">${itens}</ul>
       ${
         ocultas.length
@@ -170,10 +185,18 @@ function panoramaHTML(snap, pontos, ocultas) {
             </details>`
           : ""
       }
-      <div class="mentor-kpis-slim">
-        <span class="muted small">Cobertura <b>${snap.coberturaEdital.pct}%</b> · Aproveitamento <b>${snap.aproveitamentoGeral === null ? "—" : snap.aproveitamentoGeral + "%"}</b> · Semana <b>${fmtMin(metas.feitoSemanaMin)}${metas.semanalMin ? " / " + fmtMin(metas.semanalMin) : ""}</b></span>
-        <button class="lnk small" data-action="ir-kpi" data-rota="diagnostico" data-tip="Ver evolução, tempo, calendário e distribuição por etapa.">ver evolução completa no Acompanhamento →</button>
+      <div class="mentor-vitals">
+        <button class="mv-tile" data-action="ir-kpi" data-rota="diagnostico" data-tip="Quanto do edital você já cobriu — abre o Acompanhamento.">
+          <span class="mv-num">${snap.coberturaEdital.pct}<i>%</i></span><span class="mv-lab">Cobertura do edital</span>
+        </button>
+        <button class="mv-tile" data-action="ir-kpi" data-rota="diagnostico" data-tip="Seu % de acerto nas questões — abre o Acompanhamento.">
+          <span class="mv-num">${snap.aproveitamentoGeral === null ? "—" : `${snap.aproveitamentoGeral}<i>%</i>`}</span><span class="mv-lab">Aproveitamento</span>
+        </button>
+        <button class="mv-tile" data-action="ir-kpi" data-rota="diagnostico" data-tip="Tempo estudado nesta semana${metas.semanalMin ? " frente à sua meta" : ""} — abre o Acompanhamento.">
+          <span class="mv-num">${fmtMin(metas.feitoSemanaMin)}${metas.semanalMin ? `<i> / ${fmtMin(metas.semanalMin)}</i>` : ""}</span><span class="mv-lab">Semana${metas.semanalMin ? " / meta" : ""}</span>
+        </button>
       </div>
+      <button class="lnk small mv-link" data-action="ir-kpi" data-rota="diagnostico" data-tip="Ver evolução, tempo, calendário e distribuição por etapa.">ver evolução completa no Acompanhamento ${icone("arrow-right")}</button>
       ${
         obs.length
           ? `<div class="mentor-obs"><b class="muted small">Você anotou recentemente:</b>
@@ -216,7 +239,7 @@ function planoHTML(p, stream = false) {
   const a = p.acoes;
   const blocos = [];
 
-  if (p.analise) blocos.push(`<div class="mentor-analise"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span class="orb orb-sm" aria-hidden="true"></span>${seloBadge("amarelo")}</div><p class="mentor-analise-txt">${stream ? "" : esc(p.analise)}</p></div>`);
+  if (p.analise) blocos.push(`<div class="mentor-analise"><div class="mentor-analise-h"><span class="orb orb-sm" aria-hidden="true"></span>${seloBadge("amarelo")}</div><p class="mentor-analise-txt">${stream ? "" : esc(p.analise)}</p></div>`);
   if (p.atencao.length || p.melhorar.length) {
     blocos.push(`<div class="mentor-listas">
       ${p.atencao.length ? `<div><b>${icone("triangle-alert")} Atenção</b><ul>${p.atencao.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
@@ -230,7 +253,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="metas" checked />
         <span>Meta diária <b>${fmtMin(a.metas.diariaMin)}</b> · semanal <b>${fmtMin(a.metas.semanalMin)}</b>${a.metas.justificativa ? ` · <span class="muted">${esc(a.metas.justificativa)}</span>` : ""}</span>
-      </label>`));
+      </label>`, "target"));
   }
   // Missões
   if (a.missoes.length) {
@@ -238,7 +261,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="missao" data-i="${i}" checked />
         <span><span class="mini-tag">${esc(m.categoria)}</span> ${esc(m.titulo)}${m.topico ? ` <i class="muted">(${esc(m.topico)})</i>` : ""}</span>
-      </label>`).join("")));
+      </label>`).join(""), "list-checks", a.missoes.length));
   }
   // Flashcards
   if (a.flashcards.length) {
@@ -246,7 +269,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="flashcard" data-i="${i}" checked />
         <span><b>${esc(c.frente)}</b> <span class="muted">(resposta oculta — você a verá ao revisar)</span>${c.topico ? ` <i class="muted">(${esc(c.topico)})</i>` : ""}</span>
-      </label>`).join("")));
+      </label>`).join(""), "layers", a.flashcards.length));
   }
   // Questões
   if (a.questoes.length) {
@@ -254,7 +277,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="questao" data-i="${i}" checked />
         <span>${esc(q.enunciado)} <span class="muted">(gabarito oculto — você responde na prática)</span>${q.topico ? ` <i class="muted">(${esc(q.topico)})</i>` : ""}</span>
-      </label>`).join("")));
+      </label>`).join(""), "clipboard-list", a.questoes.length));
   }
   // Caderno de erros
   if (a.erros.length) {
@@ -262,7 +285,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="erro" data-i="${i}" checked />
         <span><b>${esc(e.descricao)}</b>${e.correto ? ` → ${esc(e.correto)}` : ""}${e.motivo ? ` <span class="mini-tag">${esc(e.motivo)}</span>` : ""}${e.topico ? ` <i class="muted">(${esc(e.topico)})</i>` : ""}</span>
-      </label>`).join("")));
+      </label>`).join(""), "flag", a.erros.length));
   }
   // Resumos
   const resumos = a.resumos || [];
@@ -271,7 +294,7 @@ function planoHTML(p, stream = false) {
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="resumo" data-i="${i}" checked />
         <span><b>${esc(r.titulo)}</b>${r.topico ? ` <i class="muted">(${esc(r.topico)})</i>` : ""}<br><span class="muted small">${esc(r.conteudo.slice(0, 160))}${r.conteudo.length > 160 ? "…" : ""}</span></span>
-      </label>`).join("")));
+      </label>`).join(""), "file-text", resumos.length));
   }
   // Lei seca / Jurisprudência (leituras)
   const indicacoes = a.indicacoes || [];
@@ -279,8 +302,8 @@ function planoHTML(p, stream = false) {
     blocos.push(grupo("Lei Seca e Jurisprudência", indicacoes.map((ind, i) => `
       <label class="mentor-item">
         <input type="checkbox" class="ap" data-tipo="indicacao" data-i="${i}" checked />
-        <span><span class="mini-tag">${ind.tipo === "juris" ? "jurisprudência" : "lei seca"}</span> ${esc(ind.referencia)}${ind.topico ? ` <i class="muted">(${esc(ind.topico)})</i>` : ""}</span>
-      </label>`).join("")));
+        <span><span class="mini-tag">${ind.tipo === "juris" ? "Jurisprudência" : "Lei Seca"}</span> ${esc(ind.referencia)}${ind.topico ? ` <i class="muted">(${esc(ind.topico)})</i>` : ""}</span>
+      </label>`).join(""), "scale", indicacoes.length));
   }
 
   const temAcoes = a.metas || a.missoes.length || a.flashcards.length || a.questoes.length || a.erros.length || resumos.length || indicacoes.length;
@@ -299,8 +322,10 @@ function planoHTML(p, stream = false) {
     }`;
 }
 
-function grupo(titulo, corpo) {
-  return `<div class="mentor-grupo"><h4>${titulo}</h4>${corpo}</div>`;
+// Cabeçalho de seção do plano com ícone + contador (dá hierarquia/escaneabilidade ao plano,
+// que antes era uma parede de listas com títulos só em negrito).
+function grupo(titulo, corpo, ico, n) {
+  return `<div class="mentor-grupo"><h4>${ico ? `${icone(ico)} ` : ""}${titulo}${n != null ? ` <span class="mentor-grupo-n">${n}</span>` : ""}</h4>${corpo}</div>`;
 }
 
 // ---------- aprovação → aplica nas telas ----------

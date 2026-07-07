@@ -34,7 +34,7 @@ export default function renderCorrecao(root, app) {
 
       <div class="cor-tema-head">
         <label for="cor-enun" style="margin:0">Pergunta / tema</label>
-        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="A IA cria um tema a partir de um tópico, de um material ou de um tema livre.">${icone("sparkles")} Gerar tema</button>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="A IA cria um tema a partir de um tópico, de um material ou de um tema livre.">${icone("sparkles")} Criar tema com IA</button>
       </div>
       <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" style="margin-bottom:14px"></textarea>
       <div id="ia-gen-box" class="ia-gen-box" hidden>
@@ -154,7 +154,7 @@ export default function renderCorrecao(root, app) {
       const oculto = box.hasAttribute("hidden");
       if (oculto) box.removeAttribute("hidden");
       else box.setAttribute("hidden", "");
-      el.textContent = oculto ? "Fechar gerador de tema" : "Gerar tema";
+      el.textContent = oculto ? "Fechar gerador" : "Criar tema com IA";
     },
     "gerar-pergunta": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar pergunta discursiva");

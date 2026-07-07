@@ -19,7 +19,7 @@ export function abrirPaleta(app) {
     { id: "comecar", label: "Por onde começar", icone: "rocket", grupo: "Sistema" },
   ];
   const telas = [...NAV_ITENS, ...EXTRAS].map((it) => ({ kind: "nav", label: it.label, sub: it.grupo, icone: it.icone, run: () => app.navigate(it.id) }));
-  const atalhos = (cfg.atalhos || []).map((a) => ({ kind: "nav", label: a.nome, sub: "Atalho", emoji: a.icone, run: () => ativarAtalho(app, a) }));
+  const atalhos = (cfg.atalhos || []).map((a) => ({ kind: "nav", label: a.nome, sub: "Atalho", icone: a.icone || "star", run: () => ativarAtalho(app, a) }));
   const navegaveis = [...telas, ...atalhos];
 
   const ov = document.createElement("div");
@@ -96,6 +96,7 @@ export function abrirPaleta(app) {
 function ativarAtalho(app, a) {
   if (a.tipo === "disciplina") app.navigate("edital", { focoDisciplinaId: a.alvo });
   else if (a.tipo === "topico") app.navigate("edital", { dossieTopicoId: a.alvo });
+  else if (a.tipo === "questoes") app.navigate("pratica", { topicoId: a.alvo });
   else if (a.tipo === "simulado") app.navigate(a.alvo === "pratica-ce" ? "pratica-ce" : "pratica", { sub: "simulado" });
   else app.navigate(a.alvo);
 }

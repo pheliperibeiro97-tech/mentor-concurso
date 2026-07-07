@@ -166,7 +166,7 @@ export function montarChat(store, app) {
     if (iaDisponivel(cfg)) {
       const pensando = addPensando();
       try {
-        const r = await responderChat(cfg, { pergunta: q, fontes: res, web: webOn });
+        const r = await responderChat(cfg, { pergunta: q, fontes: res, web: webOn, perfil: store.contextoAlunoCurto() });
         pensando.remove();
         const texto = md(r.texto);
         const webHTML = r.fontesWeb && r.fontesWeb.length
@@ -214,13 +214,13 @@ export function montarChat(store, app) {
     if (res.length) {
       add(
         `<p>Encontrei isto no seu conteúdo:</p>${fontesHTML}` +
-          `<p class="chat-nota">Estas são as fontes do seu material. Para uma <b>resposta elaborada</b> (, com origem), conecte uma IA em Configurações.</p>`,
+          `<p class="chat-nota">Estas são as fontes do seu material. Para uma <b>resposta elaborada</b> (com a origem), conecte uma IA em Configurações.</p>`,
         "bot"
       );
     } else {
       add(
         `<p>Não encontrei isso no seu conteúdo (material, resumos, lei/jurisprudência, flashcards, questões).</p>
-         <p class="chat-nota">Cadastre o material relacionado, ou conecte uma IA em Configurações para respostas geradas (, sempre indicando a origem).</p>`,
+         <p class="chat-nota">Cadastre o material relacionado, ou conecte uma IA em Configurações para respostas geradas (sempre indicando a origem).</p>`,
         "bot"
       );
     }
@@ -315,8 +315,9 @@ function msgInicial(store) {
     `<button class="chat-chip" data-q="Como funciona o app?">Como usar o app?</button>`;
   return `<div class="chat-msg bot">
       <p>Oi! Sou seu <b>assistente inteligente</b>. Faço duas coisas:</p>
-      <p>${icone("search")} <b>Respondo</b> com base no que você cadastrou (material, resumos, lei/juris, flashcards, questões), sempre com a <b>origem </b> — e explico <b>como usar o app</b>.</p>
+      <p>${icone("search")} <b>Respondo</b> com base no que você cadastrou (material, resumos, lei/juris, flashcards, questões), sempre com a <b>origem</b> — e explico <b>como usar o app</b>.</p>
       <p>${icone("sparkles")} <b>Executo ações</b> para você: criar flashcards/questões, adicionar tarefa, agendar revisão, registrar sessão, iniciar o cronômetro, abrir telas e mais. Eu sempre <b>proponho e peço sua confirmação</b> antes de fazer.</p>
+      <p class="chat-nota">Aqui é para <b>perguntas e ações rápidas</b>. Para uma <b>análise completa do seu progresso</b> e um <b>plano de estudos</b> para aprovar, use o <b>Mentor IA</b> (na barra lateral).</p>
       <div class="chat-sugestoes">${chips}</div>
     </div>`;
 }

@@ -32,7 +32,8 @@ export function bindActions(root, handlers) {
   });
 }
 
-export function toast(msg, tipo = "ok") {
+// opts (opcional): { acaoLabel, onAcao, duracao } — mostra um botão de 1 toque no toast.
+export function toast(msg, tipo = "ok", opts) {
   let cont = qs("#toasts");
   if (!cont) {
     cont = document.createElement("div");
@@ -41,13 +42,23 @@ export function toast(msg, tipo = "ok") {
   }
   const t = document.createElement("div");
   t.className = `toast toast-${tipo}`;
-  t.textContent = msg;
+  const fechar = () => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); };
+  if (opts && opts.acaoLabel && typeof opts.onAcao === "function") {
+    const sp = document.createElement("span");
+    sp.className = "toast-msg";
+    sp.textContent = msg;
+    const b = document.createElement("button");
+    b.className = "toast-acao";
+    b.textContent = opts.acaoLabel;
+    b.addEventListener("click", () => { try { opts.onAcao(); } catch (_) {} fechar(); });
+    t.appendChild(sp);
+    t.appendChild(b);
+  } else {
+    t.textContent = msg;
+  }
   cont.appendChild(t);
   setTimeout(() => t.classList.add("show"), 10);
-  setTimeout(() => {
-    t.classList.remove("show");
-    setTimeout(() => t.remove(), 300);
-  }, 2600);
+  setTimeout(fechar, (opts && opts.duracao) || 2600);
 }
 
 // Confirmação simples (Promise<boolean>).
@@ -86,7 +97,7 @@ export function escolher(msg, opcoes, opts = {}) {
     ov.className = "modal-overlay";
     const corpo = opts.lista
       ? `<div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin-top:8px">
-          ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"}" data-v="${esc(o.value)}" style="display:block;width:100%;text-align:justify;white-space:normal;height:auto;line-height:1.35;padding:8px 12px">${esc(o.label)}</button>`).join("")}
+          ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`).join("")}
         </div>`
       : `<div class="modal-acoes" style="flex-wrap:wrap">
           ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"}" data-v="${esc(o.value)}">${esc(o.label)}</button>`).join("")}
@@ -112,7 +123,7 @@ export function escolher(msg, opcoes, opts = {}) {
 // fundo escurecido, cabeçalho com Tela cheia + Fechar, corpo rolável, Esc/clique-fora fecham.
 // `corpoHTML` é o conteúdo; `aoMontar(janelaEl, fechar)` permite ligar listeners aos elementos
 // internos (botões/inputs do formulário). Devolve { overlay, fechar }.
-export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, aoMontar } = {}) {
+export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, semTelaCheia = false, aoMontar } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "mm-overlay";
   overlay.innerHTML = `
@@ -120,7 +131,7 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, ao
       <div class="mm-head">
         <b class="mm-titulo">${esc(titulo)}</b>
         <span class="spacer"></span>
-        <button class="lnk mm-full" data-tip="Expandir para tela cheia.">${icone("maximize-2")} Tela cheia</button>
+        ${semTelaCheia ? "" : `<button class="lnk mm-full" data-tip="Expandir para tela cheia.">${icone("maximize-2")} Tela cheia</button>`}
         ${botaoFechar("mm-close")}
       </div>
       <div class="mm-corpo">${corpoHTML}</div>
@@ -131,14 +142,14 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, ao
   overlay.addEventListener("click", (e) => { if (e.target === overlay) fechar(); });
   overlay.querySelector(".mm-close").addEventListener("click", fechar);
   const fullBtn = overlay.querySelector(".mm-full");
-  fullBtn.addEventListener("click", () => {
+  if (fullBtn) fullBtn.addEventListener("click", () => {
     const modal = overlay.querySelector(".mm-modal");
     const full = modal.classList.toggle("mm-modal--full");
     overlay.classList.toggle("mm-overlay--full", full);
     fullBtn.innerHTML = full ? `${icone("minimize-2")} Restaurar` : `${icone("maximize-2")} Tela cheia`;
   });
   document.addEventListener("keydown", onKey);
-  if (telaCheia) fullBtn.click();
+  if (telaCheia && fullBtn) fullBtn.click();
   if (aoMontar) aoMontar(overlay, fechar);
   // Autofocus no 1º campo (poupa um clique). Espera o render do fluxo, se houver.
   setTimeout(() => {
@@ -146,6 +157,43 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, ao
     if (primeiro && document.body.contains(overlay)) primeiro.focus();
   }, 40);
   return { overlay, fechar };
+}
+
+// Arrastar-para-reordenar genérico. Torna cada item [data-drag-id] dentro de `container`
+// arrastável; `onSoltar(dragId, alvoId)` é chamado ao soltar (insere o arrastado ANTES do alvo).
+export function ligarArrastar(container, seletor, onSoltar) {
+  if (!container) return;
+  let dragId = null;
+  container.querySelectorAll(seletor).forEach((el) => {
+    el.setAttribute("draggable", "true");
+    el.addEventListener("dragstart", (e) => {
+      dragId = el.getAttribute("data-drag-id");
+      e.dataTransfer.effectAllowed = "move";
+      try { e.dataTransfer.setData("text/plain", dragId); } catch (_) {}
+      el.classList.add("arrastando");
+    });
+    el.addEventListener("dragend", () => {
+      dragId = null;
+      el.classList.remove("arrastando");
+      container.querySelectorAll(".drop-antes").forEach((z) => z.classList.remove("drop-antes"));
+    });
+    el.addEventListener("dragover", (e) => {
+      const alvo = el.getAttribute("data-drag-id");
+      if (!dragId || alvo === dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      el.classList.add("drop-antes");
+    });
+    el.addEventListener("dragleave", (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove("drop-antes"); });
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.classList.remove("drop-antes");
+      const alvo = el.getAttribute("data-drag-id");
+      const id = dragId || (e.dataTransfer && e.dataTransfer.getData("text/plain"));
+      if (id && alvo && id !== alvo) onSoltar(id, alvo);
+      dragId = null;
+    });
+  });
 }
 
 // JANELA modal com FLUXO stateful (multi-passo): input → preview → aplicar.
@@ -375,7 +423,7 @@ export function explicacaoIAHTML(c, selo = "amarelo") {
   if (!resumido && !detalhado) return "";
   return `<div class="ia-comentario">${seloBadge(selo)}
     <p class="ia-coment-resumo">${esc(resumido || detalhado)}</p>
-    ${detalhado && resumido ? `<details class="ia-coment-det"><summary>Ver explicação detalhada (item a item)</summary><div class="ia-coment-det-corpo">${esc(detalhado).replaceAll("\n", "<br>")}</div></details>` : ""}
+    ${detalhado && resumido ? `<details class="ia-coment-det"><summary>Ver explicação detalhada</summary><div class="ia-coment-det-corpo">${esc(detalhado).replaceAll("\n", "<br>")}</div></details>` : ""}
   </div>`;
 }
 
@@ -407,17 +455,31 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
   overlay.innerHTML =
     `<div class="mm-modal" role="dialog" aria-modal="true">
       <div class="mm-head"><b class="mm-titulo">${esc(mapa.titulo || arv.titulo || "Mapa mental")}</b><span class="spacer"></span>
-        <button class="lnk mm-v-mapa" data-tip="Ver como diagrama (mapa visual).">${icone("map")} Mapa</button>
-        <button class="lnk mm-v-lista" data-tip="Ver como lista (árvore de texto).">${icone("file-text")} Lista</button>
-        ${onSalvarArvore ? `<button class="lnk mm-edit-btn" data-tip="Editar a árvore: renomear, adicionar e remover ramos.">${icone("square-pen")} Editar</button>` : ""}
-        ${temOriginal ? `<button class="lnk mm-v-orig" data-tip="Ver a imagem/PDF original importado.">${icone("image")} Original</button>` : ""}
+        <div class="mm-tabs" role="tablist">
+          <button class="mm-tab mm-v-mapa is-active" data-tip="Ver como diagrama (mapa visual).">${icone("map")} Mapa</button>
+          <button class="mm-tab mm-v-lista" data-tip="Ver como lista (árvore de texto).">${icone("file-text")} Lista</button>
+          ${onSalvarArvore ? `<button class="mm-tab mm-edit-btn" data-tip="Editar a árvore: renomear, adicionar e remover ramos.">${icone("square-pen")} Editar</button>` : ""}
+          ${temOriginal ? `<button class="mm-tab mm-v-orig" data-tip="Ver a imagem/PDF original importado.">${icone("image")} Original</button>` : ""}
+        </div>
+        ${lista.length ? `<button class="lnk mm-acoes-btn" data-tip="Ações do mapa: gerar flashcards, questões, agendar revisão.">${icone("ellipsis")} Ações</button>` : ""}
         <button class="lnk mm-full" data-tip="Expandir para tela cheia.">${icone("maximize-2")} Tela cheia</button>
         <button class="lnk mm-print" data-tip="Imprimir ou salvar em PDF.">${icone("printer")} Imprimir</button>
         ${onRemover ? `<button class="lnk lnk-danger mm-del">${icone("x")} Remover</button>` : ""}
         ${botaoFechar("mm-close")}
       </div>
       <div class="mm-corpo">
-        <div class="mm-visual"><svg class="mm-svg" style="width:100%;height:62vh;display:block"></svg></div>
+        <div class="mm-visual"><svg class="mm-svg" style="width:100%;height:62vh;display:block"></svg>
+          <div class="mm-ctrls">
+            <button class="mm-ctrl mm-toggleall" data-tip="Recolher tudo">${icone("chevron-up")}</button>
+            <span class="mm-ctrl-sep"></span>
+            <button class="mm-ctrl mm-zoom-in" data-tip="Aumentar zoom">${icone("plus")}</button>
+            <span class="mm-zoom-lbl">100%</span>
+            <button class="mm-ctrl mm-zoom-out" data-tip="Diminuir zoom">${icone("minus")}</button>
+            <span class="mm-ctrl-sep"></span>
+            <button class="mm-ctrl mm-fit" data-tip="Ajustar à tela">${icone("expand")}</button>
+            <button class="mm-ctrl mm-png" data-tip="Baixar (PNG ou PDF)">${icone("download")}</button>
+          </div>
+        </div>
         <div class="mm-arvore" hidden>${mapaMentalArvoreHTML(arv)}</div>
         ${temOriginal ? `<div class="mm-original" hidden>${originalHTML}</div>` : ""}
         ${lista.length ? `<div class="mm-acoes">${lista.map((a, i) => `<button class="btn btn-soft btn-sm mm-acao" data-i="${i}">${esc(a.label)}</button>`).join("")}</div>` : ""}
@@ -436,55 +498,126 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
   const arvEl = overlay.querySelector(".mm-arvore");
   const secVisual = overlay.querySelector(".mm-visual");
   const secOrig = overlay.querySelector(".mm-original");
-  // Imprimir: o DIAGRAMA INTEIRO (não só a parte visível). Usa a bounding box do conteúdo
-  // como viewBox e remove o zoom/pan, para o mapa todo caber e escalar na página.
-  overlay.querySelector(".mm-print").addEventListener("click", () => {
-    const svg = overlay.querySelector(".mm-svg");
-    const g = svg && svg.querySelector("g");
-    let html = null;
-    if (mmRendered && g) {
-      try {
-        const bb = g.getBBox();
-        if (bb && bb.width > 1 && bb.height > 1) {
-          const pad = 24;
-          const clone = svg.cloneNode(true);
-          const gc = clone.querySelector("g");
-          if (gc) gc.removeAttribute("transform"); // tira zoom/pan → imprime o mapa INTEIRO
-          clone.removeAttribute("style");
-          clone.removeAttribute("width");
-          clone.removeAttribute("height");
-          clone.setAttribute("viewBox", `${bb.x - pad} ${bb.y - pad} ${bb.width + pad * 2} ${bb.height + pad * 2}`);
-          clone.setAttribute("preserveAspectRatio", "xMidYMid meet");
-          html = `<div class="mm-print-svg">${clone.outerHTML}</div>`;
-        }
-      } catch (_) {}
+  // Exportar/imprimir SEMPRE em tema claro (fundo branco, texto escuro): legível no papel e
+  // econômico. O export estático é offscreen (não depende do zoom/pan da tela).
+  const tituloMapa = () => `Mapa mental — ${mapa.titulo || arv.titulo || ""}`;
+  async function svgExportMapa() {
+    const { exportStaticSVG } = await import("./mm-tree.js");
+    return exportStaticSVG(arv, { tema: "claro", collapsed: mmCollapsed });
+  }
+  // Impressão do mapa via IFRAME OCULTO contendo SÓ o título + o mapa. À prova de balas: não
+  // depende de @media print nem do estado da tela; imprime exatamente esse documento isolado
+  // (paisagem, 1 página). Imune a "window.print mudo" (usa o print do próprio iframe).
+  async function imprimirMapa() {
+    let ifr = null;
+    try {
+      const { svg, bw, bh } = await svgExportMapa();
+      const ar = bw / Math.max(bh, 1);
+      const availW = 275, availH = 175; // A4 paisagem útil (título é pequeno)
+      let dw = availW, dh = availW / ar;
+      if (dh > availH) { dh = availH; dw = availH * ar; }
+      svg.setAttribute("width", dw.toFixed(1) + "mm");
+      svg.setAttribute("height", dh.toFixed(1) + "mm");
+      const t = esc(tituloMapa());
+      const doc = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${t}</title>` +
+        `<style>@page{size:landscape;margin:8mm}html,body{margin:0;background:#fff}` +
+        `body{font-family:system-ui,-apple-system,Arial,sans-serif;text-align:center;color:#0f172a}` +
+        `h1{font-size:15px;font-weight:700;margin:0 0 1px}.sub{font-size:9.5px;color:#64748b;margin:0 0 6px}` +
+        `svg{display:block;margin:0 auto;max-width:100%}</style></head>` +
+        `<body><h1>${t}</h1><div class="sub">Mentor Concurso</div>${svg.outerHTML}</body></html>`;
+      ifr = document.createElement("iframe");
+      ifr.setAttribute("aria-hidden", "true");
+      ifr.style.cssText = "position:fixed;right:0;bottom:0;width:1px;height:1px;opacity:0;border:0;pointer-events:none;";
+      document.body.appendChild(ifr);
+      // document.write (same-origin) é imune a CSP/Trusted-Types de srcdoc.
+      const idoc = ifr.contentDocument || ifr.contentWindow.document;
+      idoc.open(); idoc.write(doc); idoc.close();
+      const imprimirIframe = () => {
+        try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (_) {}
+        setTimeout(() => { try { ifr.remove(); } catch (_) {} }, 3000);
+      };
+      // conteúdo é inline (SVG), então já está pronto; pequeno atraso garante o layout
+      setTimeout(imprimirIframe, 200);
+    } catch (e) {
+      try { console.error(e); } catch (_) {}
+      if (ifr) { try { ifr.remove(); } catch (_) {} }
+      toast("Não consegui preparar a impressão do mapa.", "erro");
     }
-    imprimir(`Mapa mental — ${mapa.titulo || arv.titulo || ""}`, html || mapaMentalArvoreHTML(arv));
-  });
+  }
+  async function baixarMapaPNG() {
+    const { svg, bw, bh } = await svgExportMapa();
+    const scale = 2;
+    svg.setAttribute("width", bw); svg.setAttribute("height", bh);
+    const xml = new XMLSerializer().serializeToString(svg);
+    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(bw * scale); cv.height = Math.round(bh * scale);
+    const ctx = cv.getContext("2d"); ctx.scale(scale, scale); ctx.drawImage(img, 0, 0);
+    const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const nome = `mapa-mental-${(mapa.titulo || arv.titulo || "mapa").replace(/[^\w\-]+/g, "_").slice(0, 40)}.png`;
+    await baixarArquivo(nome, bytes, "image/png"); // caixa de salvar nativa no desktop; download no navegador
+  }
+  async function baixarMapa() {
+    const fmt = await escolher("Baixar o mapa como:", [
+      { value: "png", label: "Imagem PNG", cls: "btn-primary" },
+      { value: "pdf", label: "PDF (abre a impressão → Salvar como PDF)" },
+    ]);
+    if (!fmt) return;
+    if (fmt === "pdf") return imprimirMapa();
+    try { await baixarMapaPNG(); } catch (e) { try { console.error(e); } catch (_) {} toast("Não consegui gerar a imagem.", "erro"); }
+  }
+  overlay.querySelector(".mm-print").addEventListener("click", imprimirMapa);
 
-  // ---- Visões: diagrama (markmap, carregado sob demanda) · lista · original ----
+  // ---- Visões: diagrama (tidy-tree próprio, carregado sob demanda) · lista · original ----
   let mmRendered = false;
   let mmInstance = null;
+  const mmCollapsed = new Set(); // estado de recolhimento persistido entre re-renders
+  let mmTodoExpandido = true;
+  const zoomLbl = overlay.querySelector(".mm-zoom-lbl");
+  const toggleBtn = overlay.querySelector(".mm-toggleall");
   async function renderVisual() {
     const svg = overlay.querySelector(".mm-svg");
     if (!svg) return;
     try {
-      const { Markmap } = await import("markmap-view");
-      svg.innerHTML = "";
-      const toNode = (n) => ({ content: esc(n.titulo || ""), children: (n.ramos || []).map(toNode) });
-      const data = { content: esc(arv.titulo || "Mapa mental"), children: (arv.ramos || []).map(toNode) };
-      mmInstance = Markmap.create(svg, undefined, data);
+      const { renderTidyTree } = await import("./mm-tree.js");
+      const tema = document.documentElement.getAttribute("data-tema") === "escuro" ? "escuro" : "claro";
+      if (mmInstance && mmInstance.destroy) mmInstance.destroy();
+      mmInstance = renderTidyTree(svg, arv, {
+        tema,
+        collapsed: mmCollapsed,
+        onZoom: (k) => { if (zoomLbl) zoomLbl.textContent = Math.round(k * 100) + "%"; },
+        onToggleAll: (todoExp) => {
+          mmTodoExpandido = todoExp;
+          if (toggleBtn) {
+            toggleBtn.innerHTML = todoExp ? icone("chevron-up") : icone("chevron-down");
+            toggleBtn.setAttribute("data-tip", todoExp ? "Recolher tudo" : "Expandir tudo");
+          }
+        },
+      });
       mmRendered = true;
     } catch (e) {
       try { console.error(e); } catch (_) {}
       secVisual.innerHTML = `<div class="muted small" style="padding:14px">Não foi possível desenhar o diagrama agora. Use Lista.</div>`;
     }
   }
+  // Controles do diagrama (zoom/ajustar/expandir-recolher/PNG)
+  overlay.querySelector(".mm-zoom-in")?.addEventListener("click", () => mmInstance?.zoomIn());
+  overlay.querySelector(".mm-zoom-out")?.addEventListener("click", () => mmInstance?.zoomOut());
+  overlay.querySelector(".mm-fit")?.addEventListener("click", () => mmInstance?.fit());
+  if (toggleBtn) toggleBtn.addEventListener("click", () => { if (mmTodoExpandido) mmInstance?.collapseAll(); else mmInstance?.expandAll(); });
+  overlay.querySelector(".mm-png")?.addEventListener("click", baixarMapa); // menu PNG/PDF
+  // marca a aba ativa (segmented control) conforme a visão atual
+  const abaPorVista = { visual: ".mm-v-mapa", lista: ".mm-v-lista", original: ".mm-v-orig" };
+  const setAba = (sel) => overlay.querySelectorAll(".mm-tab").forEach((b) => b.classList.toggle("is-active", sel != null && b.matches(sel)));
   const vista = (nome) => {
     secVisual.toggleAttribute("hidden", nome !== "visual");
     arvEl.toggleAttribute("hidden", nome !== "lista");
     if (secOrig) secOrig.toggleAttribute("hidden", nome !== "original");
     if (nome === "visual" && !mmRendered) renderVisual();
+    if (!work) setAba(abaPorVista[nome]); // em edição, a aba ativa é "Editar" (tratada à parte)
   };
   overlay.querySelector(".mm-v-mapa").addEventListener("click", () => { if (!work) vista("visual"); });
   overlay.querySelector(".mm-v-lista").addEventListener("click", () => { if (!work) vista("lista"); });
@@ -528,9 +661,9 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
           <button class="btn btn-primary btn-sm mm-edit-salvar">Salvar</button>
         </div>`;
     };
-    const sairEdit = () => { work = null; arvEl.innerHTML = mapaMentalArvoreHTML(arv); };
+    const sairEdit = () => { work = null; arvEl.innerHTML = mapaMentalArvoreHTML(arv); setAba(".mm-v-lista"); };
     const editBtn = overlay.querySelector(".mm-edit-btn");
-    if (editBtn) editBtn.addEventListener("click", () => { if (work) return; vista("lista"); work = clone(arv); renderEdit(); });
+    if (editBtn) editBtn.addEventListener("click", () => { if (work) return; vista("lista"); work = clone(arv); renderEdit(); setAba(".mm-edit-btn"); });
     arvEl.addEventListener("input", (e) => {
       if (!work) return;
       const t = e.target;
@@ -556,7 +689,7 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
         vista("visual");
       }
     });
-    if (editar) { vista("lista"); work = clone(arv); renderEdit(); }
+    if (editar) { vista("lista"); work = clone(arv); renderEdit(); setAba(".mm-edit-btn"); }
   }
 
   if (!work) vista("visual"); // vista inicial = diagrama (markmap), exceto se abriu em edição
@@ -566,6 +699,14 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
   overlay.querySelectorAll(".mm-acao").forEach((b) =>
     b.addEventListener("click", () => { const a = lista[+b.getAttribute("data-i")]; if (a && a.fn) a.fn(); })
   );
+  // Botão "Ações" (só na tela cheia, onde a barra inferior fica escondida): abre um menu com
+  // as mesmas ações (gerar flashcards/questões, agendar revisão).
+  overlay.querySelector(".mm-acoes-btn")?.addEventListener("click", async () => {
+    const i = await escolher("Ações do mapa", lista.map((a, idx) => ({ value: String(idx), label: a.label })), { lista: true });
+    if (i == null) return;
+    const a = lista[+i];
+    if (a && a.fn) a.fn();
+  });
   const obsSalvar = overlay.querySelector(".mm-obs-salvar");
   if (obsSalvar && onSalvarObs) obsSalvar.addEventListener("click", () => {
     onSalvarObs(overlay.querySelector(".mm-obs-txt").value);
@@ -600,18 +741,59 @@ export function seloBadge(tipo, fonte, { compacto = false } = {}) {
   return `<span class="selo selo-${tipo}${ia}" data-tip="${esc(tipFull)}">${icone(s.icone)} ${esc(texto)}</span>`;
 }
 
+// Salva um arquivo (bytes) escolhendo o caminho. No app DESKTOP (Tauri) usa a CAIXA DE SALVAR
+// NATIVA (comando Rust save_bytes) — o <a download> nem sempre abre diálogo no webview. No
+// navegador (ou se o nativo falhar), cai no <a download> com Blob URL. Retorna false se o
+// usuário cancelar o diálogo nativo.
+export async function baixarArquivo(nome, bytes, mime) {
+  const ehTauri = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
+  if (ehTauri) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      let bin = "";
+      const CH = 0x8000; // fatia p/ não estourar o argumento do fromCharCode
+      for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      const salvo = await invoke("save_bytes", { name: nome, data: btoa(bin) });
+      return salvo !== null; // null = cancelou
+    } catch (e) { try { console.warn("[baixar] save nativo indisponível; usando download do navegador", e); } catch (_) {} }
+  }
+  const blob = new Blob([bytes], { type: mime || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return true;
+}
+
 // Impressão: monta uma área limpa (#print-area) e dispara window.print().
 // @media print mostra só essa área e esconde o app — funciona no navegador e no Tauri.
-export function imprimir(titulo, htmlInterno) {
+// opts.cls: classe extra no #print-area (ex.: "pa-mapa" p/ encaixar o diagrama em 1 página).
+// opts.landscape: força orientação paisagem (mapas largos cabem inteiros).
+export function imprimir(titulo, htmlInterno, opts = {}) {
   let area = document.getElementById("print-area");
   if (!area) {
     area = document.createElement("div");
     area.id = "print-area";
     document.body.appendChild(area);
   }
+  area.className = opts.cls || ""; // reseta a cada impressão (não vaza entre mapa e listas)
   const quando = new Date().toLocaleString("pt-BR");
   area.innerHTML = `<h1>${esc(titulo)}</h1><div class="print-cabec">Mentor Concurso · impresso em ${esc(quando)}</div>${htmlInterno}`;
+  // Remove qualquer @page pendente de uma impressão anterior (senão a orientação paisagem do
+  // mapa poderia "vazar" para uma impressão de lista disparada logo em seguida).
+  document.getElementById("mm-print-page")?.remove();
+  let pageStyle = null;
+  if (opts.landscape) {
+    pageStyle = document.createElement("style");
+    pageStyle.id = "mm-print-page";
+    pageStyle.textContent = "@page { size: landscape; margin: 10mm; }";
+    document.head.appendChild(pageStyle);
+  }
+  const limpar = () => { if (pageStyle) { pageStyle.remove(); pageStyle = null; } window.removeEventListener("afterprint", limpar); };
+  window.addEventListener("afterprint", limpar);
   window.print();
+  setTimeout(limpar, 1500); // fallback caso afterprint não dispare
 }
 
 // Modal de OPÇÕES DE IMPRESSÃO (reusado pelos botões "Imprimir" de cabeçalho): cada grupo

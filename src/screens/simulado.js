@@ -11,6 +11,7 @@ import { icone } from "../icones.js";
 // re-render, ex.: ao ligar/desligar a correção Cebraspe).
 let notaAnimou = false;
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
+import { focoShellHTML, focoChromeKey } from "./foco-quiz.js";
 
 // Estado independente por formato.
 function novoSS() {
@@ -129,88 +130,96 @@ export default function renderSimulado(root, app, formato = "mc") {
 function renderSetup(root, app, st, formato) {
   const ss = SS[formato];
   const cfg = ss.cfg;
-  const nomeItem = formato === "ce" ? "itens" : "questões";
   const comp = composicaoDisponivel(st, formato, cfg.status);
   const total = totalCotas(ss);
   const sugestao = tempoSugerido(total, formato);
+  const rotTotal = (n) => (n === 1 ? "questão" : "questões");
 
   root.innerHTML = `
-    <div class="barra-acoes">
-      ${addQuestoesBotaoHTML(ss.addState.aberto, formato)}
-    </div>
-
     <section class="card sim-setup-card">
       <header class="sim-setup-head">
-        <h3>Monte sua prova</h3>
-        <p class="muted small" data-tip="Você pode fazer só uma disciplina, várias, ou X de cada. É cronometrado e o gabarito só aparece ao finalizar.">Escolha <b>quantas ${nomeItem} de cada disciplina</b>, como numa prova real.</p>
+        <div>
+          <h3>Monte sua prova</h3>
+          <p class="muted small">Escolha <b>quantas questões de cada disciplina</b>, como numa prova real. É cronometrado e o gabarito só aparece ao finalizar.</p>
+        </div>
+        ${addQuestoesBotaoHTML(ss.addState.aberto, formato)}
       </header>
 
-      <div class="sim-modos">
-        <span class="muted small">Atalhos:</span>
-        <button class="btn btn-ghost btn-sm" data-action="modo-tudo" data-tip="Usa todas as ${nomeItem} que você já cadastrou, de todas as disciplinas.">${icone("clipboard-list")} Todas as ${nomeItem}</button>
-        <button class="btn btn-ghost btn-sm" data-action="modo-edital" data-tip="Sorteia N ${nomeItem} distribuídas pela relevância do edital (proporção do edital).">${icone("target")} Pelo edital…</button>
-        <button class="btn btn-ghost btn-sm" data-action="modo-aleatorio" data-tip="Sorteia N ${nomeItem} aleatórias entre as disciplinas.">${icone("dices")} Aleatória…</button>
-        <button class="btn btn-ghost btn-sm" data-action="modo-fracos" data-tip="Foca no que você errou ou ainda não respondeu.">${icone("bandage")} Pontos fracos</button>
-        <button class="lnk sim-modo-limpar" data-action="modo-limpar" data-tip="Zera as cotas.">limpar</button>
-      </div>
+      ${
+        comp.length || st.questoes.filter((q) => ehDoFormato(q, formato)).length
+          ? `<div class="sim-atalhos">
+              <span class="sim-atalhos-lbl">Preencher rápido</span>
+              <div class="sim-atalhos-chips">
+                <button class="sim-chip" data-action="modo-tudo" data-tip="Usa todas as questões que você já cadastrou, de todas as disciplinas.">${icone("clipboard-list")} Todas</button>
+                <button class="sim-chip" data-action="modo-edital" data-tip="Sorteia N questões distribuídas pela relevância do edital.">${icone("target")} Pelo edital</button>
+                <button class="sim-chip" data-action="modo-aleatorio" data-tip="Sorteia N questões aleatórias entre as disciplinas.">${icone("dices")} Aleatória</button>
+                <button class="sim-chip" data-action="modo-fracos" data-tip="Foca no que você errou ou ainda não respondeu.">${icone("bandage")} Pontos fracos</button>
+              </div>
+              <button class="lnk sim-modo-limpar" data-action="modo-limpar" data-tip="Zera as cotas.">limpar</button>
+            </div>
 
-      <div class="form-row" style="margin:10px 0 4px">
-        <label class="inline">Situação:
-          <select id="sim-status">
-            <option value="todas" ${cfg.status === "todas" ? "selected" : ""}>Todas</option>
-            <option value="pendente" ${cfg.status === "pendente" ? "selected" : ""}>Pendentes</option>
-            <option value="errei" ${cfg.status === "errei" ? "selected" : ""}>Errei</option>
-            <option value="acertei" ${cfg.status === "acertei" ? "selected" : ""}>Acertei</option>
-            <option value="fracos" ${cfg.status === "fracos" ? "selected" : ""}>Pontos fracos (errei + pendentes)</option>
-          </select>
-        </label>
-      </div>
+            <div class="sim-situacao">
+              <label for="sim-status">Considerar</label>
+              <select id="sim-status">
+                <option value="todas" ${cfg.status === "todas" ? "selected" : ""}>Todas as questões</option>
+                <option value="pendente" ${cfg.status === "pendente" ? "selected" : ""}>Só as pendentes</option>
+                <option value="errei" ${cfg.status === "errei" ? "selected" : ""}>Só as que errei</option>
+                <option value="acertei" ${cfg.status === "acertei" ? "selected" : ""}>Só as que acertei</option>
+                <option value="fracos" ${cfg.status === "fracos" ? "selected" : ""}>Pontos fracos (errei + pendentes)</option>
+              </select>
+            </div>`
+          : ""
+      }
 
       ${
         comp.length
-          ? `<table class="sim-cotas">
-              <thead><tr><th>Disciplina</th><th>Disponível</th><th>Quantas no simulado</th></tr></thead>
-              <tbody>
-                ${comp
-                  .map((c) => {
-                    const v = Math.min(c.disp, Math.max(0, cfg.cotas[c.key] || 0));
-                    return `<tr>
-                      <td>${esc(c.nome)}</td>
-                      <td class="sim-disp"><span class="num">${c.disp}</span></td>
-                      <td><input type="number" class="sim-cota" data-disc="${esc(c.key)}" min="0" max="${c.disp}" value="${v}" /> <button class="lnk" data-action="cota-max" data-disc="${esc(c.key)}" data-tip="Usar todas desta disciplina">tudo</button></td>
-                    </tr>`;
-                  })
-                  .join("")}
-              </tbody>
-            </table>`
+          ? `<div class="sim-cotas">
+              <div class="sim-cotas-head"><span>Disciplina</span><span>Disponíveis</span><span>No simulado</span></div>
+              ${comp
+                .map((c) => {
+                  const v = Math.min(c.disp, Math.max(0, cfg.cotas[c.key] || 0));
+                  return `<div class="sim-cota-row ${v > 0 ? "ativa" : ""}" data-row="${esc(c.key)}">
+                      <span class="sim-cota-nome">${esc(c.nome)}</span>
+                      <span class="sim-cota-disp"><span class="num">${c.disp}</span> ${c.disp === 1 ? "questão" : "questões"}</span>
+                      <span class="sim-cota-set">
+                        <input type="number" class="sim-cota" data-disc="${esc(c.key)}" min="0" max="${c.disp}" value="${v}" aria-label="Quantas de ${esc(c.nome)}" />
+                        <button class="lnk" data-action="cota-max" data-disc="${esc(c.key)}" data-tip="Usar todas desta disciplina">tudo</button>
+                      </span>
+                    </div>`;
+                })
+                .join("")}
+            </div>`
           : (function () {
-              const nomeItem = formato === "ce" ? "itens" : "questões";
               // Tem questões do formato, mas nenhuma nessa situação? Vazio de filtro.
               const totalFormato = st.questoes.filter((q) => ehDoFormato(q, formato)).length;
               if (totalFormato) {
-                return vazio(`Nada nessa situação\nNenhuma das suas ${nomeItem} se enquadra na situação escolhida. Troque a situação acima para montar a prova.`, "", icone("dices"));
+                return vazio("Nada nessa situação\nNenhuma das suas questões se enquadra no filtro acima. Troque em \"Considerar\" para montar a prova.", "", icone("dices"));
               }
               // Não tem nada: CTA reusa o data-action real de adicionar (toggle-addq).
-              const cta = `<button class="btn btn-add" data-action="toggle-addq">Adicionar ${nomeItem}</button>`;
-              return vazio(`Cadastre ${nomeItem} para montar o simulado\nO simulado é montado a partir das suas ${nomeItem}. Adicione, importe de uma prova, ou gere com a IA.`, cta, icone("notebook-pen"));
+              const cta = `<button class="btn btn-add" data-action="toggle-addq">Adicionar questões</button>`;
+              return vazio("Cadastre questões para montar o simulado\nO simulado é montado a partir das suas questões. Adicione, importe de uma prova, ou gere com a IA.", cta, icone("notebook-pen"));
             })()
       }
 
-      <div class="sim-rodape">
-        <label class="inline">Tempo (min, 0 = sem limite)
-          <input id="sim-tempo" type="number" min="0" max="600" value="${cfg.tempoMin}" />
-        </label>
-        ${total ? `<span class="muted small">Sugestão: <b>${sugestao} min</b> (≈${formato === "ce" ? 2 : 3} min/${formato === "ce" ? "item" : "questão"}) · <button class="lnk" data-action="usar-tempo">usar</button></span>` : ""}
-        <label class="inline" ${formato === "ce" ? "style='display:none'" : ""}><input type="checkbox" id="sim-embaralhar" ${cfg.embaralhar ? "checked" : ""} /> Embaralhar as alternativas</label>
-      </div>
+      ${
+        comp.length
+          ? `<div class="sim-rodape">
+              <label class="sim-tempo-campo" for="sim-tempo">Tempo <span class="muted">(min · 0 = sem limite)</span>
+                <input id="sim-tempo" type="number" min="0" max="600" value="${cfg.tempoMin}" />
+              </label>
+              ${total ? `<span class="muted small sim-tempo-sug">Sugestão <b>${sugestao} min</b> · <button class="lnk" data-action="usar-tempo">usar</button></span>` : ""}
+              <label class="sim-embaralhar" ${formato === "ce" ? "style='display:none'" : ""}><input type="checkbox" id="sim-embaralhar" ${cfg.embaralhar ? "checked" : ""} /> Embaralhar as alternativas</label>
+            </div>
 
-      <div class="sim-iniciar">
-        <div class="sim-iniciar-resumo">
-          <span class="sim-total"><b>${total}</b> ${total === 1 ? (formato === "ce" ? "item selecionado" : "questão selecionada") : (formato === "ce" ? "itens selecionados" : "questões selecionadas")}</span>
-          <span class="muted small" data-tip="As alternativas são embaralhadas e o gabarito só aparece ao finalizar. Os erros vão para o Caderno de Erros e o tempo para o Acompanhamento.">Como funciona</span>
-        </div>
-        <button class="btn btn-primary btn-lg" data-action="iniciar" ${total ? "" : "disabled"}>${icone("play")} Iniciar simulado${total ? ` (${total})` : ""}</button>
-      </div>
+            <div class="sim-iniciar">
+              <div class="sim-iniciar-resumo">
+                <span class="sim-total"><b>${total}</b> ${rotTotal(total)} ${total === 1 ? "selecionada" : "selecionadas"}</span>
+                <span class="muted small" data-tip="O gabarito só aparece ao finalizar. Os erros vão para o Caderno de Erros e o tempo para o Acompanhamento.">${icone("info")} Como funciona o simulado</span>
+              </div>
+              <button class="btn btn-primary btn-lg" data-action="iniciar" ${total ? "" : "disabled"}>${icone("play")} Iniciar${total ? ` · ${total} ${rotTotal(total)}` : ""}</button>
+            </div>`
+          : ""
+      }
     </section>`;
 
   root.querySelector("#sim-status")?.addEventListener("change", (e) => {
@@ -226,7 +235,8 @@ function renderSetup(root, app, st, formato) {
       if (isNaN(v)) v = 0;
       v = Math.max(0, Math.min(max, v));
       cfg.cotas[k] = v;
-      atualizarTotal(root, ss, formato);
+      inp.closest(".sim-cota-row")?.classList.toggle("ativa", v > 0);
+      atualizarTotal(root, ss);
     })
   );
   root.querySelector("#sim-tempo")?.addEventListener("input", (e) => {
@@ -290,20 +300,21 @@ function renderSetup(root, app, st, formato) {
       if (cfg.embaralhar && formato !== "ce") {
         for (const q of escolhidas) ordens[q.id] = embaralhar(q.alternativas.map((_, i) => i));
       }
-      ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: cfg.tempoMin * 60, intervalId: null, resultado: null };
+      ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: cfg.tempoMin * 60, intervalId: null, resultado: null, focoIdx: 0 };
       app.refresh();
     },
   });
 }
 
 // Atualiza o total e o tempo sugerido sem re-render completo (preserva foco nos inputs).
-function atualizarTotal(root, ss, formato) {
+function atualizarTotal(root, ss) {
   const total = totalCotas(ss);
+  const rot = total === 1 ? "questão" : "questões";
   const elTotal = root.querySelector(".sim-total");
-  if (elTotal) elTotal.innerHTML = `<b>${total}</b> ${total === 1 ? (formato === "ce" ? "item selecionado" : "questão selecionada") : (formato === "ce" ? "itens selecionados" : "questões selecionadas")}`;
+  if (elTotal) elTotal.innerHTML = `<b>${total}</b> ${rot} ${total === 1 ? "selecionada" : "selecionadas"}`;
   const btn = root.querySelector('[data-action="iniciar"]');
   if (btn) {
-    btn.innerHTML = `${icone("play")} Iniciar simulado (${total})`;
+    btn.innerHTML = `${icone("play")} Iniciar${total ? ` · ${total} ${rot}` : ""}`;
     btn.disabled = !total;
   }
 }
@@ -313,47 +324,34 @@ function atualizarTotal(root, ss, formato) {
 function altsSimHTML(q, formato, respostaAtual, ordem) {
   if (formato === "ce") {
     return `<div class="ce-opcoes">
-      ${[0, 1].map((i) => `<button class="ce-btn sim-alt ${respostaAtual === i ? "selected" : ""}" data-action="responder" data-q="${q.id}" data-i="${i}">${i === 0 ? "Certo" : "Errado"}</button>`).join("")}
+      ${[0, 1].map((i) => `<button class="ce-btn sim-alt ${respostaAtual === i ? "selected" : ""}" data-action="responder" data-q="${q.id}" data-i="${i}">${i === 0 ? "Certo" : "Errado"}<kbd class="alt-key">${i === 0 ? "C" : "E"}</kbd></button>`).join("")}
     </div>`;
   }
   const ordemExib = ordem || q.alternativas.map((_, i) => i);
   return ordemExib
-    .map((orig, pos) => `<button class="alt alt-btn sim-alt ${respostaAtual === orig ? "selected" : ""}" data-action="responder" data-q="${q.id}" data-i="${orig}"><span class="alt-letra">${letra(pos)}</span> ${esc(q.alternativas[orig])}</button>`)
+    .map((orig, pos) => `<button class="alt alt-btn sim-alt ${respostaAtual === orig ? "selected" : ""}" data-action="responder" data-q="${q.id}" data-i="${orig}"><span class="alt-letra">${letra(pos)}</span> <span class="alt-txt">${esc(q.alternativas[orig])}</span>${pos < 6 ? `<kbd class="alt-key">${pos + 1}</kbd>` : ""}</button>`)
     .join("");
 }
 
-// ---------- Em andamento ----------
+// ---------- Em andamento (Modo Foco imersivo: uma questão por vez) ----------
 function renderEmAndamento(root, app, st, formato) {
   const ss = SS[formato];
   const sim = ss.sim;
   const questoes = sim.questaoIds.map((id) => st.questoes.find((q) => q.id === id)).filter(Boolean);
   const temLimite = sim.target > 0;
+  const total = questoes.length;
+  if (sim.focoIdx == null) sim.focoIdx = 0;
+  sim.focoIdx = Math.max(0, Math.min(sim.focoIdx, total - 1));
 
-  root.innerHTML = `
-    <div class="sim-barra card">
-      <div class="sim-timer ${temLimite ? "sim-timer-limite" : ""}" id="sim-timer" data-tip="${temLimite ? "Tempo restante" : "Tempo decorrido"}">${temLimite ? fmtMMSS(sim.target - sim.elapsed) : fmtMMSS(sim.elapsed)}</div>
-      <div class="sim-progresso" id="sim-progresso">Respondidas: ${Object.keys(sim.respostas).length}/${questoes.length}</div>
-      <span class="spacer"></span>
-      <button class="btn btn-ghost btn-sm" data-action="cancelar" data-tip="Descarta o simulado sem corrigir.">Cancelar</button>
-      <button class="btn btn-primary" data-action="finalizar">${icone("check")} Finalizar e corrigir</button>
-    </div>
+  root.innerHTML = simOverlayHTML(sim, questoes, formato, temLimite);
 
-    <div class="lista-questoes sim-andamento">
-      ${questoes
-        .map((q, n) => `<div class="card questao">
-            <div class="questao-meta">${formato === "ce" ? `<span class="mini-tag">Certo/Errado</span>` : ""}${seloBadge(q.selo, q.fonte)}${q.referencia ? `<span class="questao-ref-chip">${icone("paperclip")} ${esc(q.referencia)}</span>` : ""}</div>
-            <div class="questao-enun"><b>${n + 1}.</b> ${esc(q.enunciado)}</div>
-            <div class="questao-alts">${altsSimHTML(q, formato, sim.respostas[q.id], sim.ordens && sim.ordens[q.id])}</div>
-          </div>`)
-        .join("")}
-    </div>`;
-
-  const timerEl = root.querySelector("#sim-timer");
-  const progEl = root.querySelector("#sim-progresso");
-
+  function pintaTimer() {
+    const el = root.querySelector(".sim-timer");
+    if (el) el.textContent = temLimite ? fmtMMSS(Math.max(0, sim.target - sim.elapsed)) : fmtMMSS(sim.elapsed);
+  }
   function tick() {
     sim.elapsed += 1;
-    timerEl.textContent = temLimite ? fmtMMSS(Math.max(0, sim.target - sim.elapsed)) : fmtMMSS(sim.elapsed);
+    pintaTimer();
     if (temLimite && sim.target - sim.elapsed <= 0) {
       toast("Tempo esgotado! Corrigindo…");
       finalizar();
@@ -364,6 +362,13 @@ function renderEmAndamento(root, app, st, formato) {
   function pararTimer() {
     if (sim.intervalId) clearInterval(sim.intervalId);
     sim.intervalId = null;
+  }
+
+  // Troca a questão exibida SEM re-render da tela (só o overlay, fade) — não "mexe a tela".
+  function trocar(idx) {
+    sim.focoIdx = Math.max(0, Math.min(idx, total - 1));
+    const el = root.querySelector(".fc-foco");
+    if (el) el.outerHTML = simOverlayHTML(sim, questoes, formato, temLimite, "fade");
   }
 
   function finalizar() {
@@ -381,10 +386,38 @@ function renderEmAndamento(root, app, st, formato) {
     });
     sim.resultado = { itens, acertos, total: sim.questaoIds.length, respondidas: Object.keys(sim.respostas).length, tempoSeg: sim.elapsed };
     if (sim.elapsed > 0) store.registrarSessao({ fase: "A", topicoId: null, tempoSeg: sim.elapsed });
+    // Auto-registra no histórico de Simulados (uma vez). Erros = respondidas − acertos;
+    // brancos = total − respondidas. Guarda também o desempenho por disciplina.
+    if (!sim.registrado) {
+      sim.registrado = true;
+      const porDisc = {};
+      for (const it of itens) {
+        const t = it.q && it.q.topicoId ? st.topicos.find((x) => x.id === it.q.topicoId) : null;
+        const d = t ? st.disciplinas.find((x) => x.id === t.disciplinaId) : null;
+        const k = d ? d.id : "_sem";
+        if (!porDisc[k]) porDisc[k] = { nome: d ? d.nome : "Sem disciplina", total: 0, acertos: 0 };
+        porDisc[k].total++;
+        if (it.acertou) porDisc[k].acertos++;
+      }
+      const respondidas = sim.resultado.respondidas;
+      store.registrarSimulado({
+        origem: "app",
+        formato,
+        total: sim.questaoIds.length,
+        acertos,
+        erros: respondidas - acertos,
+        brancos: sim.questaoIds.length - respondidas,
+        tempoSeg: sim.elapsed,
+        porDisciplina: Object.values(porDisc),
+        questaoIds: sim.questaoIds,
+        respostas: { ...sim.respostas },
+      });
+    }
     app.refresh();
   }
 
-  // Seleção SEM re-render (preserva o cronômetro).
+  // Seleção SEM re-render (preserva o cronômetro): marca a alternativa + atualiza o contador
+  // "respondidas" e o ponto da questão no mapa, no lugar. SEM correção (só no fim).
   bindActions(root, {
     responder: (el) => {
       const qId = el.getAttribute("data-q");
@@ -393,15 +426,22 @@ function renderEmAndamento(root, app, st, formato) {
       root.querySelectorAll(`.sim-alt[data-q="${qId}"]`).forEach((b) => {
         b.classList.toggle("selected", parseInt(b.getAttribute("data-i"), 10) === i);
       });
-      progEl.textContent = `Respondidas: ${Object.keys(sim.respostas).length}/${sim.questaoIds.length}`;
+      const n = Object.keys(sim.respostas).length;
+      const pn = root.querySelector(".sim-prog-n");
+      if (pn) pn.textContent = n;
+      root.querySelector(`.fq-simdot[data-i="${sim.focoIdx}"]`)?.classList.add("resp");
     },
+    "foco-anterior": () => trocar(sim.focoIdx - 1),
+    "foco-proximo": () => trocar(sim.focoIdx + 1),
+    "sim-ir": (el) => trocar(parseInt(el.getAttribute("data-i"), 10)),
     finalizar: async () => {
       const faltando = sim.questaoIds.length - Object.keys(sim.respostas).length;
       if (faltando > 0 && !(await confirmar(`Faltam ${faltando} sem resposta. Finalizar mesmo assim?`))) return;
       finalizar();
     },
-    cancelar: async () => {
-      if (await confirmar("Cancelar o simulado? As respostas serão descartadas.")) {
+    // No foco, "sair" (× / Esc) = cancelar a prova (com confirmação).
+    "sair-foco": async () => {
+      if (await confirmar("Sair do simulado? As respostas serão descartadas.")) {
         pararTimer();
         ss.sim = null;
         app.refresh();
@@ -409,7 +449,61 @@ function renderEmAndamento(root, app, st, formato) {
     },
   });
 
-  return () => pararTimer();
+  // Teclado: chrome (Esc sai, ← → navegam) + seleção (1–6 / C·E) + Espaço = próxima.
+  function onKey(e) {
+    const chrome = focoChromeKey(e, { root });
+    if (chrome) return;
+    if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="foco-proximo"]')?.click(); return; }
+    if (root.querySelector(".fq-qalts.ce")) {
+      if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="0"]')?.click(); }
+      else if (e.key === "e" || e.key === "E") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="1"]')?.click(); }
+      return;
+    }
+    const idx = { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5 }[e.key];
+    if (idx !== undefined) { e.preventDefault(); root.querySelectorAll('.fq-qalts .sim-alt')[idx]?.click(); }
+  }
+  document.addEventListener("keydown", onKey);
+
+  return () => { pararTimer(); document.removeEventListener("keydown", onKey); };
+}
+
+// Overlay do simulado em andamento (shell compartilhado). Uma questão por vez, timer da
+// prova + "respondidas X/Y" + botão Finalizar no topo, mapa de questões clicável no rodapé.
+function simOverlayHTML(sim, questoes, formato, temLimite, anim = "in") {
+  const total = questoes.length;
+  const idx = Math.max(0, Math.min(sim.focoIdx || 0, total - 1));
+  const q = questoes[idx];
+  const respondidas = Object.keys(sim.respostas).length;
+  const timerTxt = temLimite ? fmtMMSS(Math.max(0, sim.target - sim.elapsed)) : fmtMMSS(sim.elapsed);
+  const placarExtra = `
+    <div class="fq-chip fq-simtimer ${temLimite ? "lim" : ""}" data-tip="${temLimite ? "Tempo restante da prova" : "Tempo decorrido"}">${icone("clock-3")} <span class="sim-timer">${timerTxt}</span></div>
+    <div class="fq-chip fq-simresp" data-tip="Respondidas">${icone("check-check")} <span class="sim-prog-n">${respondidas}</span>/${total}</div>`;
+  const acoesExtra = `<button class="fq-chip fq-simfim" data-action="finalizar" data-tip="Finalizar e corrigir a prova">${icone("check")} Finalizar</button>`;
+  const ce = formato === "ce";
+  const centro = `
+    <div class="fq-qcard fq-simcard" data-id="${q.id}">
+      <div class="fq-tags">
+        <span class="fq-tag">Questão ${idx + 1}</span>
+        ${ce ? `<span class="fq-tag fq-tag-ce">Certo ou errado?</span>` : ""}
+        ${q.referencia ? `<span class="fq-tag">${esc(q.referencia)}</span>` : ""}
+      </div>
+      <div class="fq-qenun">${esc(q.enunciado)}</div>
+      <div class="fq-qalts ${ce ? "ce" : ""}">${altsSimHTML(q, formato, sim.respostas[q.id], sim.ordens && sim.ordens[q.id])}</div>
+      <div class="fc-atalhos muted small">${icone("keyboard")} ${ce ? `<b>C</b> certo · <b>E</b> errado` : `teclas <b>1</b>–<b>${Math.min(q.alternativas.length, 6)}</b> para responder`} · <b>Espaço</b> próxima</div>
+    </div>
+    <nav class="fq-simmapa" aria-label="Mapa de questões">
+      ${questoes.map((qq, i) => {
+        const resp = sim.respostas[qq.id] !== undefined;
+        return `<button class="fq-simdot ${resp ? "resp" : ""} ${i === idx ? "cur" : ""}" data-action="sim-ir" data-i="${i}" data-tip="Questão ${i + 1}${resp ? " · respondida" : ""}">${i + 1}</button>`;
+      }).join("")}
+    </nav>`;
+  const rodape = ce
+    ? `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>C</kbd> certo · <kbd>E</kbd> errado · <kbd>Espaço</kbd> próxima`
+    : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>1</kbd>–<kbd>6</kbd> responder · <kbd>Espaço</kbd> próxima`;
+  return focoShellHTML({
+    idx, total, anim, crono: false, placar: null, placarExtra, acoesExtra, centro, rodape,
+    aria: "Simulado em andamento",
+  });
 }
 
 // Alternativas na correção (com gabarito). `ordem` = ordem de exibição (embaralho).
@@ -580,7 +674,86 @@ function renderResultado(root, app, st, formato) {
   });
 }
 
-// ---------- Impressão (chamada pelo botão Imprimir do cabeçalho, em pratica.js) ----------
+// ---------- Consulta posterior (Histórico › Ver correção) ----------
+// Reconstrói a correção de um simulado feito no app a partir do snapshot salvo
+// (registro.questaoIds + registro.respostas). Read-only, sem cronômetro nem botões.
+// Questões apagadas depois do simulado são simplesmente omitidas.
+export function correcaoSimuladoHTML(app, registro) {
+  const st = app.store.get();
+  const formato = registro.formato === "ce" ? "ce" : "mc";
+  const ids = Array.isArray(registro.questaoIds) ? registro.questaoIds : [];
+  const respostas = registro.respostas || {};
+  const itens = ids
+    .map((qId) => {
+      const q = st.questoes.find((x) => x.id === qId);
+      if (!q) return null;
+      const escolha = respostas[qId];
+      const respondida = escolha !== undefined && escolha !== null;
+      return { q, escolha, respondida, acertou: respondida && escolha === q.gabarito };
+    })
+    .filter(Boolean);
+
+  if (!itens.length) {
+    return `<div class="sim-corr-vazio">${vazio("Correção indisponível\nAs questões deste simulado foram editadas ou removidas depois que ele foi feito.", "", icone("clipboard-list"))}</div>`;
+  }
+
+  const total = itens.length;
+  const acertos = itens.filter((it) => it.acertou).length;
+  const respondidas = itens.filter((it) => it.respondida).length;
+  const aproveitamento = pct(acertos, total);
+  const cor = aproveitamento >= 70 ? "var(--success)" : aproveitamento >= 50 ? "var(--warn)" : "var(--danger)";
+  const faltaram = total - itens.length; // já filtradas; informa se o registro tinha mais
+
+  // Aproveitamento por matéria (só quando há mais de uma).
+  const porMat = new Map();
+  for (const it of itens) {
+    const k = discKey(st, it.q);
+    if (!porMat.has(k)) porMat.set(k, { nome: nomeDisc(st, k), acertos: 0, total: 0 });
+    const m = porMat.get(k);
+    m.total += 1;
+    if (it.acertou) m.acertos += 1;
+  }
+  const mats = [...porMat.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  const matHTML =
+    mats.length > 1
+      ? `<div class="sim-corr-mats">${mats
+          .map((m) => {
+            const p = pct(m.acertos, m.total);
+            const c = p >= 70 ? "var(--success)" : p >= 50 ? "var(--warn)" : "var(--danger)";
+            return `<div class="sim-mat-linha">
+                <span class="sim-mat-nome">${esc(m.nome)}</span>
+                <span class="sim-mat-barra"><span class="sim-mat-fill" style="width:${p}%;background:${c}"></span></span>
+                <span class="sim-mat-num"><b class="num" style="color:${c}">${p}%</b> · <span class="num">${m.acertos}/${m.total}</span></span>
+              </div>`;
+          })
+          .join("")}</div>`
+      : "";
+
+  const listaHTML = itens
+    .map((it, n) => {
+      const q = it.q;
+      const status = !it.respondida ? `<span class="sim-status nao">não respondida</span>` : it.acertou ? `<span class="sim-status ok">acertou</span>` : `<span class="sim-status erro">errou</span>`;
+      return `<div class="card questao">
+          <div class="questao-meta">${formato === "ce" ? `<span class="mini-tag">Certo/Errado</span>` : ""}${seloBadge(q.selo, q.fonte)}${q.referencia ? `<span class="questao-ref-chip">${icone("paperclip")} ${esc(q.referencia)}</span>` : ""}</div>
+          <div class="questao-enun"><b>${n + 1}.</b> ${esc(q.enunciado)} ${status}</div>
+          <div class="questao-alts">${altsCorrecaoHTML(q, formato, it, null)}</div>
+        </div>`;
+    })
+    .join("");
+
+  return `<div class="sim-corr">
+      <div class="sim-corr-topo">
+        <div class="sim-corr-nota" style="color:${cor}">${aproveitamento}%</div>
+        <div class="sim-corr-placar">${plural(acertos, "acerto", "acertos")} · ${plural(respondidas - acertos, "erro", "erros")} · ${total - respondidas} em branco <span class="muted">em ${total}</span></div>
+        ${faltaram > 0 ? `<div class="muted small">${faltaram} ${faltaram === 1 ? "questão foi removida" : "questões foram removidas"} depois deste simulado.</div>` : ""}
+      </div>
+      ${matHTML}
+      <div class="sim-corr-lista lista-questoes">${listaHTML}</div>
+    </div>`;
+}
+
+// ---------- Impressão (ligada ao botão "Imprimir folha" do cabeçalho, em simulados.js) ----------
 export function imprimirSimulado(app) {
   const formato = formatoAtivo;
   const ss = SS[formato];

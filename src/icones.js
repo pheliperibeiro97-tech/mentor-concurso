@@ -71,6 +71,7 @@ import bookmark from "lucide-static/icons/bookmark.svg?raw";
 import files from "lucide-static/icons/files.svg?raw";
 // Materiais + Lei Seca + Questões + Acompanhamento
 import eye from "lucide-static/icons/eye.svg?raw";
+import expand from "lucide-static/icons/expand.svg?raw";
 import search from "lucide-static/icons/search.svg?raw";
 import lock from "lucide-static/icons/lock.svg?raw";
 import hourglass from "lucide-static/icons/hourglass.svg?raw";
@@ -95,6 +96,7 @@ import eraser from "lucide-static/icons/eraser.svg?raw";
 // Controles genéricos (fechar, mídia, navegação, ações) — substituem emojis/glifos avulsos
 import x from "lucide-static/icons/x.svg?raw";
 import play from "lucide-static/icons/play.svg?raw";
+import keyboard from "lucide-static/icons/keyboard.svg?raw";
 import pause from "lucide-static/icons/pause.svg?raw";
 import refreshCw from "lucide-static/icons/refresh-cw.svg?raw";
 import rotateCcw from "lucide-static/icons/rotate-ccw.svg?raw";
@@ -193,6 +195,7 @@ const MAPA = {
   bookmark,
   files,
   eye,
+  expand,
   search,
   lock,
   hourglass,
@@ -214,6 +217,7 @@ const MAPA = {
   eraser,
   x,
   play,
+  keyboard,
   pause,
   "refresh-cw": refreshCw,
   "rotate-ccw": rotateCcw,

@@ -8,6 +8,7 @@ import * as ia from "./ia.js";
 import * as iaProv from "./ia-provider.js";
 import * as bancas from "./bancas.js";
 import * as areas from "./areas.js";
+import { parsearLeiHTML, buscarLeiPlanalto, selecionarArtigos } from "./legis.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
 import { detectarEstrutura } from "./estrutura.js";
@@ -65,6 +66,7 @@ function defaultState() {
     questoes: [],
     tentativas: [],
     errosManuais: [],
+    lembretes: [], // recados livres do usuário (não é estudo): {id, texto, data|null, feito, criadoEm}
     flashcards: [],
     revisoes: [],
     sessoes: [],
@@ -231,6 +233,12 @@ function fontesIndexaveis(state) {
     const t = stripHTML(r.conteudoHTML);
     out.push({ id: r.id, tipo: "resumo", titulo: r.titulo, texto: t, paginas: null, sig: sigTexto(t) });
   }
+  // Lei Seca / Jurisprudência: o texto de cada artigo/súmula/tese vira fonte pesquisável no chat.
+  for (const i of state.indicacoes || []) {
+    const t = (i.texto || "").trim();
+    if (t.length < 20) continue;
+    out.push({ id: i.id, tipo: i.tipo === "juris" ? "juris" : "leiseca", titulo: `${i.referencia}${i.tribunal ? " (" + i.tribunal + ")" : ""}`, texto: t, paginas: null, sig: sigTexto(t) });
+  }
   return out.filter((f) => f.texto.trim().length >= 20);
 }
 // Trechos (com página, quando houver) de uma fonte.
@@ -255,7 +263,7 @@ function cosseno(a, b) {
   return na && nb ? d / Math.sqrt(na * nb) : 0;
 }
 function origemDoItem(it) {
-  const tipo = it.tipo === "resumo" ? "Resumo" : "Material";
+  const tipo = it.tipo === "resumo" ? "Resumo" : it.tipo === "leiseca" ? "Lei Seca" : it.tipo === "juris" ? "Jurisprudência" : "Material";
   return `${tipo}: ${it.titulo}${it.pagina ? ` (pág. ${it.pagina})` : ""}`;
 }
 
@@ -296,6 +304,165 @@ function iaExtras(st, { topicoId, topico, dificuldade } = {}) {
     topico: nomeTopico || "",
     dificuldade: dificuldade || "medio",
   };
+}
+
+// ---- Importar LEI/JURISPRUDÊNCIA em TEXTO CORRIDO (não é lista) → fatiar em unidades ----
+// (C1 lei → artigos; C2 juris → súmulas/teses). Determinístico; o informativo em prosa,
+// sem marcadores claros, cai no fallback de IA (estruturarLeiSeca).
+
+// Detecta o nome curto da norma no cabeçalho (para compor a referência: "Art. 1º, Lei 8.112/1990").
+function detectarNomeLei(texto) {
+  const h = String(texto || "").slice(0, 1200);
+  if (/constitui[çc][aã]o\s+federal|constitui[çc][aã]o\s+da\s+rep[úu]blica/i.test(h)) return "CF";
+  if (/c[óo]digo\s+de\s+processo\s+penal/i.test(h)) return "CPP";
+  if (/c[óo]digo\s+de\s+processo\s+civil/i.test(h)) return "CPC";
+  if (/c[óo]digo\s+penal/i.test(h)) return "CP";
+  if (/c[óo]digo\s+civil/i.test(h)) return "CC";
+  if (/c[óo]digo\s+tribut[áa]rio/i.test(h)) return "CTN";
+  if (/consolida[çc][aã]o\s+das\s+leis\s+do\s+trabalho|\bCLT\b/i.test(h)) return "CLT";
+  const m = h.match(/lei\s+(?:complementar\s+)?n[ºo°.]*\s*([\d.]+)(?:[^\n]*?\bde\b[^\n]*?(\d{4}))?/i);
+  if (m) return `Lei ${m[1]}${m[2] ? `/${m[2]}` : ""}`;
+  return null;
+}
+// Normaliza o rótulo do artigo: "Artigo 1o" / "art 1" → "Art. 1º".
+function normalizarArt(label) {
+  const m = String(label || "").match(/(\d+)\s*([ºo°]?)\s*(-?\s*[A-Z])?/i);
+  if (!m) return String(label || "").trim();
+  const letra = m[3] ? "-" + m[3].replace(/[-\s]/g, "").toUpperCase() : "";
+  const ord = m[1] === "1" || m[1] === "2" || m[1] === "3" || m[1] === "4" || m[1] === "5" || m[1] === "6" || m[1] === "7" || m[1] === "8" || m[1] === "9" ? "º" : (m[2] ? "º" : "");
+  return `Art. ${m[1]}${ord}${letra}`;
+}
+// Divide um texto por marcadores (regex com 1 grupo = rótulo), devolvendo [{label, texto}].
+function dividirPorMarcador(texto, re) {
+  const t = String(texto || "").replace(/\r/g, "");
+  const marks = [];
+  let m;
+  while ((m = re.exec(t))) {
+    const label = m[1];
+    marks.push({ idx: m.index + m[0].indexOf(label), label });
+  }
+  const out = [];
+  for (let i = 0; i < marks.length; i++) {
+    const ini = marks[i].idx;
+    const fim = i + 1 < marks.length ? marks[i + 1].idx : t.length;
+    const bloco = t.slice(ini, fim).replace(/\s+\n/g, "\n").trim();
+    if (bloco) out.push({ label: marks[i].label, texto: bloco });
+  }
+  return out;
+}
+// C1: lei em texto corrido → um item por artigo (texto = corpo com §/incisos/alíneas).
+function fatiarLeiEmArtigos(texto) {
+  const re = /(?:^|\n)\s*(Art(?:igo)?\.?\s*\d+\s*[ºo°]?(?:\s*[-.]\s*[A-Z])?)/gi;
+  const partes = dividirPorMarcador(texto, re);
+  if (partes.length < 2) return [];
+  const lei = detectarNomeLei(texto);
+  return partes.map((p) => ({
+    referencia: normalizarArt(p.label) + (lei ? `, ${lei}` : ""),
+    texto: p.texto,
+    observacao: "",
+    tribunal: null,
+    categoria: null,
+  }));
+}
+// C2: jurisprudência em texto corrido → um item por súmula/tema/enunciado (com tribunal/categoria).
+function fatiarJurisEmUnidades(texto) {
+  const re = /(?:^|\n)\s*((?:S[úu]mula(?:\s+Vinculante)?|Tema(?:\s+Repetitivo)?|Enunciado|OJ)\s*(?:n[ºo°.]*\s*)?\d+)/gi;
+  const partes = dividirPorMarcador(texto, re);
+  if (partes.length < 2) return [];
+  return partes.map((p) => {
+    const ref = p.label.replace(/\s+/g, " ").trim();
+    let tribunal = null;
+    const mt = p.texto.match(/\b(STF|STJ|TST|TSE|STM|TJ[A-Z]{2}|TRF-?\s?\d|TRT-?\s?\d+)\b/i);
+    if (mt) tribunal = mt[1].toUpperCase().replace(/[\s-]/g, "");
+    else if (/s[úu]mula\s+vinculante/i.test(ref)) tribunal = "STF"; // SV é sempre do STF
+    let categoria = null;
+    if (/^s[úu]mula\s+vinculante/i.test(ref)) categoria = "Súmula Vinculante"; // SV do STF (vinculante)
+    else if (/^s[úu]mula/i.test(ref)) categoria = "Súmula";
+    else if (/^tema/i.test(ref)) categoria = "Tema repetitivo";
+    else if (/^(enunciado|oj)/i.test(ref)) categoria = "Precedente obrigatório";
+    return { referencia: ref, texto: p.texto, observacao: "", tribunal, categoria };
+  });
+}
+// Seleciona palavras-chave para LACUNA (cloze) na letra: números/prazos, quóruns, verbos de
+// comando e termos restritivos; pula o nº do próprio dispositivo/enunciado. → [{idx,len,palavra}].
+function selecionarLacunas(texto, max = 4) {
+  const t = String(texto || "");
+  if (t.length < 20) return [];
+  const padroes = [
+    /\b\d+(?:\.\d+)?\s*%?\b/g, // números, prazos, percentuais (alta prioridade)
+    /\b(?:dois\s+ter[çc]os|tr[êe]s\s+quintos|maioria\s+absoluta|maioria\s+simples|unanimidade)\b/gi, // quóruns
+    /\b(?:pode|poder[áa]|deve|dever[áa]|vedad[ao]|proibid[ao]|permitid[ao]|obrigat[óo]ri[ao]|facultad[ao])\b/gi, // verbos de comando
+    /\b(?:somente|salvo|exceto|independentemente|ressalvad[ao]s?)\b/gi, // restritivos
+  ];
+  const ocup = [];
+  const alvos = [];
+  for (const re of padroes) {
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(t))) {
+      const ini = m.index, fim = ini + m[0].length;
+      if (ocup.some((o) => ini < o.fim && fim > o.ini)) continue;
+      if (/\b(?:art(?:igo)?|s[úu]mula(?:\s+vinculante)?|tema|enunciado|oj)\.?\s*$/i.test(t.slice(Math.max(0, ini - 20), ini))) continue;
+      ocup.push({ ini, fim });
+      alvos.push({ idx: ini, len: m[0].length, palavra: m[0] });
+    }
+  }
+  alvos.sort((a, b) => a.idx - b.idx);
+  return alvos.slice(0, max);
+}
+// Extrai a NORMA da referência (último segmento não-posicional): "art. 37, caput, CF" → "CF".
+function normaDaReferencia(ref) {
+  const segs = String(ref || "").split(",").map((s) => s.trim()).filter(Boolean);
+  for (let k = segs.length - 1; k >= 0; k--) {
+    const s = segs[k];
+    if (/^(caput|§|par[áa]grafo(\s*[úu]nico)?|inc\.?|inciso|al[íi]nea|[ivxlcdm]+|[a-z])$/i.test(s)) continue;
+    if (/^art/i.test(s)) continue;
+    return s;
+  }
+  return null;
+}
+// Normaliza o texto de um dispositivo para comparação de NOVIDADE LEGISLATIVA: minúsculas, sem
+// acentos, só letras/números/espaços, espaços colapsados. Assim, ruído de parser/formatação
+// (pontuação, maiúsculas, espaços duplos) NÃO vira falso positivo de "mudou".
+function normalizarTextoLei(s) {
+  return String(s || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+// Hash determinístico (djb2) do texto normalizado — identidade do conteúdo do artigo.
+function hashLei(s) {
+  const t = normalizarTextoLei(s);
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+// Detecta o ANO de um julgado/enunciado só quando há sinal CLARO de data (evita pegar número
+// solto): "de 2018", "em 2018", "j. 2018", "(2018)", "/2018". Faixa 1988 (CF) → ano corrente+1.
+function detectarAnoJuris(s) {
+  // Sinais de data: "de 2018", "em 2018", "j. 2018", "julgado em 2018", "(2018)", "/2018".
+  const m = String(s || "").match(/(?:\bde\b|\bem\b|\bjulg\w*\b(?:\s+em)?|\bj\.?|\(|\/)\s*((?:19|20)\d{2})\b/i);
+  const y = m ? +m[1] : null;
+  const atual = +todayISO().slice(0, 4);
+  return y && y >= 1988 && y <= atual + 1 ? y : null;
+}
+// Detecta CANCELAMENTO/SUPERAÇÃO anotado no texto de uma jurisprudência (conservador, só marcadores
+// claros): "(cancelada)", "(superada)", "súmula cancelada", "cancelada em…", "superada pelo Tema…".
+function detectarCanceladaJuris(s) {
+  const t = String(s || "").slice(0, 300);
+  return /\((?:\s*)(?:cancelad|superad|revogad)[ao]\b|\bs[úu]mula\s+cancelad[ao]\b|\b(?:cancelad|superad)a\s+(?:em|pel[ao])\b/i.test(t);
+}
+// Heurística: o texto é uma NORMA/COLETÂNEA corrida (não uma lista de referências)?
+// ≥2 marcadores, sem separador de lista "|", e com corpo (média de chars por unidade > 60).
+function pareceTextoCorrido(texto, tipo) {
+  const t = String(texto || "");
+  if (/\|/.test(t)) return false; // usuário usou separador de lista explícito
+  const re = tipo === "juris" ? /(?:^|\n)\s*(?:s[úu]mula|tema|enunciado|oj)\b/gi : /(?:^|\n)\s*art(?:igo)?\.?\s*\d/gi;
+  const n = (t.match(re) || []).length;
+  if (n < 2) return false;
+  return t.length / n > 60;
 }
 
 // Extrai um tempo escrito no próprio texto da tarefa: "(50 min)", "50 min", "1h", "1h30".
@@ -449,6 +616,8 @@ export const store = {
       if (!state.config.niveisDisciplina || typeof state.config.niveisDisciplina !== "object") state.config.niveisDisciplina = {};
       if (!Array.isArray(state.config.disciplinasAdiadas)) state.config.disciplinasAdiadas = [];
       if (!Array.isArray(state.revisoesTopico)) state.revisoesTopico = [];
+      if (!Array.isArray(state.revisoesFeitas)) state.revisoesFeitas = []; // log de conclusões (Central de Revisões)
+      if (!Array.isArray(state.simulados)) state.simulados = []; // histórico de simulados (app + externos)
       if (state.config.revisaoTopicoAuto === undefined) state.config.revisaoTopicoAuto = false;
       if (!Array.isArray(state.marcacoes)) state.marcacoes = [];
       if (!state.config.paletaMarcacao) state.config.paletaMarcacao = "padrao"; // padrao | daltonismo | contraste
@@ -485,7 +654,7 @@ export const store = {
   isOnboarded() {
     return !!state.meta.onboarded && !!state.concurso;
   },
-  // True quando há um provedor de IA online conectado (Gemini/Groq com chave).
+  // True quando há um provedor de IA online conectado (Gemini com chave, ou Claude local).
   // As funções GERATIVAS (gerar questões/flashcards por texto, comentar erro,
   // correção de mérito, resposta do chat) só funcionam quando isto é verdadeiro.
   iaDisponivel() {
@@ -1315,6 +1484,16 @@ export const store = {
     [state.aulas[i], state.aulas[j]] = [state.aulas[j], state.aulas[i]];
     commit();
   },
+  // Arrastar-para-reordenar: insere a aula arrastada ANTES da aula alvo.
+  reordenarAula(dragId, alvoId) {
+    if (!dragId || !alvoId || dragId === alvoId) return;
+    const from = state.aulas.findIndex((x) => x.id === dragId);
+    if (from < 0) return;
+    const [item] = state.aulas.splice(from, 1);
+    const to = state.aulas.findIndex((x) => x.id === alvoId);
+    state.aulas.splice(to < 0 ? state.aulas.length : to, 0, item);
+    commit();
+  },
   limparAulas() {
     state.aulas = [];
     commit();
@@ -1724,7 +1903,7 @@ export const store = {
   },
 
   // ---------- questões ----------
-  addQuestao({ topicoId, disciplinaId, enunciado, alternativas, gabarito, selo, fonte, referencia, nivel, formato, justificativa, provaId, anulada, assunto, banca, ano, orgao }) {
+  addQuestao({ topicoId, disciplinaId, enunciado, alternativas, gabarito, selo, fonte, referencia, nivel, formato, justificativa, provaId, anulada, assunto, banca, ano, orgao, treino, diff, indicacaoId, duelo }) {
     let discId = disciplinaId || null;
     if (topicoId) {
       const t = state.topicos.find((x) => x.id === topicoId);
@@ -1749,6 +1928,10 @@ export const store = {
       justificativa: (justificativa || "").trim() || null, // usada no C/E (feedback)
       provaId: provaId || null, // vínculo à prova anterior importada (quando houver)
       anulada: !!anulada, // questão anulada/sem gabarito definitivo (fora da pontuação)
+      // Drill "letra da lei" (Lei Seca/Jurisprudência): itens de treino gerados de uma indicação.
+      // Não aparecem na lista normal de Questões (só no Treinar); guardam o diff da alteração.
+      treino: treino ? { indicacaoId: indicacaoId || null, duelo: !!duelo } : null,
+      diff: diff && (diff.trechoOriginal || diff.trechoAlterado) ? { trechoOriginal: diff.trechoOriginal || "", trechoAlterado: diff.trechoAlterado || "" } : null,
       comentarioIA: null, // explicação do gabarito gerada sob demanda pela IA ()
       criadoEm: nowISO(),
     };
@@ -2027,7 +2210,10 @@ export const store = {
       let gabarito = Number(q.gabarito) || 0;
       if (gabarito < 0 || gabarito >= alternativas.length) gabarito = 0;
       this.addQuestao({
-        topicoId: q.topicoId !== undefined ? q.topicoId : topicoId || null,
+        // "Vincular todas ao tópico" (topicoId) é o PADRÃO: só cai nele quando a questão não
+        // trouxe um tópico próprio. O preview devolve null/"" (não undefined) quando fica "sem
+        // tópico", então tratamos null/"" como ausência para o padrão valer.
+        topicoId: q.topicoId != null && q.topicoId !== "" ? q.topicoId : topicoId || null,
         enunciado: q.enunciado.trim(), alternativas, gabarito, selo: "manual",
         referencia: q.referencia || null, assunto: q.assunto || null, banca: q.banca || null, ano: q.ano || null, orgao: q.orgao || null, nivel: q.nivel || null,
       });
@@ -2123,7 +2309,7 @@ export const store = {
     for (const q of itens || []) {
       if (!(q.enunciado || "").trim()) continue;
       this.addQuestaoCE({
-        topicoId: q.topicoId !== undefined ? q.topicoId : topicoId || null,
+        topicoId: q.topicoId != null && q.topicoId !== "" ? q.topicoId : topicoId || null,
         enunciado: q.enunciado.trim(), certo: !!q.certo, justificativa: (q.justificativa || "").trim(), selo: "manual",
         referencia: q.referencia || null, assunto: q.assunto || null, banca: q.banca || null, ano: q.ano || null, orgao: q.orgao || null, nivel: q.nivel || null,
       });
@@ -2282,9 +2468,13 @@ export const store = {
   },
 
   // ---------- erros manuais (inclusão/importação no caderno) ----------
-  addErroManual({ disciplinaId, topicoId, descricao, correto, suaResposta, motivoErro, comentario }) {
+  addErroManual({ disciplinaId, topicoId, descricao, correto, suaResposta, motivoErro, comentario, flashcardId }) {
+    // Salvar à mão um card que já entrou automático substitui o registro auto (evita duplicar).
+    if (flashcardId) state.errosManuais = state.errosManuais.filter((x) => x.flashcardId !== flashcardId);
     const e = {
       id: uid("errm"),
+      flashcardId: flashcardId || null,
+      auto: false,
       disciplinaId: disciplinaId || null,
       topicoId: topicoId || null,
       descricao: (descricao || "").trim(),
@@ -2310,6 +2500,63 @@ export const store = {
   removerErroManual(id) {
     state.errosManuais = state.errosManuais.filter((e) => e.id !== id);
     commit();
+  },
+
+  // ---------- lembretes (recados livres — texto + data opcional; não é estudo) ----------
+  // Ordem: pendentes primeiro (com data por data crescente, depois sem data), feitos por último.
+  lembretes() {
+    const arr = state.lembretes || [];
+    const rank = (l) => (l.feito ? 2 : 0);
+    return [...arr].sort((a, b) => {
+      const ra = rank(a), rb = rank(b);
+      if (ra !== rb) return ra - rb;
+      if (!a.feito) {
+        if (a.data && b.data) return a.data < b.data ? -1 : a.data > b.data ? 1 : 0;
+        if (a.data) return -1; // com data antes de sem data
+        if (b.data) return 1;
+      }
+      return (b.criadoEm || "").localeCompare(a.criadoEm || ""); // recentes primeiro
+    });
+  },
+  addLembrete(texto, data) {
+    const t = (texto || "").trim();
+    if (!t) return null;
+    if (!state.lembretes) state.lembretes = [];
+    const l = { id: uid("lem"), texto: t, data: data || null, feito: false, criadoEm: nowISO() };
+    state.lembretes.push(l);
+    commit();
+    return l;
+  },
+  editarLembrete(id, patch) {
+    const l = (state.lembretes || []).find((x) => x.id === id);
+    if (!l) return;
+    if (patch.texto !== undefined) l.texto = (patch.texto || "").trim();
+    if (patch.data !== undefined) l.data = patch.data || null;
+    commit();
+  },
+  toggleLembrete(id) {
+    const l = (state.lembretes || []).find((x) => x.id === id);
+    if (l) { l.feito = !l.feito; commit(); }
+  },
+  removerLembrete(id) {
+    state.lembretes = (state.lembretes || []).filter((l) => l.id !== id);
+    commit();
+  },
+  lembretesPendentes() {
+    return (state.lembretes || []).filter((l) => !l.feito).length;
+  },
+  // Lembretes com data já vencida (ou hoje) e ainda não feitos — o Mentor cobra estes.
+  lembretesVencidos() {
+    const hoje = todayISO();
+    return (state.lembretes || [])
+      .filter((l) => !l.feito && l.data && l.data <= hoje)
+      .sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+  },
+
+  // Classifica o motivo do erro de um flashcard (no registro AUTO criado ao "Errei").
+  classificarErroFlashcard(flashcardId, motivo) {
+    const e = state.errosManuais.find((x) => x.flashcardId === flashcardId);
+    if (e) { e.motivoErro = motivo || null; commit(); }
   },
   setMotivoErroManual(id, motivo) {
     const e = state.errosManuais.find((x) => x.id === id);
@@ -2531,10 +2778,30 @@ export const store = {
     if (!f) return;
     f.sm2 = sm2.revisar(f.sm2, quality);
     state.revisoes.push({ id: uid("rev"), flashcardId: id, nota: quality, data: nowISO() });
+    // Loop de fraqueza por assunto: além do reagendamento (SM-2), a nota conecta o flashcard
+    // ao Caderno de Erros — que é o razão de fraqueza do app (alimenta "erros para refazer" e
+    // é marcado por tópico/disciplina). "Errei" registra o card no Caderno (auto, sem duplicar);
+    // acertar bem depois ("Bom"/"Fácil") resolve e remove o registro AUTOMÁTICO (não mexe nos
+    // que você salvou à mão com motivo/observação).
+    if (quality === 0) {
+      const jaTem = state.errosManuais.some((e) => e.flashcardId === id);
+      if (!jaTem) {
+        state.errosManuais.push({
+          id: uid("errm"), flashcardId: id, auto: true,
+          disciplinaId: f.disciplinaId || null, topicoId: f.topicoId || null,
+          descricao: `[Flashcard] ${f.frente}`, correto: f.verso || "", suaResposta: "",
+          motivoErro: null, comentarioIA: f.comentarioIA || null, duvida: null, data: nowISO(),
+        });
+      }
+    } else if (quality >= 4) {
+      state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === id && e.auto));
+    }
     commit();
   },
   removerFlashcard(id) {
     state.flashcards = state.flashcards.filter((f) => f.id !== id);
+    // Remove registros AUTOMÁTICos órfãos deste card no Caderno (mantém os manuais).
+    state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === id && e.auto));
     commit();
   },
   // Vencidos (due <= hoje), excluindo SUSPENSOS (dispensados) e, opcionalmente,
@@ -2555,6 +2822,31 @@ export const store = {
     }
     return sm2.vencidos(arr);
   },
+  // Relatório dos flashcards: composição do baralho (novos/aprendizado/maduros), vencidos e
+  // desempenho das revisões no período (nº revisado + precisão, nota >= 3 = acerto).
+  flashcardsRelatorio(dias = 30) {
+    const ativos = state.flashcards.filter((f) => !f.suspenso);
+    const total = ativos.length;
+    const suspensos = state.flashcards.length - total;
+    const hoje = todayISO();
+    let vencidos = 0, atrasados = 0, novos = 0, maduros = 0, aprendizado = 0;
+    for (const f of ativos) {
+      const sm = f.sm2 || {};
+      const iv = sm.intervaloDias || 0, reps = sm.reps || 0;
+      if (sm.dueDate && sm.dueDate <= hoje) { vencidos += 1; if (sm.dueDate < hoje) atrasados += 1; }
+      if (reps === 0 && iv === 0) novos += 1;
+      else if (iv >= 15) maduros += 1;
+      else aprendizado += 1;
+    }
+    const limite = addDays(hoje, -(Math.max(1, dias) - 1));
+    const revs = state.revisoes.filter((r) => r.flashcardId && (r.data || "").slice(0, 10) >= limite);
+    const revisados = revs.length;
+    const acertos = revs.filter((r) => (r.nota || 0) >= 3).length;
+    return {
+      total, suspensos, vencidos, atrasados, novos, maduros, aprendizado,
+      revisados, acertos, precisao: revisados ? Math.round((acertos / revisados) * 100) : null, dias,
+    };
+  },
   // Adia o card para daqui a N dias (sai da revisão de hoje, sem mexer no SM-2).
   adiarFlashcard(id, dias = 1) {
     const f = state.flashcards.find((x) => x.id === id);
@@ -2573,23 +2865,29 @@ export const store = {
   },
 
   // ---------- sessões / ciclo ----------
-  registrarSessao({ fase, topicoId, tempoSeg, paginas, paginaInicial, paginaFinal, qAcertos, qErros, comentario, data, missaoId, concluirMissao, agendarRevisao, material, videoIni, videoFim }) {
+  registrarSessao({ fase, topicoId, tempoSeg, paginas, paginaInicial, paginaFinal, qAcertos, qErros, comentario, data, missaoId, concluirMissao, agendarRevisao, material, videoIni, videoFim, aulaId, materiais, marcarConcluido, revisaoEscada, questoesLink }) {
     const vIni = Number.isFinite(+videoIni) && +videoIni > 0 ? Math.round(+videoIni) : null;
     const vFim = Number.isFinite(+videoFim) && +videoFim >= (vIni || 0) ? Math.round(+videoFim) : null;
     const s = {
       id: uid("sess"),
       fase,
       topicoId: topicoId || null,
+      aulaId: aulaId || null, // aula do cursinho vinculada (opcional) — [[aulas]]
       tempoSeg: tempoSeg || 0,
       paginas: paginas || 0,
       paginaInicial: paginaInicial || null,
       paginaFinal: paginaFinal || null,
       qAcertos: qAcertos || 0,
       qErros: qErros || 0,
+      questoesLink: (questoesLink || "").trim() || null, // link do site de questões (opcional)
       missaoId: missaoId || null, // tarefa vinculada (opcional)
       material: (material || "").trim() || null, // aula/material assistido (ex.: "Aula 01")
       videoIni: vIni, // minuto inicial da videoaula assistida (opcional)
       videoFim: vFim, // minuto final da videoaula assistida (opcional)
+      // Detalhamento rico da sessão (v4): múltiplas leituras/vídeos. Os campos legados
+      // acima seguem preenchidos pelo item principal, então Acompanhamento/estatísticas
+      // não quebram; este objeto guarda o resto para exibição futura.
+      materiais: materiais && typeof materiais === "object" ? materiais : null,
       comentario: (comentario || "").trim() || null, // observação livre da sessão
       // data escolhida (yyyy-mm-dd) → meio-dia para evitar troca de dia por fuso; senão agora.
       data: data ? `${data}T12:00:00.000Z` : nowISO(),
@@ -2601,13 +2899,22 @@ export const store = {
       const m = state.missoes.find((x) => x.id === missaoId);
       if (m) m.concluida = true;
     }
-    // Curva do esquecimento por TÓPICO (dir.2): sessão de ESTUDO de um tópico, com
-    // o opt-in ligado, agenda a revisão em 24h (a menos que o usuário desmarque na sessão).
-    // Desmarcar deixa o tópico PENDENTE (o Mentor sugere agendar depois).
-    if (fase === "E" && topicoId && state.config.revisaoTopicoAuto) {
-      if (agendarRevisao === false) {
-        s.revisaoPendente = true; // não agendou agora; vira sugestão do Mentor
-      } else {
+    // Marcar o TÓPICO como finalizado ao registrar (botão explícito da tela) — usa o
+    // mesmo campo `concluido` do toggle do edital.
+    if (marcarConcluido && topicoId) {
+      const t = state.topicos.find((x) => x.id === topicoId);
+      if (t) t.concluido = true;
+    }
+    // Curva do esquecimento por TÓPICO (dir.2). A tela decide via toggle explícito
+    // (agendarRevisao): se ligado, agenda pela escada escolhida (padrão = REV_TOP_ESCADA);
+    // se desligado num tópico de estudo com opt-in, fica PENDENTE (o Mentor sugere depois).
+    if (topicoId) {
+      const escada = Array.isArray(revisaoEscada) && revisaoEscada.length ? revisaoEscada : undefined;
+      if (agendarRevisao === true) {
+        this.agendarRevisaoTopico(topicoId, escada);
+      } else if (agendarRevisao === false && fase === "E" && state.config.revisaoTopicoAuto) {
+        s.revisaoPendente = true;
+      } else if (agendarRevisao === undefined && fase === "E" && state.config.revisaoTopicoAuto) {
         this.agendarRevisaoTopico(topicoId);
       }
     }
@@ -2618,7 +2925,7 @@ export const store = {
   editarSessao(id, patch) {
     const s = state.sessoes.find((x) => x.id === id);
     if (!s) return;
-    for (const k of ["fase", "topicoId", "tempoSeg", "paginas", "paginaInicial", "paginaFinal", "qAcertos", "qErros", "missaoId"]) {
+    for (const k of ["fase", "topicoId", "aulaId", "tempoSeg", "paginas", "paginaInicial", "paginaFinal", "qAcertos", "qErros", "questoesLink", "missaoId", "materiais"]) {
       if (patch[k] !== undefined) s[k] = patch[k];
     }
     if (patch.comentario !== undefined) s.comentario = (patch.comentario || "").trim() || null;
@@ -2654,12 +2961,15 @@ export const store = {
   },
 
   // ---------- lei seca / jurisprudência (META a cumprir × MEMÓRIA gravada) ----------
-  addIndicacao({ tipo, modo, disciplinaId, topicoId, referencia, texto, observacao, tribunal, categoria }) {
+  addIndicacao({ tipo, modo, disciplinaId, topicoId, referencia, texto, observacao, tribunal, categoria, revogado, semTarefa, metaLeitura, fonteUrl, leiHash, novidadeEm, revogadoEm, ano }) {
     let discId = disciplinaId || null;
     if (topicoId) {
       const t = state.topicos.find((x) => x.id === topicoId);
       if (t) discId = t.disciplinaId;
     }
+    const ehJurisTipo = (tipo || "lei") === "juris";
+    // Súmula Vinculante é sempre do STF; cancelamento/superação pode vir anotado no texto colado.
+    const canceladaAuto = ehJurisTipo && !revogado && detectarCanceladaJuris(`${referencia || ""} ${observacao || ""} ${texto || ""}`);
     const ind = {
       id: uid("ind"),
       tipo: tipo || "lei", // 'lei' | 'juris'
@@ -2669,17 +2979,27 @@ export const store = {
       referencia: (referencia || "").trim(),
       texto: (texto || "").trim(),
       observacao: (observacao || "").trim(), // lembrete/ressalva livre (não é o trecho)
-      tribunal: tribunal || null, // juris: TJSP | STJ | STF
-      categoria: categoria || null, // juris: Súmula | Tema repetitivo
+      tribunal: tribunal || (categoria === "Súmula Vinculante" ? "STF" : null), // SV é sempre do STF
+      categoria: categoria || null, // juris: Súmula | Súmula Vinculante | Tema repetitivo | Precedente
+      ano: ehJurisTipo ? (ano || detectarAnoJuris(`${referencia || ""} ${observacao || ""} ${texto || ""}`)) : null, // ano do entendimento (idade)
+      revogado: !!revogado || canceladaAuto, // lei revogada OU súmula cancelada / tese superada
+      revogadoEm: revogadoEm || (canceladaAuto ? todayISO() : null), // data marcada
+      metaLeitura: !!metaLeitura, // meta CRUA de leitura (aba Metas), sem transcrever a letra
+      fonteUrl: fonteUrl || null, // origem oficial (Planalto) para conferir novidade legislativa
+      leiHash: leiHash || null, // hash do texto na importação (detecta mudança na reconsulta)
+      novidadeEm: novidadeEm || null, // marcada como novidade legislativa nesta data
       lido: false,
       criadoEm: nowISO(),
     };
     state.indicacoes.push(ind);
-    // Só META vira missão de leitura (a cumprir). Memória não é tarefa.
-    if (ind.modo === "meta") {
+    // A TAREFA só nasce em METAS (modelo v3): apenas meta CRUA de leitura vira missão no
+    // Planejamento. A letra (Ler) e as importações NÃO criam tarefa.
+    if (ind.metaLeitura && !semTarefa) {
+      const ref = ind.referencia;
+      const titulo = /^\s*(ler|estudar|revisar|decorar|reler)\b/i.test(ref) ? ref : `Ler ${ref}`;
       state.missoes.push({
         id: uid("miss"),
-        titulo: `Ler ${tipo === "juris" ? "jurisprudência" : "lei seca"}: ${ind.referencia}`,
+        titulo,
         topicoId: ind.topicoId,
         origem: "indicacao",
         indicacaoId: ind.id,
@@ -2695,7 +3015,7 @@ export const store = {
   editarIndicacao(id, patch) {
     const ind = state.indicacoes.find((x) => x.id === id);
     if (!ind) return;
-    for (const k of ["referencia", "texto", "observacao", "tribunal", "categoria", "topicoId", "disciplinaId"]) {
+    for (const k of ["referencia", "texto", "observacao", "tribunal", "categoria", "topicoId", "disciplinaId", "ano"]) {
       if (patch[k] !== undefined) ind[k] = patch[k];
     }
     if (patch.topicoId !== undefined && ind.topicoId) {
@@ -2720,23 +3040,82 @@ export const store = {
     state.marcacoes = state.marcacoes.filter((m) => !(m.alvoTipo === "indicacao" && m.alvoId === id));
     commit();
   },
-  // Converte uma META (referência a ler) em item de MEMÓRIA (revisão espaçada).
-  // Deixa de ser tarefa: remove a missão "Ler ..." associada e zera o "lido".
-  converterIndicacaoParaMemoria(id) {
+  // PROMOVER para Memorizar (modelo v3): o dispositivo CONTINUA no "Ler" (não é movido) e
+  // passa a aparecer também em "Memorizar", com revisão espaçada. Não mexe na missão nem no modo.
+  promoverIndicacao(id, dias = 1) {
     const ind = state.indicacoes.find((x) => x.id === id);
-    if (!ind || ind.modo === "memoria") return false;
-    ind.modo = "memoria";
-    ind.lido = false;
-    state.missoes = state.missoes.filter((m) => m.indicacaoId !== id);
+    if (!ind) return false;
+    ind.promovido = true;
+    if (!ind.revisao) { const d = Math.max(1, parseInt(dias, 10) || 1); ind.revisao = { proxima: addDays(todayISO(), d), intervalo: d }; }
     commit();
     return true;
+  },
+  // Promove em LOTE os dispositivos de MAIOR incidência (top fração) para Memorizar — transforma
+  // o mapa de incidência (Raio-X) num plano de revisão espaçada com 1 clique. Só a letra c/ texto.
+  promoverTopIncidencia(tipo = "lei", frac = 0.2) {
+    const com = state.indicacoes.filter((i) => i.tipo === tipo && !i.metaLeitura && !i.revogado && i.pqIncidencia != null && (i.texto || "").trim());
+    com.sort((a, b) => (b.pqIncidencia || 0) - (a.pqIncidencia || 0));
+    const n = Math.max(1, Math.ceil(com.length * frac));
+    let promovidos = 0;
+    for (const i of com.slice(0, n)) {
+      if (i.promovido) continue;
+      i.promovido = true;
+      if (!i.revisao) i.revisao = { proxima: addDays(todayISO(), 1), intervalo: 1 };
+      promovidos++;
+    }
+    commit();
+    return { total: n, promovidos, jaEstavam: n - promovidos };
+  },
+  // Tira o dispositivo de "Memorizar" (continua no "Ler"). Encerra a revisão espaçada.
+  despromoverIndicacao(id) {
+    const ind = state.indicacoes.find((x) => x.id === id);
+    if (!ind) return false;
+    ind.promovido = false;
+    ind.revisao = null;
+    commit();
+    return true;
+  },
+  // Marca (ou desmarca) um dispositivo como REVOGADO (lei) / CANCELADO / SUPERADO (juris): sai do
+  // estudo (Treinar/Raio-X/Memorizar) e aparece riscado no Ler. Ao marcar, tira da revisão espaçada
+  // e limpa o treino gerado (era da redação que não vale mais). Desmarcar só reativa.
+  marcarRevogado(id, valor = true) {
+    const ind = state.indicacoes.find((x) => x.id === id);
+    if (!ind) return false;
+    ind.revogado = !!valor;
+    ind.revogadoEm = valor ? todayISO() : null;
+    if (valor) {
+      ind.promovido = false;
+      ind.revisao = null;
+      if (this.limparTreinoDeIndicacao) this.limparTreinoDeIndicacao(id);
+    }
+    commit();
+    return true;
+  },
+  // META DE LEITURA (crua, sem transcrever a letra): "Ler art. 1º a 20 da CF". Nasce AQUI e
+  // vira tarefa no Planejamento (a importação NÃO cria tarefa). Reaproveita a missão de indicação.
+  criarMetaLeitura({ tipo = "lei", referencia, disciplinaId = null, topicoId = null, observacao = null } = {}) {
+    if (!(referencia || "").trim()) return null;
+    return this.addIndicacao({ tipo, modo: "meta", metaLeitura: true, referencia: referencia.trim(), disciplinaId, topicoId, observacao });
+  },
+  // Quebra uma meta crua em várias partes (cada parte = uma meta/ tarefa). Remove a meta-mãe.
+  // partes = ["art. 1º a 5º, CF", "art. 6º a 10, CF", ...].
+  quebrarMetaLeitura(id, partes) {
+    const mae = state.indicacoes.find((x) => x.id === id);
+    if (!mae) return 0;
+    const lista = (partes || []).map((s) => (s || "").trim()).filter(Boolean);
+    if (!lista.length) return 0;
+    for (const ref of lista) {
+      this.addIndicacao({ tipo: mae.tipo, modo: "meta", metaLeitura: true, referencia: ref, disciplinaId: mae.disciplinaId || null, topicoId: mae.topicoId || null });
+    }
+    this.removerIndicacao(id); // remove a mãe (e a missão dela)
+    return lista.length;
   },
   // Remove as METAS já concluídas (lidas) de um tipo (lei/juris), com as missões e
   // marcações associadas. Devolve quantas foram removidas.
   limparIndicacoesLidas(tipo) {
     const remover = new Set(
       state.indicacoes
-        .filter((i) => i.tipo === tipo && (i.modo || "meta") === "meta" && i.lido)
+        .filter((i) => i.tipo === tipo && i.metaLeitura && i.lido)
         .map((i) => i.id)
     );
     if (!remover.size) return 0;
@@ -2787,6 +3166,18 @@ export const store = {
     const j = i + (dir === "cima" ? -1 : 1);
     if (i < 0 || j < 0 || j >= ordem.length) return;
     [ordem[i], ordem[j]] = [ordem[j], ordem[i]];
+    state.config.dossieOrdem = ordem;
+    commit();
+  },
+  // Arrastar-para-reordenar: insere a seção arrastada ANTES da seção alvo.
+  reordenarDossieSecao(dragKey, alvoKey, todasKeys) {
+    if (!dragKey || !alvoKey || dragKey === alvoKey) return;
+    const ordem = this.ordemDossie(todasKeys);
+    const from = ordem.indexOf(dragKey);
+    if (from < 0) return;
+    ordem.splice(from, 1);
+    const to = ordem.indexOf(alvoKey);
+    ordem.splice(to < 0 ? ordem.length : to, 0, dragKey);
     state.config.dossieOrdem = ordem;
     commit();
   },
@@ -2933,7 +3324,7 @@ export const store = {
   // Quantos itens da memória estão vencidos (proxima <= hoje), por tipo (lei/juris) ou total.
   memoriasParaRevisar(tipo = null) {
     const hoje = todayISO();
-    return state.indicacoes.filter((i) => i.modo === "memoria" && (!tipo || i.tipo === tipo) && i.revisao && i.revisao.proxima <= hoje).length;
+    return state.indicacoes.filter((i) => (i.promovido || i.modo === "memoria") && !i.metaLeitura && (!tipo || i.tipo === tipo) && i.revisao && i.revisao.proxima <= hoje).length;
   },
 
   // ---- REVISÃO DE TÓPICO (dir.2) — curva do esquecimento do CONTEÚDO estudado ----
@@ -2944,15 +3335,25 @@ export const store = {
     return state.revisoesTopico.find((r) => r.topicoId === topicoId) || null;
   },
   // Cria ou REINICIA a trilha do tópico em 24h (sem duplicar).
-  agendarRevisaoTopico(topicoId) {
+  // Agenda (ou reinicia) a revisão de um tópico. `escada` (opcional) personaliza os
+  // intervalos: a 1ª revisão cai no PRIMEIRO degrau e as seguintes caminham pela escada
+  // conforme o desempenho (revisarTopico). Sem escada → usa REV_TOP_ESCADA (1ª em 1 dia).
+  agendarRevisaoTopico(topicoId, escada) {
     if (!topicoId) return null;
+    const esc =
+      Array.isArray(escada) && escada.length
+        ? [...new Set(escada.map((n) => Math.round(+n)).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b)
+        : null;
+    const primeiro = esc && esc.length ? esc[0] : 1;
     let r = state.revisoesTopico.find((x) => x.topicoId === topicoId);
     if (!r) {
-      r = { id: uid("revtop"), topicoId, proxima: addDays(todayISO(), 1), intervalo: 1, criadoEm: nowISO(), historico: [] };
+      r = { id: uid("revtop"), topicoId, proxima: addDays(todayISO(), primeiro), intervalo: primeiro, criadoEm: nowISO(), historico: [] };
+      if (esc && esc.length) r.escada = esc;
       state.revisoesTopico.push(r);
     } else {
-      r.proxima = addDays(todayISO(), 1);
-      r.intervalo = 1;
+      r.proxima = addDays(todayISO(), primeiro);
+      r.intervalo = primeiro;
+      if (esc && esc.length) r.escada = esc;
     }
     commit();
     return r;
@@ -2962,7 +3363,7 @@ export const store = {
   revisarTopico(topicoId, resultado) {
     const r = state.revisoesTopico.find((x) => x.topicoId === topicoId);
     if (!r) return null;
-    const ESCADA = this.REV_TOP_ESCADA;
+    const ESCADA = Array.isArray(r.escada) && r.escada.length ? r.escada : this.REV_TOP_ESCADA;
     let idx = ESCADA.indexOf(r.intervalo);
     if (idx < 0) idx = 1;
     if (resultado === "esqueci") idx = 0;
@@ -3269,13 +3670,36 @@ export const store = {
   // (inclui tabelas achatadas: referência, trecho e observação em linhas separadas; cabeçalhos
   // de dia/coluna ignorados; tribunal/categoria deduzidos da referência na jurisprudência).
   // Só recorre à IA se o parser não reconhecer NADA (prosa solta) e houver IA conectada.
-  async prepararIndicacoesAuto(texto, tipo) {
-    const itens = this.prepararIndicacoes(texto, tipo);
-    if (itens.length) return itens;
-    if (this.iaDisponivel()) {
+  // Prosa (não-lista) via IA: na JURISPRUDÊNCIA, um informativo/narrativa → extrair TESES
+  // (extrairTesesInformativo); se não vier nada, cai no estruturador de listas. Na lei, estrutura.
+  async _estruturarProsa(texto, tipo) {
+    if (!this.iaDisponivel()) return [];
+    if (tipo === "juris") {
+      try {
+        const teses = await iaProv.extrairTesesInformativo(state.config, { texto });
+        if (teses.length) return teses.map((t) => ({ referencia: t.referencia || "Tese", texto: t.texto, observacao: "", tribunal: t.tribunal || null, categoria: t.categoria || null }));
+      } catch (e) { console.error(e); }
+    }
+    try {
       const ia = await iaProv.estruturarLeiSeca(state.config, { texto, tipo });
       if (ia.length) return ia;
+    } catch (e) { console.error(e); }
+    return [];
+  },
+  async prepararIndicacoesAuto(texto, tipo) {
+    // (C1/C2) Texto CORRIDO de uma lei/coletânea (não é lista) → fatiar por artigo/súmula/tese.
+    if (pareceTextoCorrido(texto, tipo)) {
+      const fatiado = tipo === "juris" ? fatiarJurisEmUnidades(texto) : fatiarLeiEmArtigos(texto);
+      if (fatiado.length >= 2) return fatiado;
+      const ia = await this._estruturarProsa(texto, tipo);
+      if (ia.length) return ia;
+      if (fatiado.length) return fatiado;
     }
+    // LISTA de referências (comportamento original).
+    const itens = this.prepararIndicacoes(texto, tipo);
+    if (itens.length) return itens;
+    const ia = await this._estruturarProsa(texto, tipo);
+    if (ia.length) return ia;
     return itens;
   },
   // PREVIEW (não grava): estrutura o texto em itens {referencia, texto, observacao, tribunal, categoria}.
@@ -3311,6 +3735,7 @@ export const store = {
     };
     const normCat = (v) => {
       const s = (v || "").toLowerCase();
+      if (/s[uú]mula\s+vinculante|\bsv\b/.test(s)) return "Súmula Vinculante";
       if (/s[uú]mula/.test(s)) return "Súmula";
       if (/tema/.test(s)) return "Tema repetitivo";
       if (/precedente|enunciado|orienta/.test(s)) return "Precedente obrigatório";
@@ -3405,6 +3830,124 @@ export const store = {
     }
     return n;
   },
+  // Importar LEI do texto/HTML oficial (Planalto) — letra EXATA, sem OCR. Só prepara o preview.
+  // {html} (colado, com formatação p/ pegar revogado) OU {url} (busca no desktop/Tauri).
+  // intervalo (opcional): "121-127, 155" → só esses artigos. Devolve { norma, artigos, revogados }.
+  async prepararLei({ html, url, norma, intervalo } = {}) {
+    let h = html;
+    if (!h && url) h = await buscarLeiPlanalto(url); // Tauri; lança SEM_DESKTOP na web
+    if (!h || !h.trim()) return { norma: norma || null, artigos: [], revogados: 0 };
+    const r = parsearLeiHTML(h, { norma });
+    const arts = selecionarArtigos(r.artigos, intervalo);
+    return { norma: r.norma || norma || null, artigos: arts, revogados: arts.filter((a) => a.revogado).length };
+  },
+  // Grava os artigos escolhidos como indicações de LEI (com texto). Importar NÃO cria tarefa
+  // (semTarefa). Revogados ficam FORA por padrão. Devolve { n, revogados }.
+  aceitarLei(artigos, opts = {}) {
+    let n = 0, rev = 0;
+    for (const a of artigos || []) {
+      if (!(a.referencia || "").trim()) continue;
+      if (a.revogado && !opts.incluirRevogados) { rev++; continue; }
+      this.addIndicacao({
+        tipo: "lei",
+        modo: "meta",
+        semTarefa: !opts.comMeta, // comMeta → também vira tarefa de leitura no Planejamento
+        revogado: !!a.revogado,
+        disciplinaId: opts.disciplinaId || null,
+        topicoId: opts.topicoId || null,
+        referencia: a.referencia,
+        texto: a.texto,
+        fonteUrl: opts.fonteUrl || null, // origem oficial p/ conferir novidade depois
+        leiHash: hashLei(a.texto), // identidade do texto na importação
+      });
+      n++;
+    }
+    commit();
+    return { n, revogados: rev };
+  },
+  // NOVIDADE LEGISLATIVA — diff MECÂNICO (por hash de artigo) entre o texto GUARDADO e a fonte
+  // reconsultada (Planalto ou colado). Determinístico, sem IA. Classifica cada artigo em:
+  // alterado (mesma ref, hash≠) · novo (ref inexistente) · revogado (era vigente, agora <strike>).
+  // NÃO aplica nada — só devolve o diagnóstico para o usuário decidir. { norma } filtra a norma.
+  async compararLeiComFonte({ norma, url, html, intervalo } = {}) {
+    const prep = await this.prepararLei({ html, url, norma, intervalo });
+    const normaAlvo = norma || prep.norma;
+    // Guardados desta norma (a letra; ignora metas cruas). Compara pelo último segmento da ref.
+    const guardados = state.indicacoes.filter(
+      (i) => i.tipo === "lei" && !i.metaLeitura && normaDaReferencia(i.referencia) === normaAlvo
+    );
+    const porRef = new Map(guardados.map((i) => [i.referencia, i]));
+    const alterados = [], novos = [], revogados = [];
+    const refsFresh = new Set();
+    for (const a of prep.artigos) {
+      refsFresh.add(a.referencia);
+      const g = porRef.get(a.referencia);
+      if (!g) { if (!a.revogado) novos.push({ referencia: a.referencia, texto: a.texto }); continue; }
+      if (a.revogado && !g.revogado) { revogados.push({ referencia: a.referencia, indId: g.id }); continue; }
+      if (!a.revogado) {
+        const hNovo = hashLei(a.texto);
+        const hVelho = g.leiHash || hashLei(g.texto);
+        if (hNovo !== hVelho) alterados.push({ referencia: a.referencia, textoNovo: a.texto, textoAntigo: g.texto, indId: g.id });
+      }
+    }
+    return { norma: normaAlvo, url: url || null, alterados, novos, revogados, semMudanca: prep.artigos.length - alterados.length - novos.length - revogados.length };
+  },
+  // Aplica as novidades ESCOLHIDAS (o usuário decide item a item). Marca tudo como "novidade"
+  // (selo + data) para virar treino. decisoes = { alterados:[{indId,texto}], novos:[{referencia,texto}],
+  // revogados:[{indId, acao:'revogar'|'ignorar'}], disciplinaId }.
+  aplicarNovidadesLei(decisoes = {}) {
+    const hoje = todayISO();
+    let nAlt = 0, nNovo = 0, nRev = 0;
+    for (const a of decisoes.alterados || []) {
+      const ind = state.indicacoes.find((x) => x.id === a.indId);
+      if (!ind) continue;
+      ind.textoAnterior = ind.texto; // guarda a redação anterior (histórico leve)
+      ind.texto = a.texto;
+      ind.leiHash = hashLei(a.texto);
+      ind.novidadeEm = hoje;
+      this.limparTreinoDeIndicacao && this.limparTreinoDeIndicacao(ind.id); // treino antigo é da redação velha
+      nAlt++;
+    }
+    for (const nv of decisoes.novos || []) {
+      this.addIndicacao({
+        tipo: "lei", modo: "meta", semTarefa: true,
+        disciplinaId: decisoes.disciplinaId || null,
+        referencia: nv.referencia, texto: nv.texto,
+        leiHash: hashLei(nv.texto), novidadeEm: hoje,
+      });
+      nNovo++;
+    }
+    for (const rv of decisoes.revogados || []) {
+      if (rv.acao === "ignorar") continue;
+      const ind = state.indicacoes.find((x) => x.id === rv.indId);
+      if (!ind) continue;
+      ind.revogado = true;
+      ind.novidadeEm = hoje;
+      nRev++;
+    }
+    commit();
+    return { alterados: nAlt, novos: nNovo, revogados: nRev };
+  },
+  // Marca que a NOVIDADE de um artigo foi vista (some o selo). Reaproveita novidadeEm=null.
+  limparNovidade(id) {
+    const ind = state.indicacoes.find((x) => x.id === id);
+    if (ind) { ind.novidadeEm = null; commit(); }
+  },
+  // Quais normas têm origem oficial (fonteUrl) — para o botão "Conferir atualização".
+  normasComFonte(tipo = "lei") {
+    const m = new Map();
+    for (const i of state.indicacoes) {
+      if (i.tipo !== tipo || i.metaLeitura || !i.fonteUrl) continue;
+      const nm = normaDaReferencia(i.referencia) || "(sem norma)";
+      if (!m.has(nm)) m.set(nm, { norma: nm, url: i.fonteUrl, n: 0 });
+      m.get(nm).n++;
+    }
+    return [...m.values()];
+  },
+  // Quantos artigos estão marcados como NOVIDADE (selo) por tipo — alimenta o banner/Mentor.
+  novidadesPendentes(tipo = "lei") {
+    return state.indicacoes.filter((i) => i.tipo === tipo && !i.metaLeitura && i.novidadeEm).length;
+  },
   gerarFlashcardDeIndicacao(id) {
     const i = state.indicacoes.find((x) => x.id === id);
     if (!i) return null;
@@ -3414,10 +3957,162 @@ export const store = {
     const verso = i.texto || "(consulte a referência indicada)";
     return this.addFlashcard({ frente, verso, topicoId: i.topicoId, disciplinaId: i.disciplinaId, selo: "verde", fonte: { tipo: "lei", titulo: i.referencia } });
   },
+  // Flashcards pela IA a partir do texto de UMA indicação (pergunta/resposta, estilo estudo).
+  // Online (requer iaDisponivel()). Vincula à fonte lei/juris. Devolve os cards criados.
+  async gerarFlashcardsIADeIndicacao(id, n = 4, dificuldade = "medio") {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i || !(i.texto || "").trim()) return [];
+    const cards = await iaProv.gerarFlashcards(state.config, {
+      texto: i.texto, contexto: i.referencia, n,
+      ...iaExtras(state, { topicoId: i.topicoId, topico: i.referencia, dificuldade }),
+    });
+    const fonte = { tipo: i.tipo === "juris" ? "juris" : "lei", titulo: i.referencia };
+    return cards.map((c) => this.addFlashcard({ ...c, topicoId: i.topicoId, disciplinaId: i.disciplinaId, fonte, selo: "amarelo" }));
+  },
+  // F1 — CLOZE ("complete a lei"): gera cards de LACUNA a partir do texto da indicação,
+  // apagando palavras-chave (números/prazos, quóruns, verbos de comando, termos restritivos).
+  // Heurística LOCAL (sem IA/sem cota). Cada lacuna vira um flashcard qa (entra no SM-2/Central).
+  gerarClozeDeIndicacao(id, max = 4) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return [];
+    const texto = (i.texto || "").trim();
+    const escolhidos = selecionarLacunas(texto, max);
+    if (!escolhidos.length) return [];
+    const fonte = { tipo: i.tipo === "juris" ? "juris" : "lei", titulo: i.referencia };
+    return escolhidos.map((a) =>
+      this.addFlashcard({
+        frente: `${i.referencia} — complete:\n${texto.slice(0, a.idx)}______${texto.slice(a.idx + a.len)}`,
+        verso: a.palavra,
+        topicoId: i.topicoId,
+        disciplinaId: i.disciplinaId,
+        selo: "verde",
+        fonte,
+      })
+    );
+  },
+  // E — Memorizar pela LETRA: teste de recall inline (texto com lacunas + revelar), sem SM-2
+  // (a graduação continua nos botões esqueci/lembrei/fácil do item). Devolve texto + lacunas.
+  lacunasDeIndicacao(id, max = 6) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return null;
+    const texto = (i.texto || "").trim();
+    const lacunas = selecionarLacunas(texto, max);
+    return { referencia: i.referencia, texto, lacunas };
+  },
+  // O — VIGÊNCIA: normas (leis) cuja conferência mais recente passou de ~N meses. Data efetiva
+  // de um artigo = vigenciaEm (conferida) ou criadoEm. Devolve [{norma, meses, ids}] a conferir.
+  _panoramaVigencia(meses = 6) {
+    const limite = addDays(todayISO(), -Math.round(meses * 30.4));
+    const porNorma = new Map();
+    for (const i of state.indicacoes) {
+      if (i.tipo !== "lei") continue;
+      const norma = normaDaReferencia(i.referencia);
+      if (!norma) continue;
+      const d = String(i.vigenciaEm || i.criadoEm || "").slice(0, 10);
+      if (!porNorma.has(norma)) porNorma.set(norma, { recente: d, ids: [i.id] });
+      else { const c = porNorma.get(norma); if (d > c.recente) c.recente = d; c.ids.push(i.id); }
+    }
+    const out = [];
+    for (const [norma, v] of porNorma) {
+      if (v.recente && v.recente < limite) out.push({ norma, meses: Math.max(1, Math.round(daysBetween(v.recente, todayISO()) / 30.4)), ids: v.ids });
+    }
+    out.sort((a, b) => b.meses - a.meses);
+    return out;
+  },
+  // Marca a vigência de uma norma como conferida HOJE (em todos os artigos daquela lei).
+  marcarVigenciaConferida(id) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return null;
+    const norma = normaDaReferencia(i.referencia);
+    const hoje = todayISO();
+    let n = 0;
+    for (const x of state.indicacoes) {
+      if (x.tipo === "lei" && (norma ? normaDaReferencia(x.referencia) === norma : x.id === id)) { x.vigenciaEm = hoje; n++; }
+    }
+    commit();
+    return { norma: norma || i.referencia, n };
+  },
+  // K — QUEBRAR EM TESES: um informativo (narrativa) salvo como 1 item vira teses individuais
+  // (indicações de jurisprudência). Online (IA). O item original é mantido (é a "meta de leitura").
+  async quebrarEmTeses(id) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i || i.tipo !== "juris") return [];
+    const texto = (i.texto || "").trim();
+    if (texto.length < 120) return [];
+    const teses = await iaProv.extrairTesesInformativo(state.config, { texto });
+    const criadas = [];
+    for (const t of teses) {
+      if (!(t.referencia || t.texto)) continue;
+      criadas.push(this.addIndicacao({
+        tipo: "juris",
+        modo: i.modo,
+        disciplinaId: i.disciplinaId,
+        topicoId: i.topicoId,
+        referencia: t.referencia || "Tese",
+        texto: t.texto,
+        observacao: "",
+        tribunal: t.tribunal || i.tribunal || null,
+        categoria: t.categoria || null,
+      }));
+    }
+    return criadas;
+  },
+  // Vínculo súmula/tese ↔ artigo: uma jurisprudência que CITA "art. N" (da mesma norma) liga-se
+  // à indicação de lei correspondente, e vice-versa. Detecção automática por referência.
+  vinculosDaIndicacao(id) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return [];
+    const artsDe = (txt) => { const out = []; const re = /\bart(?:igo)?\.?\s*(\d+)/gi; let m; while ((m = re.exec(txt || ""))) out.push(m[1]); return [...new Set(out)]; };
+    const numDe = (ref) => { const m = String(ref || "").match(/\bart(?:igo)?\.?\s*(\d+)/i); return m ? m[1] : null; };
+    const normaDe = (s) => { const m = String(s || "").match(/\b(CF|CPC|CPP|CTN|CLT|CDC|CP|CC)\b|lei\s*(?:complementar\s*)?n?[ºo°.]*\s*[\d.]+/i); return m ? m[0].toUpperCase().replace(/\s+/g, " ") : null; };
+    if (i.tipo === "juris") {
+      const nums = new Set(artsDe(i.texto));
+      if (!nums.size) return [];
+      const normaTexto = normaDe(i.texto);
+      return state.indicacoes.filter((x) => x.tipo === "lei" && x.id !== i.id && nums.has(numDe(x.referencia)) && (() => {
+        const n = normaDe(x.referencia); return !n || !normaTexto || normaTexto.includes(n) || n.includes(normaTexto);
+      })());
+    }
+    const meu = numDe(i.referencia);
+    if (!meu) return [];
+    const minhaNorma = normaDe(i.referencia);
+    return state.indicacoes.filter((x) => x.tipo === "juris" && x.id !== i.id && artsDe(x.texto).includes(meu) && (() => {
+      const nt = normaDe(x.texto); return !minhaNorma || !nt || nt.includes(minhaNorma) || minhaNorma.includes(nt);
+    })());
+  },
+  // Índice de vínculos súmula↔artigo para a TELA INTEIRA de uma vez (evita O(n²): antes o render
+  // chamava vinculosDaIndicacao por item). Indexa leis por número de artigo e casa com os números
+  // citados no texto de cada jurisprudência. Devolve { indId: [indicações vinculadas] }.
+  mapaVinculos() {
+    const numDe = (ref) => { const m = String(ref || "").match(/\bart(?:igo)?\.?\s*(\d+)/i); return m ? m[1] : null; };
+    const artsDe = (txt) => { const out = []; const re = /\bart(?:igo)?\.?\s*(\d+)/gi; let m; while ((m = re.exec(txt || ""))) out.push(m[1]); return [...new Set(out)]; };
+    const normaDe = (s) => { const m = String(s || "").match(/\b(CF|CPC|CPP|CTN|CLT|CDC|CP|CC)\b|lei\s*(?:complementar\s*)?n?[ºo°.]*\s*[\d.]+/i); return m ? m[0].toUpperCase().replace(/\s+/g, " ") : null; };
+    const leiPorNum = new Map();
+    for (const l of state.indicacoes) {
+      if (l.tipo !== "lei") continue;
+      const n = numDe(l.referencia); if (!n) continue;
+      if (!leiPorNum.has(n)) leiPorNum.set(n, []);
+      leiPorNum.get(n).push(l);
+    }
+    const map = {};
+    const liga = (a, b) => { (map[a.id] = map[a.id] || []).push(b); };
+    for (const j of state.indicacoes) {
+      if (j.tipo !== "juris") continue;
+      const nums = artsDe(j.texto); if (!nums.length) continue;
+      const nt = normaDe(j.texto);
+      for (const n of nums) {
+        for (const l of leiPorNum.get(n) || []) {
+          const ln = normaDe(l.referencia);
+          if (!ln || !nt || nt.includes(ln) || ln.includes(nt)) { liga(j, l); liga(l, j); }
+        }
+      }
+    }
+    return map;
+  },
   // Gera questões pela IA a partir de uma indicação de lei seca OU jurisprudência.
   // Online (requer iaDisponivel()). Usa o trecho gravado; na falta dele, a própria
   // referência (ex.: "Súmula 473 STF") como âncora. Devolve um array de questões.
-  async gerarQuestoesDeIndicacao(id, n = 3, dificuldade = "medio") {
+  async gerarQuestoesDeIndicacao(id, n = 3, dificuldade = "medio", formato = "mc") {
     const i = state.indicacoes.find((x) => x.id === id);
     if (!i) return [];
     const base = (i.texto || "").trim() || (i.referencia || "").trim();
@@ -3425,22 +4120,133 @@ export const store = {
     const ehJuris = i.tipo === "juris";
     const rotulo = ehJuris ? `Jurisprudência${i.tribunal ? " (" + i.tribunal + ")" : ""}` : "Lei seca";
     const texto = `${rotulo}: ${i.referencia}\n\n${i.texto || ""}`.trim();
-    const qs = await iaProv.gerarQuestoes(state.config, {
+    // "Provável cobrança": direciona a IA para o que MAIS cai deste dispositivo, no estilo da banca.
+    const contexto = `${rotulo} — ${nomeContexto(state, i.topicoId)} · gere a PROVÁVEL COBRANÇA deste dispositivo (o que mais cai), no estilo da banca`;
+    const extras = iaExtras(state, { topicoId: i.topicoId, dificuldade });
+    const fonte = { tipo: ehJuris ? "juris" : "lei", titulo: i.referencia };
+    if (formato === "ce") {
+      const itens = await iaProv.gerarQuestoesCE(state.config, { texto, contexto, n, ...extras });
+      return itens.map((it) =>
+        this.addQuestao({
+          enunciado: it.afirmacao,
+          alternativas: ["Certo", "Errado"],
+          gabarito: it.certo ? 0 : 1,
+          formato: "ce",
+          justificativa: it.justificativa,
+          selo: it.selo || "amarelo",
+          topicoId: i.topicoId,
+          disciplinaId: i.disciplinaId,
+          referencia: i.referencia,
+          fonte,
+        })
+      );
+    }
+    const qs = await iaProv.gerarQuestoes(state.config, { texto, contexto, n, ...extras });
+    return qs.map((q) =>
+      this.addQuestao({ ...q, topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte })
+    );
+  },
+  // Itens de TREINO (drill "letra da lei") já gerados desta indicação (formato C/E, treino=true).
+  itensTreinoDeIndicacao(id) {
+    return state.questoes.filter((q) => q.treino && q.treino.indicacaoId === id);
+  },
+  // Itens de SÚMULA-DUELO (nº/tribunal trocado) desta indicação.
+  itensDueloDeIndicacao(id) {
+    return state.questoes.filter((q) => q.treino && q.treino.indicacaoId === id && q.treino.duelo);
+  },
+  // L1 — SÚMULA-DUELO: variante de jurisprudência onde a banca troca o NÚMERO ou o TRIBUNAL.
+  // 100% LOCAL (sabemos o correto): 1 item Certo + nº trocado + tribunal trocado, com diff colorido.
+  gerarSumulaDueloDeIndicacao(id) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i || i.tipo !== "juris") return [];
+    const m = String(i.referencia || "").match(/(\d+)/);
+    if (!m) return [];
+    const num = m[1];
+    const numFake = String(parseInt(num, 10) + 1);
+    const refBase = i.referencia.trim(); // ex.: "Súmula 473" · "Súmula Vinculante 13" · "Tema 1234"
+    const trib = i.tribunal || null;
+    // Tese = texto sem o prefixo de referência/tribunal (evita repetir "Súmula 473 STF" na afirmação).
+    let tese = (i.texto || "").trim().replace(/^\s*(?:s[úu]mula(?:\s+vinculante)?|tema(?:\s+repetitivo)?|enunciado|oj)\s*(?:n[ºo°.]*\s*)?\d+\s*(?:do\s+)?(?:stf|stj|tst|tse|tj[a-z]{2})?\s*[:.\-–]?\s*/i, "").trim();
+    if (!tese) tese = (i.texto || "").trim();
+    const fonte = { tipo: "juris", titulo: i.referencia };
+    const criados = [];
+    const add = (afirmacao, certo, orig, alt) =>
+      criados.push(this.addQuestao({
+        enunciado: afirmacao, alternativas: ["Certo", "Errado"], gabarito: certo ? 0 : 1, formato: "ce",
+        justificativa: certo ? `Atribuição correta: ${refBase}${trib ? " do " + trib : ""}.` : `Atribuição incorreta — o correto é ${refBase}${trib ? " do " + trib : ""}.`,
+        topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte, selo: "verde",
+        treino: true, indicacaoId: i.id, duelo: true, diff: certo ? null : { trechoOriginal: orig, trechoAlterado: alt },
+      }));
+    add(`${refBase}${trib ? " do " + trib : ""}: ${tese}`, true);
+    add(`${refBase.replace(num, numFake)}${trib ? " do " + trib : ""}: ${tese}`, false, num, numFake);
+    if (trib) {
+      const tribFake = /stf/i.test(trib) ? "STJ" : "STF";
+      add(`${refBase} do ${tribFake}: ${tese}`, false, trib, tribFake);
+    }
+    return criados;
+  },
+  // Remove os itens de treino desta indicação (e as tentativas ligadas a eles) — para regerar.
+  limparTreinoDeIndicacao(id) {
+    const ids = new Set(state.questoes.filter((q) => q.treino && q.treino.indicacaoId === id).map((q) => q.id));
+    if (!ids.size) return 0;
+    state.questoes = state.questoes.filter((q) => !ids.has(q.id));
+    state.tentativas = state.tentativas.filter((t) => !ids.has(t.questaoId));
+    commit();
+    return ids.size;
+  },
+  // DRILL: gera itens Certo/Errado "à moda da banca" a partir do TEXTO da indicação, com o diff
+  // (trecho original × alterado) para a correção colorida. Online. Marca treino=true (não polui
+  // a lista de Questões). O "verde" (correto) vem do texto guardado; descarta item cujo trecho
+  // original não exista no texto ou seja igual ao alterado (blindagem contra alucinação).
+  async gerarTreinoDeIndicacao(id, n = 6, dificuldade = "medio") {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return [];
+    const texto = (i.texto || "").trim();
+    if (!texto) return [];
+    const ehJuris = i.tipo === "juris";
+    // Literal (diff da palavra): lei, súmula e tema repetitivo. Paráfrase: informativo/precedente.
+    const literal = !ehJuris || /s[uú]mula|tema/i.test(i.categoria || "");
+    const itens = await iaProv.gerarLeiSecaCE(state.config, {
       texto,
-      contexto: `${rotulo} — ${nomeContexto(state, i.topicoId)}`,
+      referencia: i.referencia,
+      tipo: i.tipo,
+      literal,
       n,
       ...iaExtras(state, { topicoId: i.topicoId, dificuldade }),
     });
     const fonte = { tipo: ehJuris ? "juris" : "lei", titulo: i.referencia };
-    return qs.map((q) =>
-      this.addQuestao({
-        ...q,
-        topicoId: i.topicoId,
-        disciplinaId: i.disciplinaId,
-        referencia: i.referencia,
-        fonte,
-      })
-    );
+    const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+    const criadas = [];
+    for (const it of itens) {
+      // Nos ERRADOS: se há trecho válido (literal), monta o diff colorido. Para item LITERAL sem
+      // trecho válido, descarta (blindagem). Para PARÁFRASE (informativo), aceita C/E conceitual
+      // sem diff — o "verde/vermelho da palavra" não faz sentido num texto que já é resumo.
+      let diff = null;
+      if (!it.certo) {
+        const orig = it.trechoOriginal, alt = it.trechoAlterado;
+        const trechoValido = orig && alt && norm(orig) !== norm(alt) && norm(texto).includes(norm(orig));
+        if (trechoValido) diff = { trechoOriginal: orig, trechoAlterado: alt };
+        else if (literal) continue;
+      }
+      criadas.push(
+        this.addQuestao({
+          enunciado: it.afirmacao,
+          alternativas: ["Certo", "Errado"],
+          gabarito: it.certo ? 0 : 1,
+          formato: "ce",
+          justificativa: it.justificativa,
+          topicoId: i.topicoId,
+          disciplinaId: i.disciplinaId,
+          referencia: i.referencia,
+          fonte,
+          selo: "amarelo",
+          treino: true,
+          indicacaoId: i.id,
+          diff,
+        })
+      );
+    }
+    return criadas;
   },
 
   // ---------- trilhas / missões ----------
@@ -3943,7 +4749,7 @@ export const store = {
   // conectada. Cria o resumo com selo de IA (origem.tipo === "ia-sintese" → "confira").
   async gerarResumoSinteseIA(fontes, escopo) {
     if (!this.iaDisponivel()) {
-      const e = new Error("Conecte a IA (Gemini/Groq) para sintetizar o resumo.");
+      const e = new Error("Conecte a IA (Gemini) para sintetizar o resumo.");
       e.code = "IA_OFFLINE";
       throw e;
     }
@@ -4021,6 +4827,15 @@ export const store = {
   renomearMapa(id, titulo) {
     const m = state.mapasMentais.find((x) => x.id === id);
     if (m) { m.titulo = (titulo || "").trim() || m.titulo; commit(); }
+  },
+  // (Re)vincula o mapa a um tópico (ou desvincula com topicoId null). Mantém disciplinaId em dia.
+  setTopicoMapa(id, topicoId) {
+    const m = state.mapasMentais.find((x) => x.id === id);
+    if (!m) return;
+    m.topicoId = topicoId || null;
+    const t = m.topicoId ? state.topicos.find((x) => x.id === m.topicoId) : null;
+    m.disciplinaId = t ? t.disciplinaId : null;
+    commit();
   },
   // Edição manual da árvore (Fase 3): substitui a árvore e sincroniza o título do mapa
   // com o tema central (o card mostra m.titulo).
@@ -4479,6 +5294,31 @@ export const store = {
     return null;
   },
 
+  // Panorama da Lei Seca/Jurisprudência para o Mentor: pontos de ALTA INCIDÊNCIA ainda
+  // NÃO treinados (marcou PQ mas não drillou) e dispositivos FRACOS no drill (precisão < 60%
+  // com amostra mínima). É o que faz o Mentor "puxar" a Lei Seca, não só vê-la.
+  _panoramaLeiSeca() {
+    const pq = [], fracos = [], semRevisao = [], antigas = [];
+    const anoAtual = +todayISO().slice(0, 4);
+    for (const i of state.indicacoes) {
+      if (i.metaLeitura || i.revogado) continue;
+      const treino = state.questoes.filter((q) => q.treino && q.treino.indicacaoId === i.id);
+      const ids = new Set(treino.map((q) => q.id));
+      const tents = state.tentativas.filter((t) => ids.has(t.questaoId));
+      const altaInc = (i.pqIncidencia != null && i.pqIncidencia >= 50) || (i.pq && i.pqIncidencia == null);
+      if (altaInc && tents.length === 0) pq.push(i);
+      if (tents.length >= 3 && tents.filter((t) => t.acertou).length / tents.length < 0.6) fracos.push(i);
+      // Alta incidência, com texto, mas FORA da revisão espaçada (Memorizar) → sugerir promover.
+      if (altaInc && (i.texto || "").trim() && !i.promovido && i.modo !== "memoria") semRevisao.push(i);
+      // Jurisprudência ANTIGA (>= 8 anos) → confirmar se o entendimento ainda está mantido.
+      if (i.tipo === "juris" && i.ano && anoAtual - i.ano >= 8) antigas.push(i);
+    }
+    // maior incidência primeiro
+    pq.sort((a, b) => (b.pqIncidencia || 0) - (a.pqIncidencia || 0));
+    semRevisao.sort((a, b) => (b.pqIncidencia || 0) - (a.pqIncidencia || 0));
+    antigas.sort((a, b) => (a.ano || 0) - (b.ano || 0)); // mais antigo primeiro
+    return { pq, fracos, semRevisao, antigas };
+  },
   // PANORAMA para o MENTOR PROATIVO: concatena todas as frentes do sistema num
   // retrato compacto (determinístico). Serve para a visão offline e como contexto
   // enviado à IA. É aqui que o sistema "conversa" consigo mesmo.
@@ -4497,6 +5337,28 @@ export const store = {
     const cicloTempo = {};
     fases.forEach((f) => (cicloTempo[f] = Math.round((hist.tempoFase[f] || 0) / 60)));
 
+    // Central de Revisões consolidada: o que está vencido/para hoje, POR TIPO (tópico,
+    // resumo, mapa, lei, juris, flashcards). Antes o Mentor só enxergava flashcards vencidos.
+    const revCont = this.revisoesResumoContagem();
+    const revVencPorTipo = {};
+    for (const it of this.revisoesConsolidadas()) {
+      if (it.status === "atrasada" || it.status === "hoje") revVencPorTipo[it.tipo] = (revVencPorTipo[it.tipo] || 0) + 1;
+    }
+    const lsPano = this._panoramaLeiSeca(); // Lei Seca/Jurisprudência (drill/incidência)
+    // Agenda planejada pelo aluno (hoje + próximos 7 dias) — para o Mentor NÃO propor missão
+    // que o aluno já agendou (evita duplicar) e considerar a carga já planejada.
+    const hojeISO = todayISO();
+    const planoHoje = this.tarefasDoDia(hojeISO).filter((t) => !t.concluida);
+    let planejadoSemana = 0;
+    for (let d = 0; d < 7; d++) planejadoSemana += this.tarefasDoDia(addDays(hojeISO, d)).filter((t) => !t.concluida).length;
+
+    // Comportamento (antes era uma análise ISOLADA): QUANDO o aluno rende mais + regularidade.
+    // Assim a análise do Mentor deixa de ser cega ao horário e pode ajustar a rotina.
+    const comp = this.comportamentoHorario();
+    const ofens = this.ofensiva();
+    const DIAS_SEM = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+    const FAIXAS_DIA = ["madrugada", "manhã", "tarde", "noite"];
+
     return {
       concurso: state.concurso ? state.concurso.cargo : null,
       prova: m.dataProva ? { data: m.dataProva, diasRestantes: m.diasProva } : null,
@@ -4508,13 +5370,38 @@ export const store = {
         dispDiariaMin: m.dispDiariaMin,
       },
       coberturaEdital: { pct: cob.pct, cobertos: cob.cobertos, total: cob.total, concluidos: cob.concluidos },
-      revisao: { flashcardsVencidos: this.flashcardsVencidos().length, totalFlashcards: state.flashcards.length },
+      revisao: {
+        flashcardsVencidos: this.flashcardsVencidos().length,
+        totalFlashcards: state.flashcards.length,
+        atrasadas: revCont.atrasadas, // Central de Revisões (todos os tipos)
+        paraHoje: revCont.hoje,
+        proximas7dias: revCont.proximas7,
+        vencidasPorTipo: revVencPorTipo, // ex.: { topico: 2, resumo: 1, mapa: 1, lei: 3 }
+      },
+      // Lei Seca/Jurisprudência: alta incidência sem treinar + dispositivos fracos no drill.
+      leiSeca: {
+        pqNaoTreinada: lsPano.pq.length,
+        pqNaoTreinadaEx: lsPano.pq.slice(0, 5).map((i) => i.referencia),
+        dispositivosFracos: lsPano.fracos.length,
+        dispositivosFracosEx: lsPano.fracos.slice(0, 5).map((i) => i.referencia),
+        novidadeLei: this.novidadesPendentes("lei"),
+        novidadeJuris: this.novidadesPendentes("juris"),
+        vigenciaPendente: this._panoramaVigencia().length,
+        jurisAntigas: lsPano.antigas.length,
+        metasLeituraPendentes: (state.indicacoes || []).filter((i) => i.metaLeitura && !i.lido).length,
+      },
       erros: {
         pendentes: state.tentativas.filter((t) => !t.acertou).length + state.errosManuais.length,
         porMotivo: motivos,
       },
       cicloTempoMin: cicloTempo, // equilíbrio Estudo/Prática/Revisão
       aproveitamentoGeral: diag.percentGeral,
+      // Simulados: média, melhor nota e o último (para detectar queda/tendência).
+      simulados: (() => {
+        const rs = this.simuladosResumo();
+        const ult = this.simuladosLista()[0] || null;
+        return { total: rs.total, media: rs.media, melhor: rs.melhor, ultimo: ult ? { aproveitamento: ult.aproveitamento, data: (ult.data || "").slice(0, 10), nome: ult.nome } : null };
+      })(),
       disciplinas: diag.porDisciplina.map((l) => ({
         id: l.disciplina.id,
         nome: l.disciplina.nome,
@@ -4522,16 +5409,41 @@ export const store = {
         cobertura: l.cobertura,
         tempoMin: Math.round(l.tempoSeg / 60),
         ultimoEstudo: l.ultimoEstudo ? l.ultimoEstudo.slice(0, 10) : null,
-        topicos: state.topicos.filter((t) => t.disciplinaId === l.disciplina.id).map((t) => t.nome),
+        topicos: state.topicos.filter((t) => t.disciplinaId === l.disciplina.id).map((t) => {
+          // Aproveitamento POR TÓPICO (antes só nome): tentativas (topicoId) + questões do registro de sessão.
+          const tents = state.tentativas.filter((x) => x.topicoId === t.id);
+          const sess = state.sessoes.filter((s) => s.topicoId === t.id);
+          const sAc = sess.reduce((a, s) => a + (s.qAcertos || 0), 0);
+          const sTot = sess.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
+          const ac = tents.filter((x) => x.acertou).length + sAc;
+          const tot = tents.length + sTot;
+          return { nome: t.nome, percentAcerto: tot ? Math.round((ac / tot) * 100) : null, questoes: tot, concluido: !!t.concluido };
+        }),
       })),
       topicosPrioritarios: state.topicos
         .filter((t) => (t.peso || 0) >= 61 && !topicoCoberto(state, t))
         .map((t) => t.nome),
+      // O que o aluno JÁ planejou (para o Mentor não sugerir tarefa duplicada e respeitar a carga).
+      planejado: {
+        hoje: planoHoje.map((t) => ({ titulo: t.titulo, min: t.estimMin || null, topico: t.topicoId ? ((state.topicos.find((x) => x.id === t.topicoId) || {}).nome || null) : null })),
+        totalSemana: planejadoSemana,
+      },
+      // Quando o aluno rende mais + constância (unifica a análise comportamental à do Mentor).
+      comportamento: comp.total
+        ? {
+            melhorDia: comp.melhorDiaIdx != null ? DIAS_SEM[comp.melhorDiaIdx] : null,
+            melhorFaixa: comp.melhorFaixaIdx != null ? FAIXAS_DIA[comp.melhorFaixaIdx] : null,
+            ofensivaDias: ofens.atual,
+            recordeDias: ofens.recorde,
+          }
+        : null,
       observacoes: this.observacoesRecentes(8).map((o) => ({
         data: o.data.slice(0, 10),
         topico: o.topicoNome,
         nota: o.comentario,
       })),
+      // Lembretes livres com data vencida (recados do próprio aluno) — o Mentor pode cobrar.
+      lembretesVencidos: this.lembretesVencidos().slice(0, 6).map((l) => ({ texto: l.texto, data: l.data })),
       // Base de estudo escolhida + (quando cursinho) a SEQUÊNCIA DAS AULAS, para o Mentor
       // ordenar as sugestões pela ordem do cursinho.
       baseEstudo: state.config.baseEstudo || "edital",
@@ -4582,6 +5494,77 @@ export const store = {
     const fragil = this.topicosRevisaoFragil();
     if (fragil.length)
       lista.push({ key: "revfragil", icone: "triangle-alert", txt: `Tópico frágil (esqueceu 2x): ${fragil.slice(0, 3).map((t) => t.nome).join(", ")} — considere reestudar`, acao: { rota: "hoje", label: "Estudar" } });
+    // Sumiço: faz N dias (≥3) sem nenhuma sessão — puxa de volta com um bloco curto.
+    const ultSess = state.sessoes.reduce((mx, s) => ((s.data || "") > mx ? s.data : mx), "");
+    if (ultSess) {
+      const diasSem = daysBetween(ultSess.slice(0, 10), todayISO());
+      if (diasSem >= 3) lista.push({ key: "sumico", icone: "alarm-clock", txt: `Faz ${diasSem} dias sem estudar — retome hoje com um bloco curto`, acao: { rota: "hoje", label: "Estudar agora" } });
+    }
+    // Cruza QUANDO você rende (melhor faixa do dia) com ONDE está fraco (disciplina) — proativo.
+    if (snap.comportamento && snap.comportamento.melhorFaixa) {
+      const fraca = snap.disciplinas
+        .filter((d) => d.percentAcerto !== null && d.percentAcerto < 60)
+        .sort((a, b) => a.percentAcerto - b.percentAcerto)[0];
+      if (fraca) lista.push({ key: "horario-fraco", icone: "clock-3", txt: `Você rende mais de ${snap.comportamento.melhorFaixa} — encaixe ${fraca.nome} (${fraca.percentAcerto}%) nesse horário`, acao: { rota: "planejamento", label: "Planejar" } });
+    }
+    // Atraso no plano: tarefas datadas de dias anteriores que não foram concluídas → adaptar a agenda.
+    const nAtraso = (state.missoes || []).filter((m) => m.data && m.data < todayISO() && !m.concluida).length;
+    if (nAtraso > 0) lista.push({ key: "atraso", icone: "calendar-days", txt: `${nAtraso} ${nAtraso === 1 ? "tarefa atrasada" : "tarefas atrasadas"} no plano — adaptar a agenda com o Mentor`, acao: { rota: "planejamento", label: "Adaptar agenda" } });
+    // Lei Seca/Jurisprudência — o Mentor PUXA: alta incidência sem treinar + dispositivos fracos.
+    const lsp = this._panoramaLeiSeca();
+    if (lsp.pq.length) {
+      const rota = lsp.pq.some((i) => i.tipo !== "juris") ? "leiseca" : "jurisprudencia";
+      lista.push({ key: "ls-pq", icone: "target", txt: `${lsp.pq.length} ${lsp.pq.length === 1 ? "ponto de alta incidência sem treinar" : "pontos de alta incidência sem treinar"}: ${lsp.pq.slice(0, 3).map((i) => i.referencia).join(", ")}`, acao: { rota, aba: "raiox", label: "Abrir Raio-X" } });
+    }
+    if (lsp.fracos.length) {
+      const rota = lsp.fracos.some((i) => i.tipo !== "juris") ? "leiseca" : "jurisprudencia";
+      lista.push({ key: "ls-fraco", icone: "trending-down", txt: `${lsp.fracos.length} ${lsp.fracos.length === 1 ? "dispositivo com baixa precisão no treino" : "dispositivos com baixa precisão no treino"}: ${lsp.fracos.slice(0, 3).map((i) => i.referencia).join(", ")}`, acao: { rota, aba: "treinar", label: "Treinar" } });
+    }
+    // Alta incidência FORA da revisão espaçada → sugerir colocar em Memorizar (Raio-X → Memorizar).
+    if (lsp.semRevisao.length) {
+      const rota = lsp.semRevisao.some((i) => i.tipo !== "juris") ? "leiseca" : "jurisprudencia";
+      lista.push({ key: "ls-memorizar", icone: "brain", txt: `${lsp.semRevisao.length} ${lsp.semRevisao.length === 1 ? "dispositivo de alta incidência fora da revisão espaçada" : "dispositivos de alta incidência fora da revisão espaçada"}: ${lsp.semRevisao.slice(0, 3).map((i) => i.referencia).join(", ")}. Coloque em Memorizar.`, acao: { rota, aba: "raiox", label: "Abrir Raio-X" } });
+    }
+    // Jurisprudência antiga → confirmar se o entendimento ainda está mantido (pode ter mudado).
+    if (lsp.antigas.length) {
+      lista.push({ key: "ls-juris-antiga", icone: "alarm-clock", txt: `${lsp.antigas.length} ${lsp.antigas.length === 1 ? "entendimento antigo" : "entendimentos antigos"} (de ${lsp.antigas[0].ano}): ${lsp.antigas.slice(0, 3).map((i) => i.referencia).join(", ")}. Confirme se ainda estão mantidos.`, acao: { rota: "jurisprudencia", aba: "ler", label: "Ver na Jurisprudência" } });
+    }
+    // Vigência: normas que você não confere há muitos meses (lei pode ter mudado).
+    const vig = this._panoramaVigencia();
+    if (vig.length) lista.push({ key: "ls-vigencia", icone: "alarm-clock", txt: `Confira a vigência (faz ${vig[0].meses}+ ${vig[0].meses === 1 ? "mês" : "meses"}): ${vig.slice(0, 3).map((v) => v.norma).join(", ")}`, acao: { rota: "leiseca", label: "Conferir na Lei Seca" } });
+    // Novidade legislativa: dispositivos que mudaram/entraram na última conferência (revisar+treinar).
+    const nov = this.novidadesPendentes("lei");
+    if (nov) lista.push({ key: "ls-novidade", icone: "sparkles", txt: `${nov} ${nov === 1 ? "dispositivo com novidade legislativa para revisar" : "dispositivos com novidade legislativa para revisar"} (mudaram ou entraram na última conferência).`, acao: { rota: "leiseca", aba: "ler", label: "Ver na Lei Seca" } });
+    const novJ = this.novidadesPendentes("juris");
+    if (novJ) lista.push({ key: "ls-novidade-juris", icone: "sparkles", txt: `${novJ} ${novJ === 1 ? "item de jurisprudência com novidade" : "itens de jurisprudência com novidade"} para revisar.`, acao: { rota: "jurisprudencia", aba: "ler", label: "Ver na Jurisprudência" } });
+    // Lembretes com data VENCIDA — o Mentor cobra o recado que você mesmo deixou.
+    const lembVenc = this.lembretesVencidos();
+    if (lembVenc.length) lista.push({ key: "lembrete-vencido", icone: "bell", txt: `${lembVenc.length} ${lembVenc.length === 1 ? "lembrete vencido" : "lembretes vencidos"}: ${lembVenc.slice(0, 2).map((l) => l.texto).join(" · ").slice(0, 80)}`, acao: { rota: "hoje", label: "Ver lembretes" } });
+    // Metas de leitura ainda não cumpridas (você planejou ler e não deu baixa).
+    const metasLei = (state.indicacoes || []).filter((i) => i.metaLeitura && i.tipo === "lei" && !i.lido).length;
+    const metasJur = (state.indicacoes || []).filter((i) => i.metaLeitura && i.tipo === "juris" && !i.lido).length;
+    if (metasLei) lista.push({ key: "meta-leitura-lei", icone: "target", txt: `${metasLei} ${metasLei === 1 ? "meta de leitura pendente" : "metas de leitura pendentes"} na Lei Seca`, acao: { rota: "leiseca", aba: "metas", label: "Ver metas" } });
+    if (metasJur) lista.push({ key: "meta-leitura-juris", icone: "target", txt: `${metasJur} ${metasJur === 1 ? "meta de leitura pendente" : "metas de leitura pendentes"} na Jurisprudência`, acao: { rota: "jurisprudencia", aba: "metas", label: "Ver metas" } });
+    // Resumos vencidos na Central de Revisões (mesma cobrança que flashcards/mapas/tópicos).
+    const resVenc = (snap.revisao.vencidasPorTipo && snap.revisao.vencidasPorTipo.resumo) || 0;
+    if (resVenc > 0) lista.push({ key: "revresumo", icone: "file-text", txt: `${resVenc} ${resVenc === 1 ? "resumo" : "resumos"} para revisar hoje`, acao: { rota: "revisoes", label: "Revisar" } });
+    // Ofensiva prestes a quebrar: você tem sequência de dias mas ainda não estudou hoje.
+    const ofens = (snap.comportamento && snap.comportamento.ofensivaDias) || 0;
+    const estudouHoje = (state.sessoes || []).some((s) => (s.data || "").slice(0, 10) === todayISO());
+    if (ofens >= 3 && !estudouHoje) lista.push({ key: "ofensiva", icone: "flame", txt: `Sua ofensiva de ${ofens} dias quebra hoje se você não estudar`, acao: { rota: "hoje", label: "Estudar agora" } });
+    // Simulados: queda no último vs. sua média; ou, sem nenhum simulado e prova perto, um diagnóstico.
+    const simList = this.simuladosLista();
+    const simRes = this.simuladosResumo();
+    if (simList.length >= 2 && simList[0].aproveitamento != null && simRes.media != null && simList[0].aproveitamento < simRes.media - 8) {
+      lista.push({ key: "sim-queda", icone: "trending-down", txt: `Seu último simulado (${simList[0].aproveitamento}%) ficou abaixo da sua média (${simRes.media}%) — revise onde caiu`, acao: { rota: "simulados", label: "Ver simulados" } });
+    } else if (simList.length === 0 && snap.prova && snap.prova.diasRestantes >= 0 && snap.prova.diasRestantes <= 60) {
+      lista.push({ key: "sim-fazer", icone: "clipboard-list", txt: `Faltam ${snap.prova.diasRestantes} dias e você ainda não fez um simulado — faça um para medir onde está`, acao: { rota: "simulados", label: "Fazer simulado" } });
+    }
+    // Meta diária: você começou o dia mas ainda não bateu a meta — empurrãozinho para fechar.
+    const md = snap.metas.diariaMin || 0, fh = snap.metas.feitoHojeMin || 0;
+    if (md > 0 && fh > 0 && fh < md) {
+      lista.push({ key: "meta-hoje", icone: "target", txt: `Quase lá: faltam ${md - fh} min para bater sua meta de hoje (${fh}/${md} min)`, acao: { rota: "hoje", label: "Estudar agora" } });
+    }
     // Lembrete de PERIODICIDADE: o Mentor pede para você reanalisar o progresso (só sugere,
     // não roda sozinho). Aparece com IA conectada, após atividade, se nunca analisou ou ≥7 dias.
     if (this.mentorPrecisaReanalise()) {
@@ -4672,6 +5655,72 @@ export const store = {
     const d = this.diasDesdeAnaliseMentor();
     return (d === null && state.sessoes.length > 0) || (d !== null && d >= 7);
   },
+  // Gatilho LEVE pós-sessão: vale propor um ajuste de plano? (análise velha OU dia todo concluído).
+  // Guarda diário: só sugere 1x por dia (config.mentorNudgeData). Nunca age sozinho — só propõe.
+  mentorSugereReplano() {
+    if (!this.iaDisponivel()) return false;
+    if (state.config.mentorNudgeData === todayISO()) return false;
+    const stale = this.mentorPrecisaReanalise();
+    const tarefas = this.tarefasDoDia(todayISO());
+    const diaConcluido = tarefas.length > 0 && tarefas.every((t) => t.concluida);
+    // Atraso: tarefas planejadas de dias anteriores que não foram concluídas.
+    const atrasadas = (state.missoes || []).some((m) => m.data && m.data < todayISO() && !m.concluida);
+    return stale || diaConcluido || atrasadas;
+  },
+  marcarNudgeReplano() {
+    state.config.mentorNudgeData = todayISO();
+    commit({ semCarimbo: true });
+  },
+  // Tópicos REVISADOS HOJE na Central de Revisões (para sugerir no Registrar sessão — antes
+  // não havia ponte: revisar dava baixa mas não virava/sugeria sessão).
+  revisadosHoje() {
+    const hoje = todayISO();
+    const feitas = (state.revisoesFeitas || []).filter((r) => (r.data || "").slice(0, 10) === hoje);
+    const ids = new Set();
+    for (const r of feitas) {
+      let tid = null;
+      if (r.tipo === "topico") tid = r.refId;
+      else if (r.tipo === "resumo") { const x = state.resumos.find((y) => y.id === r.refId); tid = x ? x.topicoId : null; }
+      else if (r.tipo === "mapa") { const x = state.mapasMentais.find((y) => y.id === r.refId); tid = x ? x.topicoId : null; }
+      else if (r.tipo === "ind") { const x = state.indicacoes.find((y) => y.id === r.refId); tid = x ? x.topicoId : null; }
+      if (tid) ids.add(tid);
+    }
+    return [...ids].map((id) => { const t = state.topicos.find((x) => x.id === id); return t ? { topicoId: id, nome: t.nome } : null; }).filter(Boolean);
+  },
+  // Quantas tarefas planejadas estão ATRASADAS (datadas no passado e não concluídas).
+  tarefasAtrasadas() {
+    const hoje = todayISO();
+    return state.missoes.filter((m) => m.data && m.data < hoje && !m.concluida);
+  },
+  // Adaptar a agenda: redistribui as tarefas atrasadas pelos próximos dias DISPONÍVEIS desta
+  // semana (a partir de hoje, pulando folgas), em rodízio. Determinístico — o Mentor propõe,
+  // o usuário confirma na tela. Retorna quantas foram remanejadas.
+  redistribuirAtrasadas() {
+    const hoje = todayISO();
+    const atrasadas = this.tarefasAtrasadas();
+    if (!atrasadas.length) return 0;
+    const folga = new Set(state.config.diasFolga || []);
+    const dias = [];
+    for (let i = 0; i < 7; i++) { const d = addDays(hoje, i); if (!folga.has(weekdayISO(d))) dias.push(d); }
+    if (!dias.length) dias.push(hoje);
+    atrasadas.forEach((m, i) => { m.data = dias[i % dias.length]; });
+    commit();
+    return atrasadas.length;
+  },
+  // Perfil curto do aluno (concurso, dias p/ prova, cobertura, pontos fracos) — para o chat/dossiê
+  // personalizarem as respostas. Reusado pelo assistente e pelo chat do Dossiê.
+  contextoAlunoCurto() {
+    try {
+      const s = this.snapshotMentor();
+      const fracas = (s.disciplinas || []).filter((d) => d.percentAcerto !== null && d.percentAcerto < 60).map((d) => d.nome).slice(0, 3);
+      return [
+        s.concurso ? `Concurso: ${s.concurso}` : null,
+        s.prova ? `Faltam ${s.prova.diasRestantes} dias para a prova` : null,
+        s.coberturaEdital ? `Cobertura do edital: ${s.coberturaEdital.pct}%` : null,
+        fracas.length ? `Onde está mais fraco: ${fracas.join(", ")}` : null,
+      ].filter(Boolean).join(" · ") || null;
+    } catch (_) { return null; }
+  },
 
   // ---------- diagnóstico ----------
   diagnostico() {
@@ -4681,10 +5730,14 @@ export const store = {
       const questoes = state.questoes.filter((q) => topicosIds.includes(q.topicoId));
       const questoesIds = questoes.map((q) => q.id);
       const tentativas = state.tentativas.filter((t) => questoesIds.includes(t.questaoId));
-      const acertos = tentativas.filter((t) => t.acertou).length;
       const comMaterial = topicos.filter((t) => topicoCoberto(state, t)).length;
       const sessoesDisc = state.sessoes.filter((s) => topicosIds.includes(s.topicoId));
       const tempoSeg = sessoesDisc.reduce((acc, s) => acc + (s.tempoSeg || 0), 0);
+      // Questões contam da Prática (tentativas) E do registro de sessão (qAcertos/qErros).
+      const sessAc = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0), 0);
+      const sessTot = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
+      const acertos = tentativas.filter((t) => t.acertou).length + sessAc;
+      const totalQ = tentativas.length + sessTot;
       const ultimoEstudo = sessoesDisc.reduce((max, s) => (s.data > max ? s.data : max), "");
       // detalhe por tópico (último estudo e tempo de cada um)
       const topicosDetalhe = topicos.map((t) => {
@@ -4702,9 +5755,9 @@ export const store = {
         totalTopicos: topicos.length,
         topicosComMaterial: comMaterial,
         cobertura: topicos.length ? Math.round((comMaterial / topicos.length) * 100) : 0,
-        totalTentativas: tentativas.length,
+        totalTentativas: totalQ,
         acertos,
-        percentAcerto: tentativas.length ? Math.round((acertos / tentativas.length) * 100) : null,
+        percentAcerto: totalQ ? Math.round((acertos / totalQ) * 100) : null,
         tempoSeg,
         ultimoEstudo: ultimoEstudo || null,
         topicos: topicosDetalhe,
@@ -4729,8 +5782,11 @@ export const store = {
     if (vencidos > 0) sugestoes.push(`Há ${vencidos} ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} para revisar hoje.`);
 
     const tempoTotal = state.sessoes.reduce((acc, s) => acc + (s.tempoSeg || 0), 0);
-    const totalTent = state.tentativas.length;
-    const totalAcertos = state.tentativas.filter((t) => t.acertou).length;
+    // Aproveitamento geral: questões da Prática (tentativas) + do registro de sessão.
+    const sessAcG = state.sessoes.reduce((a, s) => a + (s.qAcertos || 0), 0);
+    const sessTotG = state.sessoes.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
+    const totalTent = state.tentativas.length + sessTotG;
+    const totalAcertos = state.tentativas.filter((t) => t.acertou).length + sessAcG;
     return {
       porDisciplina,
       sugestoes,
@@ -4824,6 +5880,98 @@ export const store = {
     return { porDia, periodos, porFase, tempoFase, recentes };
   },
 
+  // Volume de estudo por TIPO de material (leitura/vídeo/questões). O tempo da sessão é único
+  // (não separado por tipo), então aqui medimos VOLUME: páginas lidas (+ ritmo págs/h estimado
+  // pelas sessões que tiveram leitura), minutos de vídeo (por trechos ini→fim) e questões.
+  esforcoPorTipo() {
+    let paginas = 0, leiturasCount = 0, videoMin = 0, videosCount = 0, tempoLeituraSeg = 0, mAc = 0, mEr = 0;
+    // Materiais novos: flashcards (soma de cartões) + lei seca / juris / resumo / mapa (nº de sessões).
+    let flashcardsRev = 0, leiSecaN = 0, jurisN = 0, resumoN = 0, mapaN = 0;
+    for (const s of state.sessoes) {
+      paginas += s.paginas || 0;
+      if ((s.paginas || 0) > 0) tempoLeituraSeg += s.tempoSeg || 0;
+      mAc += s.qAcertos || 0; mEr += s.qErros || 0;
+      const mat = s.materiais || {};
+      const vids = Array.isArray(mat.videos) && mat.videos.length
+        ? mat.videos
+        : (Number.isFinite(s.videoIni) || Number.isFinite(s.videoFim) ? [{ ini: s.videoIni, fim: s.videoFim }] : []);
+      for (const v of vids) { videosCount += 1; if (Number.isFinite(v.ini) && Number.isFinite(v.fim) && v.fim > v.ini) videoMin += v.fim - v.ini; }
+      const lts = Array.isArray(mat.leituras) && mat.leituras.length
+        ? mat.leituras.filter((l) => l && (l.paginas || l.titulo))
+        : ((s.paginas || 0) > 0 ? [{ paginas: s.paginas }] : []);
+      leiturasCount += lts.length;
+      flashcardsRev += Number(mat.flashcards) || 0;
+      if (mat.leiSeca) leiSecaN += 1;
+      if (mat.jurisprudencia) jurisN += 1;
+      if (mat.resumo) resumoN += 1;
+      if (mat.mapa) mapaN += 1;
+    }
+    const tentativas = state.tentativas.length;
+    const acertosTent = state.tentativas.filter((t) => t.acertou).length;
+    const questoes = tentativas + mAc + mEr;
+    const acertos = acertosTent + mAc;
+    return {
+      paginas, leiturasCount, videoMin, videosCount, questoes, acertos,
+      flashcardsRev, leiSecaN, jurisN, resumoN, mapaN,
+      aproveitamento: questoes ? Math.round((acertos / questoes) * 100) : null,
+      paginasPorHora: tempoLeituraSeg > 0 ? Math.round((paginas / (tempoLeituraSeg / 3600)) * 10) / 10 : null,
+    };
+  },
+
+  // Comportamento por HORÁRIO: tempo em foco por dia da semana × faixa do dia (madrugada/manhã/
+  // tarde/noite). Alimenta o heatmap "quando você rende mais". Usa o horário LOCAL de s.data
+  // (sessões com cronômetro têm hora real; lançamentos manuais usam meio-dia UTC ≈ manhã).
+  comportamentoHorario() {
+    const dias = [0, 0, 0, 0, 0, 0, 0]; // Dom..Sáb (tempoSeg)
+    const grade = Array.from({ length: 7 }, () => [0, 0, 0, 0]); // [dia][faixa]
+    const somaFaixa = [0, 0, 0, 0];
+    const faixaDe = (h) => (h < 6 ? 0 : h < 12 ? 1 : h < 18 ? 2 : 3);
+    let maxCel = 0, total = 0;
+    for (const s of state.sessoes) {
+      const t = s.tempoSeg || 0;
+      if (!t) continue;
+      const dt = new Date(s.data);
+      if (isNaN(dt.getTime())) continue;
+      const dow = dt.getDay(), fx = faixaDe(dt.getHours());
+      dias[dow] += t; grade[dow][fx] += t; somaFaixa[fx] += t; total += t;
+      if (grade[dow][fx] > maxCel) maxCel = grade[dow][fx];
+    }
+    const idxMax = (arr) => arr.reduce((mi, v, i, a) => (v > a[mi] ? i : mi), 0);
+    return {
+      dias, grade, maxCel, total,
+      melhorDiaIdx: total ? idxMax(dias) : null,
+      melhorFaixaIdx: total ? idxMax(somaFaixa) : null,
+    };
+  },
+
+  // Desempenho das questões PRATICADAS (state.tentativas) por BANCA e por TIPO (MC × C/E).
+  // A banca vem de q.banca (ou da prova vinculada via provaId). Só entram tentativas que ainda
+  // têm a questão no acervo. Manual (qAcertos/qErros da sessão) não entra: não liga a banca.
+  questoesRelatorio() {
+    const porBanca = new Map();
+    const formato = { mc: { total: 0, acertos: 0 }, ce: { total: 0, acertos: 0 } };
+    let total = 0, acertos = 0;
+    for (const t of state.tentativas) {
+      const q = state.questoes.find((x) => x.id === t.questaoId);
+      if (!q) continue;
+      total += 1; if (t.acertou) acertos += 1;
+      const fmt = q.formato === "ce" ? "ce" : "mc";
+      formato[fmt].total += 1; if (t.acertou) formato[fmt].acertos += 1;
+      let banca = (q.banca || "").trim();
+      if (!banca && q.provaId) { const p = (state.provas || []).find((x) => x.id === q.provaId); banca = p && p.banca ? p.banca.trim() : ""; }
+      banca = banca || "Sem banca";
+      const e = porBanca.get(banca) || { total: 0, acertos: 0 };
+      e.total += 1; if (t.acertou) e.acertos += 1;
+      porBanca.set(banca, e);
+    }
+    const pct = (a, t) => (t ? Math.round((a / t) * 100) : null);
+    return {
+      total, acertos, percent: pct(acertos, total),
+      porFormato: { mc: { ...formato.mc, percent: pct(formato.mc.acertos, formato.mc.total) }, ce: { ...formato.ce, percent: pct(formato.ce.acertos, formato.ce.total) } },
+      porBanca: [...porBanca.entries()].map(([banca, v]) => ({ banca, total: v.total, acertos: v.acertos, percent: pct(v.acertos, v.total) })).sort((a, b) => b.total - a.total),
+    };
+  },
+
   // Ofensiva (constância): dias consecutivos com pelo menos uma sessão. Dias marcados
   // como folga (config.diasFolga) NÃO contam nem quebram a sequência. Se hoje ainda não
   // houve estudo, a sequência considera até ontem (não quebra por "o dia não acabou").
@@ -4905,6 +6053,260 @@ export const store = {
     commit();
   },
 
+  // Domingo (início da semana) de uma data ISO 'yyyy-mm-dd'.
+  _domingoSemana(iso) {
+    const d = (iso || "").slice(0, 10);
+    if (!d) return null;
+    const [a, m, dd] = d.split("-").map(Number);
+    return addDays(d, -new Date(a, m - 1, dd).getDay());
+  },
+  // Acurácia (% de acerto) por semana nas últimas N semanas. Junta as tentativas da Prática
+  // (cada uma acertou/errou) com as questões lançadas no registro de sessão (qAcertos/qErros).
+  // Semana sem questões fica com pct=null (não inventa ponto). Alimenta o gráfico de evolução.
+  // filtro opcional: { topicoId } (um tópico) ou { disciplinaId } (todos os tópicos da disciplina).
+  acuraciaPorSemana(semanas = 12, filtro = null) {
+    // Conjunto de tópicos aceitos (null = todos). Tentativas e sessões carregam topicoId.
+    let topsOk = null;
+    if (filtro && filtro.topicoId) topsOk = new Set([filtro.topicoId]);
+    else if (filtro && filtro.disciplinaId) topsOk = new Set(state.topicos.filter((t) => t.disciplinaId === filtro.disciplinaId).map((t) => t.id));
+    const buckets = {};
+    const add = (dataISO, ac, tot) => {
+      const dom = this._domingoSemana(dataISO);
+      if (!dom || !tot) return;
+      if (!buckets[dom]) buckets[dom] = { acertos: 0, total: 0 };
+      buckets[dom].acertos += ac;
+      buckets[dom].total += tot;
+    };
+    for (const t of state.tentativas) {
+      if (topsOk && !topsOk.has(t.topicoId)) continue;
+      add(t.data, t.acertou ? 1 : 0, 1);
+    }
+    for (const s of state.sessoes) {
+      if (topsOk && !topsOk.has(s.topicoId)) continue;
+      const tot = (s.qAcertos || 0) + (s.qErros || 0);
+      if (tot) add(s.data, s.qAcertos || 0, tot);
+    }
+    const domAtual = this._domingoSemana(todayISO());
+    const out = [];
+    for (let i = semanas - 1; i >= 0; i--) {
+      const dom = addDays(domAtual, -7 * i);
+      const b = buckets[dom] || { acertos: 0, total: 0 };
+      out.push({ inicio: dom, acertos: b.acertos, total: b.total, pct: b.total ? Math.round((b.acertos / b.total) * 100) : null });
+    }
+    return out;
+  },
+  // Tempo de estudo agregado por SEMANA (bucket = domingo da semana), últimas `semanas`.
+  // Espelha acuraciaPorSemana; usado no gráfico "Horas por semana" (esforço vs meta).
+  tempoPorSemana(semanas = 8) {
+    const buckets = {};
+    for (const s of state.sessoes) {
+      const dom = this._domingoSemana(s.data);
+      if (!dom) continue;
+      if (!buckets[dom]) buckets[dom] = { tempoSeg: 0, sessoes: 0 };
+      buckets[dom].tempoSeg += s.tempoSeg || 0;
+      buckets[dom].sessoes += 1;
+    }
+    const domAtual = this._domingoSemana(todayISO());
+    const out = [];
+    for (let i = semanas - 1; i >= 0; i--) {
+      const dom = addDays(domAtual, -7 * i);
+      const b = buckets[dom] || { tempoSeg: 0, sessoes: 0 };
+      out.push({ inicio: dom, tempoSeg: b.tempoSeg, sessoes: b.sessoes });
+    }
+    return out;
+  },
+  // Comparativo desta semana vs a anterior (deltas dos KPIs). Compara janelas do MESMO
+  // tamanho: domingo→hoje (semana atual parcial) × domingo anterior→mesmo dia da semana.
+  comparativoSemana() {
+    const hoje = todayISO();
+    const domAtual = this._domingoSemana(hoje);
+    const domAnterior = addDays(domAtual, -7);
+    const [a, m, d] = hoje.split("-").map(Number);
+    const fimAnterior = addDays(domAnterior, new Date(a, m - 1, d).getDay());
+    const noIntervalo = (dataISO, ini, fim) => { const x = (dataISO || "").slice(0, 10); return x >= ini && x <= fim; };
+    const agg = (ini, fim) => {
+      let tempoSeg = 0, acertos = 0, total = 0;
+      for (const s of state.sessoes) if (noIntervalo(s.data, ini, fim)) { tempoSeg += s.tempoSeg || 0; acertos += s.qAcertos || 0; total += (s.qAcertos || 0) + (s.qErros || 0); }
+      for (const t of state.tentativas) if (noIntervalo(t.data, ini, fim)) { total += 1; acertos += t.acertou ? 1 : 0; }
+      return { tempoSeg, questoes: total, acertos, pct: total ? Math.round((acertos / total) * 100) : null };
+    };
+    return { atual: agg(domAtual, hoje), anterior: agg(domAnterior, fimAnterior) };
+  },
+
+  // ---------- Central de Revisões (VISÃO consolidada; não duplica estado) ----------
+  // Junta TODAS as revisões espaçadas (tópicos, resumos, mapas, lei/juris) num formato único,
+  // + flashcards como item-LOTE por disciplina. status: atrasada | hoje | proxima (pela data).
+  revisoesConsolidadas() {
+    const hoje = todayISO();
+    const ctx = (topicoId) => {
+      const t = topicoId ? state.topicos.find((x) => x.id === topicoId) : null;
+      const d = t ? state.disciplinas.find((x) => x.id === t.disciplinaId) : null;
+      return { topico: t, disc: d };
+    };
+    const out = [];
+    const push = (o) => {
+      o.status = o.proxima < hoje ? "atrasada" : o.proxima === hoje ? "hoje" : "proxima";
+      o.diasAtraso = o.status === "atrasada" ? daysBetween(o.proxima, hoje) : 0;
+      out.push(o);
+    };
+    for (const r of state.revisoesTopico) {
+      const { topico, disc } = ctx(r.topicoId);
+      if (!topico) continue;
+      push({ tipo: "topico", id: "topico:" + r.topicoId, refId: r.topicoId, titulo: topico.nome, topicoId: r.topicoId, disciplinaId: disc ? disc.id : null, disciplinaNome: disc ? disc.nome : "—", proxima: r.proxima, rota: "revtopico", acoes: true });
+    }
+    for (const rs of state.resumos) {
+      if (!rs.revisao || !rs.revisao.proxima) continue;
+      const { disc } = ctx(rs.topicoId);
+      push({ tipo: "resumo", id: "resumo:" + rs.id, refId: rs.id, titulo: rs.titulo || "Resumo", topicoId: rs.topicoId || null, disciplinaId: disc ? disc.id : null, disciplinaNome: disc ? disc.nome : "—", proxima: rs.revisao.proxima, rota: "resumos", acoes: true });
+    }
+    for (const mp of state.mapasMentais) {
+      if (!mp.revisao || !mp.revisao.proxima) continue;
+      const { disc } = ctx(mp.topicoId);
+      push({ tipo: "mapa", id: "mapa:" + mp.id, refId: mp.id, titulo: mp.titulo || "Mapa mental", topicoId: mp.topicoId || null, disciplinaId: disc ? disc.id : null, disciplinaNome: disc ? disc.nome : "—", proxima: mp.revisao.proxima, rota: "mapas", acoes: true });
+    }
+    for (const ind of state.indicacoes) {
+      if (ind.modo !== "memoria" || !ind.revisao || !ind.revisao.proxima) continue;
+      const { disc } = ctx(ind.topicoId);
+      push({ tipo: ind.tipo === "juris" ? "juris" : "lei", id: "ind:" + ind.id, refId: ind.id, titulo: (ind.referencia || ind.texto || "Item").slice(0, 90), topicoId: ind.topicoId || null, disciplinaId: (disc ? disc.id : null) || ind.disciplinaId || null, disciplinaNome: disc ? disc.nome : "—", proxima: ind.revisao.proxima, rota: ind.tipo === "juris" ? "jurisprudencia" : "leiseca", acoes: true });
+    }
+    // Flashcards: item-LOTE por disciplina (cada card tem sua data SM-2; só entram os vencidos).
+    const porDisc = {};
+    for (const f of this.flashcardsVencidos()) {
+      const { disc } = ctx(f.topicoId);
+      const k = disc ? disc.id : "_sem";
+      if (!porDisc[k]) porDisc[k] = { disc, qtd: 0 };
+      porDisc[k].qtd++;
+    }
+    for (const k of Object.keys(porDisc)) {
+      const g = porDisc[k];
+      push({ tipo: "flashcards", id: "fc:" + k, refId: g.disc ? g.disc.id : null, lote: true, qtd: g.qtd, titulo: `${g.qtd} flashcard${g.qtd > 1 ? "s" : ""}`, disciplinaId: g.disc ? g.disc.id : null, disciplinaNome: g.disc ? g.disc.nome : "—", proxima: hoje, rota: "flashcards", acoes: false });
+    }
+    return out;
+  },
+  // Contadores rápidos p/ os cartões do topo da Central.
+  revisoesResumoContagem() {
+    const itens = this.revisoesConsolidadas();
+    const hoje = todayISO();
+    const em7 = addDays(hoje, 7);
+    const concluidas30 = this.revisoesConcluidasLog(30).length;
+    const atrasadas = itens.filter((i) => i.status === "atrasada").length;
+    return {
+      atrasadas,
+      hoje: itens.filter((i) => i.status === "hoje").length,
+      proximas7: itens.filter((i) => i.status === "proxima" && i.proxima <= em7).length,
+      total: itens.length,
+      concluidas30,
+      // "estou em dia?": das que exigiram atenção (feitas + ainda atrasadas), quantas fiz.
+      taxaConclusao: concluidas30 + atrasadas > 0 ? Math.round((concluidas30 / (concluidas30 + atrasadas)) * 100) : null,
+    };
+  },
+  // Log de revisões CONCLUÍDAS nos últimos N dias (para a aba Concluídas + taxa).
+  revisoesConcluidasLog(dias = 30) {
+    const lim = addDays(todayISO(), -dias);
+    return (state.revisoesFeitas || []).filter((x) => (x.data || "").slice(0, 10) >= lim).sort((a, b) => (a.data < b.data ? 1 : -1));
+  },
+  // Reprograma (só move a data `proxima`, sem mexer no intervalo/escada) por id do item.
+  reprogramarRevisao(itemId, novaData) {
+    if (!itemId || !novaData) return;
+    const [tipo, refId] = itemId.split(":");
+    if (tipo === "topico") { const r = state.revisoesTopico.find((x) => x.topicoId === refId); if (r) r.proxima = novaData; }
+    else if (tipo === "resumo") { const o = state.resumos.find((x) => x.id === refId); if (o && o.revisao) o.revisao.proxima = novaData; }
+    else if (tipo === "mapa") { const o = state.mapasMentais.find((x) => x.id === refId); if (o && o.revisao) o.revisao.proxima = novaData; }
+    else if (tipo === "ind") { const o = state.indicacoes.find((x) => x.id === refId); if (o && o.revisao) o.revisao.proxima = novaData; }
+    commit();
+  },
+  // Conclui uma revisão (baixa rápida "já revisei"): avança pela escada do tipo + registra no log.
+  concluirRevisao(itemId, titulo) {
+    if (!itemId) return null;
+    const [tipo, refId] = itemId.split(":");
+    let dias = null;
+    if (tipo === "topico") dias = this.revisarTopico(refId, "lembrei");
+    else if (tipo === "resumo") dias = this.revisarResumo(refId, "ok");
+    else if (tipo === "mapa") dias = this.revisarMapa(refId, "ok");
+    else if (tipo === "ind") dias = this.revisarMemoria(refId, "ok");
+    if (dias === null) return null;
+    if (!Array.isArray(state.revisoesFeitas)) state.revisoesFeitas = [];
+    state.revisoesFeitas.push({ id: uid("revf"), item: itemId, tipo, refId, titulo: titulo || "", data: nowISO() });
+    commit();
+    return dias;
+  },
+  // Remove uma revisão da FILA (não apaga o item em si — tópico/resumo/mapa/indicação
+  // continuam; só deixam de estar agendados para revisão).
+  removerRevisao(itemId) {
+    if (!itemId) return;
+    const [tipo, refId] = itemId.split(":");
+    if (tipo === "topico") { this.cancelarRevisaoTopico(refId); return; }
+    let o = null;
+    if (tipo === "resumo") o = state.resumos.find((x) => x.id === refId);
+    else if (tipo === "mapa") o = state.mapasMentais.find((x) => x.id === refId);
+    else if (tipo === "ind") o = state.indicacoes.find((x) => x.id === refId);
+    if (o) { o.revisao = null; commit(); }
+  },
+  // Ação em lote: traz TODAS as revisões atrasadas para hoje (só move a data).
+  trazerAtrasadasParaHoje() {
+    const hoje = todayISO();
+    let n = 0;
+    for (const it of this.revisoesConsolidadas()) {
+      if (it.status === "atrasada" && it.acoes) { this.reprogramarRevisao(it.id, hoje); n++; }
+    }
+    return n;
+  },
+
+  // ---------- Simulados (histórico + registro; app auto-registra ao finalizar) ----------
+  // Registra um simulado no histórico. origem "app" (feito no motor) ou "externo" (prova
+  // física/cursinho/outra plataforma). Guarda certas/erradas/branco + aproveitamento.
+  registrarSimulado({ origem = "externo", nome, formato = "mc", total, acertos, erros, brancos, tempoSeg = 0, data, porDisciplina = null, questaoIds = null, respostas = null } = {}) {
+    const ac = Math.max(0, Math.round(+acertos || 0));
+    const er = Math.max(0, Math.round(+erros || 0));
+    const br = Math.max(0, Math.round(+brancos || 0));
+    const tot = total != null ? Math.max(ac + er + br, Math.round(+total || 0)) : ac + er + br;
+    if (tot < 1) return null; // simulado sem questões não entra
+    const s = {
+      id: uid("sim"),
+      origem,
+      nome: (nome || "").trim() || (origem === "app" ? "Simulado no app" : "Simulado"),
+      formato, // "mc" | "ce"
+      total: tot,
+      acertos: ac,
+      erros: er,
+      brancos: br,
+      tempoSeg: Math.max(0, Math.round(tempoSeg || 0)),
+      aproveitamento: tot ? Math.round((ac / tot) * 100) : 0,
+      porDisciplina: Array.isArray(porDisciplina) && porDisciplina.length ? porDisciplina : null,
+      // Snapshot para reabrir a correção (só simulados feitos no app): ids das questões
+      // na ordem aplicada + o que o usuário respondeu. O gabarito/enunciado é resolvido
+      // de state.questoes na hora de exibir (questão apagada depois é simplesmente omitida).
+      questaoIds: origem === "app" && Array.isArray(questaoIds) && questaoIds.length ? [...questaoIds] : null,
+      respostas: origem === "app" && respostas && typeof respostas === "object" ? { ...respostas } : null,
+      data: data ? (String(data).length === 10 ? `${data}T12:00:00.000Z` : data) : nowISO(),
+    };
+    if (!Array.isArray(state.simulados)) state.simulados = [];
+    state.simulados.push(s);
+    commit();
+    return s;
+  },
+  removerSimulado(id) {
+    state.simulados = (state.simulados || []).filter((s) => s.id !== id);
+    commit();
+  },
+  // Lista dos simulados (mais recentes primeiro).
+  simuladosLista() {
+    return [...(state.simulados || [])].sort((a, b) => (a.data < b.data ? 1 : -1));
+  },
+  // Cartões de evolução: total, questões, aproveitamento médio (ponderado) e melhor nota.
+  simuladosResumo() {
+    const arr = state.simulados || [];
+    const questoes = arr.reduce((a, s) => a + (s.total || 0), 0);
+    const acertos = arr.reduce((a, s) => a + (s.acertos || 0), 0);
+    return {
+      total: arr.length,
+      questoes,
+      acertos,
+      media: questoes ? Math.round((acertos / questoes) * 100) : null,
+      melhor: arr.length ? Math.max(...arr.map((s) => s.aproveitamento || 0)) : null,
+    };
+  },
+
   // Todas as sessões (mais recentes primeiro), com nomes de disciplina e tópico.
   sessoesDetalhadas() {
     return [...state.sessoes]
@@ -4922,9 +6324,12 @@ export const store = {
     for (const s of state.sessoes) {
       const d = (s.data || "").slice(0, 10);
       if (d.slice(0, 7) === mesISO) {
-        if (!map[d]) map[d] = { tempoSeg: 0, sessoes: 0 };
+        if (!map[d]) map[d] = { tempoSeg: 0, sessoes: 0, fases: {} };
         map[d].tempoSeg += s.tempoSeg || 0;
         map[d].sessoes += 1;
+        // Tempo por fase (E=Estudo, A=Prática, R=Revisão) para os filtros do calendário.
+        const f = s.fase || "E";
+        map[d].fases[f] = (map[d].fases[f] || 0) + (s.tempoSeg || 0);
       }
     }
     return map;
@@ -5095,7 +6500,15 @@ export const store = {
   async refinarPlanoIA(itens) {
     const plano = (itens || []).map((it) => `${it.data || "(sem dia)"}: ${it.titulo} [${it.categoria}]`).join("\n");
     const m = this.metas();
-    const contexto = `Prova: ${m.dataProva ? m.diasProva + " dias restantes" : "sem data"}. Cobertura do edital: ${this.coberturaEdital().pct}%.`;
+    const diag = this.diagnostico();
+    const fracas = diag.porDisciplina.filter((l) => l.percentAcerto !== null && l.percentAcerto < 60).map((l) => `${l.disciplina.nome} (${l.percentAcerto}%)`);
+    const revCont = this.revisoesResumoContagem();
+    const contexto =
+      `Prova: ${m.dataProva ? m.diasProva + " dias restantes" : "sem data"}. ` +
+      `Cobertura do edital: ${this.coberturaEdital().pct}%. ` +
+      `Tempo disponível: ${Math.round(m.dispDiariaMin || 0)} min/dia. ` +
+      (fracas.length ? `Disciplinas fracas: ${fracas.join(", ")}. ` : "") +
+      (revCont.atrasadas ? `Revisões atrasadas: ${revCont.atrasadas}. ` : "");
     return iaProv.refinarPlano(state.config, { plano, contexto });
   },
   // IMPORTAR cronograma externo: a IA estrutura o texto em tarefas (online). Mapeia o dia

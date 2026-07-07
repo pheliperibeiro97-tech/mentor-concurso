@@ -197,16 +197,19 @@ function sumarioNavegavelHTML(d, store) {
       const tipoTag = b.tipo !== "teoria" ? `<span class="mini-tag">${esc(b.tipo)}${b.banca ? " " + esc(b.banca) : ""}</span>` : "";
       const verPdf = d.pdfData ? `<button class="lnk" data-action="ler-pdf-pag" data-id="${d.id}" data-pag="${b.pIni}" data-tip="Abrir esta página no PDF">${icone("file-text")} abrir pág. ${b.pIni}</button>` : "";
       const ehQuestoes = b.tipo === "questoes" || b.tipo === "lista";
-      // F5: gerar/extrair DESTE bloco (herda tópico + páginas + banca).
+      // F5: gerar/extrair DESTE bloco (herda tópico + páginas + banca). As opções ficam num
+      // menu "Gerar ▾" (antes eram 5 links soltos repetidos em cada bloco = poluição visual).
       const gerar = temIA
-        ? `<div class="sum-gerar" data-tip="Gera a partir DESTE conteúdo (págs. ${b.pIni}–${b.pFim}).">
-             <span class="muted small">deste bloco:</span>
-             <button class="lnk" data-action="bloco-flashcards" data-id="${d.id}" data-bi="${i}">${icone("layers")} flashcards</button>
-             <button class="lnk" data-action="bloco-questoes" data-id="${d.id}" data-bi="${i}">${icone("notebook-pen")} questões</button>
-             <button class="lnk" data-action="bloco-questoes-ce" data-id="${d.id}" data-bi="${i}">${icone("check")} C/E</button>
-             <button class="lnk" data-action="bloco-mapa" data-id="${d.id}" data-bi="${i}">${iconMapa} mapa</button>
-             ${ehQuestoes ? `<button class="lnk" data-action="bloco-extrair" data-id="${d.id}" data-bi="${i}" data-tip="Extrai as questões já prontas deste bloco (não inventa).">${icone("clipboard-list")} extrair</button>` : ""}
-           </div>`
+        ? `<details class="doc-mais sum-gerar-menu">
+             <summary class="lnk" data-tip="Gera a partir DESTE conteúdo (págs. ${b.pIni}–${b.pFim}).">${icone("sparkles")} Gerar deste bloco ${icone("chevron-down")}</summary>
+             <div class="doc-mais-pop" role="menu">
+               <button class="menu-item" data-action="bloco-flashcards" data-id="${d.id}" data-bi="${i}">${icone("layers")} Flashcards</button>
+               <button class="menu-item" data-action="bloco-questoes" data-id="${d.id}" data-bi="${i}">${icone("notebook-pen")} Questões</button>
+               <button class="menu-item" data-action="bloco-questoes-ce" data-id="${d.id}" data-bi="${i}">${icone("check")} Questões C/E</button>
+               <button class="menu-item" data-action="bloco-mapa" data-id="${d.id}" data-bi="${i}">${iconMapa} Mapa mental</button>
+               ${ehQuestoes ? `<button class="menu-item" data-action="bloco-extrair" data-id="${d.id}" data-bi="${i}" data-tip="Extrai as questões já prontas deste bloco (não inventa).">${icone("clipboard-list")} Extrair questões prontas</button>` : ""}
+             </div>
+           </details>`
         : "";
       const aviso = (b.confianca || 1) < 0.6 ? `<span class="estr-aviso" data-tip="Baixa confiança — confira em ✎ revisar estrutura.">${icone("triangle-alert")}</span> ` : "";
       return `<details class="sum-bloco" style="${ind}">
@@ -927,7 +930,7 @@ function selecaoFontesHTML(store) {
           <label class="sem-fonte">
             <input type="checkbox" class="sem-fonte-chk" data-id="${f.id}" ${sel.has(f.id) ? "checked" : ""} />
             <span class="sem-fonte-nome">${esc(f.titulo)}</span>
-            <span class="mini-tag">${f.tipo === "resumo" ? "Resumo" : "Material"}</span>
+            <span class="mini-tag">${f.tipo === "resumo" ? "Resumo" : f.tipo === "leiseca" ? "Lei Seca" : f.tipo === "juris" ? "Jurisprudência" : "Material"}</span>
             <span class="sem-fonte-status ${f.indexada ? "ok" : f.emIndice ? "pend" : ""}">${statusFonte(f)}</span>
           </label>`
           )
@@ -1225,7 +1228,7 @@ function docHTML(store, st, d, busca) {
   return `
     <div class="card doc-item" data-foco-id="${d.id}">
       <div class="doc-head">
-        <span class="doc-titulo">${esc(d.titulo)}</span>
+        <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" title="Ver/ocultar o texto extraído">${esc(d.titulo)}</span>
         <div class="doc-meta">
           ${topicosDoc.map((t) => { const pg = d.topicoPaginas && d.topicoPaginas[t.id]; return `<span class="tag-topico">${esc(nomeTopico(st, t))}${pg ? ` <span class="tag-pag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span>`; }).join("")}
           ${pend ? `<span class="tag-ocr">${icone("hourglass")} ${pend} pág. p/ OCR</span>` : ""}

@@ -33,11 +33,17 @@ export function setAoPedirRegistro(fn) {
 // `startedAt` = epoch(ms) do início do trecho em andamento (0 quando parado).
 let s = {
   running: false,
-  modo: "regressivo", // "regressivo" (conta para baixo) | "progressivo" (para cima)
-  target: 25 * 60, // alvo em segundos (modo regressivo)
+  // Rótulos ao usuário: "progressivo" = Cronômetro (conta p/ cima); "regressivo" = Timer
+  // (conta p/ baixo). Chaves internas mantidas por compatibilidade. + "pomodoro".
+  modo: "regressivo",
+  target: 25 * 60, // alvo em segundos (Timer e cada fase do Pomodoro)
   base: 0,
   startedAt: 0,
   alvoAtingido: false, // já cruzou o alvo (toca o som 1x e segue no tempo extra)
+  // Pomodoro (ciclos estudo/pausa). Durações vêm da config (configuráveis pelo usuário).
+  pomoFase: "estudo", // "estudo" | "curta" | "longa"
+  pomoSessao: 1, // sessão de estudo atual dentro do ciclo
+  pomoEstudoAcum: 0, // segundos de ESTUDO acumulados no ciclo (para sugerir no registro)
   fase: null,
   topicoId: null,
   faseNome: "",
@@ -46,6 +52,7 @@ let s = {
   pausedAt: 0, // epoch(ms) em que pausou — alimenta o contador de pausa efêmero
   modoTela: "pill", // "pill" (flutuante pequeno e arrastável) | "focus" (tela cheia)
   pos: null, // posição do pill arrastado {x,y}; null = posição padrão (CSS)
+  pillOculto: false, // pill dispensado pelo usuário (o chip da topbar cobre a glanceabilidade)
 };
 
 function carregar() {
@@ -123,15 +130,59 @@ function tocarAlarme() {
 export function elapsedSeg() {
   return s.base + (s.running ? (Date.now() - s.startedAt) / 1000 : 0);
 }
-// Está em tempo extra? (regressivo que já passou do alvo)
+// Está em tempo extra? (Timer que já passou do alvo; Pomodoro nunca — ele avança de fase)
 export function emOvertime() {
-  return s.modo === "regressivo" && elapsedSeg() >= s.target;
+  return (s.modo === "regressivo" || s.modo === "pomodoro") && elapsedSeg() >= s.target;
 }
-// Valor a MOSTRAR conforme o modo (regressivo conta para baixo; após o alvo, conta o extra).
+// Valor a MOSTRAR conforme o modo. Timer/Pomodoro contam para baixo; ao passar do alvo
+// (Pomodoro sem avanço automático), viram contagem do tempo EXTRA (para cima).
 export function displaySeg() {
   const el = elapsedSeg();
   if (s.modo === "progressivo") return el;
   return el >= s.target ? el - s.target : s.target - el;
+}
+
+// ===== Pomodoro: durações (da config, configuráveis) + transição de fase =====
+function pomoCfg() {
+  const c = app && app.store ? app.store.get().config || {} : {};
+  return {
+    estudo: (c.pomoEstudo || c.pomodoroFoco || 25) * 60,
+    curta: (c.pomoCurta || 5) * 60,
+    longa: (c.pomoLonga || 15) * 60,
+    sessoes: c.pomoSessoes || 4,
+    autoAvanca: !!c.pomoAutoAvanca, // padrão: NÃO avança sozinho (o tempo extra conta como estudo)
+  };
+}
+export function pomoDurFase(fase) {
+  const p = pomoCfg();
+  return fase === "estudo" ? p.estudo : fase === "curta" ? p.curta : p.longa;
+}
+export function pomoSessoesTotal() {
+  return pomoCfg().sessoes;
+}
+export const POMO_ROTULO = { estudo: "Estudo", curta: "Pausa curta", longa: "Pausa longa" };
+// Avança para a próxima fase do ciclo. `natural` = terminou o tempo (acumula o alvo cheio);
+// senão (pular) acumula só o tempo decorrido da fase de estudo.
+function avancarPomo(natural) {
+  if (s.pomoFase === "estudo") {
+    // Conta o tempo REAL estudado nesta fase (inclui o extra além do alvo).
+    s.pomoEstudoAcum = (s.pomoEstudoAcum || 0) + Math.max(0, Math.round(elapsedSeg()));
+  }
+  let prox;
+  if (s.pomoFase === "estudo") prox = s.pomoSessao >= pomoSessoesTotal() ? "longa" : "curta";
+  else if (s.pomoFase === "curta") { prox = "estudo"; s.pomoSessao += 1; }
+  else { prox = "estudo"; s.pomoSessao = 1; s.pomoEstudoAcum = 0; } // fim do ciclo → recomeça
+  s.pomoFase = prox;
+  s.target = pomoDurFase(prox);
+  s.base = 0;
+  s.startedAt = s.running ? Date.now() : 0;
+  s.alvoAtingido = false;
+}
+// Pular a fase atual (botão ⏭ do Pomodoro): vai direto para a próxima.
+export function pularFase() {
+  if (s.modo !== "pomodoro") return;
+  avancarPomo(false);
+  emitir();
 }
 export function snapshot() {
   const el = elapsedSeg();
@@ -150,6 +201,11 @@ export function snapshot() {
     topicoLabel: s.topicoLabel,
     cor: s.cor,
     pausadoSeg: !s.running && s.base > 0 ? Math.max(0, (Date.now() - (s.pausedAt || Date.now())) / 1000) : 0,
+    // Pomodoro
+    pomoFase: s.pomoFase,
+    pomoSessao: s.pomoSessao,
+    pomoSessoes: s.modo === "pomodoro" ? pomoSessoesTotal() : 0,
+    pomoEstudoSeg: (s.pomoEstudoAcum || 0) + (s.modo === "pomodoro" && s.pomoFase === "estudo" ? el : 0),
   };
 }
 
@@ -200,6 +256,14 @@ export function zerar() {
   s.base = 0;
   s.pausedAt = 0;
   s.alvoAtingido = false;
+  // Pomodoro: zerar reinicia o ciclo (fase estudo, sessão 1, acumulado 0) — evita
+  // duplicar o tempo de estudo no próximo registro (registrar chama zerar).
+  if (s.modo === "pomodoro") {
+    s.pomoFase = "estudo";
+    s.pomoSessao = 1;
+    s.pomoEstudoAcum = 0;
+    s.target = pomoDurFase("estudo");
+  }
   emitir();
 }
 export function setModo(modo) {
@@ -209,6 +273,13 @@ export function setModo(modo) {
   s.base = 0;
   s.alvoAtingido = false;
   s.modo = modo;
+  if (modo === "pomodoro") {
+    // Começa um ciclo novo na fase de estudo.
+    s.pomoFase = "estudo";
+    s.pomoSessao = 1;
+    s.pomoEstudoAcum = 0;
+    s.target = pomoDurFase("estudo");
+  }
   emitir();
 }
 export function setTarget(seg) {
@@ -241,52 +312,68 @@ export function vincular({ fase, topicoId, faseNome, topicoLabel, cor }) {
 function ativo() {
   return s.running || s.base > 0;
 }
+let popAberto = false;
 function montarWidget() {
   if (document.getElementById("crono-fab")) return;
   widget = document.createElement("div");
   widget.id = "crono-fab";
-  widget.className = "crono-fab crono-pill oculto";
+  widget.className = "cf";
   widget.innerHTML = `
-    <div class="crono-play-row">
-      <button class="crono-btn crono-toggle" title="Iniciar / pausar" aria-label="Iniciar ou pausar">${icone("play")}</button>
-      <button class="crono-btn crono-zerar" title="Zerar — voltar a zero sem registrar" aria-label="Zerar cronômetro">${icone("rotate-ccw")}</button>
-    </div>
-    <div class="crono-corpo">
-      <div class="crono-time">00:00</div>
-      <div class="crono-sub"></div>
-      <div class="crono-config">
-        <div class="crono-modo">
-          <button class="chip crono-modo-btn" data-modo="regressivo" title="Conta para baixo, a partir do bloco definido.">Regressivo</button>
-          <button class="chip crono-modo-btn" data-modo="progressivo" title="Conta para cima, até você interromper.">Progressivo</button>
+    <div class="cf-pop" hidden role="dialog" aria-label="Cronômetro">
+      <div class="cf-topbar">
+        <div class="cf-modos">
+          <button class="cf-modo" data-modo="progressivo" title="Conta para cima, até você interromper.">Cronômetro</button>
+          <button class="cf-modo" data-modo="regressivo" title="Conta para baixo, a partir do tempo definido.">Timer</button>
+          <button class="cf-modo" data-modo="pomodoro" title="Ciclos de estudo e pausa.">Pomodoro</button>
         </div>
-        <label class="crono-alvo">Bloco <input class="crono-min" type="number" min="1" max="300" value="25" /> min</label>
+        <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
+      </div>
+      <div class="cf-disp"><div class="cf-big">00:00</div><div class="cf-cap"></div></div>
+      <div class="cf-timer">
+        <div class="cf-presets">
+          <button class="cf-preset" data-min="10">10</button>
+          <button class="cf-preset" data-min="25">25</button>
+          <button class="cf-preset" data-min="50">50</button>
+          <label class="cf-livre">livre <input class="cf-min" type="number" min="1" max="300" /> min</label>
+        </div>
+      </div>
+      <div class="cf-pomo">
+        <div class="cf-pomo-fases">
+          <span class="cf-fase" data-fase="estudo">Estudo</span>
+          <span class="cf-fase" data-fase="curta">Pausa curta</span>
+          <span class="cf-fase" data-fase="longa">Pausa longa</span>
+        </div>
+        <div class="cf-pomo-sess"></div>
+        <details class="cf-pomo-cfg">
+          <summary>${icone("settings")} Durações (min)</summary>
+          <div class="cf-pomo-grid">
+            <label>Estudo <input data-cfg="pomoEstudo" type="number" min="1" max="120" /></label>
+            <label>Pausa curta <input data-cfg="pomoCurta" type="number" min="1" max="60" /></label>
+            <label>Pausa longa <input data-cfg="pomoLonga" type="number" min="1" max="60" /></label>
+            <label>Sessões <input data-cfg="pomoSessoes" type="number" min="1" max="12" /></label>
+          </div>
+          <label class="cf-pomo-auto" title="Ligado: entra na pausa sozinho ao bater o tempo. Desligado: toca o alarme mas segue contando o tempo extra (que conta como estudo) até você tocar em ⏭."><input data-cfg="pomoAutoAvanca" type="checkbox" /> Avançar de fase sozinho</label>
+        </details>
+      </div>
+      <div class="cf-ctrl">
+        <button class="cf-play" data-cf-toggle aria-label="Iniciar ou pausar">${icone("play")}</button>
+        <button class="cf-sec" data-cf-zerar title="Zerar" aria-label="Zerar">${icone("rotate-ccw")}</button>
+        <button class="cf-sec cf-skip" data-cf-pular title="Pular fase" aria-label="Pular fase">${icone("skip-forward")}</button>
+        <button class="cf-reg" data-cf-registrar>Registrar sessão</button>
       </div>
     </div>
-    <div class="crono-acoes">
-      <button class="crono-btn crono-registrar" title="Registrar esta sessão" aria-label="Registrar sessão"><span class="crono-ic">${icone("check-check")}</span><span class="crono-lbl">Registrar sessão</span></button>
-      <button class="crono-btn crono-mini crono-expandir" title="Ampliar (modo foco)" aria-label="Ampliar">${icone("maximize-2")}</button>
-      <button class="crono-btn crono-mini crono-reduzir" title="Voltar ao tamanho normal" aria-label="Reduzir">${icone("minimize-2")}</button>
-      <button class="crono-btn crono-mini crono-hoje" title="Abrir a tela Hoje" aria-label="Abrir Hoje">${icone("external-link")}</button>
-    </div>`;
+    <button class="cf-btn" data-cf-abrir data-tip="Cronômetro" aria-label="Abrir o cronômetro">${icone("clock-3")}<span class="cf-btn-t">Cronômetro</span></button>`;
   document.body.appendChild(widget);
-  widget.querySelector(".crono-toggle").addEventListener("click", (e) => { e.stopPropagation(); toggle(); });
-  widget.querySelector(".crono-expandir").addEventListener("click", (e) => { e.stopPropagation(); setModoTela("focus"); });
-  widget.querySelector(".crono-reduzir").addEventListener("click", (e) => { e.stopPropagation(); setModoTela("pill"); });
-  widget.querySelector(".crono-hoje").addEventListener("click", (e) => { e.stopPropagation(); if (app) app.navigate("hoje"); });
-  widget.querySelector(".crono-registrar").addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (aoPedirRegistro) aoPedirRegistro();
-    else if (app) app.navigate("hoje");
-  });
-  widget.querySelector(".crono-zerar").addEventListener("click", (e) => { e.stopPropagation(); zerar(); });
-  // ESC sai da tela cheia (modo foco) e volta ao flutuante pequeno.
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && s.modoTela === "focus") setModoTela("pill");
-  });
-  // Config (só faz sentido no modo foco/tela cheia): trocar modo e ajustar o bloco.
-  widget.querySelectorAll(".crono-modo-btn").forEach((b) =>
-    b.addEventListener("click", (e) => {
-      e.stopPropagation();
+
+  const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
+  on(".cf-btn", "click", (e) => { e.stopPropagation(); setPopAberto(!popAberto); });
+  on("[data-cf-fechar]", "click", () => setPopAberto(false));
+  on("[data-cf-toggle]", "click", toggle);
+  on("[data-cf-zerar]", "click", zerar);
+  on("[data-cf-pular]", "click", pularFase);
+  on("[data-cf-registrar]", "click", () => { if (aoPedirRegistro) aoPedirRegistro(); else if (app) app.navigate("hoje"); });
+  widget.querySelectorAll(".cf-modo").forEach((b) =>
+    b.addEventListener("click", () => {
       const novo = b.getAttribute("data-modo");
       if (novo === s.modo) return;
       setModo(novo);
@@ -296,135 +383,98 @@ function montarWidget() {
       }
     })
   );
-  const minEl = widget.querySelector(".crono-min");
-  if (minEl) {
-    minEl.addEventListener("click", (e) => e.stopPropagation());
-    minEl.addEventListener("change", () => {
-      const min = Math.max(1, parseInt(minEl.value, 10) || 25);
-      setTarget(min * 60);
-      if (app && app.store) app.store.setConfig({ pomodoroFoco: min });
-    });
-  }
-  // clique no corpo: no pill abre o Hoje (atalho); no foco, não navega.
-  widget.querySelector(".crono-corpo").addEventListener("click", () => {
-    if (s.modoTela !== "focus" && app) app.navigate("hoje");
+  widget.querySelectorAll(".cf-preset").forEach((b) =>
+    b.addEventListener("click", () => setTarget((parseInt(b.dataset.min, 10) || 25) * 60))
+  );
+  const minEl = widget.querySelector(".cf-min");
+  if (minEl) minEl.addEventListener("change", () => {
+    const min = Math.max(1, parseInt(minEl.value, 10) || 25);
+    setTarget(min * 60);
+    if (app && app.store) app.store.setConfig({ pomodoroFoco: min });
   });
-  ligarArrasto(widget);
-  aplicarPos();
+  widget.querySelectorAll("[data-cfg]").forEach((inp) =>
+    inp.addEventListener("change", () => {
+      const key = inp.getAttribute("data-cfg");
+      const v = inp.type === "checkbox" ? inp.checked : Math.max(1, parseInt(inp.value, 10) || 1);
+      if (app && app.store) app.store.setConfig({ [key]: v });
+      if (s.modo === "pomodoro" && !ativo()) { s.target = pomoDurFase(s.pomoFase); emitir(); }
+      else atualizarWidget();
+    })
+  );
+  // Fecha ao clicar fora / Esc. Usa POINTERDOWN (não click): assim, ao abrir o popover por
+  // um botão externo (ex.: "Cronômetro" do Hoje), o clique que dispara a abertura não é
+  // interpretado como "clique fora" — no pointerdown desse gatilho, popAberto ainda é false.
+  document.addEventListener("pointerdown", (e) => { if (popAberto && !widget.contains(e.target)) setPopAberto(false); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && popAberto) setPopAberto(false); });
 }
 
-// Alterna entre o flutuante pequeno (pill) e a tela cheia (foco).
+function setPopAberto(v) {
+  popAberto = !!v;
+  const pop = widget && widget.querySelector(".cf-pop");
+  if (pop) pop.hidden = !popAberto;
+  if (widget) widget.classList.toggle("cf-open", popAberto);
+  if (popAberto) atualizarWidget();
+}
+
+// Retrocompat: entradas antigas ("Começar agora"/"Cronômetro" do Hoje) abrem o popover.
 export function setModoTela(modo) {
-  s.modoTela = modo === "focus" ? "focus" : "pill";
-  salvar();
-  aplicarPos();
-  atualizarWidget();
-}
-
-// Aplica a posição salva do pill (e respeita os limites da janela). No foco, posição é fixa via CSS.
-function aplicarPos() {
-  if (!widget) return;
-  if (s.modoTela === "focus" || !s.pos) {
-    widget.style.left = widget.style.top = widget.style.right = widget.style.bottom = "";
-    return;
-  }
-  const w = widget.offsetWidth || 220;
-  const h = widget.offsetHeight || 60;
-  const x = Math.min(Math.max(8, s.pos.x), window.innerWidth - w - 8);
-  // Piso de 96px: o pill nunca cobre o cabeçalho/H1 da tela (defeito visual nº1),
-  // mesmo com uma posição antiga salva perto do topo.
-  const y = Math.min(Math.max(96, s.pos.y), window.innerHeight - h - 8);
-  widget.style.left = x + "px";
-  widget.style.top = y + "px";
-  widget.style.right = "auto";
-  widget.style.bottom = "auto";
-}
-
-// Arrasto do pill (ignora botões e o modo foco).
-function ligarArrasto(el) {
-  let arrastando = false, dx = 0, dy = 0, moveu = false;
-  const onDown = (e) => {
-    if (s.modoTela === "focus" || e.target.closest(".crono-btn")) return;
-    arrastando = true;
-    moveu = false;
-    const r = el.getBoundingClientRect();
-    dx = e.clientX - r.left;
-    dy = e.clientY - r.top;
-    el.classList.add("arrastando");
-    try { el.setPointerCapture(e.pointerId); } catch (_) {}
-  };
-  const onMove = (e) => {
-    if (!arrastando) return;
-    moveu = true;
-    s.pos = { x: e.clientX - dx, y: e.clientY - dy };
-    aplicarPos();
-  };
-  const onUp = () => {
-    if (!arrastando) return;
-    arrastando = false;
-    el.classList.remove("arrastando");
-    if (moveu) salvar(); // só persiste se de fato moveu
-  };
-  el.addEventListener("pointerdown", onDown);
-  window.addEventListener("pointermove", onMove);
-  window.addEventListener("pointerup", onUp);
-  // impede que um arrasto termine "abrindo o Hoje" sem querer
-  el.querySelector(".crono-corpo").addEventListener("click", (e) => {
-    if (moveu) { e.stopImmediatePropagation(); moveu = false; }
-  }, true);
+  setPopAberto(modo === "focus");
 }
 
 function atualizarWidget() {
   if (!widget) return;
-  // O flutuante acompanha o usuário em QUALQUER tela (a Home não tem mais relógio inline).
-  // A tela cheia (foco) também aparece quando OCIOSA — para configurar o tempo e dar play
-  // (aberta pelo ícone de cronômetro no card de foco).
-  const visivel = ativo() || s.modoTela === "focus";
-  widget.classList.toggle("oculto", !visivel);
-  if (!visivel) return;
-  // Zerar/Registrar só fazem sentido quando há tempo (rodando ou pausado com acúmulo).
-  // Na tela cheia OCIOSA (aberta p/ configurar) eles somem — sobra só play + config.
-  const temTempo = s.running || s.base > 0;
-  const zEl = widget.querySelector(".crono-zerar");
-  const rEl = widget.querySelector(".crono-registrar");
-  if (zEl) zEl.style.display = temTempo ? "" : "none";
-  if (rEl) rEl.style.display = temTempo ? "" : "none";
-  // Config (visível só no modo foco via CSS): reflete o modo atual e o bloco alvo.
-  widget.querySelectorAll(".crono-modo-btn").forEach((b) => b.classList.toggle("on", b.getAttribute("data-modo") === s.modo));
-  const minEl = widget.querySelector(".crono-min");
-  if (minEl && document.activeElement !== minEl) minEl.value = Math.round(s.target / 60);
-  const alvoEl = widget.querySelector(".crono-alvo");
-  if (alvoEl) alvoEl.style.display = s.modo === "regressivo" ? "" : "none";
   const over = emOvertime();
   const pausadoSeg = !s.running && s.base > 0 ? Math.max(0, (Date.now() - (s.pausedAt || Date.now())) / 1000) : 0;
   widget.style.setProperty("--crono-cor", s.cor || "#2563eb");
-  widget.classList.toggle("crono-focus", s.modoTela === "focus");
-  widget.classList.toggle("crono-pill", s.modoTela !== "focus");
   widget.classList.toggle("rodando", s.running);
+  widget.classList.toggle("ativo", ativo());
   widget.classList.toggle("extra", over);
   widget.classList.toggle("pausado", pausadoSeg > 0);
-  widget.querySelector(".crono-time").textContent = (over ? "+" : "") + fmtMMSS(displaySeg());
-  widget.querySelector(".crono-toggle").innerHTML = s.running ? icone("pause") : icone("play");
-  const sub = widget.querySelector(".crono-sub");
-  if (pausadoSeg > 0) {
-    sub.innerHTML = `<span class="crono-pausa">${icone("pause")} Em pausa ${fmtMMSS(pausadoSeg)}</span>`;
-  } else {
-    const partes = [];
-    if (s.faseNome) partes.push(s.faseNome);
-    if (s.topicoLabel) partes.push(s.topicoLabel);
-    sub.textContent = over ? "Tempo extra" : partes.join(" · ") || "Em foco";
+  // Botão FAB: tempo ao vivo quando ativo; "Cronômetro" quando ocioso.
+  const btnT = widget.querySelector(".cf-btn-t");
+  if (btnT) btnT.textContent = ativo() ? (over ? "+" : "") + fmtMMSS(displaySeg()) : "Cronômetro";
+  if (!popAberto) return; // só atualiza o miolo do popover quando aberto
+  widget.querySelectorAll(".cf-modo").forEach((b) => b.classList.toggle("on", b.getAttribute("data-modo") === s.modo));
+  const showTimer = s.modo === "regressivo", showPomo = s.modo === "pomodoro";
+  widget.querySelector(".cf-timer").style.display = showTimer ? "" : "none";
+  widget.querySelector(".cf-pomo").style.display = showPomo ? "" : "none";
+  widget.querySelector(".cf-skip").style.display = showPomo ? "" : "none";
+  const big = widget.querySelector(".cf-big");
+  if (big) big.textContent = (over ? "+" : "") + fmtMMSS(displaySeg());
+  const cap = widget.querySelector(".cf-cap");
+  if (cap) {
+    if (pausadoSeg > 0) cap.textContent = `Em pausa ${fmtMMSS(pausadoSeg)}`;
+    else if (showPomo) cap.textContent = `${POMO_ROTULO[s.pomoFase]} · sessão ${s.pomoSessao} de ${pomoSessoesTotal()}`;
+    else if (over) cap.textContent = "Tempo extra — pause quando terminar";
+    else if (s.modo === "progressivo") cap.textContent = "Contando o tempo de estudo";
+    else cap.textContent = "Conta regressiva do bloco";
   }
-  if (s.modoTela === "pill") aplicarPos();
+  widget.querySelectorAll(".cf-preset").forEach((b) => b.classList.toggle("on", (parseInt(b.dataset.min, 10) || 0) * 60 === s.target));
+  const minEl = widget.querySelector(".cf-min");
+  if (minEl && document.activeElement !== minEl) minEl.value = Math.round(s.target / 60);
+  widget.querySelectorAll(".cf-fase").forEach((b) => {
+    const f = b.getAttribute("data-fase");
+    b.classList.toggle("on", showPomo && f === s.pomoFase);
+    b.classList.toggle("pausa", f !== "estudo");
+  });
+  const sess = widget.querySelector(".cf-pomo-sess");
+  if (sess) sess.textContent = `Sessão ${s.pomoSessao} de ${pomoSessoesTotal()}`;
+  const cfg = pomoCfg();
+  const setInp = (key, val) => { const i = widget.querySelector(`[data-cfg="${key}"]`); if (i && document.activeElement !== i) i.value = val; };
+  setInp("pomoEstudo", Math.round(cfg.estudo / 60));
+  setInp("pomoCurta", Math.round(cfg.curta / 60));
+  setInp("pomoLonga", Math.round(cfg.longa / 60));
+  setInp("pomoSessoes", cfg.sessoes);
+  const chkAuto = widget.querySelector('[data-cfg="pomoAutoAvanca"]');
+  if (chkAuto && document.activeElement !== chkAuto) chkAuto.checked = cfg.autoAvanca;
+  widget.querySelector("[data-cf-toggle]").innerHTML = s.running ? icone("pause") : icone("play");
+  const temTempo = s.running || s.base > 0;
+  widget.querySelector("[data-cf-zerar]").style.display = temTempo ? "" : "none";
+  widget.querySelector("[data-cf-registrar]").style.display = temTempo ? "" : "none";
 }
-// A tela "Hoje" avisa quando está visível para evitar dois relógios na tela.
+// A tela "Hoje" avisa quando está visível (habilita o confete ao cruzar o alvo).
 export function setTelaHoje(v) {
   naTelaHoje = !!v;
-  // Ao SAIR da Home com o foco aberto mas OCIOSO (usuário abriu o cronômetro e não iniciou),
-  // colapsa para pill — evita a tela cheia "presa" cobrindo as outras telas.
-  if (!v && !ativo() && s.modoTela === "focus") {
-    s.modoTela = "pill";
-    salvar();
-  }
   atualizarWidget();
 }
 
@@ -450,6 +500,23 @@ function tick() {
     tocarAlarme();
     if (naTelaHoje) confetti(); // marco: bloco de foco concluído (só se o cronômetro grande está à vista)
     toast(`Tempo do bloco (${Math.round(s.target / 60)} min) atingido. Seguindo no tempo extra; pause quando terminar.`);
+  }
+  // Pomodoro: ao terminar a fase, toca o alarme UMA vez. Se "avançar sozinho" estiver
+  // ligado, passa para a próxima fase; senão SEGUE contando o tempo extra (que conta como
+  // estudo) até o usuário tocar em ⏭.
+  if (s.modo === "pomodoro" && !s.alvoAtingido && elapsedSeg() >= s.target) {
+    s.alvoAtingido = true;
+    salvar();
+    tocarAlarme();
+    if (naTelaHoje && s.pomoFase === "estudo") confetti();
+    if (pomoCfg().autoAvanca) {
+      const antes = POMO_ROTULO[s.pomoFase];
+      avancarPomo(true);
+      toast(`${antes} concluído. Agora: ${POMO_ROTULO[s.pomoFase]}${s.pomoFase === "estudo" ? ` · sessão ${s.pomoSessao}` : ""}.`);
+    } else {
+      toast(`${POMO_ROTULO[s.pomoFase]} (${Math.round(s.target / 60)} min) concluído — seguindo no tempo extra. Toque em ⏭ para a próxima fase.`);
+    }
+    emitir();
   }
   if (++ticksDesdeCheckpoint >= 10) {
     ticksDesdeCheckpoint = 0;

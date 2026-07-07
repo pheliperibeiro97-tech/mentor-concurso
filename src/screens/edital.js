@@ -1,6 +1,6 @@
 // Tela Edital: gerenciar disciplinas, tópicos e destaques a qualquer momento
 // (o onboarding monta a estrutura inicial; aqui você acrescenta/edita depois).
-import { bindActions, toast, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar } from "../ui.js";
 import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
@@ -15,6 +15,7 @@ let aulaTopAberto = null; // aulaId com o editor de tópicos da aula aberto (Fas
 let aulasImportAberto = false; // mostrar a caixa de importar aulas mesmo já tendo aulas
 let topSort = "custom"; // ordem dos tópicos DENTRO da disciplina: "custom" | "relevancia"
 let aulasSort = "custom"; // ordem de EXIBIÇÃO das aulas: "custom" | "nome" | "topicos" (só na renderização)
+let cursinhoView = "aula"; // Plano do cursinho: ver "aula" (aula→tópicos) ou "topico" (tópico→aula)
 let topSel = new Set(); // tópicos selecionados para ações em lote (mover/unificar/nova disciplina)
 let selMode = false; // modo de seleção (mostra as caixas de seleção; fora dele só aparece o ✓ Concluído)
 let discAcAberta = new Set(); // disciplinas com o accordion ABERTO (persiste na sessão)
@@ -63,29 +64,38 @@ export function relLabel(t) {
   if ((t.peso || 0) > 0) return `${t.peso}%`;
   return t.maisCai ? "Mais cai" : "";
 }
-// <select> de relevância pronto (data-nivel dispara o handler). extraClass opcional.
-export function relSelectHTML(t, extraClass = "") {
-  const v = relValor(t);
-  const opts =
-    `<option value="nd" ${v === "nd" ? "selected" : ""}>Não definido</option>` +
-    `<option value="mc" ${v === "mc" ? "selected" : ""}>Mais cai (sem %)</option>` +
-    BANDAS.slice(1)
-      .map((b, i) => {
-        const idx = i + 1;
-        return `<option value="${idx}" ${v === String(idx) ? "selected" : ""}>${b.rotulo}</option>`;
-      })
-      .join("");
-  const cls = v === "mc" ? "rel-sel-bmc" : v === "nd" ? "rel-sel-b0" : `rel-sel-b${v}`;
-  return `<select class="rel-sel ${cls} ${extraClass}" data-id="${t.id}" data-nivel>${opts}</select>`;
+// ---- Relevância NOMEADA (Não cai · Baixa · Média · Alta · Altíssima) ----
+// O sistema interpreta o % de incidência (peso) da banca e mostra um nível nomeado,
+// como pílula colorida. A edição grava um peso representativo do nível escolhido.
+const REL_NIVEIS = [
+  { v: "nd", nome: "Não cai", peso: 0 },
+  { v: "baixa", nome: "Baixa", peso: 15 },
+  { v: "media", nome: "Média", peso: 40 },
+  { v: "alta", nome: "Alta", peso: 70 },
+  { v: "altissima", nome: "Altíssima", peso: 95 },
+];
+// Valor nomeado atual de um tópico a partir do peso (maisCai sem % conta como Alta).
+export function relNamedValor(t) {
+  const p = t.peso || 0;
+  if (p <= 0) return t.maisCai ? "alta" : "nd";
+  if (p <= 20) return "baixa";
+  if (p <= 50) return "media";
+  if (p <= 80) return "alta";
+  return "altissima";
 }
-// Aplica o valor escolhido no <select> de relevância ao store (Edital e Dossiê).
-export function aplicarRelValor(store, id, val) {
-  if (val === "nd") store.setRelevancia(id, { peso: 0, maisCai: false });
-  else if (val === "mc") store.setRelevancia(id, { peso: 0, maisCai: true });
-  else {
-    const i = parseInt(val, 10) || 0;
-    store.setRelevancia(id, { peso: BANDAS[i] ? BANDAS[i].rep : 0, maisCai: true });
-  }
+export function relNamedNome(t) {
+  return (REL_NIVEIS.find((n) => n.v === relNamedValor(t)) || REL_NIVEIS[0]).nome;
+}
+// <select> estilizado como pílula colorida (mantém a relevância editável na própria tabela).
+export function relPillSelectHTML(t) {
+  const cur = relNamedValor(t);
+  const opts = REL_NIVEIS.map((n) => `<option value="${n.v}" ${n.v === cur ? "selected" : ""}>${n.nome}</option>`).join("");
+  return `<select class="rel-pill relp-${cur}" data-id="${t.id}" data-nivel-named data-tip="Relevância: o quanto o tema cai na sua banca (o sistema interpreta o % de incidência).">${opts}</select>`;
+}
+export function aplicarRelNamed(store, id, val) {
+  const n = REL_NIVEIS.find((x) => x.v === val);
+  if (!n || n.v === "nd") store.setRelevancia(id, { peso: 0, maisCai: false });
+  else store.setRelevancia(id, { peso: n.peso, maisCai: true });
 }
 
 // Painel de SUGESTÃO de relevância por IA: Fonte B (provas importadas) e Fonte C (web).
@@ -904,24 +914,25 @@ function aulasListaHTML(store, st) {
     if (dids.length === 1) { const d = st.disciplinas.find((x) => x.id === dids[0]); if (d) return d.nome; }
     return a.disciplinaNome || "Sem disciplina";
   };
-  const cardDeAula = ({ a, idx }) => {
+  const discNomeDe = (t) => { const d = st.disciplinas.find((x) => x.id === t.disciplinaId); return d ? d.nome : ""; };
+  // AULA protagonista: nome da aula em cima; os TÓPICOS do edital que ela cobre embaixo
+  // (cada um clicável, abre o dossiê). Bolinha com a cor da disciplina; sem títulos de
+  // disciplina no meio (lista corrida na ordem das aulas).
+  const aulaRow = ({ a, idx }) => {
       const tops = (a.topicoIds || []).map((id) => st.topicos.find((t) => t.id === id)).filter(Boolean);
-      const discs = new Set(tops.map((t) => t.disciplinaId));
+      const discIds = [...new Set(tops.map((t) => t.disciplinaId).filter(Boolean))];
+      const multi = discIds.length > 1;
       const concl = tops.filter((t) => t.concluido).length;
-      // Título da aula = o conteúdo escrito no plano (assuntos), exibido SEMPRE — esteja
-      // ou não vinculado a um tópico do edital. Se a aula não tem assuntos (criada à mão),
-      // cai para os nomes dos tópicos vinculados.
-      const titulo = (a.assuntos && a.assuntos.length)
-        ? a.assuntos.join(" · ")
-        : tops.map((t) => t.nome).join(" · ");
-      return `<div class="card aula-card">
-        <div class="aula-head">
-          <b class="aula-nome">${idx + 1}. ${esc(a.nome)}</b>
-          ${discs.size > 1 ? `<span class="mini-tag" data-tip="Esta aula mistura assuntos de mais de uma disciplina.">${icone("shuffle")} ${discs.size} disciplinas</span>` : ""}
+      return `<div class="cur-aula-row" data-drag-id="${a.id}">
+        <div class="cur-aula-head">
+          <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
+          <b class="cur-aula-nome">${esc(a.nome)}</b>
+          ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
-          <button class="lnk" data-action="aula-topicos" data-id="${a.id}" data-tip-pos="cima-dir" data-tip="Definir os tópicos desta aula">${icone("square-pen")} tópicos</button>
+          ${tops.length ? `<span class="cur-prog" data-tip="Tópicos desta aula concluídos.">${concl}/${tops.length}</span>` : ""}
+          <button class="lnk cur-edit" data-action="aula-topicos" data-id="${a.id}" data-tip-pos="cima-dir" data-tip="Definir os tópicos desta aula">${icone("square-pen")}</button>
           <details class="doc-mais ed-top-mais">
-            <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para esta aula.">${icone("ellipsis")}</summary>
+            <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações para esta aula.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
               <button class="menu-item" data-action="aula-subir" data-id="${a.id}" ${custom && idx > 0 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-up")}</span> Subir</button>
               <button class="menu-item" data-action="aula-descer" data-id="${a.id}" ${custom && idx < aulas.length - 1 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-down")}</span> Descer</button>
@@ -931,15 +942,16 @@ function aulasListaHTML(store, st) {
             </div>
           </details>
         </div>
-        ${titulo ? `<div class="aula-titulo">${esc(titulo)}</div>` : ""}
-        <div class="aula-tops">
-          <span class="muted small aula-tops-rotulo">No edital:</span>
-          ${tops.length ? tops.map((t) => `<button class="tag-topico lnk" data-action="ir-dossie" data-id="${t.id}">${esc(nomeDe(t.id))}</button>`).join("") + (concl ? ` <span class="muted small">· ${plural(concl, "concluído", "concluídos")}</span>` : "") : `<span class="muted small">sem vínculo — use "✎ tópicos" para vincular.</span>`}
+        <div class="cur-aula-tops">
+          ${tops.length
+            ? tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")
+            : `<span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span>`}
         </div>
         ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a) : ""}
       </div>`;
   };
-  // Agrupa as aulas por DISCIPLINA (preservando a ordem de aparição).
+  // Agrupa as aulas por DISCIPLINA (numeração das aulas reinicia por disciplina no
+  // cursinho). Cabeçalho do grupo com a cor da disciplina; dentro, as aulas na ordem.
   const grupos = [];
   const idxGrupo = new Map();
   for (const item of display) {
@@ -947,10 +959,39 @@ function aulasListaHTML(store, st) {
     if (!idxGrupo.has(dnome)) { idxGrupo.set(dnome, grupos.length); grupos.push({ disc: dnome, itens: [] }); }
     grupos[idxGrupo.get(dnome)].itens.push(item);
   }
-  const usarGrupos = grupos.length > 1 || (grupos[0] && grupos[0].disc !== "Sem disciplina");
-  const cards = usarGrupos
-    ? grupos.map((g) => `<div class="aulas-disc-grupo"><h4 class="aulas-disc-titulo">${esc(g.disc)} <span class="muted small">(${g.itens.length} aula${g.itens.length === 1 ? "" : "s"})</span></h4>${g.itens.map(cardDeAula).join("")}</div>`).join("")
-    : display.map(cardDeAula).join("");
+  // Uma TABELA por disciplina (igual ao Edital): a disciplina é a "caixa", as aulas são
+  // linhas. Bem menos boxes que um card por aula.
+  const cards = grupos.map((g) => {
+    const d = st.disciplinas.find((x) => x.nome === g.disc);
+    const cor = d ? store.corDisciplina(d.id) : "var(--muted)";
+    return `<div class="cur-disc" style="--acc:${cor}">
+      <div class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(g.disc)}</span><span class="cur-grupo-n">${g.itens.length} aula${g.itens.length === 1 ? "" : "s"}</span></div>
+      <div class="cur-aula-list">${g.itens.map(aulaRow).join("")}</div>
+    </div>`;
+  }).join("");
+  // Modo "por tópico": os tópicos do edital (por disciplina, ordem do edital) mostrando
+  // a(s) aula(s) do cursinho que os cobrem — o inverso do modo "por aula".
+  const bodyTopico = st.disciplinas.map((d) => {
+    const tps = st.topicos.filter((t) => t.disciplinaId === d.id);
+    if (!tps.length) return "";
+    const cor = store.corDisciplina(d.id);
+    const rows = tps.map((t) => {
+      const aulasT = st.aulas.filter((a) => (a.topicoIds || []).includes(t.id));
+      const ref = aulasT.length
+        ? aulasT.map((a) => `<span class="cur-aula-chip">${esc(a.nome)}</span>`).join("")
+        : `<span class="cur-sem muted small">${icone("link")} não vinculado a nenhuma aula</span>`;
+      return `<div class="cur-aula-row">
+        <div class="cur-aula-head">
+          <button class="lnk ed-top-link cur-top-lnk" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico">${icone("external-link")}</span></button>
+        </div>
+        <div class="cur-aula-ref">${ref}</div>
+      </div>`;
+    }).join("");
+    return `<div class="cur-disc" style="--acc:${cor}">
+      <div class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(d.nome)}</span><span class="cur-grupo-n">${tps.length} tópico${tps.length === 1 ? "" : "s"}</span></div>
+      <div class="cur-aula-list">${rows}</div>
+    </div>`;
+  }).join("");
   return `
     <p class="muted small cursinho-nota">As aulas <b>agrupam os seus tópicos</b> na ordem do cursinho — <b>não criam estrutura nova</b>. Com a base "Cursinho", o app estuda na <b>ordem das aulas</b> (aqui e no Hoje); o conteúdo, o progresso e a cobertura continuam os mesmos do seu edital.</p>
     <div class="barra-acoes cursinho-barra">
@@ -960,13 +1001,11 @@ function aulasListaHTML(store, st) {
           <option value="cursinho" ${base === "cursinho" ? "selected" : ""}>Cursinho (por aula)</option>
         </select>
       </label>
-      <label class="inline" data-tip="Só muda a ordem em que as aulas aparecem aqui. Em 'Como cadastrei' você pode mover manualmente (↑/↓).">Ordenar:
-        <select id="aulas-sort">
-          <option value="custom" ${aulasSort === "custom" ? "selected" : ""}>Como cadastrei</option>
-          <option value="nome" ${aulasSort === "nome" ? "selected" : ""}>Por nome (A–Z)</option>
-          <option value="topicos" ${aulasSort === "topicos" ? "selected" : ""}>Mais tópicos primeiro</option>
-        </select>
-      </label>
+      <span class="cur-seg" role="tablist" data-tip="Só muda a forma de ver nesta tela (não altera nada do estudo).">
+        <span class="cur-seg-lbl">Ver por:</span>
+        <button class="${cursinhoView === "aula" ? "on" : ""}" data-action="cur-view" data-v="aula">Aula</button>
+        <button class="${cursinhoView === "topico" ? "on" : ""}" data-action="cur-view" data-v="topico">Tópico</button>
+      </span>
       <span class="spacer"></span>
       <button class="btn btn-soft btn-sm" data-action="compatibilizar-aulas-ia" data-tip="A IA casa os assuntos das aulas com os tópicos do seu edital (vira sinônimo), sem você marcar um por um.">${icone("bot")} Compatibilizar com IA</button>
       <button class="btn btn-soft btn-sm" data-action="add-aula">${icone("plus")} Nova aula</button>
@@ -980,8 +1019,8 @@ function aulasListaHTML(store, st) {
         </div>
       </details>
     </div>
-    ${cards}
-    ${soltos.length ? `<div class="card cursinho-soltos muted small">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> (não estão na divisão do cursinho): ${soltos.map((t) => esc(t.nome)).join(" · ")}</div>` : ""}`;
+    ${cursinhoView === "aula" ? cards : bodyTopico}
+    ${cursinhoView === "aula" && soltos.length ? `<div class="card cursinho-soltos muted small">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> (não estão na divisão do cursinho): ${soltos.map((t) => esc(t.nome)).join(" · ")}</div>` : ""}`;
 }
 
 export default function renderEdital(root, app) {
@@ -1039,18 +1078,29 @@ export default function renderEdital(root, app) {
   // Accordion: na 1ª visita, abre só a primeira disciplina (as demais recolhidas = fim do paredão).
   if (!discAcInit && st.disciplinas.length) { discAcInit = true; discAcAberta.add(st.disciplinas[0].id); }
 
+  const algumAberto = st.disciplinas.some((d) => discAcAberta.has(d.id));
   const estruturaBody = `
     <div class="barra-acoes ed-barra">
       <button class="btn btn-add btn-sm" data-action="toggle-add-disc" data-tip-pos="cima-esq" data-tip="Adicionar disciplinas e tópicos: digite uma disciplina ou cole/importe o edital (separado automaticamente).">${icone("plus")} Adicionar ao edital</button>
       <span class="spacer"></span>
+      <label class="inline ed-ord">Ordenar:
+        <select id="ed-top-sort" class="ed-ord-sel">
+          <option value="custom" ${topSort === "custom" ? "selected" : ""}>Como cadastrei</option>
+          <option value="relevancia" ${topSort === "relevancia" ? "selected" : ""}>Mais relevantes primeiro</option>
+        </select>
+      </label>
+      ${st.disciplinas.length ? `<button class="lnk small" data-action="${algumAberto ? "ed-recolher" : "ed-expandir"}" data-tip-pos="cima-esq" data-tip="${algumAberto ? "Recolher todas as disciplinas." : "Abrir todas as disciplinas."}">${algumAberto ? "Recolher tudo" : "Expandir tudo"}</button>
+      <button class="btn btn-ghost btn-sm ${selMode ? "on" : ""}" data-action="toggle-selmode" data-tip-pos="cima-esq" data-tip="Selecionar vários tópicos para mover, unificar ou virar nova disciplina.">${selMode ? "Concluir seleção" : "Selecionar"}</button>` : ""}
       <details class="doc-mais ed-barra-mais">
-        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Relevância dos temas e checklist da banca.">${icone("ellipsis")} Mais</summary>
+        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações do edital.">${icone("ellipsis")} Mais</summary>
         <div class="doc-mais-pop" role="menu">
           <div class="menu-grupo-rotulo" aria-hidden="true">${icone("target")} Relevância</div>
           <button class="menu-item" data-action="toggle-destaques" data-tip="Cole os temas que mais caem (com % ou sem) e preenche a relevância automaticamente."><span class="menu-ico">${icone("star")}</span> Importar temas que mais caem</button>
           <button class="menu-item" data-action="toggle-sug-ia" data-tip="A IA sugere a relevância dos temas a partir das suas provas e/ou de uma pesquisa na web (você confere e aplica)."><span class="menu-ico">${icone("sparkles")}</span> Sugerir por IA (provas/web)</button>
           <div class="menu-sep"></div>
-          <button class="menu-item" data-action="toggle-oficial" data-tip="Cole o edital da banca: o app valida o que o seu edital já cobre e o que ficou de fora (lacunas), sem mexer na sua estrutura."><span class="menu-ico">${icone("clipboard-list")}</span> Checklist da banca</button>
+          <button class="menu-item" data-action="toggle-oficial" data-tip="Cole o edital da banca: o app valida o que o seu edital já cobre e o que ficou de fora (lacunas), sem mexer na sua estrutura."><span class="menu-ico">${icone("clipboard-list")}</span> Comparar com o edital oficial</button>
+          ${st.disciplinas.length ? `<div class="menu-sep"></div>
+          <button class="menu-item menu-item-danger" data-action="limpar-edital"><span class="menu-ico">${icone("trash-2")}</span> Limpar edital (estrutura)</button>` : ""}
         </div>
       </details>
     </div>
@@ -1058,32 +1108,11 @@ export default function renderEdital(root, app) {
     <details class="ed-ajuda">
       <summary>Como funciona o Edital?</summary>
       <div class="ed-ajuda-corpo">
-        <p>Esta é a tela do <b>seu edital</b>. Clique no <b>nome do tópico</b> para abrir o <b>Dossiê</b> (a pasta viva, com tudo daquele assunto).</p>
-        <p><b>${icone("check")} Concluído</b>: marca que você já estudou o tópico (conta na cobertura).</p>
-        <p><b>${icone("target")} Relevância</b>: o quanto o tema costuma cair, em faixas coloridas (do cinza ao vermelho). É <b>unificada</b>: cada tópico tem um <b>peso de 0 a 100%</b> <i>ou</i> a marca <b>"Mais cai" (sem %)</b> quando o percentual é desconhecido. Você pode definir de <b>3 jeitos</b>: (1) <b>manualmente</b>, no seletor de cada tópico; (2) importando os <b>"temas que mais caem"</b> (uma lista, com ou sem %); (3) pedindo à <b>IA para sugerir</b> a partir das suas provas anteriores ou de uma pesquisa na web (você confere e aplica). As três ficam reunidas no menu <b>${icone("ellipsis")} Mais ▸ Relevância</b>.</p>
-        <p><b>${icone("clipboard-list")} Checklist da banca</b> (opcional): cole o edital da banca e o app <b>valida a sua cobertura</b> (o que já cobre e as lacunas), sem mudar a sua estrutura.</p>
-        <p><b>Cobertura</b>: percentual de tópicos marcados como concluídos.</p>
-        <p>${icone("bar-chart-3")} <b>Para ver o "edital verticalizado" com o seu desempenho</b> (acertos, % de acerto, tempo e última vez por disciplina e tópico), abra a tela <b>Acompanhamento</b> (na barra lateral, grupo <b>Rotina</b>) e veja os blocos <b>"Por disciplina"</b> e <b>"Estatísticas detalhadas"</b>.</p>
+        <p>Aqui fica o <b>seu edital</b> — as disciplinas e os tópicos que você vai estudar. Clique no tópico (ou no ${icone("external-link")}) para abrir o <b>Dossiê</b>: a pasta viva com tudo daquele assunto.</p>
+        <p>Cada linha mostra a <b>relevância</b> (o quanto o tema cai, de <b>Não cai</b> a <b>Altíssima</b>), o <b>aproveitamento</b> nas questões e <b>quantas vezes</b> e <b>quando</b> você estudou o tópico.</p>
+        <p>A <b>relevância</b> você define clicando na pílula de cada tópico — ou deixa o sistema estimar pelas suas <b>provas</b> ou pela <b>IA</b> (menu <b>${icone("ellipsis")} Mais</b>). Marcar um tópico como <b>concluído</b> aumenta a <b>cobertura</b> do edital.</p>
       </div>
     </details>
-
-    <div class="barra-acoes" style="margin-top:6px">
-      <label class="inline">Ordenar tópicos:
-        <select id="ed-top-sort">
-          <option value="custom" ${topSort === "custom" ? "selected" : ""}>Como cadastrei</option>
-          <option value="relevancia" ${topSort === "relevancia" ? "selected" : ""}>Mais relevantes primeiro</option>
-        </select>
-      </label>
-      ${
-        st.disciplinas.length
-          ? `<button class="lnk small" data-action="ed-expandir" data-tip-pos="cima-esq" data-tip="Abrir todas as disciplinas.">Expandir tudo</button>
-      <button class="lnk small" data-action="ed-recolher" data-tip-pos="cima-esq" data-tip="Recolher todas as disciplinas.">Recolher tudo</button>
-      <button class="btn btn-ghost btn-sm ${selMode ? "on" : ""}" data-action="toggle-selmode" data-tip-pos="cima-esq" data-tip="Selecionar vários tópicos para mover, unificar ou virar nova disciplina.">${icone("check-check")} ${selMode ? "Concluir seleção" : "Selecionar tópicos"}</button>
-      <span class="spacer"></span>
-      <button class="lnk lnk-danger" data-action="limpar-edital" data-tip="Apaga todas as disciplinas e tópicos. Materiais, questões e flashcards NÃO são apagados: ficam 'sem tópico'." data-tip-pos="cima-dir">${icone("trash-2")} Limpar edital (estrutura)</button>`
-          : ""
-      }
-    </div>
 
     <div class="edital-estrutura">
       ${st.disciplinas.length ? selBarHTML(store, st) : ""}
@@ -1112,20 +1141,26 @@ export default function renderEdital(root, app) {
   else if (aulasImportAberto) cursinhoBody = aulasImportHTML(aulasTextoSalvo) + (st.aulas.length ? aulasListaHTML(store, st) : "");
   else if (st.aulas.length === 0) cursinhoBody = aulasConviteHTML();
   else cursinhoBody = aulasListaHTML(store, st);
-  const dossieBtn = `
-    ${edModo !== "estrutura" ? `<button class="btn btn-soft btn-sm" data-action="modo-estrutura" data-tip-pos="bottom-dir" data-tip="Editar a estrutura do edital.">${icone("list-checks")} Estrutura</button>` : ""}
-    ${edModo !== "resumo" ? `<button class="btn btn-dossie btn-sm" data-action="modo-resumo" data-tip-pos="bottom-dir" data-tip="Visão por tópico: cada tópico com seus números (materiais, questões, erros, flashcards, tempo).">${icone("table")} Dossiê por tópico</button>` : ""}
-    ${edModo !== "cursinho" ? `<button class="btn btn-soft btn-sm" data-action="modo-cursinho" data-tip-pos="bottom-dir" data-tip="Opcional: organizar/estudar pela divisão de aulas do seu cursinho (mapa aula ↔ tópico ↔ edital).">${icone("library")} Plano do cursinho</button>` : ""}`;
+  // Modos do Edital = segmented control único (mesmo componente da Lei Seca), com estado
+  // ATIVO visível (antes eram botões soltos que sumiam no modo atual, sem indicar onde você está).
+  const edModosSeg = `
+    <div class="ls-segmented ed-modos" role="tablist">
+      <button class="ls-seg ${edModo === "estrutura" ? "on" : ""}" data-action="modo-estrutura" data-tip="Editar a estrutura do edital.">${icone("list-checks")}<span class="ls-seg-txt">Estrutura</span></button>
+      <button class="ls-seg ${edModo === "resumo" ? "on" : ""}" data-action="modo-resumo" data-tip="Visão por tópico: cada tópico com seus números (materiais, questões, erros, flashcards, tempo).">${icone("table")}<span class="ls-seg-txt">Dossiê por tópico</span></button>
+      <button class="ls-seg ${edModo === "cursinho" ? "on" : ""}" data-action="modo-cursinho" data-tip="Opcional: organizar/estudar pela divisão de aulas do seu cursinho (mapa aula ↔ tópico ↔ edital).">${icone("library")}<span class="ls-seg-txt">Plano do cursinho</span></button>
+    </div>`;
 
   root.innerHTML = `
-    ${header("Edital", `${plural(st.disciplinas.length, "disciplina", "disciplinas")} · ${plural(totalTopicos, "tópico", "tópicos")}`, dossieBtn + botaoImprimir())}
+    ${header("Edital", `${plural(st.disciplinas.length, "disciplina", "disciplinas")} · ${plural(totalTopicos, "tópico", "tópicos")}`, botaoImprimir())}
+
+    ${edModosSeg}
 
     <section class="card cobertura-edital">
       <div class="cob-edital-num">
         ${(() => { const anima = !edCountAnimou; edCountAnimou = true; return progressRing(cob.pct, { size: 92, stroke: 9, grad: true, count: anima }); })()}
         <div class="cob-edital-barra-wrap">
           <span class="cob-edital-rotulo">Cobertura do edital</span>
-          <span class="cob-edital-info muted small"><b class="num">${cob.cobertos}</b> de <b class="num">${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"} · o anel completa conforme você marca tópicos</span>
+          <span class="cob-edital-info muted small"><b class="num">${cob.cobertos}</b> de <b class="num">${cob.total}</b> ${cob.total === 1 ? "tópico concluído" : "tópicos concluídos"}</span>
         </div>
       </div>
       ${
@@ -1195,6 +1230,13 @@ export default function renderEdital(root, app) {
   root.querySelector("#base-estudo")?.addEventListener("change", (e) => {
     store.setBaseEstudo(e.target.value);
   });
+  // Arrastar-para-reordenar as aulas do cursinho (dentro de cada disciplina).
+  root.querySelectorAll(".cur-disc").forEach((disc) =>
+    ligarArrastar(disc, ".cur-aula-row[data-drag-id]", (id, alvo) => {
+      store.reordenarAula(id, alvo);
+      app.refresh();
+    })
+  );
   // Accordion: persiste (sem re-render) qual disciplina está aberta/fechada.
   root.querySelectorAll("details.ed-disc-acc").forEach((det) =>
     det.addEventListener("toggle", () => {
@@ -1260,7 +1302,9 @@ export default function renderEdital(root, app) {
         toast("Estrutura do edital apagada.");
       }
     },
-    imprimir: () => imprimir("Edital — Mentor Concurso", printEdital(st)),
+    imprimir: () => edModo === "cursinho"
+      ? imprimir("Plano do cursinho — Mentor Concurso", printCursinho(st))
+      : imprimir("Edital — Mentor Concurso", printEdital(st)),
     "modo-estrutura": () => {
       edModo = "estrutura";
       app.refresh();
@@ -1351,6 +1395,7 @@ export default function renderEdital(root, app) {
       aulaTopAberto = aulaTopAberto === id ? null : id;
       app.refresh();
     },
+    "cur-view": (el) => { cursinhoView = el.getAttribute("data-v") === "topico" ? "topico" : "aula"; app.refresh(); },
     "aula-remover": async (el) => {
       if (await confirmar("Remover esta aula? (não apaga os tópicos, só a aula)")) store.removerAula(el.getAttribute("data-id"));
     },
@@ -1459,11 +1504,12 @@ export default function renderEdital(root, app) {
     app.refresh();
   });
 
-  // Seletor de relevância: "Não definido", "Mais cai (sem %)" ou faixa com %.
-  // (A faixa grava o peso REPRESENTATIVO; a importação continua gravando o % exato.)
-  root.querySelectorAll("select[data-nivel]").forEach((el) =>
+  // Relevância = pílula NOMEADA (Não cai · Baixa · Média · Alta · Altíssima), a única escala
+  // exibida ao usuário. (A escala em faixas de % foi removida — era código morto.)
+  root.querySelectorAll("select[data-nivel-named]").forEach((el) =>
     el.addEventListener("change", () => {
-      aplicarRelValor(store, el.getAttribute("data-id"), el.value);
+      aplicarRelNamed(store, el.getAttribute("data-id"), el.value);
+      app.refresh();
     })
   );
 }
@@ -1521,11 +1567,11 @@ function discHTML(store, st, d) {
         <span class="ed-disc-prog" data-tip="Cobertura: tópicos marcados como concluídos.">
           <span class="ed-prog-track"><i class="ed-prog-bar" style="width:${cob}%"></i></span>
           <b class="nums">${cob}%</b>
+          <span class="ed-disc-cont muted small nums" data-tip="Tópicos concluídos.">${concluidos}/${tops.length}</span>
         </span>
         <span class="ed-sem ed-sem-${nivel}" data-tip="Aproveitamento médio das questões desta disciplina.">
           <i class="ed-sem-dot"></i>${aprov === null ? "—" : aprov + "%"}
         </span>
-        <span class="ed-disc-cont muted small nums" data-tip="Tópicos concluídos.">${concluidos}/${tops.length}</span>
         <span class="spacer"></span>
         <span class="ed-disc-acoes">
           <button class="mover-btn" data-action="add-top" data-disc="${d.id}" data-tip-pos="cima-dir" data-tip="Adicionar tópico">${icone("plus")}</button>
@@ -1534,17 +1580,14 @@ function discHTML(store, st, d) {
         </span>
         <span class="ed-disc-chev">${icone("chevron-down")}</span>
       </summary>
-      <ul class="ed-tops">
-        ${
-          tops.length
-            ? tops.map((t) => topHTML(store, st, t)).join("")
-            : `<li class="muted">Sem tópicos.</li>`
-        }
-      </ul>
+      ${tops.length ? `<div class="ed-tabwrap"><table class="ed-tab">
+        <thead><tr><th class="edc-chk"></th><th>Tópico</th><th class="edc-rel">Relevância</th><th class="edc-ap">Aproveitamento</th><th class="edc-vez">Vezes</th><th class="edc-ult">Última vez</th><th class="edc-acts"></th></tr></thead>
+        <tbody>${tops.map((t, i) => topHTML(store, st, t, i + 1)).join("")}</tbody>
+      </table></div>` : `<p class="muted small ed-semtop">Sem tópicos ainda. Use o "+" acima para adicionar.</p>`}
     </details>`;
 }
 
-function topHTML(store, st, t) {
+function topHTML(store, st, t, n) {
   const ult = ultimoEstudoTopico(st, t.id);
   const s = statsTopico(st, t.id);
   // Métricas inline compactas: % de aproveitamento (colorido), questões feitas e
@@ -1563,31 +1606,38 @@ function topHTML(store, st, t) {
         .map((l, i) => `<a class="ed-link-chip" href="${esc(l.url)}" target="_blank" rel="noopener" data-tip="${esc(l.url)}">${icone("link")} ${esc(l.titulo || l.url)}<button class="ed-link-x" data-action="del-link-top" data-id="${t.id}" data-idx="${i}" data-tip="Remover link" title="Remover">${icone("x")}</button></a>`)
         .join("")}</span>`
     : "";
+  // Aproveitamento: barra colorida (verde/âmbar/vermelho) + %, ou "—" sem questões.
+  const apCor = s.pct === null ? "z" : s.pct < 50 ? "r" : s.pct < 75 ? "y" : "g";
+  const certas = s.pct === null ? 0 : Math.round((s.pct / 100) * s.questoes);
+  const erradas = (s.questoes || 0) - certas;
+  const apTip = s.pct === null ? "Sem questões respondidas neste tópico." : `${certas} certas · ${erradas} erradas · ${s.questoes} no total`;
+  const apCell = s.pct === null
+    ? `<span class="ed-ap z" data-tip="${apTip}"><span class="ed-apb"><i style="width:0"></i></span><b>—</b></span>`
+    : `<span class="ed-ap ${apCor}" data-tip="${apTip}"><span class="ed-apb"><i style="width:${s.pct}%"></i></span><b>${s.pct}%</b></span>`;
+  // Estudo em duas colunas: nº de vezes | última vez (alinhadas e com o mesmo estilo).
+  const vezes = st.sessoes.filter((x) => x.topicoId === t.id).length;
+  const vezCell = vezes ? `<b class="ed-vez">${vezes}×</b>` : `<span class="ed-est none">—</span>`;
+  const ultCell = s.ultima ? `<span class="ed-ult">${fmtData(s.ultima)}</span>` : `<span class="ed-est none">nunca</span>`;
   return `
-    <li class="${relBandClass(t)} ${t.concluido ? "ed-top-concluido" : ""}">
-      <span class="ed-top-nome">
-        ${selMode ? `<input type="checkbox" class="ed-top-sel" data-id="${t.id}" ${topSel.has(t.id) ? "checked" : ""} title="Selecionar (para mover, unificar ou virar nova disciplina)" />` : ""}
-        <button class="chip-check ${t.concluido ? "on" : ""}" data-action="done-top" data-id="${t.id}" data-tip-pos="cima-esq" data-tip="${t.concluido ? "Concluído · clique para desmarcar" : "Marcar como concluído (já estudei)"}">${icone("check")}</button>
-        <button class="lnk ed-top-link" data-action="ir-dossie" data-id="${t.id}" data-tip-pos="bottom" data-tip="Abrir o dossiê deste tópico (pasta viva).">${esc(t.nome)}</button>
-        ${chips}
-      </span>
-      <span class="ed-top-acoes">
-        ${metricas}
-        <button class="ed-add-link" data-action="add-link-top" data-id="${t.id}" data-tip-pos="cima-dir" data-tip="Anexar um link (videoaula, PDF, caderno de questões).">${icone("link")}</button>
-        <label class="ed-nivel" data-tip="Relevância: o quanto o tema cai. 'Mais cai (sem %)' marca o tema como relevante quando o percentual é desconhecido.">
-          <span class="muted">Relevância:</span>
-          ${relSelectHTML(t)}
-        </label>
+    <tr class="${t.concluido ? "ed-tr-done" : ""}">
+      <td class="edc-chk">${selMode ? `<input type="checkbox" class="ed-top-sel" data-id="${t.id}" ${topSel.has(t.id) ? "checked" : ""} title="Selecionar (para mover, unificar ou virar nova disciplina)" />` : `<button class="ed-chk ${t.concluido ? "on" : ""}" data-action="done-top" data-id="${t.id}" data-tip-pos="cima-esq" data-tip="${t.concluido ? "Concluído · clique para desmarcar" : "Marcar como concluído (já estudei)"}">${icone("check")}</button>`}</td>
+      <td class="edc-nome"><button class="lnk ed-top-link" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico" aria-hidden="true">${icone("external-link")}</span></button>${chips}</td>
+      <td class="edc-rel">${relPillSelectHTML(t)}</td>
+      <td class="edc-ap">${apCell}</td>
+      <td class="edc-vez">${vezCell}</td>
+      <td class="edc-ult">${ultCell}</td>
+      <td class="edc-acts">
         <details class="doc-mais ed-top-mais">
-          <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este tópico.">${icone("ellipsis")}</summary>
+          <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações para este tópico.">${icone("ellipsis")}</summary>
           <div class="doc-mais-pop" role="menu">
             <button class="menu-item" data-action="ren-top" data-id="${t.id}"><span class="menu-ico">${icone("square-pen")}</span> Renomear</button>
+            <button class="menu-item" data-action="add-link-top" data-id="${t.id}"><span class="menu-ico">${icone("link")}</span> Anexar link</button>
             <div class="menu-sep"></div>
             <button class="menu-item menu-item-danger" data-action="del-top" data-id="${t.id}"><span class="menu-ico">${icone("x")}</span> Remover tópico</button>
           </div>
         </details>
-      </span>
-    </li>`;
+      </td>
+    </tr>`;
 }
 
 function ultimoEstudoTopico(st, topicoId) {
@@ -1667,9 +1717,21 @@ function printEdital(st) {
     .map((d) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
       const itens = tops.length
-        ? `<ul>${tops.map((t) => `<li>${t.concluido ? "✓ " : ""}${t.destaque ? "★ " : ""}${esc(t.nome)}${t.peso ? ` <span class="print-meta">(${t.peso}%)</span>` : ""}${t.previsaoAula ? ` <span class="print-meta">(aula prevista)</span>` : ""}</li>`).join("")}</ul>`
+        ? `<ul>${tops.map((t) => { const rv = relNamedValor(t); const rel = rv !== "nd" ? ` <span class="print-meta">(${relNamedNome(t)})</span>` : ""; return `<li>${t.concluido ? "✓ " : ""}${t.destaque ? "★ " : ""}${esc(t.nome)}${rel}${t.previsaoAula ? ` <span class="print-meta">(aula prevista)</span>` : ""}</li>`; }).join("")}</ul>`
         : "<p>—</p>";
       return `<h2>${esc(d.nome)}</h2>${itens}`;
+    })
+    .join("");
+}
+// Impressão do PLANO DO CURSINHO: aulas na ordem, agrupadas por disciplina, com os tópicos.
+function printCursinho(st) {
+  const aulas = st.aulas || [];
+  if (!aulas.length) return "<p>Nenhuma aula no plano do cursinho.</p>";
+  const nomeTop = (id) => { const t = st.topicos.find((x) => x.id === id); return t ? esc(t.nome) : ""; };
+  return aulas
+    .map((a, i) => {
+      const tops = (a.topicoIds || []).map((id) => nomeTop(id)).filter(Boolean);
+      return `<div class="print-aula"><b>${i + 1}. ${esc(a.nome)}</b>${tops.length ? `<div class="print-meta">No edital: ${tops.join(" · ")}</div>` : ""}</div>`;
     })
     .join("");
 }

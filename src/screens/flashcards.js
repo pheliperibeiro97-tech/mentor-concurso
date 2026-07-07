@@ -7,13 +7,20 @@ import { icone } from "../icones.js";
 import * as sm2 from "../sm2.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, questaoNoFiltro } from "./questoes-filtro.js";
 import { abrirSeletorEscopo } from "./seletor-escopo.js";
+import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
+import { abrirRegistroSessao } from "../registro-sessao.js";
+import * as crono from "../cronometro.js";
 
 let revelado = false;
+let focoAtivo = false; // modo Foco: quiz imersivo em tela cheia (usa a fila filtrada atual)
+let focoFila = [];     // ids da sessão de foco (snapshot da fila filtrada) — navegação livre
+let focoIdx = 0;       // posição atual na sessão
+let focoPlacar = {};   // id -> nota dada nesta sessão (para o placar ✓/✗/%)
 let mostrarLista = false;
 let editandoId = null;
 const filtroRev = { sel: [], aberto: false }; // multi-tópico da revisão
 let filtroTipo = "todos"; // todos | qa | afirmacao (C/E)
-let cadernoErroId = null; // id do card com o painel "salvar no caderno" aberto
+let perguntandoMotivoId = null; // após "Errei": pergunta o motivo (1 toque) antes de avançar
 let puladosSessao = new Set(); // ids pulados nesta sessão (voltam depois)
 let mostrarExport = false; // painel de exportação Anki (oculto até clicar)
 let revisarId = null; // estuda UM card específico sob demanda (da lista "Ver todos"), mesmo não vencido
@@ -69,6 +76,11 @@ export default function renderFlashcards(root, app) {
     app.params.focoFlashcardId = null;
     mostrarLista = true;
   }
+  // Escopo vindo do "Hoje" (Revisar → deste tópico): pré-filtra a revisão pelo tópico.
+  if (app.params && app.params.topicoId) {
+    filtroRev.sel = [app.params.topicoId];
+    app.params.topicoId = null;
+  }
   const vencidos = store
     .flashcardsVencidos()
     .filter((c) => !puladosSessao.has(c.id) && questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo));
@@ -77,6 +89,11 @@ export default function renderFlashcards(root, app) {
   if (ordemRev === "recentes") vencidos.sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
   // "Revisar este" (da lista) força UM card específico no topo, mesmo não vencido.
   const atual = (revisarId && st.flashcards.find((c) => c.id === revisarId && !c.suspenso)) || vencidos[0];
+  // No modo foco: card da sessão pela posição (permite ← →); pula os removidos/suspensos.
+  const cardFoco = focoAtivo ? st.flashcards.find((c) => c.id === focoFila[focoIdx] && !c.suspenso) : null;
+  // Após "Errei": passo de 1 toque para classificar o motivo (fica pinado até escolher/pular).
+  const cardMotivo = perguntandoMotivoId ? st.flashcards.find((c) => c.id === perguntandoMotivoId) : null;
+  if (perguntandoMotivoId && !cardMotivo) perguntandoMotivoId = null;
   const suspensos = st.flashcards.filter((f) => f.suspenso).length;
   // Resumo do cabeçalho (global, sem o filtro): pendentes hoje · já revisados hoje · total geral.
   const hoje = todayISO();
@@ -84,10 +101,11 @@ export default function renderFlashcards(root, app) {
   const revisadosHoje = st.flashcards.filter((f) => f.sm2.lastReview === hoje).length;
 
   root.innerHTML = `
-    ${header("Flashcards", `Recordação ativa com repetição espaçada · ${pendentesHoje} para hoje · ${plural(revisadosHoje, "revisado", "revisados")} · ${st.flashcards.length} no total`, botaoImprimir())}
+    ${header("Flashcards", `Recordação ativa e repetição espaçada · ${st.flashcards.length} ${st.flashcards.length === 1 ? "cartão" : "cartões"}`, botaoImprimir())}
 
     <div class="barra-acoes">
       <button class="btn btn-add btn-sm" data-action="toggle-criar" data-tip-pos="cima-esq" data-tip="Digite/cole, importe um arquivo, gere do material (IA) ou das suas questões.">Criar flashcards</button>
+      ${atual ? `<button class="btn btn-primary btn-sm fc-foco-btn" data-action="entrar-foco" data-tip-pos="cima-esq" data-tip="Estudar em tela cheia, sem distrações — usa o filtro atual. Espaço vira, 1–4 nota, Esc sai.">${icone("expand")} Modo foco</button>` : ""}
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-action="toggle-lista" data-tip-pos="cima-dir" data-tip="Lista todos os seus flashcards em tabela.">${mostrarLista ? "Ocultar lista" : "Ver todos"}</button>
       <details class="doc-mais">
@@ -122,7 +140,7 @@ export default function renderFlashcards(root, app) {
         <button class="${filtroTipo === "qa" ? "on" : ""}" data-filtro-tipo="qa">P/R</button>
         <button class="${filtroTipo === "afirmacao" ? "on" : ""}" data-filtro-tipo="afirmacao">C/E</button>
       </div>
-      <span class="muted small">${vencidos.length} para revisar hoje</span>
+      ${(filtroRev.sel.length || filtroTipo !== "todos") ? `<span class="muted small">${vencidos.length} nesta seleção</span>` : ""}
       <span class="filtro-lbl muted small">Ordem:</span>
       <div class="seg seg-sm" role="tablist" data-tip-pos="cima-esq" data-tip="“Mais recentes” traz ao topo os flashcards recém-gerados, sem zerar os pendentes antigos.">
         <button class="${ordemRev === "vencimento" ? "on" : ""}" data-ordem-rev="vencimento">Vencimento</button>
@@ -133,9 +151,23 @@ export default function renderFlashcards(root, app) {
     </div>
     ${filtroTopicosPainelHTML(st, filtroRev.sel, filtroRev.aberto)}
 
-    <div class="revisao-area">
+    ${
+      !focoAtivo && st.flashcards.length && revisadosHoje + pendentesHoje > 0
+        ? `<div class="fc-progresso">
+            <div class="fc-prog-bar"><span style="width:${Math.round((revisadosHoje / (revisadosHoje + pendentesHoje)) * 100)}%"></span></div>
+            <span class="fc-prog-txt">${revisadosHoje} de ${revisadosHoje + pendentesHoje} hoje</span>
+          </div>`
+        : ""
+    }
+
+    ${
+      focoAtivo
+        ? ""
+        : `<div class="revisao-area">
       ${
-        atual
+        cardMotivo
+          ? motivoPanelHTML(st, cardMotivo)
+          : atual
           ? cardRevisaoHTML(st, atual)
           : st.flashcards.length
             ? `<div class="card revisao-vazia">
@@ -150,9 +182,11 @@ export default function renderFlashcards(root, app) {
                 <button class="btn btn-add" data-action="toggle-criar" style="margin-top:12px">Criar flashcards</button>
               </div>`
       }
-    </div>
+    </div>`
+    }
 
-    ${mostrarLista ? listaHTML(st) : ""}`;
+    ${mostrarLista && !focoAtivo ? listaHTML(st) : ""}
+    ${focoAtivo ? focoQuizHTML(st, { card: cardFoco, cardMotivo, idx: focoIdx, total: focoFila.length, placar: focoPlacar }) : ""}`;
 
   ligarFiltroTopicos(root, app, filtroRev);
   focarItem(root, focoFc);
@@ -251,50 +285,91 @@ export default function renderFlashcards(root, app) {
         el.disabled = false;
       }
     },
-    "toggle-fc-erro": (el) => {
-      const id = el.getAttribute("data-id");
-      cadernoErroId = cadernoErroId === id ? null : id;
-      app.refresh();
+    // Após "Errei": um toque classifica o motivo no registro (auto) do Caderno e avança.
+    "motivo-fc": (el) => {
+      store.classificarErroFlashcard(el.getAttribute("data-id"), el.getAttribute("data-motivo"));
+      perguntandoMotivoId = null;
+      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); app.refresh(); return; }
+      if (store.flashcardsVencidos().length === 0) { confetti(); toast("Fila concluída! Registrei o erro no Caderno.", "ok"); }
+      else toast("Motivo registrado. Próximo card.");
     },
-    "cancelar-fc-erro": () => {
-      cadernoErroId = null;
+    "pular-motivo": () => {
+      perguntandoMotivoId = null;
+      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); app.refresh(); return; }
+      if (store.flashcardsVencidos().length === 0) { confetti(); toast("Fila concluída!", "ok"); }
       app.refresh();
-    },
-    "salvar-fc-erro": (el) => {
-      const c = store.get().flashcards.find((f) => f.id === el.getAttribute("data-id"));
-      if (!c) return;
-      const motivo = root.querySelector("#fc-cad-motivo").value || null;
-      const obs = root.querySelector("#fc-cad-obs").value.trim();
-      store.addErroManual({
-        descricao: `[Flashcard] ${c.frente}`,
-        correto: c.verso,
-        suaResposta: "",
-        comentario: [textoComentario(c.comentarioIA), obs].filter(Boolean).join(". ") || "",
-        motivoErro: motivo,
-        topicoId: c.topicoId || null,
-        disciplinaId: c.disciplinaId || null,
-      });
-      cadernoErroId = null;
-      toast("Salvo no Caderno de Erros.");
     },
     revelar: () => {
       revelado = true;
+      // No modo foco, o card faz FLIP 3D: anima trocando a classe sem re-render (o verso já
+      // está no DOM). Fora do foco, re-renderiza normalmente.
+      if (focoAtivo) {
+        const card = root.querySelector(".fq-card");
+        if (card) { card.classList.add("is-flipped"); return; }
+      }
       app.refresh();
     },
+    // Volta à pergunta (desvira o card) — no foco anima sem re-render.
+    "voltar-pergunta": () => {
+      revelado = false;
+      if (focoAtivo) {
+        const card = root.querySelector(".fq-card");
+        if (card) { card.classList.remove("is-flipped"); return; }
+      }
+      app.refresh();
+    },
+    "entrar-foco": () => {
+      // Snapshot da fila FILTRADA atual → vira a sessão navegável (livre ← →).
+      const fila = store.flashcardsVencidos().filter((c) => questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo));
+      if (ordemRev === "recentes") fila.sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
+      focoFila = fila.map((c) => c.id);
+      focoIdx = 0;
+      focoPlacar = {};
+      focoAtivo = true;
+      revelado = false;
+      perguntandoMotivoId = null;
+      app.refresh();
+    },
+    "foco-anterior": () => { if (focoIdx > 0) { focoIdx--; revelado = false; app.refresh(); } },
+    "foco-proximo": () => { if (focoIdx < focoFila.length) { focoIdx++; revelado = false; app.refresh(); } },
+    "sair-foco": () => {
+      focoAtivo = false;
+      revelado = false;
+      app.refresh();
+    },
+    "foco-registrar-tempo": () => {
+      const temTempo = crono.snapshot().elapsed >= 60;
+      focoAtivo = false;
+      revelado = false;
+      app.refresh();
+      abrirRegistroSessao(store, app, { modo: temTempo ? "crono" : "manual", fasePadrao: "R" });
+    },
+    ...bindFocoCrono({}), // cronômetro do foco (toggle/prog/reg/livre) — módulo compartilhado
     nota: (el) => {
       const q = parseInt(el.getAttribute("data-q"), 10);
       const id = el.getAttribute("data-id");
       const tinhaFila = store.flashcardsVencidos().length;
-      store.revisarFlashcard(id, q);
-      revelado = false;
-      revisarId = null;
-      // Marco: zerou a fila de revisão do dia → comemora.
-      if (tinhaFila && store.flashcardsVencidos().length === 0) {
-        confetti();
-        toast("Fila de revisão concluída! Mandou bem.", "ok");
-      } else {
-        toast("Revisado. Próximo card.");
-      }
+      const aplicar = () => {
+        if (focoAtivo) focoPlacar[id] = q; // placar da sessão (✓/✗/%)
+        store.revisarFlashcard(id, q); // grava SM-2 + (se Errei) registra no Caderno; commit re-renderiza
+        revelado = false;
+        revisarId = null;
+        // "Errei": o card já entrou no Caderno; pergunta o motivo (1 toque) antes de avançar.
+        if (q === 0) { perguntandoMotivoId = id; app.refresh(); return; }
+        // No foco, avança pela POSIÇÃO da sessão (permite voltar depois); zerou tudo → confete.
+        if (focoAtivo) {
+          focoIdx++;
+          if (focoIdx >= focoFila.length) confetti();
+          app.refresh();
+          return;
+        }
+        if (tinhaFila && store.flashcardsVencidos().length === 0) { confetti(); toast("Fila de revisão concluída! Mandou bem.", "ok"); }
+        else toast("Revisado. Próximo card.");
+      };
+      // No foco, anima a SAÍDA do card antes de trocar pelo próximo.
+      const stage = focoAtivo ? root.querySelector(".fq-stage") : null;
+      if (stage) { stage.classList.add("fq-out"); setTimeout(aplicar, 230); }
+      else aplicar();
     },
     pular: (el) => {
       puladosSessao.add(el.getAttribute("data-id"));
@@ -345,6 +420,47 @@ export default function renderFlashcards(root, app) {
       exportarAnki(st, cards);
     },
   });
+
+  // Atalhos de teclado na revisão (como Anki/MEI): Espaço/Enter revela; 1–4 dá a nota.
+  // Ignora digitação em campos e quando há modal aberto. O listener é recriado a cada
+  // render (o main.js chama o cleanup retornado antes de re-renderizar), então lê sempre
+  // o estado atual de `revelado`.
+  function onKey(e) {
+    // No foco, o shell trata Esc/setas/campo do cronômetro; segue só se sobrar um atalho de card.
+    if (focoAtivo) {
+      const r = focoChromeKey(e, { root, bloquearNav: !!perguntandoMotivoId });
+      if (r) return; // "stop" (consumiu) ou "input" (digitando/modal)
+    } else {
+      const a = e.target;
+      if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (document.querySelector(".mm-overlay, .modal-overlay")) return;
+    }
+    // Passo do motivo (após "Errei"): 1–4 classifica; Espaço/Enter pula.
+    if (perguntandoMotivoId) {
+      const chips = root.querySelectorAll('.fc-motivo-chips [data-action="motivo-fc"]');
+      const mi = { "1": 0, "2": 1, "3": 2, "4": 3 }[e.key];
+      if (mi !== undefined && chips[mi]) { e.preventDefault(); chips[mi].click(); }
+      else if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="pular-motivo"]')?.click(); }
+      return;
+    }
+    // Escopo do card: no foco é o quiz (.fq-card/.fq-notas); fora, o inline.
+    const notasSel = focoAtivo ? ".fq-notas" : ".fc-notas";
+    const cardSel = focoAtivo ? ".fq-card" : ".flashcard";
+    if (!root.querySelector(cardSel)) return;
+    if (!revelado) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="revelar"]')?.click(); }
+      return;
+    }
+    const idx = { "1": 0, "2": 1, "3": 2, "4": 3 }[e.key];
+    if (idx !== undefined) { e.preventDefault(); root.querySelectorAll(`${notasSel} [data-action="nota"]`)[idx]?.click(); }
+    else if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('[data-action="comentar-fc"]:not([disabled])')?.click(); } // C = comentar com IA
+    else if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="voltar-pergunta"]')?.click(); } // Espaço alterna: volta à pergunta
+  }
+  document.addEventListener("keydown", onKey);
+  // Cronômetro no foco: mantém o tempo do chip vivo (por segundo) sem re-renderizar a tela.
+  const offTick = focoAtivo ? ligarTickCrono(root) : null;
+  return () => { document.removeEventListener("keydown", onKey); if (offTick) offTick(); };
 }
 
 // Painel ÚNICO de criação: digitar/colar/importar (frente · verso), gerar do
@@ -564,6 +680,104 @@ function vinculoFlashcard(st, c) {
   return null;
 }
 
+// ===================== MODO FOCO — quiz imersivo em tela cheia =====================
+// Overlay full-viewport (fundo aurora + card em vidro com flip 3D). Reusa os mesmos
+// handlers (revelar/nota/motivo-fc…) e a fila FILTRADA atual. Teclado: Espaço vira, 1–4 nota.
+function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }) {
+  const notas = Object.values(placar || {});
+  const erros = notas.filter((q) => q === 0).length;      // "Errei"
+  const acertos = notas.filter((q) => q >= 3).length;      // Difícil/Bom/Fácil
+  const feitos = acertos + erros;
+  const fim = idx >= total; // passou de todos → conclusão
+  const centro = cardMotivo ? quizMotivoHTML(st, cardMotivo) : card ? quizCardHTML(st, card) : quizConclusaoHTML(feitos, acertos);
+  const rodape = cardMotivo
+    ? `<kbd>Esc</kbd> sair · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> motivo · <kbd>Espaço</kbd> pular`
+    : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>Espaço</kbd> virar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> nota · <kbd>C</kbd> comentar`;
+  return focoShellHTML({
+    idx, total, fim,
+    mostrarNav: !cardMotivo, // no passo de motivo, esconde as setas
+    placar: { acertos, erros },
+    centro, rodape,
+  });
+}
+
+function quizCardHTML(st, c) {
+  const vinc = vinculoFlashcard(st, c);
+  const notas = NOTAS.map((n, i) => {
+    const dias = sm2.revisar(c.sm2, n.q).intervaloDias;
+    const int = dias <= 1 ? "1d" : `${dias}d`;
+    return `<button class="fq-nota ${n.cls}" data-action="nota" data-q="${n.q}" data-id="${c.id}" data-tip="Atalho ${i + 1}"><span class="fq-nota-l">${n.label}</span><span class="fq-nota-i">${int}</span></button>`;
+  }).join("");
+  return `
+    <div class="fq-card ${revelado ? "is-flipped" : ""} ${c.comentarioIA ? "fq-card--ia" : ""}" data-id="${c.id}">
+      <div class="fq-face fq-front">
+        <div class="fq-tags">${vinc ? `<span class="fq-tag">${esc(vinc)}</span>` : ""}${c.tipo === "afirmacao" ? `<span class="fq-tag fq-tag-ce">Certo ou errado?</span>` : ""}</div>
+        <div class="fq-q">${esc(c.frente)}</div>
+        <button class="fq-mostrar" data-action="revelar">${icone("eye")} Mostrar resposta</button>
+      </div>
+      <div class="fq-face fq-back">
+        <div class="fq-back-topo">
+          <span class="fq-back-rot">${icone("corner-down-right")} Resposta</span>
+          <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida. Atalho: C">${icone("sparkles")} Comentar com IA</button>
+        </div>
+        <div class="fq-back-corpo">
+          <div class="fq-back-pergunta">${esc(c.frente)}</div>
+          ${c.tipo === "afirmacao" ? `<div class="fq-gab ${c.gabaritoCerto ? "certo" : "errado"}">${c.gabaritoCerto ? `${icone("check")} Certo` : `${icone("x")} Errado`}</div>` : ""}
+          <div class="fq-a">${esc(c.verso)}</div>
+          ${explicacaoIAHTML(c.comentarioIA)}
+        </div>
+        <div class="fq-notas">${notas}</div>
+      </div>
+    </div>`;
+}
+
+function quizMotivoHTML(st, c) {
+  return `
+    <div class="fq-panel fq-panel-motivo">
+      <div class="fq-motivo-selo">${icone("flag")} Anotado no Caderno de Erros</div>
+      <div class="fq-q fq-q-sm">${esc(c.frente)}</div>
+      <div class="fq-motivo-q">Por que você errou?</div>
+      <div class="fc-motivo-chips fq-motivo-chips">
+        ${MOTIVOS_ERRO.map((m, i) => `<button class="fc-motivo-chip" data-action="motivo-fc" data-id="${c.id}" data-motivo="${esc(m)}" data-tip="Atalho ${i + 1}">${esc(m)}</button>`).join("")}
+      </div>
+      <button class="lnk fq-motivo-pular" data-action="pular-motivo" data-tip="Pular sem escolher um motivo (Espaço)">Pular sem classificar</button>
+    </div>`;
+}
+
+function quizConclusaoHTML(feitos, acertos = 0) {
+  const pct = feitos ? Math.round((acertos / feitos) * 100) : 0;
+  return `
+    <div class="fq-panel fq-conclusao">
+      <div class="fq-check">${icone("check")}</div>
+      <h2>Sessão concluída</h2>
+      <p class="muted">Você revisou <b>${feitos}</b> ${feitos === 1 ? "cartão" : "cartões"} neste foco.</p>
+      ${feitos ? `<div class="fq-conc-placar">
+        <div class="fq-conc-item ok"><strong>${acertos}</strong><span>acertos</span></div>
+        <div class="fq-conc-item err"><strong>${feitos - acertos}</strong><span>erros</span></div>
+        <div class="fq-conc-item pct"><strong>${pct}%</strong><span>precisão</span></div>
+      </div>` : ""}
+      <div class="fq-conclusao-acoes">
+        ${feitos ? `<button class="btn btn-soft btn-lg" data-action="foco-registrar-tempo" data-tip="Lança o TEMPO desta revisão de flashcards no seu histórico de sessões.">${icone("clock-3")} Registrar tempo</button>` : ""}
+        <button class="btn btn-primary btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>
+      </div>
+    </div>`;
+}
+
+// Passo pós-"Errei": registro já feito no Caderno; um toque classifica o motivo (ou pula).
+function motivoPanelHTML(st, c) {
+  const vinc = vinculoFlashcard(st, c);
+  return `
+    <div class="card fc-motivo">
+      <div class="fc-motivo-head">${icone("flag")} Anotado no Caderno de Erros${vinc ? ` · <b>${esc(vinc)}</b>` : ""}</div>
+      <div class="fc-motivo-frente">${esc(c.frente)}</div>
+      <div class="fc-motivo-q">Por que você errou?</div>
+      <div class="fc-motivo-chips">
+        ${MOTIVOS_ERRO.map((m, i) => `<button class="fc-motivo-chip" data-action="motivo-fc" data-id="${c.id}" data-motivo="${esc(m)}" data-tip="Atalho ${i + 1}"><span class="fc-motivo-num">${i + 1}</span> ${esc(m)}</button>`).join("")}
+      </div>
+      <button class="lnk fc-motivo-pular" data-action="pular-motivo" data-tip="Espaço">agora não · pular</button>
+    </div>`;
+}
+
 function cardRevisaoHTML(st, c) {
   const vinc = vinculoFlashcard(st, c);
   return `
@@ -583,32 +797,19 @@ function cardRevisaoHTML(st, c) {
              <div class="fc-verso">${esc(c.verso)}</div>
              ${explicacaoIAHTML(c.comentarioIA)}
              <div class="fc-notas">
-               ${NOTAS.map((n) => {
+               ${NOTAS.map((n, i) => {
                  const dias = sm2.revisar(c.sm2, n.q).intervaloDias;
-                 const quando = dias <= 1 ? "volta em 24h" : `volta em ${dias} dias`;
-                 return `<button class="btn btn-nota ${n.cls}" data-action="nota" data-q="${n.q}" data-id="${c.id}" data-tip="${esc(n.label)}: ${quando}.">${n.label}</button>`;
+                 const intCurto = dias <= 1 ? "1d" : `${dias}d`;
+                 const quando = dias <= 1 ? "volta em ~24h" : `volta em ~${dias} dias`;
+                 return `<button class="btn btn-nota ${n.cls}" data-action="nota" data-q="${n.q}" data-id="${c.id}" data-tip="Atalho ${i + 1} · ${esc(n.label)}: ${quando}."><span class="nota-lbl">${n.label}</span><span class="nota-int">${intCurto}</span></button>`;
                }).join("")}
              </div>
+             <div class="fc-atalhos muted small">${icone("keyboard")} <b>1–4</b> nota · <b>Espaço</b> vira</div>
              <div class="fc-extra">
-               <button class="fc-acao" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida."><span class="orb orb-xs" aria-hidden="true"></span> Comentar com IA</button>
-               <button class="fc-acao ${cadernoErroId === c.id ? "on" : ""}" data-action="toggle-fc-erro" data-id="${c.id}" data-tip="Registra este card no Caderno de Erros para revisar lá também. As notas (Errei/Bom…) acima são da revisão; isto é à parte.">${icone("flag")} Caderno de Erros</button>
-             </div>
-             ${
-               cadernoErroId === c.id
-                 ? `<div class="fc-caderno-box">
-                     <p class="muted small" style="margin:0 0 8px">Classifique o motivo (a disciplina e o tópico já vêm deste card):</p>
-                     <div class="fc-cad-row">
-                       <label class="inline">Motivo: <select id="fc-cad-motivo"><option value="">— não definido —</option>${MOTIVOS_ERRO.map((m) => `<option>${m}</option>`).join("")}</select></label>
-                       <input id="fc-cad-obs" type="text" placeholder="Observação (opcional)" />
-                     </div>
-                     <div class="form-acoes">
-                       <button class="btn btn-ghost btn-sm" data-action="cancelar-fc-erro">Cancelar</button>
-                       <button class="btn btn-primary btn-sm" data-action="salvar-fc-erro" data-id="${c.id}">Salvar no Caderno</button>
-                     </div>
-                   </div>`
-                 : ""
-             }`
-          : `<button class="btn btn-primary btn-lg" data-action="revelar">Mostrar resposta</button>`
+               <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
+             </div>`
+          : `<button class="btn btn-primary btn-lg" data-action="revelar">Mostrar resposta</button>
+             <div class="fc-atalhos muted small">${icone("keyboard")} <b>Espaço</b> para mostrar</div>`
       }
       <div class="fc-sessao">
         <button class="fc-acao" data-action="pular" data-id="${c.id}" data-tip="Vê outro agora; este volta nesta sessão.">${icone("skip-forward")} Pular</button>
@@ -625,16 +826,15 @@ function listaHTML(st) {
       `<button class="btn btn-add btn-sm" data-action="toggle-criar">Criar flashcards</button>`,
       icone("layers")
     )}</div>`;
-  // Aplica os MESMOS filtros (tópico + tipo) e ORDEM da fila de revisão, para a lista "Ver
-  // todos" ficar sincronizada com a barra acima. Sem isto, a lista ignorava filtro/ordem e
-  // os cards recém-gerados não subiam para o topo.
-  const cards = [...st.flashcards]
-    .filter((c) => questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo))
-    .sort((a, b) =>
-      ordemRev === "vencimento"
-        ? (a.sm2.dueDate || "").localeCompare(b.sm2.dueDate || "")
-        : (b.criadoEm || "").localeCompare(a.criadoEm || "")
-    );
+  // "Ver todos" mostra TODOS os cards (é a lista completa e a via de acesso para gerenciar
+  // qualquer cartão) — sem o filtro de tópico/tipo da barra acima; senão um cartão SEM tópico
+  // (ou fora do filtro ativo) ficaria invisível e impossível de editar/excluir pela UI.
+  // Mantém só a ORDEM da barra (recém-criados sobem quando "Mais recentes").
+  const cards = [...st.flashcards].sort((a, b) =>
+    ordemRev === "vencimento"
+      ? (a.sm2.dueDate || "").localeCompare(b.sm2.dueDate || "")
+      : (b.criadoEm || "").localeCompare(a.criadoEm || "")
+  );
   const contagem = cards.length === st.flashcards.length ? `${cards.length}` : `${cards.length} de ${st.flashcards.length}`;
   const hojeISO = todayISO();
   return `

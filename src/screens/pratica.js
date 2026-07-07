@@ -6,20 +6,23 @@
 import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, focarItem, explicacaoIAHTML, abrirJanela , plural } from "../ui.js";
 import { esc, MOTIVOS_ERRO as MOTIVOS } from "../util.js";
 import { icone } from "../icones.js";
-import renderSimulado, { imprimirSimulado } from "./simulado.js";
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, questaoNoFiltro } from "./questoes-filtro.js";
+import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
+import { abrirRegistroSessao } from "../registro-sessao.js";
+import * as crono from "../cronometro.js";
 
 // Estado independente por formato (Questões e Questões C/E não se misturam).
 function novoEstado() {
-  return { subModo: "treino", filtroTop: { sel: [], aberto: false }, filtroStatus: "todas", addState: { aberto: false }, editandoId: null, refazer: new Set() };
+  return { subModo: "treino", filtroTop: { sel: [], aberto: false }, filtroStatus: "todas", addState: { aberto: false }, editandoId: null, refazer: new Set(),
+    focoAtivo: false, focoFila: [], focoIdx: 0, focoPlacar: {}, focoAnimEntrada: false }; // Modo Foco: quiz imersivo
 }
 const S = { mc: novoEstado(), ce: novoEstado() };
 
 const TXT = {
   mc: {
     titulo: "Questões",
-    sub: "Treine com gabarito imediato ou faça um simulado cronometrado",
+    sub: "Treine com gabarito imediato (o simulado cronometrado fica em Simulados)",
     vazioTit: "Você ainda não tem questões",
     vazioSub: "Adicione, importe de uma prova, ou gere com a IA.",
     vazioIco: icone("notebook-pen"),
@@ -27,7 +30,7 @@ const TXT = {
   },
   ce: {
     titulo: "Questões C/E",
-    sub: "Itens Certo ou Errado, com gabarito imediato ou simulado cronometrado",
+    sub: "Itens Certo ou Errado, com gabarito imediato (o simulado fica em Simulados)",
     vazioTit: "Você ainda não tem itens",
     vazioSub: "Adicione, importe de uma prova, ou gere com a IA.",
     vazioIco: icone("square-pen"),
@@ -56,27 +59,12 @@ export function renderPraticaCE(root, app) {
 
 function render(root, app, formato) {
   const s = S[formato];
-  if (app.params && app.params.sub) {
-    s.subModo = app.params.sub;
-    app.params.sub = null;
-  }
-  // Deep-link de uma questão específica (vindo do Dossiê): força o modo Treino.
-  if (app.params && app.params.focoQuestaoId) s.subModo = "treino";
+  // "Simulado" migrou para a tela "Simulados" (hub). Aqui é só o Treino (gabarito imediato).
+  s.subModo = "treino";
   root.innerHTML = `
     ${header(TXT[formato].titulo, TXT[formato].sub, botaoImprimir())}
-    <div class="subtabs">
-      <button class="subtab ${s.subModo === "treino" ? "on" : ""}" data-sub="treino">${icone("square-pen")} Treino</button>
-      <button class="subtab ${s.subModo === "simulado" ? "on" : ""}" data-sub="simulado">${icone("clock-3")} Simulado</button>
-    </div>
     <div id="prat-body"></div>`;
-  root.querySelectorAll("[data-sub]").forEach((b) =>
-    b.addEventListener("click", () => {
-      s.subModo = b.getAttribute("data-sub");
-      app.refresh();
-    })
-  );
   root.querySelector('[data-action="imprimir"]')?.addEventListener("click", async () => {
-    if (s.subModo === "simulado") return imprimirSimulado(app);
     const st = app.store.get();
     const qs = st.questoes
       .filter((q) => ehDoFormato(q, formato) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
@@ -89,7 +77,6 @@ function render(root, app, formato) {
     imprimir(`${TXT[formato].titulo} — Mentor Concurso`, printQuestoes(st, qs, formato, op.gab === "com"));
   });
   const body = root.querySelector("#prat-body");
-  if (s.subModo === "simulado") return renderSimulado(body, app, formato);
   return renderTreino(body, app, formato);
 }
 
@@ -100,6 +87,18 @@ function renderTreino(root, app, formato) {
   if (app.params && app.params.topicoId) {
     s.filtroTop.sel = [app.params.topicoId];
     app.params.topicoId = null;
+  }
+  // Refazer erros em foco (vindo do Caderno de Erros): entra direto no Modo Foco com a
+  // fila = questões erradas passadas (pode misturar MC e C/E — o foco detecta por questão).
+  if (app.params && app.params.focoErrosIds) {
+    const ids = app.params.focoErrosIds;
+    app.params.focoErrosIds = null;
+    s.focoFila = ids.filter((id) => st.questoes.some((q) => q.id === id));
+    s.focoFila.forEach((id) => s.refazer.add(id)); // começam EM BRANCO (refazer, não rever)
+    s.focoIdx = 0;
+    s.focoPlacar = {};
+    s.focoAtivo = s.focoFila.length > 0;
+    s.focoAnimEntrada = true;
   }
   // Foco numa questão (Dossiê): garante que ela apareça (limpa o filtro de situação
   // e foca o tópico dela) e rola até ela ao final.
@@ -113,13 +112,14 @@ function renderTreino(root, app, formato) {
     s.addState.aberto = false;
   }
 
+  // Itens de TREINO (drill "letra da lei") não entram na lista de Questões — só no Treinar da Lei Seca.
   const questoes = st.questoes
-    .filter((q) => ehDoFormato(q, formato) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
+    .filter((q) => !q.treino && ehDoFormato(q, formato) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
     .sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); // recém-criadas primeiro (padrão)
-  const nErradas = st.questoes.filter((q) => ehDoFormato(q, formato) && statusQuestao(st, q) === "errei").length;
+  const nErradas = st.questoes.filter((q) => !q.treino && ehDoFormato(q, formato) && statusQuestao(st, q) === "errei").length;
   // Há questões do formato, mas nenhuma passou no filtro atual? Então é um vazio de
   // filtro (não "não tem nada"): mostra mensagem orientando a ajustar os filtros.
-  const totalFormato = st.questoes.filter((q) => ehDoFormato(q, formato)).length;
+  const totalFormato = st.questoes.filter((q) => !q.treino && ehDoFormato(q, formato)).length;
 
   const opcoesVincular = `<option value="">— sem tópico —</option>` + st.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`).join("");
   const editObj = s.editandoId ? st.questoes.find((q) => q.id === s.editandoId) : null;
@@ -127,6 +127,7 @@ function renderTreino(root, app, formato) {
   root.innerHTML = `
     <div class="barra-acoes">
       ${addQuestoesBotaoHTML(s.addState.aberto, formato)}
+      <button class="btn btn-sm fc-foco-btn" data-action="entrar-foco" ${questoes.length ? "" : "disabled"} data-tip="Resolver uma a uma, em tela cheia, sem distração (respeita o filtro atual).">${icone("expand")} Modo foco</button>
       <button class="btn btn-sm btn-treinar" data-action="treinar-erradas" ${nErradas ? "" : "disabled"} data-tip="Refaz, em branco, todas as que você errou. Cada uma sai da lista quando você acerta.">Treinar erros (<span class="num">${nErradas}</span>)</button>
       <span class="spacer"></span>
       <button class="btn btn-sm btn-ghost lnk-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito.">${icone("trash-2")} Limpar (<span class="num">${questoes.length}</span>)</button>
@@ -156,7 +157,9 @@ function renderTreino(root, app, formato) {
             ? vazio(`Nada nesse filtro\nNenhuma ${formato === "ce" ? "afirmação" : "questão"} corresponde à situação ou aos tópicos selecionados. Ajuste os filtros acima.`, "", icone("dices"))
             : vazioPratica(formato)
       }
-    </div>`;
+    </div>
+    ${s.focoAtivo ? focoOverlayHTML(st, s, formato, s.focoAnimEntrada ? "in" : "fade") : ""}`;
+  s.focoAnimEntrada = false; // consumido: re-renders seguintes (ex.: comentar IA) não "pulam"
 
   root.querySelector("#filtro-status")?.addEventListener("change", (e) => {
     s.filtroStatus = e.target.value;
@@ -174,6 +177,25 @@ function renderTreino(root, app, formato) {
 
   bindActions(root, {
     ...addQuestoesHandlers(root, app, s.addState, formato),
+    ...bindFocoCrono({}), // cronômetro do foco (toggle/prog/reg/livre) — módulo compartilhado
+    "entrar-foco": () => {
+      // Snapshot da fila FILTRADA atual → sessão navegável.
+      s.focoFila = questoes.map((q) => q.id);
+      s.focoIdx = 0;
+      s.focoPlacar = {};
+      s.focoAtivo = true;
+      s.focoAnimEntrada = true; // só a 1ª aparição tem animação plena (as demais, fade)
+      app.refresh();
+    },
+    "foco-anterior": () => { if (s.focoIdx > 0) { s.focoIdx--; atualizarOverlayFoco(root, store, s, formato); } },
+    "foco-proximo": () => { if (s.focoIdx < s.focoFila.length) { s.focoIdx++; atualizarOverlayFoco(root, store, s, formato); } },
+    "sair-foco": () => { s.focoAtivo = false; app.refresh(); },
+    "foco-registrar-tempo": () => {
+      const temTempo = crono.snapshot().elapsed >= 60;
+      s.focoAtivo = false;
+      app.refresh();
+      abrirRegistroSessao(store, app, { modo: temTempo ? "crono" : "manual", fasePadrao: "A" });
+    },
     "treinar-erradas": () => {
       // Filtra as erradas e as apresenta EM BRANCO (sem gabarito) para refazer.
       s.filtroStatus = "errei";
@@ -235,6 +257,17 @@ function renderTreino(root, app, formato) {
       const escolha = parseInt(el.getAttribute("data-i"), 10);
       const t = store.registrarTentativa({ questaoId: qId, escolha });
       s.refazer.delete(qId);
+      if (s.focoAtivo && t) {
+        // No foco: registra no placar da sessão e atualiza SÓ o miolo + o placar, no lugar
+        // (sem app.refresh, senão o overlay re-anima e "parece recarregar").
+        s.focoPlacar[qId] = t.acertou;
+        const st2 = store.get();
+        const q = st2.questoes.find((x) => x.id === qId);
+        const stage = root.querySelector(".fq-stage");
+        if (stage && q) stage.innerHTML = focoQuestaoHTML(st2, q, formato, s);
+        atualizarPlacarFoco(root, s.focoPlacar);
+        return;
+      }
       if (t) toast(t.acertou ? "Acertou!" : "Errou. Registrado no caderno.", t.acertou ? "ok" : "erro");
     },
     refazer: (el) => {
@@ -282,6 +315,32 @@ function renderTreino(root, app, formato) {
   root.querySelectorAll('select[data-action="motivo"]').forEach((selEl) => {
     selEl.addEventListener("change", () => store.setMotivoErro(selEl.getAttribute("data-t"), selEl.value));
   });
+
+  // ===== Modo Foco: teclado + cronômetro vivo (só quando ativo) =====
+  if (!s.focoAtivo) return;
+  function onKey(e) {
+    const chrome = focoChromeKey(e, { root }); // Esc/setas/campo do cronômetro
+    if (chrome) return;
+    const qcard = root.querySelector(".fq-qcard");
+    if (!qcard) return; // tela de conclusão: só o chrome
+    if (qcard.classList.contains("is-answered")) {
+      if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="foco-proximo"]')?.click(); }
+      else if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qcard [data-action="comentar-questao"]:not([disabled])')?.click(); }
+      return;
+    }
+    // Ainda não respondida: seleciona a alternativa (C/E nos itens, 1–6 na múltipla).
+    // Detecta o formato pelo DOM da questão atual (sessão pode ser mista).
+    if (root.querySelector(".fq-qalts.ce")) {
+      if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="0"]')?.click(); }
+      else if (e.key === "e" || e.key === "E") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="1"]')?.click(); }
+      return;
+    }
+    const idx = { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5 }[e.key];
+    if (idx !== undefined) { e.preventDefault(); root.querySelectorAll('.fq-qalts [data-action="responder"]')[idx]?.click(); }
+  }
+  document.addEventListener("keydown", onKey);
+  const offTick = ligarTickCrono(root);
+  return () => { document.removeEventListener("keydown", onKey); offTick(); };
 }
 
 // Formulário de EDIÇÃO (estruturado), específico por formato.
@@ -432,6 +491,170 @@ function questaoHTML(st, q, formato, s) {
       ${cardAcoes}
       ${q.comentarioIA ? `<div class="ia-comentario"><span class="orb orb-xs" aria-hidden="true"></span>${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
     </div>`;
+}
+
+// ===================== MODO FOCO — quiz imersivo de questões =====================
+// Reaproveita o shell compartilhado (foco-quiz.js): overlay + aurora + barra (nav ← →,
+// placar, cronômetro) + palco animado. O miolo é a questão (enunciado + alternativas +
+// correção imediata). Fila = snapshot da lista filtrada; revisitar mostra o resultado
+// anterior (sem nova tentativa).
+function focoOverlayHTML(st, s, formato, anim = "in") {
+  const total = s.focoFila.length;
+  const idx = s.focoIdx;
+  const fim = idx >= total;
+  const q = fim ? null : st.questoes.find((x) => x.id === s.focoFila[idx]);
+  const vals = Object.values(s.focoPlacar);
+  const acertos = vals.filter((v) => v === true).length;
+  const erros = vals.filter((v) => v === false).length;
+  const centro = q ? focoQuestaoHTML(st, q, formato, s) : focoConclusaoHTML(acertos, erros);
+  const rodape = !q
+    ? `<kbd>Esc</kbd> sair`
+    : q.formato === "ce" // legenda por questão (sessão pode ser mista, ex.: refazer erros)
+      ? `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>C</kbd> certo · <kbd>E</kbd> errado · <kbd>Espaço</kbd> próxima`
+      : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>1</kbd>–<kbd>4</kbd> responder · <kbd>Espaço</kbd> próxima · <kbd>C</kbd> comentar`;
+  return focoShellHTML({
+    idx, total, fim: !q, anim,
+    placar: { acertos, erros },
+    centro, rodape,
+    aria: formato === "ce" ? "Modo foco Certo/Errado" : "Modo foco Questões",
+  });
+}
+
+// Atualiza o overlay do foco NO LUGAR (troca só o .fc-foco, sem re-renderizar a lista de
+// fundo) — evita o "mexer a tela" da navegação. Fade de opacidade, sem movimento.
+function atualizarOverlayFoco(root, store, s, formato) {
+  const el = root.querySelector(".fc-foco");
+  if (el) el.outerHTML = focoOverlayHTML(store.get(), s, formato, "fade");
+}
+
+// Drill "letra da lei": realça na afirmação já respondida o trecho que a banca alterou (vermelho).
+function enunTreino(q, respondida) {
+  if (respondida && q.treino && q.diff && q.diff.trechoAlterado) {
+    const alvo = q.diff.trechoAlterado;
+    const i = q.enunciado.toLowerCase().indexOf(alvo.toLowerCase());
+    if (i >= 0) {
+      return `${esc(q.enunciado.slice(0, i))}<span class="ls-diff-red">${esc(q.enunciado.slice(i, i + alvo.length))}</span>${esc(q.enunciado.slice(i + alvo.length))}`;
+    }
+  }
+  return esc(q.enunciado);
+}
+// Correção colorida do drill: trecho trocado (vermelho) → texto correto guardado (verde).
+function diffTreinoHTML(q) {
+  if (!q.treino) return "";
+  if (q.diff && q.diff.trechoOriginal) {
+    return `<div class="ls-diff"><span class="ls-diff-red">${esc(q.diff.trechoAlterado)}</span> ${icone("arrow-right")} <span class="ls-diff-green">${esc(q.diff.trechoOriginal)}</span> <span class="muted small">(texto correto)</span></div>`;
+  }
+  return `<div class="ls-diff ls-diff-fiel">${icone("check")} Afirmação fiel à letra do texto.</div>`;
+}
+
+function focoQuestaoHTML(st, q, formato, s) {
+  const ce = q.formato === "ce"; // por QUESTÃO (permite sessão mista: refazer erros MC+CE)
+  const tentativas = st.tentativas.filter((t) => t.questaoId === q.id);
+  const ultima = tentativas[tentativas.length - 1];
+  // Respondida (mostra correção) a menos que esteja marcada p/ refazer (aí começa em branco).
+  const respondida = !!ultima && !s.refazer.has(q.id);
+  const vinc = vinculoQuestao(st, q);
+  // Histórico da questão (como no MEI): quantas vezes já tentou e o placar ✓/✗.
+  const nTent = tentativas.length;
+  const acT = tentativas.filter((t) => t.acertou).length;
+  const histChip = nTent
+    ? `<span class="fq-tag fq-tag-hist" data-tip="Seu histórico nesta questão (todas as tentativas)">${icone("rotate-ccw")} ${nTent} ${nTent === 1 ? "tentativa" : "tentativas"} · <b class="hist-ok">${acT}✓</b> <b class="hist-err">${nTent - acT}✗</b>${!respondida ? " · nova conta" : ""}</span>`
+    : "";
+
+  let alts;
+  if (ce) {
+    alts = [0, 1].map((i) => {
+      const rot = i === 0 ? "Certo" : "Errado";
+      if (respondida) {
+        const cls = i === q.gabarito ? "alt correta" : i === ultima.escolha ? "alt errada" : "alt alt-off";
+        const tag = i === q.gabarito ? ` ${icone("check")}` : i === ultima.escolha ? ` ${icone("x")}` : "";
+        return `<div class="${cls}">${rot}${tag}</div>`;
+      }
+      return `<button class="alt alt-btn" data-action="responder" data-q="${q.id}" data-i="${i}">${rot}<kbd class="alt-key">${i === 0 ? "C" : "E"}</kbd></button>`;
+    }).join("");
+  } else {
+    alts = q.alternativas.map((a, i) => {
+      if (respondida) {
+        const cls = i === q.gabarito ? "alt correta" : i === ultima.escolha ? "alt errada" : "alt alt-off";
+        const tag = i === q.gabarito ? ` ${icone("check")}` : i === ultima.escolha ? ` ${icone("x")}` : "";
+        return `<div class="${cls}"><span class="alt-letra">${letra(i)}</span> ${esc(a)}${tag}</div>`;
+      }
+      return `<button class="alt alt-btn" data-action="responder" data-q="${q.id}" data-i="${i}"><span class="alt-letra">${letra(i)}</span> <span class="alt-txt">${esc(a)}</span>${i < 6 ? `<kbd class="alt-key">${i + 1}</kbd>` : ""}</button>`;
+    }).join("");
+  }
+
+  let feedback = "";
+  if (respondida) {
+    const justif = ce && q.justificativa ? `<div class="ce-justif"><b>Justificativa:</b> ${esc(q.justificativa)}</div>` : "";
+    feedback = `
+      <div class="fq-qfeedback">
+        <div class="feedback ${ultima.acertou ? "ok" : "erro"}">${icone(ultima.acertou ? "check" : "x")} ${ultima.acertou ? "Você acertou." : "Resposta incorreta. Salva no Caderno de Erros."}</div>
+        ${diffTreinoHTML(q)}
+        ${justif}
+        <div class="fq-qia-topo">
+          <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-tip="A IA explica o gabarito desta questão (com selo de origem). Atalho: C">${icone("sparkles")} Comentar com IA</button>
+          <span class="fq-qia-dica muted small">→ ou Espaço para a próxima</span>
+        </div>
+        ${q.comentarioIA ? `<div class="ia-comentario fq-qia"><span class="orb orb-xs" aria-hidden="true"></span>${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
+      </div>`;
+  }
+
+  return `
+    <div class="fq-qcard ${respondida ? "is-answered" : ""} ${respondida && q.comentarioIA ? "fq-qcard--ia" : ""}" data-id="${q.id}">
+      <div class="fq-tags">
+        ${vinc ? `<span class="fq-tag">${esc(vinc)}</span>` : ""}
+        ${ce ? `<span class="fq-tag fq-tag-ce">Certo ou errado?</span>` : q.nivel ? `<span class="fq-tag">${esc(q.nivel)}</span>` : ""}
+        ${histChip}
+      </div>
+      <div class="fq-qenun">${enunTreino(q, respondida)}</div>
+      <div class="fq-qalts ${ce ? "ce" : ""}">${alts}</div>
+      ${
+        respondida
+          ? ""
+          : `<div class="fc-atalhos muted small">${icone("keyboard")} ${
+              ce
+                ? `<b>C</b> certo · <b>E</b> errado`
+                : `teclas <b>1</b>–<b>${Math.min(q.alternativas.length, 6)}</b> para responder`
+            }</div>`
+      }
+      ${feedback}
+    </div>`;
+}
+
+function focoConclusaoHTML(acertos, erros) {
+  const feitos = acertos + erros;
+  const pct = feitos ? Math.round((acertos / feitos) * 100) : 0;
+  return `
+    <div class="fq-panel fq-conclusao">
+      <div class="fq-check">${icone("check")}</div>
+      <h2>Sessão concluída</h2>
+      <p class="muted">Você resolveu <b>${feitos}</b> ${feitos === 1 ? "questão" : "questões"} neste foco.</p>
+      ${feitos ? `<div class="fq-conc-placar">
+        <div class="fq-conc-item ok"><strong>${acertos}</strong><span>acertos</span></div>
+        <div class="fq-conc-item err"><strong>${erros}</strong><span>erros</span></div>
+        <div class="fq-conc-item pct"><strong>${pct}%</strong><span>precisão</span></div>
+      </div>` : ""}
+      <div class="fq-conclusao-acoes">
+        ${feitos ? `<button class="btn btn-soft btn-lg" data-action="foco-registrar-tempo" data-tip="Lança o TEMPO desta sessão de prática (as questões já foram contadas uma a uma).">${icone("clock-3")} Registrar tempo</button>` : ""}
+        <button class="btn btn-primary btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>
+      </div>
+    </div>`;
+}
+
+// Atualiza o placar da sessão no lugar (sem re-render), após responder no foco.
+function atualizarPlacarFoco(root, placar) {
+  const vals = Object.values(placar);
+  const acertos = vals.filter((v) => v === true).length;
+  const erros = vals.filter((v) => v === false).length;
+  const feitos = acertos + erros;
+  const box = root.querySelector(".fq-placar");
+  if (!box) return;
+  const ok = box.querySelector(".fq-plc-ok");
+  if (ok) ok.innerHTML = `${icone("check")} ${acertos}`;
+  const er = box.querySelector(".fq-plc-err");
+  if (er) er.innerHTML = `${icone("x")} ${erros}`;
+  const pc = box.querySelector(".fq-plc-pct");
+  if (pc) pc.textContent = feitos ? Math.round((acertos / feitos) * 100) + "%" : "—";
 }
 
 function printQuestoes(st, questoes, formato, comGab = true) {

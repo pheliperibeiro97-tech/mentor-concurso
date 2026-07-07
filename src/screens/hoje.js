@@ -17,8 +17,9 @@ import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";
 import * as crono from "../cronometro.js";
 import { abrirRegistroSessao } from "../registro-sessao.js";
 import { progressRing } from "../viz.js";
+import { lembretesListaHTML, abrirLembretes, tratarCliqueLembrete } from "../lembretes.js";
 
-let sel = { fase: null, topicoId: null };
+let sel = { fase: null, topicoId: null, blocoMin: null, missaoId: null }; // blocoMin: tempo do bloco; missaoId: tarefa planejada em foco (pré-seleciona no registro)
 let anelAnimou = false; // count-up dos anéis só na 1ª renderização da sessão (não re-anima a cada ação)
 let mentorFalou = false; // streaming do texto do Mentor só uma vez por sessão (não re-digita a cada ação)
 
@@ -28,10 +29,9 @@ let mentorFalou = false; // streaming do texto do Mentor só uma vez por sessão
 // NUNCA inventar dado nem mostrar caixa vazia. Combina no máximo 2 sinais, do mais urgente ao menos.
 function porqueFoco(store, st, topico) {
   if (!topico) return "";
-  const hoje = todayISO();
   const sinais = [];
-  const rev = store.revisaoTopicoDe(topico.id);
-  if (rev && rev.proxima && rev.proxima <= hoje) sinais.push("a revisão dele vence hoje");
+  // Nota: "a revisão vence hoje" NÃO entra aqui — é redundante com a seção de revisões
+  // logo abaixo na própria tela (decisão do usuário, jul/2026).
   const d = store.dossie(topico.id);
   if (d && d.totalTentativas >= 3 && d.acertos / d.totalTentativas < 0.6)
     sinais.push(`você acertou ${d.acertos} de ${plural(d.totalTentativas, "questão", "questões")} dele`);
@@ -52,6 +52,8 @@ export default function renderHoje(root, app) {
   const { store } = app;
   const st = store.get();
   const plano = store.planoHoje();
+  const lembTotal = store.lembretes().length;
+  const lembPend = store.lembretesPendentes ? store.lembretesPendentes() : 0;
 
   if (!sel.fase) sel.fase = plano.fase;
   if (app.params && app.params.reta) {
@@ -59,8 +61,9 @@ export default function renderHoje(root, app) {
     app.params.reta = null;
   }
   if (!sel.topicoId && plano.topico) sel.topicoId = plano.topico.id;
-  // Quando ocioso e em modo regressivo, alinha o alvo ao bloco salvo nas configurações.
-  if (crono.snapshot().modo === "regressivo") crono.setTargetIfIdle((st.config.pomodoroFoco || 25) * 60);
+  // Quando ocioso e em modo regressivo, alinha o alvo ao tempo do BLOCO planejado em foco
+  // (se houver) ou, na falta dele, ao bloco padrão das configurações.
+  if (crono.snapshot().modo === "regressivo") crono.setTargetIfIdle((sel.blocoMin || st.config.pomodoroFoco || 25) * 60);
 
   const faseInfo = FASES[sel.fase] || plano.faseInfo;
   const topicoSel = st.topicos.find((t) => t.id === sel.topicoId) || plano.topico;
@@ -69,36 +72,9 @@ export default function renderHoje(root, app) {
   // escolha do usuário — senão o selo afirmaria uma sugestão que o Mentor não fez.
   const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id && sel.fase === plano.fase);
 
-  const cicloHTML = ORDEM_FASES.map((f) => {
-    const info = FASES[f];
-    const n = plano.contagem[f];
-    return `<div class="ciclo-fase ${f === plano.fase ? "rec" : ""}" style="--cor:${info.cor}" data-tip-pos="cima-esq" data-tip="${plural(n, "sessão", "sessões")} de ${info.nome} ${n === 1 ? "registrada" : "registradas"} hoje">
-      <div class="ciclo-bolha">${info.codigo}</div>
-      <div class="ciclo-nome">${info.nome}</div>
-    </div>`;
-  }).join('<div class="ciclo-seta">→</div>');
-
-  // Em base "cursinho", os seletores de tópico seguem a ordem das AULAS (Aula 1 → 2 → ...).
-  const topicosOrd = ordenarTopicosPorBase(st, st.topicos);
-  const opcoesTopico = topicosOrd
-    .map((t) => `<option value="${t.id}" ${t.id === sel.topicoId ? "selected" : ""}>${esc(rotuloTopico(st, t))}</option>`)
-    .join("");
-  // Tarefas pendentes (para vincular opcionalmente à sessão).
-  const opcoesTarefas = st.missoes
-    .filter((m) => !m.concluida)
-    .map((m) => {
-      const t = m.topicoId ? st.topicos.find((x) => x.id === m.topicoId) : null;
-      return `<option value="${m.id}">${esc((t ? rotuloTopico(st, t) + " · " : "") + m.titulo)}</option>`;
-    })
-    .join("");
-
   const vencidos = store.flashcardsVencidos().length;
-  const errosPend = st.tentativas.filter((t) => !t.acertou).length;
-  const apQ = aproveitamentoQuestoesHoje(st);
   const metas = store.metas();
-  const ofensHoje = store.ofensiva();
   const pontos = store.pontosAtencao();
-  const tarefasHojePend = store.tarefasDoDia(todayISO()).filter((x) => !x.concluida);
   // "Onde parei": última sessão registrada (tópico + data) — retoma sem precisar pensar.
   const ultimaSess = st.sessoes && st.sessoes.length
     ? [...st.sessoes].sort((a, b) => (a.data < b.data ? 1 : -1))[0]
@@ -112,12 +88,16 @@ export default function renderHoje(root, app) {
     : "";
   const hora = new Date().getHours();
   const saud = hora < 5 ? "Boa madrugada" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
-  const provaChip = metas && metas.prova ? ` · prova em ${plural(metas.prova.diasRestantes, "dia", "dias")}` : "";
   const reta = store.retaFinal();
   // A faixa de insight NÃO repete o que já está no hub "Revisões de hoje" (flashcards
   // vencidos, revisão de tópico, mapas) — mostra o 1º ponto de atenção AINDA não coberto ali.
   const COBERTO_PELO_HUB = new Set(["venc", "revtop", "mapas"]);
   const pontoInsight = pontos.find((p) => !COBERTO_PELO_HUB.has(p.key));
+  // Revisão do PRÓPRIO tópico em foco vencendo hoje: o Mentor comenta isso (contextual e
+  // acionável, nomeando o tópico) — diferente do hub "Revisões de hoje", que dá só a
+  // contagem genérica. Tem prioridade sobre o ponto de atenção comum.
+  const revFoco = topicoSel ? store.revisaoTopicoDe(topicoSel.id) : null;
+  const focoRevVenceHoje = !!(revFoco && revFoco.proxima && revFoco.proxima <= todayISO());
   // "Plano de hoje do Mentor": o mentor FALA na Home — 2 a 4 acionáveis derivados do
   // que o app já sabe (pontos de atenção, tópico sugerido, revisões, prova). Cada um
   // com um botão que EXECUTA (não é aviso decorativo). Substitui a faixinha discreta.
@@ -129,7 +109,7 @@ export default function renderHoje(root, app) {
   const minPlano = (topicoSel ? st.config.pomodoroFoco || 25 : 0) + tarefasDia.reduce((a, x) => a + (x.estimMin || 0), 0);
   const pbTask = (it) => {
     const cor = it.tipo === "rotina" ? "#f472b6" : "#818cf8";
-    return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${it.topicoId && !it.concluida ? ` data-action="focar-topico" data-top="${it.topicoId}"` : ""}>
+    return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${!it.concluida && (it.topicoId || it.estimMin) ? ` data-action="focar-topico"${it.topicoId ? ` data-top="${it.topicoId}"` : ""} data-min="${it.estimMin || ""}"${it.tipo === "missao" ? ` data-missao="${it.id}"` : ""}` : ""}>
         <span class="pb-stripe"></span>
         <div class="pb-top"><span class="pb-tag">${it.tipo === "rotina" ? "Rotina" : "Tarefa"}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : "Você planejou"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}</div>
         <h4><span class="pb-chk" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}"${it.concluida ? " data-on" : ""}></span>${esc(it.titulo)}</h4>
@@ -152,7 +132,7 @@ export default function renderHoje(root, app) {
         }
         ${tarefasDia.map(pbTask).join("")}
         <button class="pb pb-add" data-action="hub-ir" data-rota="planejamento">
-          <span class="pb-add-pl">＋</span><span class="pb-add-t">Adicionar ao dia</span><span class="pb-add-m">Outra matéria, tarefa ou sessão</span>
+          <span class="pb-add-pl">${icone("plus")}</span><span class="pb-add-t">Adicionar ao dia</span><span class="pb-add-m">Outra matéria, tarefa ou sessão</span>
         </button>
       </div>
     </section>`;
@@ -193,11 +173,10 @@ export default function renderHoje(root, app) {
         <div class="foco-topico-nome">${topicoSel ? esc(topicoSel.nome) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
         ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico — você decide.">${icone("repeat-2")} Trocar tópico</button>` : ""}
       </div>
-      ${porqueHoje ? `<div class="foco-porque">${icone("sparkles")} ${porqueHoje}</div>` : ""}
       ${
         st.topicos.length
           ? `<div class="foco-meta">
-        <div class="fm"><span class="fm-k">Bloco</span><span class="fm-v">${st.config.pomodoroFoco || 25} min</span></div>
+        <div class="fm"><span class="fm-k">Bloco${sel.blocoMin ? " · do plano" : ""}</span><span class="fm-v">${sel.blocoMin || st.config.pomodoroFoco || 25} min</span></div>
         ${ondePareiFase ? `<div class="fm"><span class="fm-k">Onde parei</span><span class="fm-v">${esc(ondePareiFase)}</span></div>` : ""}
         <div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">${dominio != null ? dominio + "%" : "—"}</span></div>
       </div>`
@@ -208,20 +187,29 @@ export default function renderHoje(root, app) {
           st.topicos.length
             ? `<button class="btn btn-primary btn-lg btn-foco" data-action="foco-comecar">${icone("play")} Começar agora</button>
         <button class="btn btn-ghost" data-action="ir-pratica" data-tip="Praticar questões deste tópico.">Questões</button>
-        <button class="btn btn-ghost" data-action="ir-flashcards" data-tip="Revisar flashcards vencidos.">Revisar${vencidos ? ` · ${vencidos}` : ""}</button>`
+        <button class="btn btn-ghost" data-action="foco-revisar" data-topico="${topicoSel ? topicoSel.id : ""}" data-tip="Revisar os flashcards do tópico em foco. (As demais revisões ficam no hub 'Revisões de hoje' abaixo.)">Revisar tópico atual</button>`
             : `<button class="btn btn-primary btn-lg" data-action="hub-ir" data-rota="edital">Montar meu edital →</button>`
         }
       </div>
     </section>
       <aside class="hoje-side">
         ${ringsHTML(store)}
-        ${mentorVozHTML(store, st, topicoSel, pontoInsight ? pontoInsight.txt : "")}
+        ${mentorVozHTML(store, st, topicoSel, focoRevVenceHoje ? `A revisão de ${topicoSel.nome} vence hoje — quer resolver agora?` : porqueHoje || (pontoInsight ? pontoInsight.txt : ""))}
       </aside>
     </div>
 
-    ${hubRevisoesHTML(store)}
-
-    ${planoSec}
+    <div class="hoje-split">
+      <div class="hoje-split-main">
+        ${hubRevisoesHTML(store)}
+        ${planoSec}
+      </div>
+      <section class="plano-sec hoje-lembretes hoje-split-side">
+        <div class="plano-h"><h2>${icone("pin")} Lembretes</h2>${lembPend ? `<span class="cnt">${lembPend}</span>` : ""}<span class="sp"></span>
+          <button class="lnk small" data-lem-novo data-tip="Adicionar um recado">${icone("plus")} Novo</button>
+        </div>
+        ${lembPend ? lembretesListaHTML(store, { soPendentes: true }) : `<p class="muted small lem-sec-vazia">Sem lembretes${lembTotal ? " pendentes" : ""}. Anote o que não pode esquecer — prova, inscrição, boleto… <a data-lem-novo>criar o primeiro →</a></p>`}
+      </section>
+    </div>
 
     <div class="hoje-rodape">
       <span class="muted small">Hoje: <b>${fmtTempo(tempoHoje(st))}</b> em foco · <b>${sessoesHoje(st)}</b> ${sessoesHoje(st) === 1 ? "sessão" : "sessões"} · <b>${questoesHoje(st)}</b> questões</span>
@@ -245,8 +233,6 @@ export default function renderHoje(root, app) {
 
   function atualizaVinculo() {
     const t = st.topicos.find((x) => x.id === sel.topicoId);
-    const vEl = root.querySelector("#crono-vinculo");
-    if (vEl) vEl.innerHTML = `Registrar como <b>${esc(FASES[sel.fase].nome)}</b> · <b>${t ? esc(rotuloTopico(st, t)) : "sem tópico"}</b>`;
     // Espelha o vínculo no cronômetro global (para o registro e o rótulo do mini-relógio).
     crono.vincular({
       fase: sel.fase,
@@ -257,9 +243,10 @@ export default function renderHoje(root, app) {
     });
   }
   atualizaVinculo();
-  root.querySelector("#sel-topico")?.addEventListener("change", (e) => {
-    sel.topicoId = e.target.value;
-    atualizaVinculo();
+  // Card de Lembretes na Hoje: marcar feito / remover / novo (abre o mesmo popover do topo).
+  root.querySelector(".hoje-lembretes")?.addEventListener("click", (e) => {
+    if (e.target.closest("[data-lem-novo]")) { abrirLembretes(store, () => app.refresh()); return; }
+    tratarCliqueLembrete(e, store, () => app.refresh());
   });
   root.querySelectorAll("[data-sel-fase]").forEach((b) =>
     b.addEventListener("click", () => {
@@ -274,9 +261,33 @@ export default function renderHoje(root, app) {
   // o confete ao cruzar o alvo do bloco enquanto o usuário está aqui.
   crono.setTelaHoje(true);
 
+  // Rotas que sabem filtrar por um tópico (via params.topicoId). Só nelas faz sentido
+  // perguntar o ESCOPO (deste tópico x geral); nas demais abre o conteúdo como está.
+  const ESCOPO_TOPICO = new Set(["pratica", "pratica-ce", "flashcards", "erros", "resumos", "mapas"]);
+  // Navega para `rota`; se houver tópico em foco e a rota suportar filtro, pergunta o escopo.
+  const navComEscopo = async (rota) => {
+    const tid = sel.topicoId;
+    const topico = tid ? st.topicos.find((t) => t.id === tid) : null;
+    if (!topico || !ESCOPO_TOPICO.has(rota)) { app.navigate(rota); return; }
+    const nome = topico.nome.length > 32 ? topico.nome.slice(0, 32) + "…" : topico.nome;
+    const v = await escolher("Qual escopo?", [
+      { label: `Deste tópico · ${nome}`, value: "t", cls: "btn-primary" },
+      { label: "Todos os tópicos", value: "g" },
+    ]);
+    if (!v) return;
+    app.navigate(rota, v === "t" ? { topicoId: tid } : {});
+  };
+
   bindActions(root, {
     // "Começar agora": inicia o cronômetro e entra em modo foco (tela cheia imersiva).
     "foco-comecar": () => {
+      // Bloco planejado tem duração definida → estuda como Timer (regressivo) desse tamanho,
+      // ligando o tempo do plano ao cronômetro mesmo se o modo atual for Pomodoro/Cronômetro.
+      // Sem bloco (foco do Mentor), mantém o modo e o tempo que o usuário já usa.
+      if (sel.blocoMin) {
+        crono.setModo("regressivo");
+        crono.setTarget(sel.blocoMin * 60);
+      }
       crono.iniciar();
       crono.setModoTela("focus");
     },
@@ -284,11 +295,13 @@ export default function renderHoje(root, app) {
     // dá play ali (deixa o cronômetro visível/acessível de novo, sem forçar o início).
     "abrir-crono": () => crono.setModoTela("focus"),
     // Abre a janela de registro de sessão (manual) já apontada para o foco atual.
-    "abrir-registro": () => abrirRegistroSessao(store, app, { modo: "manual", fasePadrao: sel.fase, topicoPadrao: sel.topicoId }),
+    "abrir-registro": () => abrirRegistroSessao(store, app, { modo: "manual", fasePadrao: sel.fase, topicoPadrao: sel.topicoId, missaoPadrao: sel.missaoId }),
     // Trocar o tópico em foco: seletor disciplina → tópico (o usuário escolhe, não o sistema).
     "trocar-topico": () => {
       abrirSeletorTopico(store, (topId) => {
         sel.topicoId = topId;
+        sel.blocoMin = null; // escolha manual não é bloco planejado
+        sel.missaoId = null;
         app.refresh();
       });
     },
@@ -298,6 +311,8 @@ export default function renderHoje(root, app) {
       if (typeof app.perguntarNoChat === "function") app.perguntarNoChat(q);
       else app.navigate("mentor");
     },
+    // "Refazer meu plano": abre o Mentor IA e dispara a reanálise (ação real, não mais chat morto).
+    "refazer-plano": () => app.navigate("mentor", { autoAnalisar: true }),
     // Marca/desmarca uma tarefa de hoje como feita (missão ou ocorrência de rotina).
     "th-toggle": (el) => {
       const id = el.getAttribute("data-id");
@@ -308,35 +323,58 @@ export default function renderHoje(root, app) {
     // Clicar num item do plano / numa tarefa → torna-o o FOCO atual (rola até o card de foco).
     "focar-topico": (el) => {
       const top = el.getAttribute("data-top") || el.getAttribute("data-topico");
-      if (!top) return;
-      sel.topicoId = top;
-      const f = el.getAttribute("data-fase");
-      if (f && FASES[f]) sel.fase = f;
-      app.refresh();
-      requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
-      toast("Foco atualizado — comece quando quiser.");
+      const min = Number(el.getAttribute("data-min"));
+      sel.missaoId = el.getAttribute("data-missao") || null; // tarefa do bloco → pré-seleciona no registro
+      if (top) {
+        // Tarefa COM tópico → vira o "foco de agora" (tópico + tempo do bloco no cronômetro).
+        sel.topicoId = top;
+        const f = el.getAttribute("data-fase");
+        if (f && FASES[f]) sel.fase = f;
+        sel.blocoMin = min > 0 ? min : null;
+        if (sel.blocoMin) {
+          const snap = crono.snapshot();
+          if (!snap.running && snap.elapsed === 0) { crono.setModo("regressivo"); crono.setTarget(sel.blocoMin * 60); }
+        }
+        app.refresh();
+        requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+        toast("Foco atualizado — comece quando quiser.");
+      } else if (min > 0) {
+        // Tarefa SÓ com tempo (sem tópico real) → é um bloco de tempo puro: vai direto pro
+        // cronômetro em modo Timer e abre o relógio, SEM associar um tópico falso ao foco.
+        const snap = crono.snapshot();
+        const ocioso = !snap.running && snap.elapsed === 0;
+        if (ocioso) { crono.setModo("regressivo"); crono.setTarget(min * 60); }
+        crono.setModoTela("focus");
+        toast(ocioso ? `Timer de ${min} min pronto — dê play quando quiser.` : "Cronômetro em uso — finalize a sessão atual antes.");
+      }
     },
     "ir-pratica": async () => {
       sel.fase = "A";
       // Respeita quais telas de questões estão visíveis (Configurações → Botões da barra):
-      // abre a habilitada; se as duas, pergunta; se nenhuma, abre Questões mesmo assim.
+      // múltipla escolha, certo/errado e DISCURSIVA/redação. Só pergunta se houver mais de uma.
       const oc = st.config.botoesOcultos || [];
-      const mcOn = !oc.includes("pratica");
-      const ceOn = !oc.includes("pratica-ce");
-      let rota = "pratica";
-      if (mcOn && ceOn) {
-        const v = await escolher("Abrir qual prática de questões?", [
-          { label: "Questões", value: "pratica", cls: "btn-primary" },
-          { label: "Questões C/E", value: "pratica-ce" },
-        ]);
+      const tipos = [
+        { value: "pratica", label: "Múltipla escolha", ico: "list-checks" },
+        { value: "pratica-ce", label: "Certo / errado", ico: "check-check" },
+        { value: "correcao", label: "Discursiva / redação", ico: "pencil-line" },
+      ].filter((t) => !oc.includes(t.value));
+      if (!tipos.length) { await navComEscopo("pratica"); return; }
+      let rota = tipos[0].value;
+      if (tipos.length > 1) {
+        const v = await escolher("Praticar questões — qual tipo?", tipos, { lista: true });
         if (!v) return;
         rota = v;
-      } else if (ceOn && !mcOn) {
-        rota = "pratica-ce";
       }
-      app.navigate(rota, { topicoId: sel.topicoId });
+      await navComEscopo(rota);
     },
-    "ir-flashcards": () => app.navigate("flashcards"),
+    // "Revisar tópico atual": revisa direto os flashcards do tópico em foco (escopo).
+    // As demais revisões (tópicos, erros, resumos, mapas) ficam no hub "Revisões de hoje"
+    // abaixo — antes este botão abria um menu que DUPLICAVA esse hub.
+    "foco-revisar": (el) => {
+      sel.fase = "R";
+      const tid = el.getAttribute("data-topico");
+      app.navigate("flashcards", tid ? { topicoId: tid } : {});
+    },
     "ir-erros": () => app.navigate("erros"),
     "ir-mentor": () => app.navigate("mentor"),
     "ir-revtopico": () => app.navigate("revtopico"),
@@ -386,8 +424,8 @@ function ringsHTML(store) {
     </section>`;
 }
 
-// Card do Mentor com voz: uma observação/ponto de atenção (o "porquê" do foco agora vive
-// DENTRO do card de foco) + sugestões (propõe, não executa).
+// Card do Mentor com voz: o "porquê" do foco agora (banca/erros/flashcards), ou a revisão
+// que vence, ou um ponto de atenção — tudo aqui, NÃO no card de foco + sugestões (propõe, não executa).
 function mentorVozHTML(store, st, topicoSel, insightTxt) {
   const nomeTop = topicoSel ? rotuloTopico(st, topicoSel) : "";
   const sug = (q, lbl) => `<button class="chip hmv-sug" data-action="mentor-sug" data-q="${esc(q)}">${esc(lbl)}</button>`;
@@ -402,7 +440,7 @@ function mentorVozHTML(store, st, topicoSel, insightTxt) {
       <div class="hmv-sugs">
         ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
         ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}
-        ${sug("Refaça meu plano de estudos de hoje", "Refazer meu plano")}
+        <button class="chip hmv-sug" data-action="refazer-plano" data-tip="Abre o Mentor IA e reanalisa seu progresso — propõe metas, tarefas e revisões pra você aprovar.">${icone("refresh-cw")} Refazer meu plano</button>
       </div>
       <div class="hmv-nota muted small">O Mentor propõe; você aprova antes de qualquer ação.</div>
     </section>`;
@@ -441,104 +479,6 @@ function hubRevisoesHTML(store) {
   </section>`;
 }
 
-// Tarefas planejadas para hoje (datadas + rotinas). É SUGESTÃO: marca/conclui, aponta o
-// cronômetro para a tarefa, mas nunca bloqueia o usuário de estudar outra coisa. O tempo
-// (≈) é só estimativa e jamais interrompe a sessão.
-function tarefasHojeHTML(store) {
-  const itens = store.tarefasDoDia(todayISO());
-  if (!itens.length) {
-    // Estado vazio DISCRETO: só para quem já usa o planejamento (tem missões), p/ não
-    // poluir quem ainda não planejou — e esclarece que a seção existe, hoje só está livre.
-    if (!(store.get().missoes || []).length) return "";
-    return `<details class="card tarefas-hoje-card hoje-recolhe">
-      <summary class="hoje-recolhe-sum">${icone("clipboard-list")} Tarefas de hoje <span class="spacer"></span><span class="muted small" style="font-weight:400">nada hoje</span></summary>
-      <p class="muted small" style="margin:8px 0 0">Nada planejado para hoje — siga o ciclo livremente. <button class="lnk small" data-action="hub-ir" data-rota="planejamento">abrir planejamento →</button></p>
-    </details>`;
-  }
-  const pend = itens.filter((x) => !x.concluida);
-  const totMin = pend.reduce((a, x) => a + (x.estimMin || 0), 0);
-  const feitas = itens.length - pend.length;
-  return `<details class="card tarefas-hoje-card hoje-recolhe">
-    <summary class="hoje-recolhe-sum">
-      ${icone("clipboard-list")} Tarefas de hoje
-      <span class="spacer"></span>
-      <span class="muted small">${feitas}/${itens.length} ${feitas === 1 ? "feita" : "feitas"}${totMin > 0 ? ` · ≈ ${fmtMin(totMin)}` : ""}</span>
-    </summary>
-    <p class="muted small" style="margin:8px 0 10px">Sugestão do que você planejou. Você é livre para estudar outra coisa.</p>
-    <ul class="th-lista">
-      ${itens
-        .map(
-          (it) => `<li class="th-item ${it.concluida ? "feito" : ""}">
-            <input type="checkbox" class="th-check" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}" ${it.concluida ? "checked" : ""} />
-            ${it.topicoId && !it.concluida ? `<button class="th-titulo th-titulo-btn" data-action="focar-topico" data-top="${it.topicoId}" data-tip="Tornar esta tarefa o seu foco de agora.">${esc(it.titulo)}</button>` : `<span class="th-titulo">${esc(it.titulo)}</span>`}
-            ${it.tipo === "rotina" ? `<span class="th-badge" data-tip="Tarefa da sua rotina semanal">${icone("repeat-2")}</span>` : ""}
-            ${it.estimMin ? `<span class="muted small th-tempo" data-tip="Tempo só sugerido.">≈ ${fmtMin(it.estimMin)}</span>` : ""}
-            <span class="spacer"></span>
-            ${it.topicoId && !it.concluida ? `<button class="lnk th-estudar" data-action="focar-topico" data-top="${it.topicoId}" data-tip="Tornar esta tarefa o seu foco de agora.">${icone("play")} focar</button>` : ""}
-          </li>`
-        )
-        .join("")}
-    </ul>
-  </details>`;
-}
-
-// Check-in gentil ao abrir o app (dir.3): balanço de ontem + hoje + streak + reforço positivo.
-// Dispensável por dia (não cobra horário, não é agressivo).
-function checkinHTML(store) {
-  const s = store.streak();
-  const ont = store.balancoOntem();
-  const hj = store.balancoHoje();
-  const conq = store.conquistas();
-  const saud = s.estudouHoje ? "Bom te ver de novo hoje!" : s.atual > 0 ? "Bom te ver de volta!" : "Vamos começar?";
-  const ontemTxt =
-    ont.sessoes || ont.planejadas
-      ? `Ontem você ${ont.planejadas ? `concluiu ${ont.feitas}/${ont.planejadas} ${ont.planejadas === 1 ? "tarefa" : "tarefas"}` : "estudou"}${ont.tempoMin ? ` e somou ${fmtMin(ont.tempoMin)}` : ""}.`
-      : "Ontem não houve registro de estudo — sem cobrança, hoje é um novo dia.";
-  const hojeTxt = hj.planejadas
-    ? `Hoje: ${hj.feitas}/${hj.planejadas} ${hj.planejadas === 1 ? "tarefa" : "tarefas"}`
-    : "Hoje você ainda não marcou tarefas";
-  const extras = [];
-  if (hj.revisoesTopico) extras.push(`${plural(hj.revisoesTopico, "revisão", "revisões")} de tópico`);
-  if (hj.flashcards) extras.push(`${plural(hj.flashcards, "flashcard", "flashcards")}`);
-  return `<section class="card checkin-card">
-    <button class="checkin-fechar" data-action="checkin-dispensar" data-tip-pos="cima-dir" data-tip="Ok, entendi (some por hoje).">${icone("x")}</button>
-    <div class="checkin-head">
-      <h3>${saud}</h3>
-      <div class="checkin-chips">
-        <span class="chip-streak" data-tip="Dias consecutivos de estudo. Os dias de folga que você configurou não interrompem a sequência.">${icone("flame")} ${plural(s.atual, "dia seguido", "dias seguidos")}</span>
-        <span class="chip-semana" data-tip="Dias estudados nesta semana sobre os dias de estudo configurados (folgas não contam).">${icone("calendar")} ${s.naSemana}/${s.metaSemana || 7} na semana</span>
-      </div>
-    </div>
-    <p class="checkin-balanco">${ontemTxt} ${hojeTxt}${extras.length ? " · " + extras.join(" · ") : ""}.</p>
-    ${conq.length ? `<div class="checkin-conquistas">${conq.map((c) => `<span class="conquista">${icone(c.icone)} ${esc(c.txt)}</span>`).join("")}</div>` : ""}
-  </section>`;
-}
-
-// Banner da prova: data + contagem regressiva. Some quando não há data (estudo
-// pré-edital é válido), mostrando só uma dica discreta para cadastrar.
-function provaBannerHTML(m) {
-  if (!m.dataProva) {
-    return `<div class="prova-banner sem-data"><span class="prova-ico">${icone("calendar")}</span>
-      <span class="muted small">Data da prova não cadastrada. Defina em <b>Configurações</b> para ver a contagem regressiva.</span></div>`;
-  }
-  const d = m.diasProva;
-  let txt, cls;
-  if (d > 0) {
-    txt = `faltam <b>${d}</b> dia${d === 1 ? "" : "s"}`;
-    cls = d <= 30 ? "urgente" : "";
-  } else if (d === 0) {
-    txt = "<b>é hoje!</b> Boa prova! 🍀";
-    cls = "urgente";
-  } else {
-    txt = "<b>já passou</b>";
-    cls = "passou";
-  }
-  return `<div class="prova-banner ${cls}">
-    <span class="prova-ico">${icone("calendar")}</span>
-    <span>Prova em <b>${fmtData(m.dataProva)}</b> · ${txt}</span>
-  </div>`;
-}
-
 // Aviso de RETA FINAL (≤30 dias): banner destacado e premium na tela Hoje. Discreto
 // (não é pop-up), reusa as classes do banner da prova + um modificador de realce. A
 // faixa de 30 dias é decidida em store.retaFinal() (mesma fonte dos pontos/notificações).
@@ -547,7 +487,7 @@ function retaFinalHTML(m) {
   let titulo, micro;
   if (d === 0) {
     titulo = "Reta final: <b>é hoje!</b>";
-    micro = "Respire fundo e confie no que você treinou. Boa prova! 🍀";
+    micro = "Respire fundo e confie no que você treinou. Boa prova!";
   } else if (d <= 7) {
     titulo = `Reta final: falta${d === 1 ? "" : "m"} <b>${d}</b> dia${d === 1 ? "" : "s"}`;
     micro = "Reta de chegada: revise o essencial, descanse e mantenha a calma.";
@@ -606,9 +546,6 @@ function abrirSeletorTopico(store, onPick) {
     },
   });
 }
-function dataHoje() {
-  return new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-}
 function hojeStr() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -626,13 +563,4 @@ function questoesHoje(st) {
     .filter((s) => s.data.slice(0, 10) === hoje)
     .reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
   return tent + man;
-}
-// Aproveitamento de questões hoje (tentativas + lançamentos manuais).
-function aproveitamentoQuestoesHoje(st) {
-  const hoje = hojeStr();
-  const tent = st.tentativas.filter((t) => t.data.slice(0, 10) === hoje);
-  const sess = st.sessoes.filter((s) => s.data.slice(0, 10) === hoje);
-  const acerto = tent.filter((t) => t.acertou).length + sess.reduce((a, s) => a + (s.qAcertos || 0), 0);
-  const total = tent.length + sess.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
-  return total ? Math.round((acerto / total) * 100) : null;
 }

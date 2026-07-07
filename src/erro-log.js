@@ -4,7 +4,7 @@
 // e-mail para análise. Nada é enviado automaticamente; é sempre o usuário quem exporta.
 import { backendName } from "./persistence.js";
 
-export const APP_VERSION = "0.4.2"; // manter em sincronia com src-tauri/tauri.conf.json
+export const APP_VERSION = "0.6.1"; // manter em sincronia com src-tauri/tauri.conf.json
 export const EMAIL_SUPORTE = "phelipe.ribeiro97@gmail.com";
 
 const LS = "mentor_errlog_v1";
