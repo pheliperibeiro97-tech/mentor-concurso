@@ -450,7 +450,7 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     <div class="lf-acoes">
       <button class="lfoco-btn ${ind.favorito ? "on-fav" : ""}" data-action="lf-fav" data-tip-pos="cima" data-tip="${ind.favorito ? "Favorito — tirar" : "Favoritar"}">${icone("bookmark")}</button>
       <button class="lfoco-btn ${ind.dificil ? "on-dif" : ""}" data-action="lf-dif" data-tip-pos="cima" data-tip="${ind.dificil ? "Difícil — tirar" : "Marcar difícil"}">${icone("flame")}</button>
-      <button class="lfoco-btn ${ind.pq ? "on-pq" : ""}" data-action="lf-pq" data-tip-pos="cima" data-tip="Provável questão">${icone("star")}</button>
+      <button class="lfoco-btn ${ind.pq ? "on-pq" : ""}" data-action="lf-pq" data-tip-pos="cima" data-tip="O que mais cai">${icone("star")}</button>
       <span class="lf-sep"></span>
       ${mostrarModos ? "" : `<button class="lfoco-btn ${grifarAberto ? "on" : ""}" data-action="lf-grifar" data-tip-pos="cima" data-tip="Grifar">${icone("highlighter")}</button>
       <button class="lfoco-btn" data-action="lf-anotar" data-tip-pos="cima" data-tip="Anotar">${icone("notebook-pen")}</button>`}
@@ -485,7 +485,8 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     const prev = host.querySelector('[data-action="foco-anterior"]'); if (prev) prev.disabled = idx <= 0;
     const next = host.querySelector('[data-action="foco-proximo"]'); if (next) next.disabled = idx >= ids.length - 1;
     montarMk(ind);
-    if (!ind.lido) store.toggleIndicacaoLida(ind.id); // ao PASSAR pelo Foco, o artigo já conta como lido (sem botão)
+    // Fase 5 (fix P-04 da auditoria): EXIBIR não marca como lido — abrir o Foco e sair
+    // inflava o progresso da lei e o "lidos hoje". Lido = AVANÇAR (irProximo) ou botão.
     if (normaFoco) store.setUltimaLeitura(normaFoco, { indicacaoId: ind.id, pct: Math.round((100 * (idx + 1)) / ids.length) }); // continuar leitura
   };
 
@@ -542,7 +543,6 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     if (cz) { revelados.add(cz.getAttribute("data-cloze")); atualizar("none"); }
   });
   montarMk(ind0);
-  if (ind0 && !ind0.lido) store.toggleIndicacaoLida(ind0.id); // primeiro artigo do Foco também já conta como lido
   offTick = ligarTickCrono(host);
   const chip = host.querySelector(".fq-crono"); if (chip) atualizarChipCrono(chip);
   const onKey = (e) => { focoChromeKey(e, { root: host }); };
@@ -873,7 +873,7 @@ function renderIndicacoes(root, app, tipo) {
       <div class="ed-ajuda-corpo">
         <p>Três abas, cada uma um passo: <b>Ler</b> (a letra), <b>Estudar</b> (praticar) e <b>Metas</b> (planejar).</p>
         <p>${icone("book-open")} <b>Ler</b> — a lista com o <b>texto</b> ${tipo === "juris" ? "das súmulas/teses" : "dos artigos"}. Aqui você lê, <b>grifa</b>, marca o que mais cai com a <b>★</b> (a <b>incidência</b> aparece numa mini-barra no item) e <b>importa</b>${tipo === "juris" ? " (colar o texto/informativo ou PDF)" : " (a letra oficial do Planalto/colando — detecta o revogado — ou uma lista/PDF)"}.${tipo === "lei" ? " Em <b>Conferir atualização</b>, o app compara com a fonte e mostra o que <b>mudou/entrou/foi revogado</b> (selo de novidade)." : ""}</p>
-        <p>${icone("target")} <b>Estudar</b> — em tela cheia: <b>Certo/Errado</b>, <b>Completar a letra</b>, <b>Revisar o que vence</b> e <b>Refazer erros</b>${tipo === "juris" ? ", além da <b>Súmula-duelo</b> (número/tribunal trocado)" : ""}. Escolha o <b>escopo</b> (tudo ou o que mais cai); toda geração pergunta <b>quantidade e dificuldade</b> e você ainda gera <b>flashcards</b> e <b>questões</b>.</p>
+        <p>${icone("target")} <b>Estudar</b> — em tela cheia: <b>Certo/Errado</b>, <b>Completar a letra</b>, <b>Revisar o que vence</b> e <b>Refazer erros</b>${tipo === "juris" ? ", além da <b>Súmula-duelo</b> (número/tribunal trocado)" : ""}. Escolha o <b>escopo</b> (tudo ou o que mais cai); um clique já começa no padrão e, em <b>Opções…</b>, você ajusta <b>quantidade e dificuldade</b> — dá ainda para gerar <b>flashcards</b> e <b>questões</b>.</p>
         <p>${icone("calendar-check")} <b>Metas</b> — planeje a leitura. No topo, o app mostra seu <b>progresso</b>, <b>ritmo</b> e <b>previsão de conclusão</b>; em <b>Hoje</b>, suas metas do dia e as <b>revisões que vencem</b> (com a semana à frente). Crie metas (ex.: "ler ${tipo === "juris" ? "os informativos 810–815" : "art. 1º a 20"}") que viram <b>tarefa no Planejamento</b>, mostram o <b>progresso</b> quando dá para medir, e podem ser <b>divididas em etapas</b> ou <b>importadas de um cronograma</b>.</p>
       </div>
     </details>
@@ -887,7 +887,7 @@ function renderIndicacoes(root, app, tipo) {
     <div class="barra-acoes">
       ${modo === "ler" && !mostrarBiblioteca ? `<button class="btn btn-add btn-sm" data-action="importar" data-tip-pos="cima-esq" data-tip="${tipo === "lei" ? "Trazer a lei: do site oficial (Planalto), colando o texto, ou de um PDF." : "Trazer súmulas/teses: colando o texto/informativo ou de um PDF."}">${icone("download")} Importar</button>` : ""}
       ${tipo === "lei" && modo === "ler" && !modoLeitor && !mostrarBiblioteca && store.normasComFonte("lei").length ? `<button class="btn btn-ghost btn-sm" data-action="conferir-atualizacao" data-tip-pos="cima-esq" data-tip="Recompara com a fonte oficial e mostra o que mudou, entrou ou foi revogado. Você decide o que aplicar.">${icone("refresh-cw")} Conferir atualização</button>` : ""}
-      ${modo === "ler" && !modoLeitor && !mostrarBiblioteca ? `<button class="btn btn-ghost btn-sm" data-action="toggle-pq-import" data-tip-pos="cima-esq" data-tip="Marque o que mais cai (incidência): a IA sugere ou você importa uma estatística.">${icone("star")} Marcar incidência</button>` : ""}
+      ${modo === "ler" && !modoLeitor && !mostrarBiblioteca ? `<button class="btn btn-ghost btn-sm" data-action="toggle-pq-import" data-tip-pos="cima-esq" data-tip="Marque o que mais cai (incidência): a IA sugere ou você importa uma estatística.">${icone("star")} O que mais cai</button>` : ""}
       ${modo === "ler" && !modoLeitor && !mostrarBiblioteca && st.indicacoes.some((i) => (i.tipo || "lei") === (tipo === "juris" ? "juris" : "lei") && (i.texto || "").trim().length >= 20) ? `<button class="btn btn-ia btn-sm" data-action="abrir-indice" data-tip-pos="cima-esq" data-tip="Separar ${tipo === "juris" ? "as súmulas/teses" : "os artigos"} para a Busca por significado (IA) do chat — só deste módulo.">${icone("sparkles")} Busca IA</button>` : ""}
       ${modo === "metas" ? `<button class="btn btn-add btn-sm" data-action="nova-meta" data-tip-pos="cima-esq" data-tip="Criar uma meta de leitura (ex.: 'ler art. 1º a 20'). Dá para dividir em etapas; vira tarefa no Planejamento.">${icone("calendar-check")} Nova meta</button>` : ""}
       ${modo === "metas" ? `<button class="btn btn-ghost btn-sm" data-action="importar-metas" data-tip-pos="cima-esq" data-tip="Importar um cronograma/tabela de metas de leitura (colar ou PDF). Cada linha vira uma meta.">${icone("download")} Importar metas</button>` : ""}
@@ -1045,6 +1045,52 @@ function renderIndicacoes(root, app, tipo) {
     app.navigate("pratica-ce", { focoErrosIds: fila });
   };
 
+  // Gera flashcards do escopo (IA). Chamado com o padrão (1 clique) ou com o que o usuário
+  // escolheu em "Opções…". Mantém o progresso narrado e o corte de 12 avisado ANTES.
+  const gerarFlashcardsEscopo = async (el, n, dificuldade) => {
+    if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards"); // "Gerar com IA" exige IA (igual questões)
+    const itens = escopoItens();
+    if (!itens.length) return toast("Adicione o texto dos artigos na aba Ler primeiro.", "erro");
+    const alvo = itens.slice(0, 12);
+    const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
+    const lote = store.iniciarLoteGeracao(rot);
+    const fim = toastCarregando(itens.length > 12 ? "Gerando flashcards com IA… (limite de 12 por vez)" : "Gerando flashcards com IA…");
+    if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
+    let total = 0;
+    try {
+      let i = 0;
+      for (const it of alvo) { fim(`Gerando flashcards com IA… ${++i}/${alvo.length}`); try { const cs = await store.gerarFlashcardsIADeIndicacao(it.id, n, dificuldade); total += cs.length; } catch (e) { console.error(e); } }
+    } finally {
+      fim();
+      if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
+      store.encerrarLoteGeracao();
+    }
+    toast(total ? `${plural(total, "flashcard gerado", "flashcards gerados")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou flashcards.", total ? "ok" : "erro");
+    if (total) app.navigate("flashcards", { lote, loteRotulo: rot }); // abre mostrando só os recém-gerados
+  };
+  // Gera questões de múltipla escolha do escopo (IA) — mesmo padrão dos flashcards.
+  const gerarQuestoesEscopo = async (el, n, dificuldade) => {
+    if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
+    const itens = escopoItens();
+    if (!itens.length) return toast("Adicione o texto dos artigos na aba Ler primeiro.", "erro");
+    const alvo = itens.slice(0, 12); // limita p/ não estourar a cota de IA
+    const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
+    const lote = store.iniciarLoteGeracao(rot);
+    const fim = toastCarregando(itens.length > 12 ? "Gerando questões com IA… (limite de 12 por vez)" : "Gerando questões de múltipla escolha com IA…");
+    if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
+    let total = 0;
+    try {
+      let i = 0;
+      for (const it of alvo) { fim(`Gerando questões com IA… ${++i}/${alvo.length}`); try { const qs = await store.gerarQuestoesDeIndicacao(it.id, n, dificuldade, "mc"); total += qs.length; } catch (e) { console.error(e); } }
+    } finally {
+      fim();
+      if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
+      store.encerrarLoteGeracao();
+    }
+    toast(total ? `${plural(total, "questão gerada", "questões geradas")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou questões. Confira se os artigos têm texto.", total ? "ok" : "erro");
+    if (total) app.navigate("pratica", { lote, loteRotulo: rot }); // abre mostrando só as recém-geradas
+  };
+
   // Monta a marcação tricromática nos itens com o painel aberto.
   root.querySelectorAll("[data-mk-host]").forEach((host) => {
     const id = host.getAttribute("data-mk-host");
@@ -1147,7 +1193,13 @@ function renderIndicacoes(root, app, tipo) {
     "estudar-tema-chip": (el) => { const t = el.getAttribute("data-tema"); estudarTemaSel = estudarTemaSel === t ? null : t; estudarSecaoSel = null; estudarArtFiltro = ""; app.refresh(); }, // F2: atalho memorizar por tema
     "estudar-tema-limpar": () => { estudarTemaSel = null; app.refresh(); },
     "estudar-cross-lei": () => { estudarLeiSel = estudarLeiSel === "todas" ? null : "todas"; estudarSecaoSel = null; app.refresh(); }, // F2: tema em todas as leis
-    "estudar-ce": async () => {
+    // 1 clique = começa DIRETO no padrão (4 itens, dificuldade média, escopo atual).
+    // Quantidade/dificuldade viram o link "Opções…" do card (handler -opcoes abaixo).
+    "estudar-ce": () => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Gerar Certo/Errado");
+      iniciarCE(escopoItens(), { n: 4, dificuldade: "medio", regenerate: true });
+    },
+    "estudar-ce-opcoes": async () => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar Certo/Errado");
       const g = await pedirNumero("Quantos itens Certo/Errado por dispositivo?", { padrao: 4, min: 1, max: 8, nivel: true });
       if (!g) return;
@@ -1166,8 +1218,9 @@ function renderIndicacoes(root, app, tipo) {
       app.refresh();
     },
     // Súmula-duelo (só juris, offline): a banca troca número/tribunal — julga a atribuição.
+    // Respeita o MESMO recorte de estudo (tribunal/ramo/assunto/tema) que C/E e Completar usam.
     "estudar-duelo": () => {
-      let itens = todasDoTipo.filter((i) => !i.metaLeitura && !i.revogado && passaFiltro(i));
+      let itens = todasDoTipo.filter((i) => !i.metaLeitura && !i.revogado && passaFiltro(i) && noEscopoEstudo(i));
       if (estudarEscopo[tipo] === "incidencia") {
         itens = itens.filter((i) => i.pqIncidencia != null).sort(porIncidencia);
         itens = itens.slice(0, Math.max(1, Math.ceil(itens.length * 0.2)));
@@ -1187,54 +1240,20 @@ function renderIndicacoes(root, app, tipo) {
       abrirCompletarArtigo(app, store, itens.map((i) => i.id));
     },
     // Gerar material do escopo: flashcards (IA, com fallback offline) e questões de múltipla escolha.
-    "estudar-flashcards": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards"); // "Gerar com IA" exige IA (igual questões)
-      const itens = escopoItens();
-      if (!itens.length) return toast("Adicione o texto dos artigos na aba Ler primeiro.", "erro");
+    // 1 clique gera DIRETO no padrão; o link "Opções…" do card abre o pedirNumero de antes.
+    "estudar-flashcards": (el) => gerarFlashcardsEscopo(el, 3, "medio"),
+    "estudar-flashcards-opcoes": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const g = await pedirNumero("Quantos flashcards por artigo?", { padrao: 3, min: 1, max: 6, nivel: true });
       if (!g) return;
-      const alvo = itens.slice(0, 12);
-      const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
-      const lote = store.iniciarLoteGeracao(rot);
-      // Progresso narrado por artigo (o comOcupado tinha mensagem fixa e parecia travado);
-      // corte de 12 avisado ANTES, no rótulo inicial. Botão ocupado mantido como antes.
-      const fim = toastCarregando(itens.length > 12 ? "Gerando flashcards com IA… (limite de 12 por vez)" : "Gerando flashcards com IA…");
-      if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
-      let total = 0;
-      try {
-        let i = 0;
-        for (const it of alvo) { fim(`Gerando flashcards com IA… ${++i}/${alvo.length}`); try { const cs = await store.gerarFlashcardsIADeIndicacao(it.id, g.n, g.dificuldade); total += cs.length; } catch (e) { console.error(e); } }
-      } finally {
-        fim();
-        if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
-        store.encerrarLoteGeracao();
-      }
-      toast(total ? `${plural(total, "flashcard gerado", "flashcards gerados")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou flashcards.", total ? "ok" : "erro");
-      if (total) app.navigate("flashcards", { lote, loteRotulo: rot }); // abre mostrando só os recém-gerados
+      gerarFlashcardsEscopo(el, g.n, g.dificuldade);
     },
-    "estudar-questoes": async (el) => {
+    "estudar-questoes": (el) => gerarQuestoesEscopo(el, 2, "medio"),
+    "estudar-questoes-opcoes": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
-      const itens = escopoItens();
-      if (!itens.length) return toast("Adicione o texto dos artigos na aba Ler primeiro.", "erro");
-      const r = await pedirNumero("Quantas questões de múltipla escolha por artigo?", { padrao: 2, min: 1, max: 5, nivel: true });
-      if (!r) return;
-      const alvo = itens.slice(0, 12); // limita p/ não estourar a cota de IA
-      const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
-      const lote = store.iniciarLoteGeracao(rot);
-      // Progresso narrado por artigo + aviso do corte de 12 ANTES (mesmo padrão dos flashcards).
-      const fim = toastCarregando(itens.length > 12 ? "Gerando questões com IA… (limite de 12 por vez)" : "Gerando questões de múltipla escolha com IA…");
-      if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
-      let total = 0;
-      try {
-        let i = 0;
-        for (const it of alvo) { fim(`Gerando questões com IA… ${++i}/${alvo.length}`); try { const qs = await store.gerarQuestoesDeIndicacao(it.id, r.n, r.dificuldade, "mc"); total += qs.length; } catch (e) { console.error(e); } }
-      } finally {
-        fim();
-        if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
-        store.encerrarLoteGeracao();
-      }
-      toast(total ? `${plural(total, "questão gerada", "questões geradas")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou questões. Confira se os artigos têm texto.", total ? "ok" : "erro");
-      if (total) app.navigate("pratica", { lote, loteRotulo: rot }); // abre mostrando só as recém-geradas
+      const g = await pedirNumero("Quantas questões de múltipla escolha por artigo?", { padrao: 2, min: 1, max: 5, nivel: true });
+      if (!g) return;
+      gerarQuestoesEscopo(el, g.n, g.dificuldade);
     },
     "estudar-revisar": () => app.navigate("revisoes"),
     "estudar-grifos": () => {
@@ -1286,7 +1305,7 @@ function renderIndicacoes(root, app, tipo) {
       const id = el.getAttribute("data-id");
       const ind = store.get().indicacoes.find((x) => x.id === id);
       const rr = rotuloRevogado(tipo, ind && ind.categoria);
-      if (!(await confirmar(`${tipo === "juris" ? "Marcar como " + rr.adj : "Marcar como revogado"}? Sai do Treinar e do Raio-X, fica riscado no Ler e o treino gerado é limpo. Dá para reativar depois.`))) return;
+      if (!(await confirmar(`${tipo === "juris" ? "Marcar como " + rr.adj : "Marcar como revogado"}? Sai do estudo e fica riscado no Ler; as questões geradas dele são removidas. Dá para reativar depois.`))) return;
       store.marcarRevogado(id, true);
       toast(tipo === "juris" ? `Marcado como ${rr.adj} (fora do estudo).` : "Marcado como revogado (fora do estudo).");
       app.refresh();
@@ -1364,16 +1383,14 @@ function renderIndicacoes(root, app, tipo) {
     },
     "toggle-favorito": (el) => { const id = el.getAttribute("data-id"); const on = store.toggleFavorito(id); toast(on ? "Favorito (entra na revisão espaçada)." : "Removido dos favoritos."); app.refresh(); animarFlagsLeitor(id); },
     "toggle-dificil": (el) => { const id = el.getAttribute("data-id"); const on = store.toggleDificil(id); toast(on ? "Marcado como difícil (revisão em 1/3/7/15/30 dias)." : "Removido dos difíceis."); app.refresh(); animarFlagsLeitor(id); },
+    // Antes abria um modal simples homônimo (texto ~70ch); agora delega ao MESMO overlay
+    // premium de tela cheia do "ler-foco-art", começando no item clicado. Para juris a lista
+    // fica na ordem exibida (numArtigo não se aplica a "Súmula NNN"); só itens com texto entram.
     "ler-foco": (el) => {
-      const item = store.get().indicacoes.find((x) => x.id === el.getAttribute("data-id"));
-      if (!item || !item.texto) return;
-      abrirJanela({
-        titulo: item.referencia || "Leitura em foco",
-        corpoHTML: `<div class="leitura-foco">
-          ${item.observacao ? `<p class="lf-obs">${esc(item.observacao)}</p>` : ""}
-          <div class="lf-texto">${esc(item.texto)}</div>
-        </div>`,
-      });
+      const id = el.getAttribute("data-id");
+      const ids = listaLerFinal.filter((i) => (i.texto || "").trim()).map((i) => i.id);
+      const start = ids.indexOf(id);
+      if (ids.length) abrirLeituraFoco(app, store, ids, start >= 0 ? start : 0);
     },
     "toggle-marcar": (el) => {
       const id = el.getAttribute("data-id");
@@ -1384,7 +1401,7 @@ function renderIndicacoes(root, app, tipo) {
     "toggle-pq": (el) => {
       const ind = store.get().indicacoes.find((x) => x.id === el.getAttribute("data-id"));
       store.setIndicacaoPQ(el.getAttribute("data-id"), !(ind && ind.pq));
-      toast(ind && ind.pq ? "PQ removida." : "Marcado como Provável Questão (PQ).");
+      toast(ind && ind.pq ? "Removido de 'o que mais cai'." : "Marcado como 'o que mais cai'.");
     },
     "toggle-pq-import": () => abrirMarcarPQ(app, tipo),
     "salvar-edicao": (el) => salvar(root, store, tipo, modo, el.getAttribute("data-id")),
@@ -2375,7 +2392,7 @@ function abrirMarcarPQ(app, tipo) {
   const { store } = app;
   const estado = { analise: null, corte: 30, sugerindo: false };
   abrirJanelaFluxo({
-    titulo: "Marcar Prováveis Questões (PQ)",
+    titulo: "O que mais cai",
     render: (corpo, { rerender }) => {
       corpo.innerHTML = pqImportHTML(tipo, estado.corte, estado.sugerindo, estado.analise);
       corpo.querySelector("#pq-corte")?.addEventListener("change", (e) => {
@@ -2385,7 +2402,7 @@ function abrirMarcarPQ(app, tipo) {
       // Importar estatística de ARQUIVO (.txt/.csv/.pdf) — antes só dava p/ colar.
       ligarImportArquivo(corpo.querySelector("#pq-file"), {
         getCfg: () => store.get().config,
-        contexto: "estatística de incidência (PQ)",
+        contexto: "estatística de incidência (o que mais cai)",
         onTexto: (texto) => {
           if (!texto || !texto.trim()) return toast("Não consegui ler texto desse arquivo.", "erro");
           // Joga o texto extraído no quadro p/ você conferir/editar antes de "Analisar".
@@ -2397,7 +2414,7 @@ function abrirMarcarPQ(app, tipo) {
     },
     handlers: ({ rerender, fechar, corpo }) => ({
       "pq-ia-sugere": async () => {
-        if (!store.iaDisponivel()) return avisoIA(app, "Sugerir PQ com IA");
+        if (!store.iaDisponivel()) return avisoIA(app, "Sugerir 'o que mais cai' com IA");
         estado.sugerindo = true; rerender();
         try {
           estado.analise = await store.sugerirPQIA(tipo);
@@ -2419,7 +2436,7 @@ function abrirMarcarPQ(app, tipo) {
           if (r) r.ids.forEach((id) => itens.push({ id, incidencia: r.incidencia }));
         });
         const n = store.aplicarPQ(itens);
-        toast(n ? `${plural(n, "item marcado", "itens marcados")} como PQ.` : "Nenhum item selecionado.", n ? "ok" : "erro");
+        toast(n ? `${plural(n, "item marcado", "itens marcados")} como 'o que mais cai'.` : "Nenhum item selecionado.", n ? "ok" : "erro");
         if (n) { fechar(); app.refresh(); }
       },
     }),
@@ -2431,7 +2448,7 @@ function abrirMarcarPQ(app, tipo) {
 function pqImportHTML(tipo, corte = 30, sugerindo = false, analise = null) {
   const ondeBase = tipo === "juris" ? "Jurisprudência" : "Lei Seca";
   return `<div class="card pq-import">
-    <h3><span class="orb orb-sm" aria-hidden="true" style="display:inline-block;vertical-align:middle"></span> ${icone("star")} Marcar Prováveis Questões (PQ) <span class="muted small pq-info" data-tip-pos="bottom" data-tip="Pontos de alta incidência (o que mais cai) num tópico. A IA estima pelas suas referências de ${ondeBase}; ou importe/cole uma estatística. Você confirma antes de aplicar.">${icone("info")}</span></h3>
+    <h3><span class="orb orb-sm" aria-hidden="true" style="display:inline-block;vertical-align:middle"></span> ${icone("star")} Marcar o que mais cai <span class="muted small pq-info" data-tip-pos="bottom" data-tip="Pontos de alta incidência (o que mais cai) num tópico. A IA estima pelas suas referências de ${ondeBase}; ou importe/cole uma estatística. Você confirma antes de aplicar.">${icone("info")}</span></h3>
 
     <div class="pq-acoes">
       <button class="btn btn-ia btn-sm" data-action="pq-ia-sugere" ${sugerindo ? "disabled" : ""}>${icone("sparkles")} ${sugerindo ? "Analisando…" : "Sugerir com IA"}</button>
@@ -2457,7 +2474,7 @@ function pqResultadoHTML(corte, analise) {
   }
   const casadas = analise.filter((r) => r.ids.length).length;
   return `<div class="pq-resultado">
-      <div class="muted small u-mt-12 u-mb-8">${plural(casadas, "referência casada", "referências casadas")} com seus itens. Confira e ajuste o que será marcado como PQ:</div>
+      <div class="muted small u-mt-12 u-mb-8">${plural(casadas, "referência casada", "referências casadas")} com seus itens. Confira e ajuste o que será marcado como 'o que mais cai':</div>
       <ul class="pq-lista">
         ${analise
           .map((r, i) => {
@@ -2471,7 +2488,7 @@ function pqResultadoHTML(corte, analise) {
           })
           .join("")}
       </ul>
-      <button class="btn btn-primary btn-sm" data-action="pq-aplicar">Aplicar PQ aos selecionados</button>
+      <button class="btn btn-primary btn-sm" data-action="pq-aplicar">Marcar os selecionados</button>
     </div>`;
 }
 
@@ -2939,8 +2956,8 @@ const LER_NAV_DEF = [
 const LER_ACOES_DEF = [
   { k: "incidencia", ic: "star", lbl: "Marcar o que mais cai", act: "toggle-pq-import", grupo: "prep", tip: "Marca os artigos que MAIS CAEM em prova (por incidência): a IA sugere ou você cola a estatística. Diferente de grifar — aqui você ranqueia os artigos de maior peso." },
   { k: "buscaIA", ic: "sparkles", lbl: "Busca por significado (IA)", act: "abrir-indice", grupo: "prep", ia: true, tip: "Separa os artigos para a Busca por significado (IA) do chat — encontra pelo sentido, não só pela palavra exata. Só deste módulo." },
-  { k: "grifar", ic: "highlighter", lbl: "Grifar prazos e restritivas", act: "ler-grifar-auto", grupo: "prep", tip: "Grifa dentro do texto 🔵 prazos e valores e 🔴 termos restritivos (offline)." },
-  { k: "grifarIA", ic: "sparkles", lbl: "Grifar palavras-chave (IA)", act: "ler-grifar-ia", grupo: "prep", ia: true, tip: "A IA grifa 🟡 as palavras-chave de cada artigo." },
+  { k: "grifar", ic: "highlighter", lbl: "Grifar prazos e restritivas", act: "ler-grifar-auto", grupo: "prep", tip: "Grifa dentro do texto os prazos e valores e os termos restritivos, cada grupo com uma cor própria (offline)." },
+  { k: "grifarIA", ic: "sparkles", lbl: "Grifar palavras-chave (IA)", act: "ler-grifar-ia", grupo: "prep", ia: true, tip: "A IA grifa as palavras-chave de cada artigo." },
   { k: "temas", ic: "tags", lbl: "Classificar por tema", act: "ler-temas", grupo: "prep", tip: "Detecta temas por artigo (prazo, competência, quórum…) — habilita o memorizar por tema." },
   { k: "temasIA", ic: "sparkles", lbl: "Refinar temas (IA)", act: "ler-temas-ia", grupo: "prep", ia: true, tip: "A IA refina e adiciona temas mais finos por artigo (mescla com os detectados offline)." },
   { k: "lidoBloco", ic: "check-check", lbl: "Marcar lido em bloco", act: "ler-lido-bloco", grupo: "bloco", tip: "Marca um intervalo de artigos (de/até) como lidos." },
@@ -3160,28 +3177,28 @@ function estudarCorpoHTML(store, st, tipo, r) {
     : [];
   const filtrado = tipo === "lei" && (estudarSecaoSel || estudarArtFiltro || estudarTemaSel || esc2 === "incidencia");
   const escopoLeiHTML = tipo !== "lei" ? "" : `<div class="estudar-escopo ${_escopoAberto ? "aberto" : ""}">
-      <button class="est-escopo-btn ${filtrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Escolher a lei a estudar (e, se quiser, refinar por parte, artigos ou incidencia)">
+      <button class="est-escopo-btn ${filtrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Escolher a lei a estudar (e, se quiser, refinar por parte, artigos ou incidência)">
         ${icone("book-open")}<span class="ee-resumo"><b class="ee-lei">${esc(leiNome)}</b><span class="ee-refino"> · ${esc(refinoPartes.join(" · "))}</span></span><span class="escopo-cont">${plural(nEsc, "artigo", "artigos")}</span>${icone("chevron-down")}
       </button>
       ${_escopoAberto ? `<div class="est-escopo-pop">
         <div class="ee-sec-lbl">${icone("book-open")} Lei a estudar</div>
         ${normas.length > 1
           ? `<select class="escopo-sel ee-lei-sel" data-action="escopo-lei">${normas.map((nr) => `<option value="${esc(nr)}" ${leiSel === nr ? "selected" : ""}>${esc(nomeAmigavelLei(nr))}</option>`).join("")}</select>`
-          : `<div class="ee-lei-fixa"><b>${esc(leiNome)}</b><span class="muted small">Importe outra lei na aba Ler para ter mais opcoes.</span></div>`}
+          : `<div class="ee-lei-fixa"><b>${esc(leiNome)}</b><span class="muted small">Importe outra lei na aba Ler para ter mais opções.</span></div>`}
         <div class="ee-sec-lbl ee-opc">Refinar <span>— opcional</span></div>
         ${secoes.length ? `<label class="ee-row"><span>Parte</span><select class="escopo-sel" data-action="escopo-secao">
           <option value="">A lei inteira</option>
           ${secoes.map((s) => `<option value="${esc(s.k)}" ${estudarSecaoSel === s.k ? "selected" : ""}>${" ".repeat(Math.max(0, (s.nivel - 1) * 2))}${esc(s.rotulo)}${s.titulo ? " · " + esc(s.titulo) : ""}</option>`).join("")}
         </select></label>` : ""}
         <label class="ee-row"><span>Artigos</span><input class="escopo-art" data-action="escopo-art" value="${esc(estudarArtFiltro)}" placeholder="ex.: 121 ou 1-10" />
-          <span class="ee-hint">Um numero ou um intervalo. Vazio = todos os artigos do campo acima.</span></label>
+          <span class="ee-hint">Um número ou um intervalo. Vazio = todos os artigos do campo acima.</span></label>
         ${temasDisp.length ? `<label class="ee-row"><span>Tema</span><select class="escopo-sel" data-action="escopo-tema">
           <option value="">Todos os temas</option>
           ${temasDisp.map((t) => `<option value="${esc(t.tema)}" ${estudarTemaSel === t.tema ? "selected" : ""}>${esc(t.tema)} (${t.n})</option>`).join("")}
         </select></label>` : ""}
         <div class="ee-row"><span>Prioridade</span><div class="ee-toggle">
           <button class="chip-escopo ${esc2 === "tudo" ? "on" : ""}" data-action="estudar-escopo" data-e="tudo">Todos</button>
-          <button class="chip-escopo ${esc2 === "incidencia" ? "on" : ""}" data-action="estudar-escopo" data-e="incidencia" data-tip="'O que mais cai' usa so os artigos que voce marcou por incidencia em prova (top 20%).${temInc ? "" : " Nenhum marcado ainda: marque em Ler > Opcoes > Marcar o que mais cai."}">O que mais cai</button>
+          <button class="chip-escopo ${esc2 === "incidencia" ? "on" : ""}" data-action="estudar-escopo" data-e="incidencia" data-tip="'O que mais cai' usa só os artigos que você marcou por incidência em prova (top 20%).${temInc ? "" : " Nenhum marcado ainda: marque em Ler > Opções > Marcar o que mais cai."}">O que mais cai</button>
         </div></div>
         <div class="ee-foot">${filtrado ? `<button class="lnk" data-action="estudar-escopo-limpar">${icone("x")} Limpar recorte</button>` : "<span></span>"}<button class="btn btn-sm btn-primary" data-action="estudar-escopo-toggle">Pronto</button></div>
       </div>` : ""}
@@ -3204,7 +3221,7 @@ function estudarCorpoHTML(store, st, tipo, r) {
         ${temasDisp.length ? `<label class="ee-row"><span>Tema</span><select class="escopo-sel" data-action="escopo-tema"><option value="">Todos os temas</option>${temasDisp.map((t) => `<option value="${esc(t.tema)}" ${estudarTemaSel === t.tema ? "selected" : ""}>${esc(t.tema)} (${t.n})</option>`).join("")}</select></label>` : ""}
         <div class="ee-row"><span>Prioridade</span><div class="ee-toggle">
           <button class="chip-escopo ${esc2 === "tudo" ? "on" : ""}" data-action="estudar-escopo" data-e="tudo">Todos</button>
-          <button class="chip-escopo ${esc2 === "incidencia" ? "on" : ""}" data-action="estudar-escopo" data-e="incidencia" data-tip="'O que mais cai' usa só as súmulas/teses marcadas por incidência (★).${temInc ? "" : " Nenhuma marcada ainda: marque em Ler > ★ Marcar incidência."}">O que mais cai</button>
+          <button class="chip-escopo ${esc2 === "incidencia" ? "on" : ""}" data-action="estudar-escopo" data-e="incidencia" data-tip="'O que mais cai' usa só as súmulas/teses marcadas por incidência (★).${temInc ? "" : " Nenhuma marcada ainda: marque em Ler > ★ O que mais cai."}">O que mais cai</button>
         </div></div>
         <div class="ee-foot">${jFiltrado ? `<button class="lnk" data-action="estudar-escopo-limpar">${icone("x")} Limpar recorte</button>` : "<span></span>"}<button class="btn btn-sm btn-primary" data-action="estudar-escopo-toggle">Pronto</button></div>
       </div>` : ""}
@@ -3261,7 +3278,10 @@ function estudarCorpoHTML(store, st, tipo, r) {
   // A recomendação do Mentor "mora" no card certo (sem hero duplicado). Recs que não têm card
   // próprio (foco/tema fraco) apontam para o Certo/Errado, a prática universal.
   const recCardAcao = { "estudar-foco": "estudar-ce", "estudar-tema-fraco": "estudar-ce" }[rec.acao] || rec.acao;
-  const card = (ic, titulo, desc, acao, extra, on = true) => {
+  // opcoes (opcional): { acao, tip } — link "Opções…" discreto dentro do card. O clique no card
+  // inicia DIRETO com o padrão; o link abre a escolha de quantidade/dificuldade (bindActions
+  // dispara pelo [data-action] mais interno, então o clique no link não dispara o card).
+  const card = (ic, titulo, desc, acao, extra, on = true, opcoes = null) => {
     const isRec = on && acao === recCardAcao;
     return `
     <button class="estudar-card ${on ? "" : "off"} ${isRec ? "rec" : ""}" data-action="${acao}" ${on ? "" : "disabled"}${isRec ? ` data-tip="${esc(rec.desc)}"` : ""}>
@@ -3269,6 +3289,7 @@ function estudarCorpoHTML(store, st, tipo, r) {
       <span class="estudar-card-ic">${icone(ic)}</span>
       <span class="estudar-card-txt"><b>${titulo}</b><span class="muted small">${desc}</span></span>
       ${extra ? `<span class="estudar-card-n">${extra}</span>` : ""}
+      ${opcoes && on ? `<span class="lnk small" role="button" data-action="${opcoes.acao}" data-tip="${opcoes.tip}">Opções…</span>` : ""}
     </button>`;
   };
   const grupo = (ic, titulo, sub, cards) => `<section class="estudar-grupo">
@@ -3294,7 +3315,7 @@ function estudarCorpoHTML(store, st, tipo, r) {
     errosCard,
   ];
   const cardsTreinar = [
-    card("repeat-2", "Certo / Errado", tipo === "juris" ? "Afirmações sobre a súmula/tese — você julga Certo ou Errado." : "Uma palavra é trocada no texto; você caça a pegadinha (diff colorido).", "estudar-ce", nEsc ? `${nEsc}` : "", !!nEsc),
+    card("repeat-2", "Certo / Errado", tipo === "juris" ? "Afirmações sobre a súmula/tese — você julga Certo ou Errado. Um clique já começa (4 itens, nível médio)." : "Uma palavra é trocada no texto; você caça a pegadinha (diff colorido). Um clique já começa (4 itens, nível médio).", "estudar-ce", nEsc ? `${nEsc}` : "", !!nEsc, { acao: "estudar-ce-opcoes", tip: "Escolher quantidade e dificuldade antes de começar." }),
     card("puzzle", "Completar o artigo", tipo === "juris" ? "Recall por lacunas nos pontos-chave da tese." : "Preencha as lacunas em 4 níveis — do fácil ao redigitar de memória.", "estudar-cloze", "", !!nEsc),
     tipo === "juris" ? card("scale", "Súmula-duelo", "Troca-se o número/tribunal da súmula — você diz se a atribuição está certa (offline).", "estudar-duelo", "", !!base.length) : "",
   ];
@@ -3305,10 +3326,12 @@ function estudarCorpoHTML(store, st, tipo, r) {
       <div class="estudar-grid">
         <div class="estudar-card estudar-card-gerar">
           <span class="estudar-card-ic">${icone("sparkles")}</span>
-          <span class="estudar-card-txt"><b>Gerar material</b><span class="muted small">A IA cria a partir do escopo e abre a aba correspondente.</span></span>
+          <span class="estudar-card-txt"><b>Gerar material</b><span class="muted small">A IA cria a partir do escopo e abre a aba correspondente. Um clique gera no padrão; em Opções… você escolhe quantidade e dificuldade.</span></span>
           <span class="estudar-card-acoes">
-            <button class="btn btn-sm btn-soft" data-action="estudar-flashcards">${icone("layers")} Flashcards</button>
-            <button class="btn btn-sm btn-soft" data-action="estudar-questoes">${icone("notebook-pen")} Questões</button>
+            <button class="btn btn-sm btn-soft" data-action="estudar-flashcards" data-tip="Gerar já: 3 flashcards por artigo, nível médio.">${icone("layers")} Flashcards</button>
+            <button class="lnk small" data-action="estudar-flashcards-opcoes" data-tip="Escolher quantidade e dificuldade dos flashcards.">Opções…</button>
+            <button class="btn btn-sm btn-soft" data-action="estudar-questoes" data-tip="Gerar já: 2 questões por artigo, nível médio.">${icone("notebook-pen")} Questões</button>
+            <button class="lnk small" data-action="estudar-questoes-opcoes" data-tip="Escolher quantidade e dificuldade das questões.">Opções…</button>
           </span>
         </div>
       </div>
@@ -3440,8 +3463,8 @@ function metasCorpoHTML(st, tipo, lista, r, store) {
         <button class="btn btn-ghost btn-sm" data-action="meta-set" data-k="${k}">${icone(meta ? "square-pen" : "plus")} ${meta ? "Ajustar" : "Definir"}</button>
       </div>`;
   };
-  // BLOCO 2 - "Hoje": funde metas diarias + agenda + calendario leve. UMA fonte de revisoes (o
-  // calendario consolidado), entao o numero de hoje bate com a celula de hoje (sem inconsistencia).
+  // BLOCO 2 — "Hoje": funde metas diárias + agenda + calendário leve. UMA fonte de revisões (o
+  // calendário consolidado), então o número de hoje bate com a célula de hoje (sem inconsistência).
   const DOW = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const hojeCal = todayISO();
   const dowHoje = new Date(hojeCal + "T12:00:00").getDay();
@@ -3464,7 +3487,7 @@ function metasCorpoHTML(st, tipo, lista, r, store) {
           return `<div class="pc-dia ${isHoje ? "hoje" : ""} ${isFolga ? "folga" : ""}"><span class="pc-dow">${DOW[dow]}</span><span class="pc-num">${d.slice(8)}</span>${isFolga ? `<span class="pc-tag">folga</span>` : n ? `<button class="pc-rev" data-action="ir-revisoes" data-tip="${plural(n, "revisão", "revisões")}${d === hojeCal && atrasadas ? ` (${atrasadas} atrasada${atrasadas > 1 ? "s" : ""})` : ""}">${n}</button>` : `<span class="pc-vazio">—</span>`}</div>`;
         }).join("")}
       </div>
-      <button class="btn btn-soft btn-sm" data-action="ir-planejamento" data-tip="Cronograma da semana, replanejamento e horas - no Planejamento global.">${icone("calendar-days")} Abrir Planejamento da semana</button>
+      <button class="btn btn-soft btn-sm" data-action="ir-planejamento" data-tip="Cronograma da semana, replanejamento e horas — no Planejamento global.">${icone("calendar-days")} Abrir Planejamento da semana</button>
     </section>`;
 
   const linha = (i) => {
@@ -3653,7 +3676,7 @@ function itemLeitorHTML(st, tipo, i, store, vincMap) {
     ic("ler-lido", i.lido ? "ok" : "", "check", i.lido ? "Lido — clique para desmarcar." : "Marcar como lido.") +
     ic("toggle-favorito", i.favorito ? "fav" : "", "bookmark", i.favorito ? "Favorito (entra em revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão).") +
     ic("toggle-dificil", i.dificil ? "dif" : "", "flame", i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão).") +
-    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "Provável questão. Clique para desmarcar." : "Marcar como provável questão.") +
+    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'.") +
     `<details class="ls-mais ler-mais"><summary data-tip="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">${menuArtigoHTML(i, tipo)}</div></details>`;
   const grifos = store ? store.marcasAncoradas("indicacao", i.id, i.texto) : [];
   return `<article class="ler-art ${i.lido ? "lida" : ""} ${i.revogado ? "revogada" : ""} ${i.favorito ? "fav" : ""} ${i.dificil ? "dif" : ""}" data-foco-id="${i.id}" data-id="${i.id}">
@@ -3787,13 +3810,13 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
     ? `<span class="ls-inc ${i.pqIncidencia >= 70 ? "alta" : i.pqIncidencia >= 40 ? "media" : "baixa"}" data-tip="Incidência ${i.pqIncidencia} — o quanto cai. Prioriza no Estudar."><span class="ls-inc-bar"><span style="width:${Math.max(8, Math.min(100, i.pqIncidencia))}%"></span></span>${i.pqIncidencia}</span>`
     : "";
   // Ação principal visível: ★ (marcar como o que mais cai) + grifar (se houver texto).
-  const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "É provável questão (o que mais cai). Clique para desmarcar." : "Marcar como provável questão (o que mais cai)."}">${icone("star")}</button>`;
+  const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")}</button>`;
   const acaoMarcar = i.texto
     ? `<button class="lnk-ic ${marcarAberto.has(i.id) ? "on" : ""}" data-action="toggle-marcar" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Grifar palavras-chave, prazos e termos restritivos.">${icone("square-pen")}</button>`
     : "";
   // Menu "⋯" LEAN: só organizar/gerenciar (nada de treino/geração — isso é da aba Estudar).
   const menu = [
-    i.texto ? `<button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Ler em tela limpa, coluna estreita (~70 caracteres).">${icone("book-open")} Ler em foco</button>` : "",
+    i.texto ? `<button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste item.">${icone("book-open")} Ler em foco</button>` : "",
     i.fonteUrl ? `<button class="lnk" data-action="abrir-fonte" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir na fonte oficial (Planalto).">${icone("external-link")} Abrir no site oficial</button>` : "",
     i.texto && !i.promovido ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Entra na revisão espaçada (aba Estudar → Revisar). Continua aqui no Ler.">${icone("brain")} Marcar para revisar</button>` : "",
     i.promovido ? `<button class="lnk" data-action="despromover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Tirar da revisão espaçada. Continua no Ler.">${icone("brain")} Tirar da revisão</button>` : "",
@@ -3819,7 +3842,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
         <button class="lea ia" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
         <button class="lea ia" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
         <button class="lea ${i.promovido ? "on" : ""}" data-action="${i.promovido ? "despromover-mem" : "promover-mem"}" data-id="${i.id}" data-tip="${i.promovido ? "Já está na revisão espaçada — clique para tirar." : "Colocar na revisão espaçada (curva do esquecimento)."}">${icone("repeat")} Revisar</button>
-        <button class="lea foco" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco, tela limpa.">${icone("book-open")} Foco</button>
+        <button class="lea foco" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>
       </div>`
     : "";
   return `

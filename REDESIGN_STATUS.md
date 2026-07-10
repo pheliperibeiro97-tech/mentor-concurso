@@ -186,12 +186,46 @@
 - Riscos visuais menores apontados pelos agentes (espaçamento da linha nova nos
   flashcards; contraste do btn-ghost no vazio) — conferir na próxima passada visual.
 
-## PRÓXIMAS FASES (5–8)
+## FASE 5 — Dieta de densidade (7 TELAS FEITAS; falta o estrutural da Lei Seca)
 
-Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 5 (dieta de
-densidade tela a tela), Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs
-com arquivo:linha — vários já corrigidos nas fases 0-4; conferir a lista), Fase 8
-(responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
+### Feito (6 agentes em paralelo + CSS central; verificado ao vivo, 0 erros)
+- **Hoje**: duplicação foco×plano morta (P-05); "DOMÍNIO —" órfão removido; juramentos 1×.
+- **Acompanhamento**: 11→9 blocos; "Por período"→presets do Histórico; Metas em 1 linha;
+  tabela 9→4 colunas (resto na expansão); 4 funções mortas apagadas; "Por banca" RELIGADO.
+- **Edital**: 7→5 colunas ("Estudo"=3×·há5d; aproveitamento=pílula+tooltip); links →
+  dossiê (card "Links anexados"); summary da disciplina com menu ···; details-manual
+  morto→tooltips; relevância nomeada única; anexar link 1 modal.
+- **Dossiê**: retrair/remover corrigidos (ações renomeadas, "Tirar do dossiê"); só drag;
+  histórico 4 colunas; ícones no lugar de "Mat./Quest./Flash."; "decorar".
+- **Materiais**: menu 15→8; "Gerar com IA" visível; "(N req.)" fora; busca automática
+  pós-1ª-ativação (`store.indexarFonteAuto`, silenciosa) + "Atualizar índice (N)";
+  vocabulário sumário/tópico.
+- **Prática/Simulados**: herói "Praticar agora"; streak (flame 3+) + melhor sequência;
+  conclusão 3 faixas + "Refazer as N erradas"; "Simulado rápido" 1 clique; Esc→Pausar
+  (tela Prova pausada); "Limpar (N)"→menu ··· com confirmação digitada; legenda dinâmica.
+- **Config**: autosave universal (debounce + preservação de foco no re-render); IA
+  mantém botão; sync 1 frase+details; EMAIL_SUPORTE; aba "Dados & concurso".
+- **Lei Seca (subset seguro, agente ao final da sessão — CONFERIR)**: "O que mais cai"
+  unificado; copy fantasma Treinar/Raio-X; acentos do escopo; treinos com default
+  1-clique + "Opções…"; duelo respeita escopo; "Ler em foco" único (ver relatório).
+
+### Falta da Fase 5 (estrutural da Lei Seca — sessão dedicada)
+- [ ] Barra do leitor auto-oculta ao rolar (leitor sereno; ~13 controles hoje).
+- [ ] 1 ação visível por artigo + "···" (favorito/difícil/incidência via seleção).
+- [ ] UM sistema de grifo (aposentar painel-pincel; menu flutuante reposiciona no scroll).
+- [ ] Estudar sem dashboard (estatísticas em details); Metas sem dashboard duplicado.
+- [ ] Impressão reescrita p/ modelo atual (~1062-1079 usa modo meta/memoria da v3).
+- [ ] Card de juris: fileira "estudar" (5 botões) → 1 botão "Estudar" (split/menu).
+- [ ] Split do arquivo (280KB) em ~6 módulos (leitor/biblioteca/estudar/metas/import/juris).
+- [ ] CSS órfão das dietas: .periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir
+      outros usos), .sess-mais/.sess-obs, .disc-row/.disc-toggle/.topico-row, .qb-card,
+      .ed-top-links/.ed-link-chip/.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda* — faxina.
+
+## PRÓXIMAS FASES (6–8)
+
+Fase 6 (microcopy/glossário §8 do relatório — atenção: guia.js:156 ainda cita "Conta &
+dados" e onboarding.js usa os microcopys antigos de metas), Fase 7 (bugs restantes da
+lista de 27 — muitos já caíram nas fases 0-5; conferir), Fase 8 (responsivo/a11y).
 
 ## Armadilhas conhecidas (não tropece)
 
