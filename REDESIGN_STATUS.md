@@ -205,9 +205,12 @@
   (tela Prova pausada); "Limpar (N)"→menu ··· com confirmação digitada; legenda dinâmica.
 - **Config**: autosave universal (debounce + preservação de foco no re-render); IA
   mantém botão; sync 1 frase+details; EMAIL_SUPORTE; aba "Dados & concurso".
-- **Lei Seca (subset seguro, agente ao final da sessão — CONFERIR)**: "O que mais cai"
-  unificado; copy fantasma Treinar/Raio-X; acentos do escopo; treinos com default
-  1-clique + "Opções…"; duelo respeita escopo; "Ler em foco" único (ver relatório).
+- **Lei Seca (subset seguro — VERIFICADO ao vivo)**: "O que mais cai" unificado (zero
+  "PQ" na UI); copy fantasma Treinar/Raio-X; acentos do escopo; treinos com default
+  1-clique + "Opções…"; duelo respeita escopo; "Ler em foco" único (overlay).
+- **FIX P-04 (o bug de conceito mais urgente da auditoria)**: o Modo Foco da Lei Seca
+  NÃO marca mais artigo como lido ao exibi-lo — lido = avançar ou botão. As métricas
+  de progresso da lei voltam a ser verdadeiras.
 
 ### Falta da Fase 5 (estrutural da Lei Seca — sessão dedicada)
 - [ ] Barra do leitor auto-oculta ao rolar (leitor sereno; ~13 controles hoje).
