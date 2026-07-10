@@ -56,18 +56,18 @@ export default function renderSimulados(root, app) {
   const { store } = app;
   const st = store.get();
 
-  const subtabs = `<div class="ls-segmented" role="tablist">
-      <button class="ls-seg ${subModo === "fazer" ? "on" : ""}" data-sub="fazer">${icone("clipboard-list")}<span class="ls-seg-txt">Novo simulado</span></button>
-      <button class="ls-seg ${subModo === "historico" ? "on" : ""}" data-sub="historico">${icone("trending-up")}<span class="ls-seg-txt">Histórico</span></button>
+  const subtabs = `<div class="seg u-mb-16" role="tablist">
+      <button class="${subModo === "fazer" ? "on" : ""}" data-sub="fazer">${icone("clipboard-list")}<span class="seg-txt">Novo simulado</span></button>
+      <button class="${subModo === "historico" ? "on" : ""}" data-sub="historico">${icone("trending-up")}<span class="seg-txt">Histórico</span></button>
     </div>`;
 
   if (subModo === "fazer") {
     root.innerHTML = `
       ${header("Simulados", "Monte uma prova cronometrada a partir das suas questões.", `<button class="btn btn-ghost btn-sm" data-action="sim-imprimir" data-tip="Imprimir a folha do simulado (questões; com gabarito quando já corrigido).">${icone("printer")} Imprimir folha</button>`)}
       ${subtabs}
-      <div class="ls-segmented sim-fmt" role="group" aria-label="Formato do simulado">
-        <button class="ls-seg ${formatoAtivo === "mc" ? "on" : ""}" data-fmt="mc">${icone("list-checks")}<span class="ls-seg-txt">Múltipla escolha</span></button>
-        <button class="ls-seg ${formatoAtivo === "ce" ? "on" : ""}" data-fmt="ce">${icone("check-check")}<span class="ls-seg-txt">Certo / errado</span></button>
+      <div class="seg sim-fmt u-mb-16" role="group" aria-label="Formato do simulado">
+        <button class="${formatoAtivo === "mc" ? "on" : ""}" data-fmt="mc">${icone("list-checks")}<span class="seg-txt">Múltipla escolha</span></button>
+        <button class="${formatoAtivo === "ce" ? "on" : ""}" data-fmt="ce">${icone("check-check")}<span class="seg-txt">Certo / errado</span></button>
       </div>
       <div id="sim-body"></div>`;
     ligarSubtabs(root, app);

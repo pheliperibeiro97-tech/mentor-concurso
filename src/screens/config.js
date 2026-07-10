@@ -66,11 +66,11 @@ export default function renderConfig(root, app) {
       <p class="muted small u-m-0 u-mt-8">Manual completo: o que cada tela faz, como o Mentor IA funciona e como tudo se conecta.</p>
     </section>
 
-    <div class="subtabs" role="tablist">
-      <button class="subtab" data-aba-btn="estudo">${icone("target")} Estudo &amp; prova</button>
-      <button class="subtab" data-aba-btn="ia">${icone("bot")} IA</button>
-      <button class="subtab" data-aba-btn="aparencia">${icone("palette")} Aparência</button>
-      <button class="subtab" data-aba-btn="conta">${icone("graduation-cap")} Conta &amp; dados</button>
+    <div class="seg u-mb-16" role="tablist">
+      <button data-aba-btn="estudo">${icone("target")} Estudo &amp; prova</button>
+      <button data-aba-btn="ia">${icone("bot")} IA</button>
+      <button data-aba-btn="aparencia">${icone("palette")} Aparência</button>
+      <button data-aba-btn="conta">${icone("graduation-cap")} Conta &amp; dados</button>
     </div>
 
     <div class="cfg-aba" data-aba="aparencia" ${abaCfg === "aparencia" ? "" : "hidden"}>

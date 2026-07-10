@@ -22,7 +22,7 @@ const S = { mc: novoEstado(), ce: novoEstado() };
 const TXT = {
   mc: {
     titulo: "Questões",
-    sub: "Treine com gabarito imediato (o simulado cronometrado fica em Simulados)",
+    sub: "Treine com gabarito imediato",
     vazioTit: "Você ainda não tem questões",
     vazioSub: "Adicione, importe de uma prova, ou gere com a IA.",
     vazioIco: icone("notebook-pen"),
@@ -30,7 +30,7 @@ const TXT = {
   },
   ce: {
     titulo: "Questões C/E",
-    sub: "Itens Certo ou Errado, com gabarito imediato (o simulado fica em Simulados)",
+    sub: "Itens Certo ou Errado, com gabarito imediato",
     vazioTit: "Você ainda não tem itens",
     vazioSub: "Adicione, importe de uma prova, ou gere com a IA.",
     vazioIco: icone("square-pen"),
@@ -61,9 +61,22 @@ function render(root, app, formato) {
   const s = S[formato];
   // "Simulado" migrou para a tela "Simulados" (hub). Aqui é só o Treino (gabarito imediato).
   s.subModo = "treino";
+  // Questões C/E é um MODO desta tela (a rota "pratica-ce" saiu da barra lateral):
+  // o seg no header alterna entre os dois formatos navegando entre as rotas.
+  const segFormato = `
+    <div class="seg" role="tablist" data-tip-pos="bottom" data-tip="Alterne o formato do treino. O simulado cronometrado fica em Simulados.">
+      <button class="${formato === "mc" ? "on" : ""}" data-formato-rota="pratica">Múltipla escolha</button>
+      <button class="${formato === "ce" ? "on" : ""}" data-formato-rota="pratica-ce">Certo/Errado</button>
+    </div>`;
   root.innerHTML = `
-    ${header(TXT[formato].titulo, TXT[formato].sub, botaoImprimir())}
+    ${header(TXT[formato].titulo, TXT[formato].sub, segFormato + botaoImprimir())}
     <div id="prat-body"></div>`;
+  root.querySelectorAll("[data-formato-rota]").forEach((b) =>
+    b.addEventListener("click", () => {
+      const rota = b.getAttribute("data-formato-rota");
+      if (rota !== (formato === "ce" ? "pratica-ce" : "pratica")) app.navigate(rota);
+    })
+  );
   root.querySelector('[data-action="imprimir"]')?.addEventListener("click", async () => {
     const st = app.store.get();
     const qs = st.questoes

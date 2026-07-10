@@ -1015,8 +1015,8 @@ function aulasListaHTML(store, st) {
           <option value="cursinho" ${base === "cursinho" ? "selected" : ""}>Cursinho (por aula)</option>
         </select>
       </label>
-      <span class="cur-seg" role="tablist" data-tip="Só muda a forma de ver nesta tela (não altera nada do estudo).">
-        <span class="cur-seg-lbl">Ver por:</span>
+      <span class="filtro-lbl muted small">Ver por:</span>
+      <span class="seg seg-sm" role="tablist" data-tip="Só muda a forma de ver nesta tela (não altera nada do estudo).">
         <button class="${cursinhoView === "aula" ? "on" : ""}" data-action="cur-view" data-v="aula">Aula</button>
         <button class="${cursinhoView === "topico" ? "on" : ""}" data-action="cur-view" data-v="topico">Tópico</button>
       </span>
@@ -1158,10 +1158,10 @@ export default function renderEdital(root, app) {
   // Modos do Edital = segmented control único (mesmo componente da Lei Seca), com estado
   // ATIVO visível (antes eram botões soltos que sumiam no modo atual, sem indicar onde você está).
   const edModosSeg = `
-    <div class="ls-segmented ed-modos" role="tablist">
-      <button class="ls-seg ${edModo === "estrutura" ? "on" : ""}" data-action="modo-estrutura" data-tip="Editar a estrutura do edital.">${icone("list-checks")}<span class="ls-seg-txt">Estrutura</span></button>
-      <button class="ls-seg ${edModo === "resumo" ? "on" : ""}" data-action="modo-resumo" data-tip="Visão por tópico: cada tópico com seus números (materiais, questões, erros, flashcards, tempo).">${icone("table")}<span class="ls-seg-txt">Dossiê por tópico</span></button>
-      <button class="ls-seg ${edModo === "cursinho" ? "on" : ""}" data-action="modo-cursinho" data-tip="Opcional: organizar/estudar pela divisão de aulas do seu cursinho (mapa aula ↔ tópico ↔ edital).">${icone("library")}<span class="ls-seg-txt">Plano do cursinho</span></button>
+    <div class="seg ed-modos u-mb-16" role="tablist">
+      <button class="${edModo === "estrutura" ? "on" : ""}" data-action="modo-estrutura" data-tip="Editar a estrutura do edital.">${icone("list-checks")}<span class="seg-txt">Estrutura</span></button>
+      <button class="${edModo === "resumo" ? "on" : ""}" data-action="modo-resumo" data-tip="Visão por tópico: cada tópico com seus números (materiais, questões, erros, flashcards, tempo).">${icone("table")}<span class="seg-txt">Dossiê por tópico</span></button>
+      <button class="${edModo === "cursinho" ? "on" : ""}" data-action="modo-cursinho" data-tip="Opcional: organizar/estudar pela divisão de aulas do seu cursinho (mapa aula ↔ tópico ↔ edital).">${icone("library")}<span class="seg-txt">Plano do cursinho</span></button>
     </div>`;
 
   root.innerHTML = `

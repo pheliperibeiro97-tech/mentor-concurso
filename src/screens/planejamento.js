@@ -876,9 +876,9 @@ function cronogramaCardHTML(st, store, opcoesTopico) {
       <span class="muted small" data-tip="Escolha o destino (Semana = com dia · Tarefas avulsas = sem dia) e adicione como preferir. Nada é criado sem a sua aprovação." data-tip-pos="cima-dir">${icone("info")}</span>
     </div>
 
-    <div class="subtabs u-mb-16">
-      <button class="subtab ${tarefasView === "semana" ? "on" : ""}" data-action="ver-semana" data-tip="Tarefas organizadas por dia da semana + sua rotina recorrente.">${icone("calendar-days")} Semana</button>
-      <button class="subtab ${tarefasView === "soltas" ? "on" : ""}" data-action="ver-soltas" data-tip="Tarefas sem dia marcado (lista livre).">${icone("clipboard-list")} Tarefas avulsas</button>
+    <div class="seg u-mb-16" role="tablist">
+      <button class="${tarefasView === "semana" ? "on" : ""}" data-action="ver-semana" data-tip="Tarefas organizadas por dia da semana + sua rotina recorrente.">${icone("calendar-days")} Semana</button>
+      <button class="${tarefasView === "soltas" ? "on" : ""}" data-action="ver-soltas" data-tip="Tarefas sem dia marcado (lista livre).">${icone("clipboard-list")} Tarefas avulsas</button>
     </div>
 
     ${tarefasView === "soltas" ? blocoAvulsasHTML(st, store, opcoesTopico) : blocoSemanaHTML(st, store)}

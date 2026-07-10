@@ -878,11 +878,10 @@ function renderIndicacoes(root, app, tipo) {
       </div>
     </details>
 
-    <div class="ls-segmented" role="tablist">
-      <button class="ls-seg ${modo === "ler" ? "on" : ""}" data-action="modo" data-modo="ler" data-tip="A letra: ler, grifar e organizar cada dispositivo. É o seu acervo.">${icone("book-open")}<span class="ls-seg-txt">Ler</span></button>
-      <button class="ls-seg ${modo === "estudar" ? "on" : ""}" data-action="modo" data-modo="estudar" data-tip="Fazer: Certo/Errado, completar a letra, revisar o que vence e refazer erros — em tela cheia.">${icone("target")}<span class="ls-seg-txt">Estudar</span>${revN ? `<span class="ls-seg-n ls-seg-n-due">${revN}</span>` : ""}</button>
-      <button class="ls-seg ${modo === "metas" ? "on" : ""}" data-action="modo" data-modo="metas" data-tip="Planejar a leitura: metas por nome (ex.: 'ler art. 1º a 20'), importáveis, que viram tarefa.">${icone("calendar-check")}<span class="ls-seg-txt">Metas</span>${metasPend ? `<span class="ls-seg-n">${metasPend}</span>` : ""}</button>
-      <span class="ls-seg-ind" data-seg-ind></span>
+    <div class="seg u-mb-16" role="tablist">
+      <button class="${modo === "ler" ? "on" : ""}" data-action="modo" data-modo="ler" data-tip="A letra: ler, grifar e organizar cada dispositivo. É o seu acervo.">${icone("book-open")}<span class="seg-txt">Ler</span></button>
+      <button class="${modo === "estudar" ? "on" : ""}" data-action="modo" data-modo="estudar" data-tip="Fazer: Certo/Errado, completar a letra, revisar o que vence e refazer erros — em tela cheia.">${icone("target")}<span class="seg-txt">Estudar</span>${revN ? `<span class="seg-badge seg-badge-due">${revN}</span>` : ""}</button>
+      <button class="${modo === "metas" ? "on" : ""}" data-action="modo" data-modo="metas" data-tip="Planejar a leitura: metas por nome (ex.: 'ler art. 1º a 20'), importáveis, que viram tarefa.">${icone("calendar-check")}<span class="seg-txt">Metas</span>${metasPend ? `<span class="seg-badge">${metasPend}</span>` : ""}</button>
     </div>
 
     <div class="barra-acoes">
