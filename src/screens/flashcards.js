@@ -214,7 +214,7 @@ export default function renderFlashcards(root, app) {
             ? `<div class="card revisao-vazia">
                 <div class="rev-emoji">${icone("check")}</div>
                 <h3>Tudo revisado por hoje!</h3>
-                <p class="muted">Volte amanhã ou adiante a revisão criando novos cards.</p>
+                <p class="muted">Volte amanhã ou adiante a revisão criando novos flashcards.</p>
                 ${provaPlano ? `<p class="muted small">${provaPlano}</p>` : ""}
               </div>`
             : `<div class="card revisao-vazia">
@@ -332,7 +332,7 @@ export default function renderFlashcards(root, app) {
     },
     "comentar-fc": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar este flashcard com IA");
-      const r = await comOcupado(() => store.comentarFlashcardIA(el.getAttribute("data-id")), { botao: el, msg: "Explicando este card com a IA…" });
+      const r = await comOcupado(() => store.comentarFlashcardIA(el.getAttribute("data-id")), { botao: el, msg: "Explicando este cartão com a IA…" });
       if (r === null) return;
       toast("Comentário da IA gerado.");
     },
@@ -342,7 +342,7 @@ export default function renderFlashcards(root, app) {
       perguntandoMotivoId = null;
       if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); app.refresh(); return; }
       if (store.flashcardsVencidos().length === 0) { confetti(); toast("Fila concluída! Registrei o erro no Caderno.", "ok"); }
-      else toast("Motivo registrado. Próximo card.");
+      else toast("Motivo registrado. Próximo cartão.");
     },
     "pular-motivo": () => {
       perguntandoMotivoId = null;
@@ -415,7 +415,7 @@ export default function renderFlashcards(root, app) {
           return;
         }
         if (tinhaFila && store.flashcardsVencidos().length === 0) { confetti(); toast("Fila de revisão concluída! Mandou bem.", "ok"); }
-        else toast("Revisado. Próximo card.");
+        else toast("Revisado. Próximo cartão.");
       };
       // No foco, anima a SAÍDA do card antes de trocar pelo próximo.
       const stage = focoAtivo ? root.querySelector(".fq-stage") : null;
@@ -432,13 +432,13 @@ export default function renderFlashcards(root, app) {
       store.adiarFlashcard(el.getAttribute("data-id"), 1);
       revelado = false;
       revisarId = null;
-      toast("Card adiado para amanhã.");
+      toast("Cartão adiado para amanhã.");
     },
     dispensar: (el) => {
       store.suspenderFlashcard(el.getAttribute("data-id"));
       revelado = false;
       revisarId = null;
-      toast("Card dispensado. Reative quando quiser.");
+      toast("Cartão dispensado. Reative quando quiser.");
     },
     // Estudar UM card específico da lista "Ver todos": joga no topo (área de revisão) e rola até lá.
     "revisar-este": (el) => {
@@ -451,7 +451,7 @@ export default function renderFlashcards(root, app) {
       store.get().flashcards.forEach((f) => {
         if (f.suspenso) store.suspenderFlashcard(f.id);
       });
-      toast("Cards dispensados reativados.");
+      toast("Cartões dispensados reativados.");
     },
     "del-card": async (el) => {
       if (await confirmar("Excluir este flashcard? Não dá para desfazer.")) {
@@ -520,7 +520,7 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
   return `
     <div class="card form-flashcard">
       <h3>Criar flashcards</h3>
-      <p class="muted small u-m-0 u-mb-8">Um card por linha: a <b>frente (pergunta)</b> e o <b>verso (resposta)</b>, separados por <b>Tab</b>, <b>;</b>, <b>|</b> ou vírgula. Compatível com o Anki.</p>
+      <p class="muted small u-m-0 u-mb-8">Um cartão por linha: a <b>frente (pergunta)</b> e o <b>verso (resposta)</b>, separados por <b>Tab</b>, <b>;</b>, <b>|</b> ou vírgula. Compatível com o Anki.</p>
       <label class="inline">Vincular ao tópico: <select id="fc-add-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       <label class="btn btn-ghost btn-file u-m-0 u-mt-8 u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um arquivo .txt/.csv (formato Anki). Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="fc-add-file" type="file" accept=".txt,.csv,.tsv,text/plain" hidden />
@@ -548,7 +548,7 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
                ${
                  st.questoes.length
                    ? `<label class="inline">Das questões: <select id="fc-add-top-q"><option value="todos">Todas</option>${opcoesTopico}</select></label>
-                      <button class="btn btn-ghost btn-sm" data-action="gerar-questoes" data-tip="Cria 1 card por questão. Frente = enunciado; verso = a alternativa correta destacada. Não explica o porquê.">Gerar</button>
+                      <button class="btn btn-ghost btn-sm" data-action="gerar-questoes" data-tip="Cria 1 cartão por questão. Frente = enunciado; verso = a alternativa correta destacada. Não explica o porquê.">Gerar</button>
                       <button class="btn btn-ghost btn-sm" data-action="gerar-afirmacoes" data-tip="Transforma cada questão em afirmações para julgar Certo ou Errado (a correta vira CERTO; um distrator vira ERRADO).">C/E</button>`
                    : ""
                }
@@ -607,7 +607,7 @@ function fcPreviewHTML(itens) {
           return `<li class="prev-card m-geral">
             <div class="prev-card-l1">
               <input class="prev-inp fc-frente-edit" data-i="${i}" value="${esc(c.frente || "")}" placeholder="Frente (pergunta)" />
-              <button class="prev-remover" data-action="remover-fc-prev" data-i="${i}" data-tip-pos="cima-dir" data-tip="Remover este card">${icone("x")}</button>
+              <button class="prev-remover" data-action="remover-fc-prev" data-i="${i}" data-tip-pos="cima-dir" data-tip="Remover este cartão">${icone("x")}</button>
             </div>
             <details class="prev-spoiler">
               <summary>${icone("eye")} ver/editar verso${semVerso ? ' <b style="color:var(--danger,#dc2626)">(vazio!)</b>' : ""}</summary>
@@ -679,7 +679,7 @@ function abrirCriarFlashcards(app) {
       "adicionar-fc": () => {
         const texto = corpo.querySelector("#fc-add-texto").value;
         const top = corpo.querySelector("#fc-add-top")?.value || "";
-        if (!texto.trim()) return toast("Digite ou cole ao menos um card.", "erro");
+        if (!texto.trim()) return toast("Digite ou cole ao menos um cartão.", "erro");
         const itens = parseFlashcards(texto);
         if (!itens.length) return toast("Nada reconhecido. Use 'frente ; verso' por linha.", "erro");
         estado.texto = texto;
@@ -697,7 +697,7 @@ function abrirCriarFlashcards(app) {
       "descartar-fc": () => fechar(),
       "aceitar-fc": () => {
         const itens = (estado.preview || []).filter((c) => (c.frente || "").trim() && (c.verso || "").trim());
-        if (!itens.length) return toast("Cada card precisa de frente e verso.", "erro");
+        if (!itens.length) return toast("Cada cartão precisa de frente e verso.", "erro");
         itens.forEach((c) => store.addFlashcard({ frente: c.frente, verso: c.verso, topicoId: estado.topico || null, selo: "manual" }));
         toast(`${plural(itens.length, "flashcard adicionado", "flashcards adicionados")}.`);
         fechar();
@@ -808,7 +808,7 @@ function quizCardHTML(st, c) {
       <div class="fq-face fq-back">
         <div class="fq-back-topo">
           <span class="fq-back-rot">${icone("corner-down-right")} Resposta</span>
-          <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida. Atalho: C">${icone("sparkles")} Comentar com IA</button>
+          <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este cartão para tirar a sua dúvida. Atalho: C">${icone("sparkles")} Comentar com IA</button>
         </div>
         <div class="fq-back-corpo">
           <div class="fq-back-pergunta">${esc(c.frente)}</div>
@@ -896,7 +896,7 @@ function cardRevisaoHTML(st, c) {
              </div>
              <div class="fc-atalhos muted small">${icone("keyboard")} <b>1–4</b> nota · <b>Espaço</b> vira</div>
              <div class="fc-extra">
-               <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
+               <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este cartão para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
                ${c.fonte && (c.fonte.tipo === "lei" || c.fonte.tipo === "juris") ? `<button class="btn btn-ghost btn-sm" data-action="fc-abrir-artigo" data-ref="${esc(c.fonte.titulo || "")}" data-tipo="${c.fonte.tipo}" data-tip="Abrir o artigo de origem na ${c.fonte.tipo === "juris" ? "Jurisprudência" : "Lei Seca"}.">${icone("book-open")} Abrir artigo</button>` : ""}
              </div>`
           : `<button class="btn btn-primary btn-lg" data-action="revelar">Mostrar resposta</button>
@@ -904,8 +904,8 @@ function cardRevisaoHTML(st, c) {
       }
       <div class="fc-sessao">
         <button class="fc-acao" data-action="pular" data-id="${c.id}" data-tip="Vê outro agora; este volta nesta sessão.">${icone("skip-forward")} Pular</button>
-        <button class="fc-acao" data-action="adiar" data-id="${c.id}" data-tip="Reagenda este card para amanhã.">${icone("alarm-clock")} Adiar 1 dia</button>
-        <button class="fc-acao fc-acao-danger" data-action="dispensar" data-id="${c.id}" data-tip="Suspende o card das revisões (reative depois).">${icone("ban")} Dispensar</button>
+        <button class="fc-acao" data-action="adiar" data-id="${c.id}" data-tip="Reagenda este cartão para amanhã.">${icone("alarm-clock")} Adiar 1 dia</button>
+        <button class="fc-acao fc-acao-danger" data-action="dispensar" data-id="${c.id}" data-tip="Suspende o cartão das revisões (reative depois).">${icone("ban")} Dispensar</button>
       </div>
     </div>`;
 }
@@ -956,7 +956,7 @@ function vencimentoFc(dueDate, hojeISO) {
 function fcTileHTML(st, c, hojeISO) {
   const vinc = vinculoFlashcard(st, c);
   const v = vencimentoFc(c.sm2.dueDate, hojeISO);
-  return `<div class="card card-click fc-tile" data-foco-id="${c.id}" data-action="revisar-este" data-id="${c.id}" data-tip-pos="cima" data-tip="Estudar este card agora (abre na área de revisão, no topo).">
+  return `<div class="card card-click fc-tile" data-foco-id="${c.id}" data-action="revisar-este" data-id="${c.id}" data-tip-pos="cima" data-tip="Estudar este cartão agora (abre na área de revisão, no topo).">
     <div class="fc-tile-frente">${esc(c.frente.slice(0, 120))}</div>
     <div class="fc-tile-chips">
       ${vinc ? `<span class="chip chip-sm">${esc(vinc)}</span>` : ""}
@@ -1012,7 +1012,7 @@ function exportarAnki(st, cards) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  toast(`${plural(cards.length, "card exportado", "cards exportados")}. No Anki: Arquivo → Importar → selecione o .txt.`);
+  toast(`${plural(cards.length, "cartão exportado", "cartões exportados")}. No Anki: Arquivo → Importar → selecione o .txt.`);
 }
 
 function printFlashcards(st, cards, lados = "ambos") {

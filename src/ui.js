@@ -935,7 +935,7 @@ export const MET = {
   constancia: "Constância — a cor de cada dia mostra quanto tempo você estudou (mais escuro = mais). Folga não pune.",
   relevancia: "Relevância — o quanto o tema costuma cair, em faixa (com % ou 'Mais cai' quando o % é desconhecido).",
   vencimento: "Vencimento — quando este item volta para revisão pela curva do esquecimento.",
-  streak: "Ofensiva — dias seguidos estudando (a folga configurada não quebra a sequência).",
+  streak: "Sequência — dias seguidos estudando (a folga configurada não quebra a sequência).",
 };
 // Marcador [?] discreto com o texto do glossário (tooltip via portal). pos: data-tip-pos opcional.
 export function defMetrica(chave, pos = "cima") {

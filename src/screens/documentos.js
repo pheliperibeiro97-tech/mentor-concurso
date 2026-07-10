@@ -1309,7 +1309,7 @@ function abrirImportarMaterial(app) {
           const topicoId = corpo.querySelector("#doc-top").value;
           if (!texto && !pend.pdf && !pend.img) return toast("O conteúdo está vazio.", "erro");
           if (!store.get().config.materialAvisoAceito) {
-            const ok = await confirmar('Importe apenas material que você tem direito de usar (ex.: comprado por você). O conteúdo fica só neste dispositivo e o Mentor não o compartilha. Para compartilhar um backup, use a opção "sem materiais" em Configurações ▸ Dados. Continuar?');
+            const ok = await confirmar("Importe apenas material que você tem direito de usar. Ele fica só neste dispositivo. Continuar?");
             if (!ok) return;
             store.setConfig({ materialAvisoAceito: true });
           }

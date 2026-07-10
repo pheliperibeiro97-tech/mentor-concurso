@@ -315,7 +315,7 @@ function aulasImportHTML(texto = "") {
 function addDiscPanelHTML(texto = "") {
   return `<div class="card">
     <h3>Adicionar ao edital</h3>
-    <p class="muted small u-m-0 u-mb-8">Digite <b>ou</b> cole aqui — funciona dos dois jeitos. Para criar só <b>uma disciplina</b>, escreva o nome dela (uma linha). Para vários itens, <b>cole o edital</b>: uma <b>disciplina</b> é uma linha em MAIÚSCULAS ou terminada em "<b>:</b>", e as linhas seguintes (ou itens separados por "<b>;</b>") viram os <b>tópicos</b> dela. Você revisa e edita tudo antes de aplicar. Você também pode importar um arquivo.</p>
+    <p class="muted small u-m-0 u-mb-8">Cole o edital (ou digite uma disciplina) — o app separa disciplinas e tópicos para você revisar antes de aplicar.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
@@ -1045,7 +1045,7 @@ function aulasListaHTML(store, st) {
   return `
     <p class="muted small cursinho-nota">As aulas <b>agrupam os seus tópicos</b> na ordem do cursinho — <b>não criam estrutura nova</b>. Com a base "Cursinho", o app estuda na <b>ordem das aulas</b> (aqui e no Hoje); o conteúdo, o progresso e a cobertura continuam os mesmos do seu edital.</p>
     <div class="barra-acoes cursinho-barra">
-      <label class="inline" data-tip="Mesmos tópicos, ordem diferente — um só botão muda a navegação do estudo. EDITAL: o Hoje sugere e ordena os tópicos por disciplina (ordem do edital). CURSINHO: o Hoje sugere e ordena pela SEQUÊNCIA DAS AULAS (Aula 1 → 2 → ...), aqui e nos seletores de sessão. O conteúdo, o progresso e a COBERTURA são sempre compartilhados (a cobertura é sempre medida pelo edital).">Base de estudo:
+      <label class="inline" data-tip="Muda só a ordem do estudo e das sugestões do Hoje: Edital segue as disciplinas; Cursinho segue a sequência das aulas — conteúdo, progresso e cobertura são os mesmos.">Base de estudo:
         <select id="base-estudo">
           <option value="edital" ${base === "edital" ? "selected" : ""}>Edital (por disciplina)</option>
           <option value="cursinho" ${base === "cursinho" ? "selected" : ""}>Cursinho (por aula)</option>
@@ -1343,7 +1343,7 @@ export default function renderEdital(root, app) {
       }
     },
     "limpar-edital": async () => {
-      if (await confirmar("Apagar TODA a estrutura do edital (disciplinas e tópicos)? Seu conteúdo (materiais, questões, flashcards, sessões…) NÃO será apagado: ficará como 'sem tópico'. Esta ação não pode ser desfeita.")) {
+      if (await confirmar("Apagar o edital? Seus materiais, questões e flashcards continuam salvos — só ficam sem tópico.")) {
         store.limparEdital();
         toast("Estrutura do edital apagada.");
       }
@@ -1498,7 +1498,7 @@ export default function renderEdital(root, app) {
     "sel-unificar": async () => {
       const dest = root.querySelector("#sel-uni-dest")?.value;
       if (!dest) return toast("Escolha o tópico de destino.", "erro");
-      if (!(await confirmar("Unificar os selecionados no tópico de destino? O conteúdo vinculado (questões, materiais, flashcards, revisões…) será TRANSFERIDO para o destino e os outros tópicos serão removidos. Não pode ser desfeito."))) return;
+      if (!(await confirmar("Unificar os selecionados no tópico de destino? O conteúdo vinculado vai junto para o destino e os outros tópicos são removidos."))) return;
       for (const id of [...topSel]) if (id !== dest) store.mesclarTopicos(id, dest);
       topSel.clear();
       toast("Tópicos unificados.");

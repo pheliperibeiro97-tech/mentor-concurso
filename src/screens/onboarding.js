@@ -252,7 +252,7 @@ export default function renderOnboarding(root, app) {
               <label class="u-mb-8">Data da prova
                 <input id="ob-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
               </label>
-              <label class="inline small u-fw-regular"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
+              <label class="inline small u-fw-regular"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Ainda sem data de prova</label>
             </div>
           </div>
           <div class="ob-grupo">
@@ -262,7 +262,7 @@ export default function renderOnboarding(root, app) {
               <label>Meta semanal ${campoHM("ob-meta-sem", cfg.metaSemanalMin, semMetas)}</label>
               <label>Meta mensal ${campoHM("ob-meta-mes", cfg.metaMensalMin, semMetas)}</label>
             </div>
-            <label class="inline small" style="font-weight:400; display:flex; width:fit-content"><input id="ob-meta-pre" type="checkbox" ${semMetas ? "checked" : ""} /> Meta não definida</label>
+            <label class="inline small" style="font-weight:400; display:flex; width:fit-content"><input id="ob-meta-pre" type="checkbox" ${semMetas ? "checked" : ""} /> Sem meta por enquanto</label>
           </div>
         </div>
         <div class="ob-final">
@@ -314,7 +314,7 @@ export default function renderOnboarding(root, app) {
     <div class="ob-card ob-wide">
       ${steps(3)}
       <h1>Mentor IA <span class="ob-tag-opt">opcional</span></h1>
-      <p class="ob-lead">O app já funciona completo offline. Se quiser, conecte uma IA com a <b>chave grátis do Google Gemini</b> para gerar questões e flashcards, comentar seus erros, corrigir discursivas e conversar com o mentor. Dá para começar offline e conectar depois.</p>
+      <p class="ob-lead">Com a IA (chave grátis do Gemini), o Mentor gera questões, corrige redações e conversa com você. Conecte agora ou depois.</p>
       <p class="small ob-ia-status">Status: ${iaDisponivel(cfg) ? '<b style="color:var(--success)">IA conectada</b> ' : '<b>Offline</b> — a IA é opcional; conecte agora ou depois em Configurações.'}</p>
       <div class="ob-form">
         <div class="form-row">

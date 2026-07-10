@@ -199,7 +199,7 @@ export default function renderResumos(root, app) {
       ]);
       if (dias) {
         store.agendarRevisaoResumo(id, parseInt(dias, 10));
-        toast(`Combinado! Te lembro de revisar em ${plural(dias, "dia", "dias")}.`);
+        toast(`Combinado — aviso você em ${plural(dias, "dia", "dias")}.`);
       }
     },
     "rev-modo-resumo": (el) => {

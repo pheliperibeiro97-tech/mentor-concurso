@@ -4,7 +4,6 @@
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { store } from "./store.js";
-import { backendName } from "./persistence.js";
 import { toast, plural } from "./ui.js";
 import { esc, fmtMMSS } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
@@ -267,10 +266,6 @@ function navHTML() {
           ${configHTML}
         </div>
       </nav>
-      <div class="sidebar-rodape">
-        <div class="backend-tag" data-tip-pos="cima-esq" data-tip="Onde os dados são salvos">${icone("database")} ${esc(backendName())}</div>
-        <div class="assinatura-dev">Desenvolvido por <b>Phelipe Ribeiro da Silva</b></div>
-      </div>
     </aside>`;
 }
 
@@ -297,7 +292,7 @@ function topbarHTML(store) {
   try {
     const ofe = store.ofensiva ? store.ofensiva() : null;
     if (ofe && ofe.atual > 0)
-      streakChip = `<button type="button" class="tb-chip tb-streak" data-nav="diagnostico" data-tip="Dias seguidos de estudo — ver constância">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</button>`;
+      streakChip = `<button type="button" class="tb-chip tb-streak" data-nav="diagnostico" data-tip="Sequência de dias estudando — ver constância">${icone("flame")}<b>${ofe.atual}</b> ${ofe.atual === 1 ? "dia" : "dias"}</button>`;
   } catch (_) {}
   // Cronômetro e lembretes saíram do topo: agora são botões FLUTUANTES (cronometro.js e
   // lembretes.js), presentes em todas as telas inclusive no foco. Aqui no topo ficam prova

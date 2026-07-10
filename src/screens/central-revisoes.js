@@ -40,7 +40,7 @@ const TIPO_INFO = {
 
 function quando(it) {
   if (it.status === "atrasada") return `atrasada há ${it.diasAtraso} ${it.diasAtraso === 1 ? "dia" : "dias"}`;
-  if (it.status === "hoje") return "vence hoje";
+  if (it.status === "hoje") return "ponto ideal: hoje";
   return fmtData(it.proxima);
 }
 
@@ -123,14 +123,14 @@ export default function renderCentralRevisoes(root, app) {
   const listaVazia = !atrasadas.length && !hoje.length && !proximas.length;
 
   root.innerHTML = `
-    ${header("Central de Revisões", "Tudo o que vence, num lugar só — sincronizado com todas as telas.")}
+    ${header("Central de Revisões", "O que sua memória pede hoje — cada item no ponto ideal da curva do esquecimento.")}
 
     <section class="scorecard rev-cards">
       <div class="sc-pilar ${cont.atrasadas ? "rev-alerta" : ""}"><span class="kpi-ico">${icone("triangle-alert")}</span><span class="sc-num">${cont.atrasadas}</span><span class="sc-rot">Atrasadas</span></div>
       <div class="sc-pilar"><span class="kpi-ico">${icone("calendar-check")}</span><span class="sc-num">${cont.hoje}</span><span class="sc-rot">Para hoje</span></div>
       <div class="sc-pilar"><span class="kpi-ico">${icone("calendar-days")}</span><span class="sc-num">${cont.proximas7}</span><span class="sc-rot">Próximos 7 dias</span></div>
       <div class="sc-pilar" data-tip="Das revisões que exigiram atenção nos últimos 30 dias (concluídas + ainda atrasadas), quantas você fez. Alto = em dia.">
-        <span class="kpi-ico">${icone("trending-up")}</span><span class="sc-num ${cont.taxaConclusao == null ? "" : cont.taxaConclusao >= 70 ? "rev-taxa-ok" : cont.taxaConclusao < 50 ? "rev-taxa-baixo" : ""}">${cont.taxaConclusao == null ? "—" : cont.taxaConclusao + "%"}</span><span class="sc-rot">Taxa de conclusão (30d)</span></div>
+        <span class="kpi-ico">${icone("trending-up")}</span><span class="sc-num ${cont.taxaConclusao == null ? "" : cont.taxaConclusao >= 70 ? "rev-taxa-ok" : cont.taxaConclusao < 50 ? "rev-taxa-baixo" : ""}">${cont.taxaConclusao == null ? "—" : cont.taxaConclusao + "%"}</span><span class="sc-rot">Em dia (últimos 30 dias)</span></div>
     </section>
 
     ${pendentesFoco.length ? `<div class="rev-foco-cta">

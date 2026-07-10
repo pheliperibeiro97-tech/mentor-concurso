@@ -1034,9 +1034,9 @@ function metasCompactasHTML(m) {
 
 // ----- ofensiva (constância): linha discreta, sem caixa -----
 function ofensivaTexto(o) {
-  if (!o || !o.atual) return `<span>Comece sua ofensiva hoje.</span>`;
+  if (!o || !o.atual) return `<span>Comece sua sequência hoje.</span>`;
   const dias = `${o.atual} dia${o.atual === 1 ? "" : "s"}`;
-  return `<span>Ofensiva: <b>${dias}</b> · recorde ${o.recorde}</span>`;
+  return `<span>Sequência: <b>${dias}</b> · recorde ${o.recorde}</span>`;
 }
 
 // ----- semáforo de desempenho: classe CSS a partir de store.corDesempenho() -----

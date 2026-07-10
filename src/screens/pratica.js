@@ -31,11 +31,11 @@ const TXT = {
   },
   ce: {
     titulo: "Questões C/E",
-    sub: "Itens Certo ou Errado, com gabarito imediato",
-    vazioTit: "Você ainda não tem itens",
+    sub: "Itens C/E (Certo ou Errado), com gabarito imediato",
+    vazioTit: "Você ainda não tem itens C/E",
     vazioSub: "Adicione, importe de uma prova, ou gere com a IA.",
     vazioIco: icone("square-pen"),
-    vazioCta: "Adicionar itens",
+    vazioCta: "Adicionar itens C/E",
   },
 };
 
@@ -163,7 +163,7 @@ function renderTreino(root, app, formato) {
       <details class="doc-mais prat-mais">
         <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações.">${icone("ellipsis")}</summary>
         <div class="doc-mais-pop" role="menu">
-          <button class="menu-item menu-item-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito."><span class="menu-ico">${icone("trash-2")}</span> Limpar (${questoes.length})</button>
+          <button class="menu-item menu-item-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga ${formato === "ce" ? "os itens C/E" : "as questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito."><span class="menu-ico">${icone("trash-2")}</span> Limpar (${questoes.length})</button>
         </div>
       </details>
     </div>
@@ -183,25 +183,25 @@ function renderTreino(root, app, formato) {
     </div>
     ${filtroTopicosPainelHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
 
-    ${s.filtroLote ? `<div class="lote-banner">${icone("sparkles")}<span>Praticando só as <b>${questoes.length}</b> ${formato === "ce" ? "afirmações" : "questões"} recém-geradas ${esc(s.filtroLoteRotulo)}.</span><button class="lnk" data-action="lote-ver-todos" data-tip="Voltar para todas as suas ${formato === "ce" ? "afirmações" : "questões"}.">Ver todas</button></div>` : ""}
+    ${s.filtroLote ? `<div class="lote-banner">${icone("sparkles")}<span>Praticando só ${formato === "ce" ? "os" : "as"} <b>${questoes.length}</b> ${formato === "ce" ? "itens C/E recém-gerados" : "questões recém-geradas"} ${esc(s.filtroLoteRotulo)}.</span><button class="lnk" data-action="lote-ver-todos" data-tip="Voltar para ${formato === "ce" ? "todos os seus itens C/E" : "todas as suas questões"}.">${formato === "ce" ? "Ver todos" : "Ver todas"}</button></div>` : ""}
 
     ${nPraticar ? `
     <section class="card foco-hero pratica-hero">
       <div class="foco-eyebrow">Pronto para treinar</div>
-      <p class="foco-desc">Você tem <b>${nPraticar}</b> ${formato === "ce" ? (nPraticar === 1 ? "afirmação" : "afirmações") : (nPraticar === 1 ? "questão" : "questões")} para resolver neste filtro${filaErradas.length ? " — as erradas entram primeiro na fila, depois as pendentes" : ""}. Entre no Modo Foco e resolva uma a uma, sem distração.</p>
+      <p class="foco-desc">Você tem <b>${nPraticar}</b> ${formato === "ce" ? (nPraticar === 1 ? "item C/E" : "itens C/E") : (nPraticar === 1 ? "questão" : "questões")} para resolver neste filtro${filaErradas.length ? " — o que você errou entra primeiro na fila, depois o restante" : ""}. Entre no Modo Foco e resolva uma a uma, sem distração.</p>
       <div class="foco-acoes">
         <button class="btn btn-primary btn-lg" data-action="praticar-agora" data-tip="Modo Foco com a fila inteligente: erradas e pendentes primeiro.">${icone("play")} Praticar agora (${nPraticar})</button>
       </div>
     </section>` : ""}
 
-    ${totalFormato ? `<div class="plano-h"><h2>${formato === "ce" ? "Seus itens" : "Suas questões"}</h2><span class="cnt">${questoes.length}</span>${questoes.length ? `<span class="tempo-est" data-tip="Tempo estimado para resolver este conjunto (${formato === "ce" ? "~1,2 min" : "~2,2 min"} por ${formato === "ce" ? "item" : "questão"}).">${icone("clock-3")} ≈ ${Math.max(1, Math.round(questoes.length * (formato === "ce" ? 1.2 : 2.2)))} min</span>` : ""}<span class="sp"></span></div>` : ""}
+    ${totalFormato ? `<div class="plano-h"><h2>${formato === "ce" ? "Seus itens C/E" : "Suas questões"}</h2><span class="cnt">${questoes.length}</span>${questoes.length ? `<span class="tempo-est" data-tip="Tempo estimado para resolver este conjunto (${formato === "ce" ? "~1,2 min" : "~2,2 min"} por ${formato === "ce" ? "item C/E" : "questão"}).">${icone("clock-3")} ≈ ${Math.max(1, Math.round(questoes.length * (formato === "ce" ? 1.2 : 2.2)))} min</span>` : ""}<span class="sp"></span></div>` : ""}
     <div class="lista-questoes">
       ${
         questoes.length
           ? questoes.map((q) => questaoHTML(st, q, formato, s)).join("")
           : totalFormato
             ? vazio(
-                `Nada nesse filtro\nNenhuma ${formato === "ce" ? "afirmação" : "questão"} corresponde à situação ou aos tópicos selecionados. Ajuste os filtros acima.`,
+                `Nada nesse filtro\n${formato === "ce" ? "Nenhum item C/E" : "Nenhuma questão"} corresponde à situação ou aos tópicos selecionados. Ajuste os filtros acima.`,
                 `<button class="btn btn-ghost" data-action="limpar-filtros">Limpar filtros</button>`,
                 icone("dices")
               )
@@ -297,16 +297,16 @@ function renderTreino(root, app, formato) {
       // Lotes grandes (> 50) exigem confirmação FORTE: digitar o número exato.
       if (questoes.length > 50) {
         const digitado = await pedirTexto(
-          `Apagar ${plural(questoes.length, formato === "ce" ? "afirmação" : "questão", formato === "ce" ? "afirmações" : "questões")}${ctx}? Esta ação não pode ser desfeita. Digite ${questoes.length} para confirmar.`,
+          `Apagar ${plural(questoes.length, formato === "ce" ? "item C/E" : "questão", formato === "ce" ? "itens C/E" : "questões")}${ctx}? Esta ação não pode ser desfeita. Digite ${questoes.length} para confirmar.`,
           { placeholder: String(questoes.length), rotuloOk: "Apagar" }
         );
         if (digitado === null) return; // cancelou
         if (digitado.trim() !== String(questoes.length)) return toast("Número não confere — nada foi apagado.", "erro");
-      } else if (!(await confirmar(`Apagar ${plural(questoes.length, formato === "ce" ? "afirmação" : "questão", formato === "ce" ? "afirmações" : "questões")}${ctx}? Esta ação não pode ser desfeita.`))) {
+      } else if (!(await confirmar(`Apagar ${plural(questoes.length, formato === "ce" ? "item C/E" : "questão", formato === "ce" ? "itens C/E" : "questões")}${ctx}? Esta ação não pode ser desfeita.`))) {
         return;
       }
       questoes.forEach((q) => store.removerQuestao(q.id));
-      toast(`${plural(questoes.length, formato === "ce" ? "item removido" : "questão removida", formato === "ce" ? "itens removidos" : "questões removidas")}.`);
+      toast(`${plural(questoes.length, formato === "ce" ? "item C/E removido" : "questão removida", formato === "ce" ? "itens C/E removidos" : "questões removidas")}.`);
       app.refresh();
     },
     // PILOTO de "janela": editar abre numa JANELA modal premium (antes expandia inline + scrollIntoView).
@@ -315,7 +315,7 @@ function renderTreino(root, app, formato) {
       const q = store.get().questoes.find((x) => x.id === id);
       if (!q) return;
       abrirJanela({
-        titulo: formato === "ce" ? "Editar item Certo/Errado" : "Editar questão",
+        titulo: formato === "ce" ? "Editar item C/E" : "Editar questão",
         corpoHTML: editFormHTML(st, q, opcoesVincular, formato),
         aoMontar: (jan, fechar) => {
           jan.querySelector('[data-action="cancelar-edicao"]').addEventListener("click", fechar);
@@ -323,7 +323,7 @@ function renderTreino(root, app, formato) {
             const enun = jan.querySelector("#qe-enun").value.trim();
             const topicoId = jan.querySelector("#qe-top").value || null;
             const referencia = jan.querySelector("#qe-ref").value.trim();
-            if (!enun) return toast(formato === "ce" ? "Escreva a afirmação." : "Escreva o enunciado.", "erro");
+            if (!enun) return toast(formato === "ce" ? "Escreva o texto do item." : "Escreva o enunciado.", "erro");
             if (formato === "ce") {
               const certo = jan.querySelector("#qe-ce").value === "certo";
               const justificativa = jan.querySelector("#qe-justif").value.trim();
@@ -438,7 +438,7 @@ function editFormHTML(st, q, opcoesVincular, formato) {
   if (formato === "ce") {
     return `
     <div class="card form-questao">
-      <h3>${icone("square-pen")} Editar item Certo/Errado</h3>
+      <h3>${icone("square-pen")} Editar item C/E</h3>
       <div class="form-row">
         <label class="u-grow-2">Tópico (opcional) <select id="qe-top">${opTop}</select></label>
         <label>Gabarito <select id="qe-ce"><option value="certo" ${q.gabarito === 0 ? "selected" : ""}>Certo</option><option value="errado" ${q.gabarito === 1 ? "selected" : ""}>Errado</option></select></label>
