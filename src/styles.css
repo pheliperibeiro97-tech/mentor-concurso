@@ -4791,6 +4791,11 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .u-w-64{width:64px}.u-w-90{width:90px}.u-w-120{width:120px}
 .u-block{display:block}
 .u-nowrap{white-space:nowrap}
+.u-row{display:flex;gap:8px} /* linha SEM align-center (irmã da .u-flex) */
+.u-items-end{align-items:flex-end}
+.u-fw-regular{font-weight:var(--fw-regular)}
+/* selects dentro de label.inline respiram sem precisar de style= */
+label.inline > select{margin-left:6px}
 
 /* Fase 0 — saída ANIMADA de overlays/modais (par do modal-pop de entrada).
    fecharAnimado() em ui.js adiciona .closing e remove o nó após ~160ms. */
