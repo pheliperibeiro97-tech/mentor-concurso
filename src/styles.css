@@ -1635,7 +1635,9 @@ body.onboarding #crono-fab { display: none !important; }
 .ls-item .ls-mais > summary { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border-radius: 8px; color: var(--muted); }
 .ls-item .ls-mais > summary svg { width: 16px; height: 16px; }
 .ls-item .ls-mais > summary:hover, .ls-item .ls-mais[open] > summary { color: var(--fg); background: color-mix(in srgb, var(--fg) 6%, transparent); }
-.ls-item .ls-mais-pop { right: 0; }
+/* Abre para a ESQUERDA (o ⋯ fica na borda direita da carta). Precisa zerar o `left:0` herdado
+   de .ls-mais-pop, senão fica sobrecondicionado e o menu vaza/é cortado pela direita. */
+.ls-item .ls-mais-pop { right: 0; left: auto; }
 .ls-inc { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; color: var(--primary); }
 .ls-inc-bar { display: inline-block; width: 38px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--primary) 15%, transparent); overflow: hidden; }
 .ls-inc-bar > span { display: block; height: 100%; border-radius: 3px; background: currentColor; }
@@ -1653,6 +1655,8 @@ body.onboarding #crono-fab { display: none !important; }
 .ls-fpill-sel { border: 0; background-color: transparent; background-image: none; color: var(--fg); font-size: var(--fs-xs); font-weight: var(--fw-medium); padding: 0 2px; cursor: pointer; max-width: 150px; appearance: none; -webkit-appearance: none; -moz-appearance: none; color-scheme: light dark; }
 .ls-fpill-sel::-ms-expand { display: none; }
 [data-tema="escuro"] .ls-fpill-sel { color-scheme: dark; }
+/* O <select> é transparente; sem cor/fundo explícitos as opções somem no tema escuro. */
+.ls-fpill-sel option { background: var(--surface); color: var(--text); }
 .ls-fpill-sel:focus { outline: none; }
 .ca-sec { margin: 4px 0 12px; }
 .ca-sec-tit { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: var(--fw-medium); margin-bottom: 6px; }

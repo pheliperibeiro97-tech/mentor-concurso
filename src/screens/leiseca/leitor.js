@@ -175,6 +175,73 @@ export function abrirBuscaLei(app, store, norma, artigos) {
   });
 }
 
+// Busca da JURISPRUDÊNCIA: mesma ideia da Lei Seca (textual instantânea + semântica por IA),
+// só que sobre as súmulas/teses e sem "ir para o artigo nº". Cada resultado abre no card
+// (focoIndicacaoId → rola até ele). Substitui o antigo botão "Busca IA", que só montava o
+// índice do chat e não deixava digitar o que buscar.
+export function abrirBuscaJuris(app, store, juris) {
+  const norm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const estado = { sem: false };
+  abrirJanela({
+    titulo: "Buscar na Jurisprudência",
+    corpoHTML: `<div class="card busca-lei">
+      <div class="busca-topo">${icone("search")}<input id="busca-q" type="text" placeholder="Palavra, tribunal, tema ou número (ex.: algemas · 473 · prescrição)" autocomplete="off" /></div>
+      <label class="busca-sem" data-tip="Busca por SIGNIFICADO (usa IA), não só a palavra exata."><input type="checkbox" id="busca-sem-chk" /> ${icone("sparkles")} Busca inteligente (IA)</label>
+      <div class="busca-res" id="busca-res"><p class="muted small">Digite para buscar nas súmulas e teses.</p></div>
+    </div>`,
+    aoMontar: (overlay, fechar) => {
+      const corpo = overlay.querySelector(".mm-corpo");
+      const inp = corpo.querySelector("#busca-q");
+      const res = corpo.querySelector("#busca-res");
+      const chk = corpo.querySelector("#busca-sem-chk");
+      const jump = (id) => { fechar(); app.navigate("jurisprudencia", { focoIndicacaoId: id }); };
+      const pintar = (itens, termo) => {
+        if (!itens.length) { res.innerHTML = `<p class="muted small">Nada encontrado${termo ? ` para "${esc(termo)}"` : ""}.</p>`; return; }
+        res.innerHTML = itens.map((it) => `<button class="busca-item" data-id="${it.id}"><span class="busca-item-ref">${esc(it.ref)}</span><span class="busca-item-tr">${it.snippet}</span></button>`).join("");
+        res.querySelectorAll(".busca-item").forEach((b) => b.addEventListener("click", () => jump(b.getAttribute("data-id"))));
+      };
+      const textual = (q) => {
+        const nq = norm(q); const out = [];
+        for (const a of juris) {
+          const texto = corpoArtigoLimpo(a.texto || "");
+          const nt = norm(texto); const pos = nt.indexOf(nq);
+          const nRef = norm(a.referencia) + " " + norm(a.tribunal || "") + " " + norm(a.categoria || "");
+          if (nRef.includes(nq) || pos >= 0) {
+            const ref = String(a.referencia).split(",")[0].trim();
+            let snippet;
+            if (pos >= 0) { const ini = Math.max(0, pos - 30); snippet = (ini ? "…" : "") + esc(texto.slice(ini, pos)) + "<mark>" + esc(texto.slice(pos, pos + q.length)) + "</mark>" + esc(texto.slice(pos + q.length, pos + q.length + 45)) + "…"; }
+            else snippet = esc(texto.slice(0, 80)) + "…";
+            out.push({ id: a.id, ref, snippet });
+          }
+          if (out.length >= 40) break;
+        }
+        return out;
+      };
+      const rodarTextual = () => { const q = inp.value.trim(); if (!q) { res.innerHTML = `<p class="muted small">Digite para buscar nas súmulas e teses.</p>`; return; } pintar(textual(q), q); };
+      const rodarSemantica = async () => {
+        const q = inp.value.trim(); if (!q) return;
+        if (!store.iaDisponivel()) { chk.checked = false; estado.sem = false; res.innerHTML = `<p class="muted small">A busca inteligente precisa da IA conectada — usando busca por palavra.</p>`; return rodarTextual(); }
+        res.innerHTML = `<p class="muted small">${icone("sparkles")} Buscando por significado…</p>`;
+        try {
+          if (!(store.get().embeddings && store.get().embeddings.itens.length)) await store.indexarSemantica(null, { ids: juris.map((a) => a.id) });
+          const r = await store.buscaSemantica(q, { k: 20 });
+          const idsJ = new Set(juris.map((a) => a.id));
+          const itens = r.filter((x) => idsJ.has(x.fonteId)).map((x) => {
+            const a = juris.find((y) => y.id === x.fonteId);
+            return { id: x.fonteId, ref: String((a && a.referencia) || x.titulo).split(",")[0].trim(), snippet: esc(corpoArtigoLimpo((a && a.texto) || x.trecho).slice(0, 110)) + "…" };
+          });
+          pintar(itens, q);
+        } catch (e) { console.error(e); res.innerHTML = `<p class="erro-msg small">Não consegui a busca inteligente agora.</p>`; }
+      };
+      let t;
+      inp.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => (estado.sem ? rodarSemantica() : rodarTextual()), estado.sem ? 450 : 90); });
+      inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { const b = res.querySelector(".busca-item"); if (b) b.click(); } });
+      chk.addEventListener("change", () => { estado.sem = chk.checked; estado.sem ? rodarSemantica() : rodarTextual(); });
+      inp.focus();
+    },
+  });
+}
+
 // T1 — Agrupar por NORMA (lei) ou TRIBUNAL (juris). Extrai a norma do último segmento da
 // referência que não seja posicional (caput/§/inciso/alínea) nem o próprio "art.".
 export function normaDeRef(ref) {
@@ -1009,15 +1076,15 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   // Fase 5 (grifo único): o botão NÃO arma mais pincéis — abre o painel de revisão (modos +
   // imprimir); grifar/comentar é selecionando o texto do card (menu flutuante).
   const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")}</button>`;
-  const acaoMarcar = i.texto
-    ? `<button class="lnk-ic ${S.marcarAberto.has(i.id) ? "on" : ""}" data-action="toggle-marcar" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Revisar as marcas (Texto · Só marcas · Recordar) e imprimir. Para grifar, selecione o texto.">${icone("square-pen")}</button>`
-    : "";
+  // Fase 5 (grifo único): grifar/comentar é selecionando o texto do card — o antigo botão
+  // "Revisar as marcas" (por-card) saiu daqui por ser redundante (as marcas já aparecem no texto).
   // Menu "⋯" LEAN: só organizar/gerenciar (nada de treino/geração — isso é da aba Estudar).
+  // Na juris, "Ler em foco" e "Marcar para revisar" já vivem no menu "Estudar" → não repetir aqui.
   const menu = [
-    i.texto ? `<button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste item.">${icone("book-open")} Ler em foco</button>` : "",
+    i.texto && tipo !== "juris" ? `<button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste item.">${icone("book-open")} Ler em foco</button>` : "",
     i.fonteUrl ? `<button class="lnk" data-action="abrir-fonte" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir na fonte oficial (Planalto).">${icone("external-link")} Abrir no site oficial</button>` : "",
-    i.texto && !i.promovido ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Entra na revisão espaçada (aba Estudar → Revisar). Continua aqui no Ler.">${icone("brain")} Marcar para revisar</button>` : "",
-    i.promovido ? `<button class="lnk" data-action="despromover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Tirar da revisão espaçada. Continua no Ler.">${icone("brain")} Tirar da revisão</button>` : "",
+    i.texto && !i.promovido && tipo !== "juris" ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Entra na revisão espaçada (aba Estudar → Revisar). Continua aqui no Ler.">${icone("brain")} Marcar para revisar</button>` : "",
+    i.promovido && tipo !== "juris" ? `<button class="lnk" data-action="despromover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Tirar da revisão espaçada. Continua no Ler.">${icone("brain")} Tirar da revisão</button>` : "",
     tipo === "juris" && (i.texto || "").length > 300 ? `<button class="lnk" data-action="quebrar-teses" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="A IA separa este informativo em teses individuais.">${icone("list-checks")} Quebrar em teses</button>` : "",
     tipo === "lei" ? `<button class="lnk" data-action="conferir-vigencia" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Marca que você conferiu a vigência hoje (o Mentor lembra quando faz muito tempo).">${icone("calendar-check")} Conferi a vigência</button>` : "",
     i.novidadeEm ? `<button class="lnk" data-action="limpar-novidade" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Já revisei esta novidade: remover o selo.">${icone("check")} Já vi a novidade</button>` : "",
@@ -1059,7 +1126,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
         <span class="spacer"></span>
         ${vinc}
         <div class="ls-acoes">
-          ${acaoPQ}${acaoMarcar}
+          ${acaoPQ}
           <details class="ls-mais">
             <summary data-tip="Mais ações" title="Mais ações">${icone("ellipsis")}</summary>
             <div class="ls-mais-pop">${menu}</div>

@@ -13,7 +13,7 @@ import { S, parseIntervaloArt, rotulos, rotuloRevogado } from "./leiseca/estado.
 import { CATEGORIAS_JURIS, tribunaisDe, tribAdminHTML, topicoOptions, bindCascata, tribunalPickerHTML, categoriaPickerHTML, ligarTribunalPicker, ligarCategoriaPicker } from "./leiseca/pickers.js";
 import { garantirGrifoFlutuante, garantirPopoverMarca } from "./leiseca/grifo.js";
 import { abrirLeituraFoco, abrirCompletarArtigo } from "./leiseca/foco.js";
-import { garantirScrollSpy, garantirBarraAutoOculta, desligarBarraAutoOculta, abrirBuscaLei, normaDeRef, numArtigo, nomeAmigavelLei, bibliotecaLeisHTML, leitorBarraHTML, lerCorpoHTML, ultimoInfoBadgeHTML, indiceJurisHTML, abrirRenomearLei, abrirPersonalizarBarra, acaoGrifarAuto, acaoGrifarIA, acaoClassificarTemas, acaoRefinarTemasIA, acaoLimparGrifos, abrirMarcarLidoBloco, abrirEditarTemas, animarFlagsLeitor } from "./leiseca/leitor.js";
+import { garantirScrollSpy, garantirBarraAutoOculta, desligarBarraAutoOculta, abrirBuscaLei, abrirBuscaJuris, normaDeRef, numArtigo, nomeAmigavelLei, bibliotecaLeisHTML, leitorBarraHTML, lerCorpoHTML, ultimoInfoBadgeHTML, indiceJurisHTML, abrirRenomearLei, abrirPersonalizarBarra, acaoGrifarAuto, acaoGrifarIA, acaoClassificarTemas, acaoRefinarTemasIA, acaoLimparGrifos, abrirMarcarLidoBloco, abrirEditarTemas, animarFlagsLeitor } from "./leiseca/leitor.js";
 import { estudarCorpoHTML } from "./leiseca/estudar.js";
 import { metasCorpoHTML, abrirNovaMeta, abrirQuebrarMeta, abrirImportarMetas } from "./leiseca/metas.js";
 import { abrirImportarLei, abrirConferirAtualizacao, abrirAdicionarIndicacao, abrirMarcarPQ } from "./leiseca/importar.js";
@@ -162,12 +162,12 @@ function renderIndicacoes(root, app, tipo) {
       ${modo === "ler" && !mostrarBiblioteca ? `<button class="btn btn-add btn-sm" data-action="importar" data-tip-pos="cima-esq" data-tip="${tipo === "lei" ? "Trazer a lei: do site oficial (Planalto), colando o texto, ou de um PDF." : "Trazer súmulas/teses: colando o texto/informativo ou de um PDF."}">${icone("download")} Importar</button>` : ""}
       ${tipo === "lei" && modo === "ler" && !modoLeitor && !mostrarBiblioteca && store.normasComFonte("lei").length ? `<button class="btn btn-ghost btn-sm" data-action="conferir-atualizacao" data-tip-pos="cima-esq" data-tip="Recompara com a fonte oficial e mostra o que mudou, entrou ou foi revogado. Você decide o que aplicar.">${icone("refresh-cw")} Conferir atualização</button>` : ""}
       ${modo === "ler" && !modoLeitor && !mostrarBiblioteca ? `<button class="btn btn-ghost btn-sm" data-action="toggle-pq-import" data-tip-pos="cima-esq" data-tip="Marque o que mais cai (incidência): a IA sugere ou você importa uma estatística.">${icone("star")} O que mais cai</button>` : ""}
-      ${modo === "ler" && !modoLeitor && !mostrarBiblioteca && st.indicacoes.some((i) => (i.tipo || "lei") === (tipo === "juris" ? "juris" : "lei") && (i.texto || "").trim().length >= 20) ? `<button class="btn btn-ia btn-sm" data-action="abrir-indice" data-tip-pos="cima-esq" data-tip="Separar ${tipo === "juris" ? "as súmulas/teses" : "os artigos"} para a Busca por significado (IA) do chat — só deste módulo.">${icone("sparkles")} Busca IA</button>` : ""}
+      ${modo === "ler" && !modoLeitor && !mostrarBiblioteca && tipo === "juris" && st.indicacoes.some((i) => i.tipo === "juris" && (i.texto || "").trim().length >= 10) ? `<button class="btn btn-ghost btn-sm" data-action="buscar-juris" data-tip-pos="cima-esq" data-tip="Buscar nas súmulas e teses por palavra, tribunal, número ou significado (IA).">${icone("search")} Buscar</button>` : ""}
       ${modo === "metas" ? `<button class="btn btn-add btn-sm" data-action="nova-meta" data-tip-pos="cima-esq" data-tip="Criar uma meta de leitura (ex.: 'ler art. 1º a 20'). Dá para dividir em etapas; vira tarefa no Planejamento.">${icone("calendar-check")} Nova meta</button>` : ""}
       ${modo === "metas" ? `<button class="btn btn-ghost btn-sm" data-action="importar-metas" data-tip-pos="cima-esq" data-tip="Importar um cronograma/tabela de metas de leitura (colar ou PDF). Cada linha vira uma meta.">${icone("download")} Importar metas</button>` : ""}
       <span class="spacer"></span>
       ${modo === "ler" && !modoLeitor && !mostrarBiblioteca && novidadesN ? `<button class="btn ${S.lerFiltroNov[tipo] ? "btn-soft" : "btn-ghost"} btn-sm" data-action="filtro-novidades" data-tip-pos="cima-dir" data-tip="Mostrar só os dispositivos com novidade legislativa (mudaram/entraram na última conferência).">${icone("file-clock")} Novidades <span class="mini-tag nov-tag">${novidadesN}</span></button>` : ""}
-      ${modo !== "estudar" && !mostrarBiblioteca ? filtroTopicosBotaoHTML(st, S.filtroTop[tipo].sel, S.filtroTop[tipo].aberto) : ""}
+      ${modo !== "estudar" && !mostrarBiblioteca && tipo !== "juris" ? filtroTopicosBotaoHTML(st, S.filtroTop[tipo].sel, S.filtroTop[tipo].aberto) : ""}
       ${
         tipo === "juris" && modo === "ler"
           ? `<span class="ls-fpill ${S.filtroTribunal !== "todos" ? "on" : ""}"><span class="ls-fpill-lbl">Tribunal</span>
@@ -195,7 +195,7 @@ function renderIndicacoes(root, app, tipo) {
           : ""
       }
     </div>
-    ${modo !== "estudar" ? filtroTopicosPainelHTML(st, S.filtroTop[tipo].sel, S.filtroTop[tipo].aberto) : ""}
+    ${modo !== "estudar" && tipo !== "juris" ? filtroTopicosPainelHTML(st, S.filtroTop[tipo].sel, S.filtroTop[tipo].aberto) : ""}
     ${tipo === "juris" && modo === "ler" && !modoLeitor ? ultimoInfoBadgeHTML(st) : ""}
 
     ${mostrarBiblioteca ? bibliotecaLeisHTML(st, store, normasLei) : ""}
@@ -441,6 +441,7 @@ function renderIndicacoes(root, app, tipo) {
     "importar-metas": () => abrirImportarMetas(app, tipo),
     // Fase 6 — índice de busca semântica DENTRO do módulo (Lei Seca/Jurisprudência), não mais em Materiais.
     "abrir-indice": () => { if (!store.iaDisponivel()) return avisoIA(app, "Busca por significado"); abrirIndiceModulo(app, tipo); },
+    "buscar-juris": () => { const juris = st.indicacoes.filter((i) => i.tipo === "juris" && (i.texto || "").trim()); if (!juris.length) return toast("Importe súmulas/teses antes de buscar.", "erro"); abrirBuscaJuris(app, store, juris); },
     // Minhas Leis — abrir uma lei do card, voltar à biblioteca, ou continuar de onde parou.
     "abrir-lei": (el) => { S.leiAtiva.lei = el.getAttribute("data-norma"); S.leiFiltro.lei = null; app.refresh(); },
     "voltar-biblioteca": () => { S.leiAtiva.lei = null; S.leiFiltro.lei = null; app.refresh(); },

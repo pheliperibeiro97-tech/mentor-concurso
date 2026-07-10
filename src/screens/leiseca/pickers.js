@@ -6,7 +6,7 @@ import { icone } from "../../icones.js";
 import { S } from "./estado.js";
 
 export const TRIBUNAIS = ["STF", "STJ", "TJSP"]; // padrão; "Outro" no seletor cobre qualquer outro
-export const CATEGORIAS_JURIS = ["Súmula", "Súmula Vinculante", "Tema repetitivo", "Repercussão Geral", "Precedente obrigatório", "Jurisprudência em Teses", "Tese", "Enunciado"];
+export const CATEGORIAS_JURIS = ["Súmula", "Súmula Vinculante", "Tema repetitivo", "Repercussão Geral", "Precedente", "Tese"];
 // ---------- helpers ----------
 export function topicoOptions(st, disciplinaId, selecionado) {
   const tops = st.topicos.filter((t) => !disciplinaId || t.disciplinaId === disciplinaId);
