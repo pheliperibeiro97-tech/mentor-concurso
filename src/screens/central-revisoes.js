@@ -7,6 +7,7 @@ import { esc, fmtData, todayISO, addDays } from "../util.js";
 import { icone } from "../icones.js";
 import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
 import { abrirRegistroSessao } from "../registro-sessao.js";
+import { sanitize } from "./resumos.js"; // sanitiza conteudoHTML também na LEITURA (sync/import antigo pode não ter passado pelo save)
 import * as crono from "../cronometro.js";
 
 // Filtros (persistem entre re-renders da sessão). "" = sem filtro.
@@ -326,7 +327,7 @@ function atualizarFocoRev(root, store) {
 function conteudoRevelado(st, it) {
   if (it.tipo === "resumo") {
     const r = st.resumos.find((x) => x.id === it.refId);
-    return r && r.conteudoHTML ? `<div class="fq-rev-conteudo">${r.conteudoHTML}</div>` : `<p class="muted">Resumo sem conteúdo.</p>`;
+    return r && r.conteudoHTML ? `<div class="fq-rev-conteudo">${sanitize(r.conteudoHTML)}</div>` : `<p class="muted">Resumo sem conteúdo.</p>`;
   }
   if (it.tipo === "lei" || it.tipo === "juris") {
     const ind = st.indicacoes.find((x) => x.id === it.refId);
@@ -340,7 +341,7 @@ function conteudoRevelado(st, it) {
       return `<div class="fq-rev-conteudo"><p class="muted small">Palavras-chave marcadas neste tópico:</p><ul class="fq-rev-kws">${kws.map((k) => `<li>${esc(k)}</li>`).join("")}</ul></div>`;
     }
     if (resumos.length && resumos[0].conteudoHTML) {
-      return `<div class="fq-rev-conteudo">${resumos[0].conteudoHTML}</div>`;
+      return `<div class="fq-rev-conteudo">${sanitize(resumos[0].conteudoHTML)}</div>`;
     }
     return `<div class="fq-rev-conteudo"><p>Revise mentalmente o essencial de <b>${esc(it.titulo)}</b> — o que caiu, os pontos-chave e onde você erra.</p><p class="muted small">Dica: marque as palavras-chave (grifo amarelo) ou crie um resumo deste tópico para elas aparecerem aqui.</p></div>`;
   }

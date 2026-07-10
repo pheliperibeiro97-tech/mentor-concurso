@@ -19,7 +19,7 @@ import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
 import { montarLembretesFab } from "./lembretes.js";
-import { initTooltips } from "./tooltip.js";
+import { initTooltips, esconderTooltip } from "./tooltip.js";
 import { montarOrbs, setOrbsOffline } from "./orb.js";
 
 iniciarCapturaErros(); // captura erros não tratados desde o início (para o relatório de diagnóstico)
@@ -273,12 +273,25 @@ function navHTML() {
 // Não recria um input próprio — clicar (ou Ctrl/⌘+K) abre a paleta, que já tem o campo real
 // e reusa 100% o motor do chat (interpretar → propor → confirmar → executar).
 const EH_MAC = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform || "");
-function topbarHTML(store) {
+
+// Saudação + data do topo. Extraída do topbarHTML para o watcher da virada do dia
+// (setInterval no bootstrap) poder recomputar e comparar sem re-render global.
+// `chave` identifica o par saudação+data corrente (vai num data-attr do chip).
+function heyInfo(store) {
   const st = store.get();
   const hora = new Date().getHours();
   const saud = hora < 5 ? "Boa madrugada" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const dataFmt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
   const cargo = st.concurso && st.concurso.cargo ? st.concurso.cargo : "";
+  return {
+    chave: `${saud}|${dataFmt}`,
+    html: `${esc(saud)} · <b>${esc(dataFmt)}</b>${cargo ? ` · <span class="tb-cargo">${esc(cargo)}</span>` : ""}`,
+  };
+}
+
+function topbarHTML(store) {
+  const st = store.get();
+  const hey = heyInfo(store);
   // Contexto persistente no topo (reusa os mesmos sinais da tela Hoje): prova + ofensiva.
   let provaChip = "";
   try {
@@ -300,7 +313,7 @@ function topbarHTML(store) {
   return `
     <header class="topbar">
       <div class="topbar-inner">
-        <div class="tb-hey">${esc(saud)} · <b>${esc(dataFmt)}</b>${cargo ? ` · <span class="tb-cargo">${esc(cargo)}</span>` : ""}</div>
+        <div class="tb-hey" data-hey="${esc(hey.chave)}">${hey.html}</div>
         <div class="tb-sp"></div>
         ${provaChip}
         ${streakChip}
@@ -402,6 +415,7 @@ function bottomBarHTML() {
 }
 
 function render(preservarScroll = true) {
+  esconderTooltip(); // re-render/navegação destrói a âncora — sem isto o portal fica "preso" visível
   const root = document.getElementById("app");
   // Preserva a posição de rolagem entre re-renders (ex.: expandir uma disciplina),
   // para a tela não "pular" para o topo. Ao navegar, preservarScroll=false.
@@ -596,6 +610,19 @@ async function bootstrap() {
   // Re-render em qualquer mudança de estado.
   store.subscribe(() => render());
   render();
+  // Virada do dia / da faixa horária com o app aberto: saudação e data do topo são
+  // calculadas no render, então ficariam defasadas. Watcher registrado UMA vez no boot
+  // (não por render): a cada 60s compara a chave exibida (data-hey) com a atual e, se
+  // mudou, atualiza SÓ o chip do topo — sem re-render global.
+  setInterval(() => {
+    const el = document.querySelector(".topbar .tb-hey");
+    if (!el) return;
+    const hey = heyInfo(store);
+    if (el.getAttribute("data-hey") !== hey.chave) {
+      el.setAttribute("data-hey", hey.chave);
+      el.innerHTML = hey.html;
+    }
+  }, 60000);
   // Accountability (dir.3): dispara as notificações devidas (só no desktop/Tauri).
   dispararNotificacoesDevidas(store);
   // Agendador do lembrete diário (toast no app + notificação do SO no desktop).

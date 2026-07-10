@@ -324,7 +324,7 @@ function abrirEditarResumo(app, { resumo = null, prefill = null } = {}) {
       // editor rico
       const editor = corpo.querySelector("#res-editor");
       if (editor) {
-        if (obj && obj.conteudoHTML) editor.innerHTML = obj.conteudoHTML;
+        if (obj && obj.conteudoHTML) editor.innerHTML = sanitize(obj.conteudoHTML);
         corpo.querySelectorAll(".rt-btn, .rt-swatch").forEach((b) => {
           b.addEventListener("mousedown", (ev) => {
             ev.preventDefault();
@@ -482,7 +482,7 @@ function resumoHTML(st, r) {
                   <p class="resumo-previa">${previa}</p>
                   <details class="resumo-leia">
                     <summary class="lnk">Ler resumo</summary>
-                    <div class="resumo-corpo">${r.conteudoHTML}</div>
+                    <div class="resumo-corpo">${sanitize(r.conteudoHTML || "")}</div>
                   </details>
                 </div>`
               : `<div class="resumo-conteudo"><span class="muted">(vazio)</span></div>`
@@ -557,7 +557,10 @@ function textoPuro(html) {
   div.innerHTML = html || "";
   return div.textContent || "";
 }
-function sanitize(html) {
+// Sanitização de HTML de resumo. Exportada porque precisa rodar também na LEITURA
+// (aqui e na Central de Revisões): conteúdo vindo de sync/import antigo pode nunca
+// ter passado pelo salvar, então sanitizar só no save não protege o render.
+export function sanitize(html) {
   const div = document.createElement("div");
   div.innerHTML = html || "";
   div.querySelectorAll("script,style,iframe,object,embed").forEach((n) => n.remove());

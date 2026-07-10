@@ -20,9 +20,10 @@
 
 import { esc } from "./util.js";
 import { icone } from "./icones.js";
+import { EMAIL_SUPORTE } from "./erro-log.js"; // e-mail de suporte único do app
 
 const APP_ID = "mentor-concurso";
-const EMAIL_CONTATO = "phelipe.ribeiro97@gmail.com";
+const EMAIL_CONTATO = EMAIL_SUPORTE;
 
 // === CONFIGURAÇÃO DO PORTEIRO (preencher antes de distribuir) ===
 const PORTEIRO_URL = "https://script.google.com/macros/s/AKfycbwee3Zn6XFLZc18tETBwoEltkSAlDoKhjnBetxkyEvrEXyIKcMf_4zVV-4Pn3ggrExuEg/exec";

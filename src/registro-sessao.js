@@ -12,7 +12,7 @@
 // O modelo (store.registrarSessao) ganhou campos ricos (aulaId, materiais,
 // marcarConcluido, revisaoEscada) mantendo os legados preenchidos pelo item principal,
 // então Acompanhamento e estatísticas seguem intactos.
-import { abrirJanela, toast, confetti } from "./ui.js";
+import { abrirJanela, toast, celebrarMeta } from "./ui.js";
 import { icone } from "./icones.js";
 import { esc, fmtMMSS, fmtTempo, todayISO } from "./util.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "./ciclo.js";
@@ -33,14 +33,6 @@ function rotuloTopico(st, t) {
 function aulasDoTopico(st, topicoId) {
   if (!topicoId) return [];
   return (st.aulas || []).filter((a) => Array.isArray(a.topicoIds) && a.topicoIds.includes(topicoId));
-}
-// Confete quando a sessão faz o tempo do dia CRUZAR a meta diária (mesma regra da Home).
-function celebrarMeta(store, antes) {
-  const dep = store.metas();
-  if (dep.metaDiariaMin > 0 && (antes.feitoHojeMin || 0) < dep.metaDiariaMin && (dep.feitoHojeMin || 0) >= dep.metaDiariaMin) {
-    confetti();
-    toast("Meta diária batida! Excelente ritmo.", "ok");
-  }
 }
 
 export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = null, topicoPadrao = null, missaoPadrao = null } = {}) {

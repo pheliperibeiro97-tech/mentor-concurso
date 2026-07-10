@@ -60,15 +60,24 @@ export function montarChat(store, app) {
   }
   renderConversa();
 
+  // Fechado, o painel some só visualmente (classe .oculto) — sem `inert`, o #chat-in
+  // continuava focável por Tab e recebendo texto "no escuro". `inert` desativa foco e
+  // interação de TODOS os filhos (suportado no Chromium/WebView2); o tabIndex=-1 no
+  // textarea é cinto de segurança extra.
   const abrir = () => {
     panel.classList.remove("oculto");
+    panel.removeAttribute("inert");
+    input.removeAttribute("tabindex");
     fab.classList.add("ativo");
     input.focus();
   };
   const fechar = () => {
     panel.classList.add("oculto");
+    panel.setAttribute("inert", "");
+    input.tabIndex = -1;
     fab.classList.remove("ativo");
   };
+  fechar(); // estado inicial coerente (nasce oculto → também inerte)
   fab.addEventListener("click", () => (panel.classList.contains("oculto") ? abrir() : fechar()));
   panel.querySelector(".chat-x").addEventListener("click", fechar);
   panel.querySelector(".chat-limpar").addEventListener("click", () => {
@@ -333,7 +342,12 @@ export function atualizarChatVisibilidade(onboarded) {
   const fab = document.getElementById("chat-fab");
   const panel = document.getElementById("chat-panel");
   if (fab) fab.style.display = onboarded ? "" : "none";
-  if (!onboarded && panel) panel.classList.add("oculto");
+  if (!onboarded && panel) {
+    panel.classList.add("oculto");
+    panel.setAttribute("inert", ""); // fechado também para foco/teclado, não só visualmente
+    const inp = panel.querySelector("#chat-in");
+    if (inp) inp.tabIndex = -1;
+  }
 }
 
 // Saudação inicial — Fase 2: persona única (Mentor) + CHIPS CONTEXTUAIS pela tela

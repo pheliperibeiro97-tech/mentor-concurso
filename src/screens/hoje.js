@@ -1,16 +1,7 @@
 // Tela "Hoje": conduz o ciclo do dia + cronômetro Pomodoro + lançamento manual.
 // Cronômetro com dois modos: REGRESSIVO (conta para baixo de um tempo definível) e
 // PROGRESSIVO (conta para cima até você interromper).
-import { bindActions, toast, header, escolher, faixaIA, confetti, plural, abrirJanela, ativarCountUp, revelarTexto } from "../ui.js";
-
-// Comemora (confete) quando uma sessão faz o tempo do dia CRUZAR a meta diária.
-function celebrarMeta(store, antes) {
-  const dep = store.metas();
-  if (dep.metaDiariaMin > 0 && (antes.feitoHojeMin || 0) < dep.metaDiariaMin && (dep.feitoHojeMin || 0) >= dep.metaDiariaMin) {
-    confetti();
-    toast("Meta diária batida! Excelente ritmo.", "ok");
-  }
-}
+import { bindActions, toast, header, escolher, faixaIA, celebrarMeta, plural, abrirJanela, ativarCountUp, revelarTexto } from "../ui.js";
 import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";

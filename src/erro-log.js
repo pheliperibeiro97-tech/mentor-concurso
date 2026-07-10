@@ -4,7 +4,10 @@
 // e-mail para análise. Nada é enviado automaticamente; é sempre o usuário quem exporta.
 import { backendName } from "./persistence.js";
 
-export const APP_VERSION = "0.6.1"; // manter em sincronia com src-tauri/tauri.conf.json
+// Versão vem do package.json via `define` do Vite (vite.config.js) — fonte única, nunca
+// mais desatualiza à mão. Fora do Vite (ex.: node --check) o global não existe → "dev".
+export const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+// E-mail de suporte ÚNICO do app (config.js e licenca.js importam daqui).
 export const EMAIL_SUPORTE = "phelipe.ribeiro97@gmail.com";
 
 const LS = "mentor_errlog_v1";

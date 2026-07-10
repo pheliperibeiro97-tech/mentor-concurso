@@ -1009,6 +1009,17 @@ export function confetti(x, y) {
   setTimeout(() => cont.remove(), 1400);
 }
 
+// Confete quando uma sessão faz o tempo do dia CRUZAR a meta diária (mesma regra em toda
+// parte — antes duplicada em hoje.js e registro-sessao.js). `antes` = store.metas() capturado
+// ANTES de registrar a sessão.
+export function celebrarMeta(store, antes) {
+  const dep = store.metas();
+  if (dep.metaDiariaMin > 0 && (antes.feitoHojeMin || 0) < dep.metaDiariaMin && (dep.feitoHojeMin || 0) >= dep.metaDiariaMin) {
+    confetti();
+    toast("Meta diária batida! Excelente ritmo.", "ok");
+  }
+}
+
 // Esqueleto de documento "nascendo" (shimmer) — mostrado durante gerações de IA no lugar
 // de um spinner. Passa a sensação premium de que o conteúdo está sendo redigido.
 export function skeletonDoc(linhas = 5, { titulo = true } = {}) {

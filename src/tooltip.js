@@ -26,6 +26,13 @@ function esconder() {
   if (tipEl) tipEl.classList.remove("tip-on");
 }
 
+// Exportada para o render global (main.js): quando a tela re-renderiza ou navega, a
+// âncora do tooltip é destruída mas o portal (position:fixed no <body>) continuaria
+// visível, "preso" no ar. O main.js chama isto no início de cada render.
+export function esconderTooltip() {
+  esconder();
+}
+
 function posicionar(alvo) {
   const txt = alvo.getAttribute("data-tip");
   if (!txt) return esconder();

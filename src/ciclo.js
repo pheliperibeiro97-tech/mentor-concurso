@@ -5,6 +5,11 @@ import { vencidos } from "./sm2.js";
 
 export const FASES = {
   E: { codigo: "E", nome: "Estudo", cor: "#3b82f6", desc: "Aprender conteúdo novo" },
+  // ATENÇÃO — LEGADO PROPOSITAL, NÃO "CONSERTAR": a chave é "A" mas o código exibido é "P".
+  // "A" (de "Aplicação", nome antigo da fase) é a chave HISTÓRICA persistida nos dados dos
+  // usuários (sessoes[].fase === "A", ORDEM_FASES, FASE_ICON...). Renomear a chave para "P"
+  // quebraria todo dado já salvo e exigiria migração. O rótulo/código visível ("P" de
+  // "Prática") vive no campo `codigo`; a chave fica "A" para sempre.
   A: { codigo: "P", nome: "Prática", cor: "#10b981", desc: "Resolver questões" },
   R: { codigo: "R", nome: "Revisão", cor: "#f59e0b", desc: "Flashcards e caderno de erros" },
   // A 4ª etapa não é uma sessão cronometrada: é o ajuste de rota, feito no
