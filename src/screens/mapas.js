@@ -132,7 +132,7 @@ export default function renderMapas(root, app) {
 
   root.innerHTML = `
     ${header("Mapas mentais", "Suas ideias em árvore. Crie a partir de tópico, material, resumo, tema, arquivo ou do zero; revise na escada da memória e gere flashcards e questões a partir deles.", imprimirBtn)}
-    ${due.length ? `<div class="plano-h"><h2>Para revisar hoje</h2><span class="cnt">${due.length}</span></div>${due.map(cardRevisar).join("")}` : ""}
+    ${due.length ? `<div class="card u-flex u-between u-wrap u-mb-16"><span>${icone("calendar-check")} <b>${due.length}</b> ${due.length === 1 ? "mapa vence" : "mapas vencem"} hoje — a fila do dia vive na Central de Revisões.</span><button class="btn btn-primary btn-sm" data-action="ir-central-mapas">Abrir a Central</button></div>` : ""}
     <div class="plano-h mapa-listhead" style="align-items:center">
       <h2>Todos os mapas</h2>
       <span class="cnt">${filtrados.length}${filtroTop ? ` de ${maps.length}` : ""}</span>
@@ -172,6 +172,7 @@ export default function renderMapas(root, app) {
     if (cont) cont.innerHTML = btnImprimirPadrao;
   };
   bindActions(root, {
+    "ir-central-mapas": () => app.navigate("revisoes"),
     abrir: (el) => abrir(el.getAttribute("data-id")),
     "print-um": (el) => { const m = store.get().mapasMentais.find((x) => x.id === el.getAttribute("data-id")); if (m) imprimir(`Mapa mental — ${m.titulo}`, arvoreParaHTML(m)); },
     // MODO SELEÇÃO: 1º clique revela os checkboxes; depois "Imprimir marcados" (ou Cancelar).

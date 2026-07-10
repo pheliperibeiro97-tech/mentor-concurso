@@ -17,7 +17,7 @@ let filtroTipo = "";
 
 // Sessão única "Revisar tudo em foco": percorre as revisões vencidas (exceto o lote de
 // flashcards, que tem foco próprio) uma a uma — recorde → revele → "Revisei" (concluirRevisao).
-let focoRev = { ativo: false, fila: [], idx: 0, revelado: false, feitas: {}, anim: true };
+let focoRev = { ativo: false, fila: [], idx: 0, revelado: false, feitas: {}, anim: true, fcVenc: 0 };
 
 const TIPO_INFO = {
   topico: { ico: "repeat-2", nome: "Tópico", cor: "#f59e0b" },
@@ -37,10 +37,16 @@ function quando(it) {
 function cardItem(it) {
   const ti = TIPO_INFO[it.tipo] || TIPO_INFO.topico;
   const meta = [ti.nome, it.disciplinaNome && it.disciplinaNome !== "—" ? it.disciplinaNome : null].filter(Boolean).join(" · ");
+  // Fase 1: baixa GRADUADA (mesma escala das telas de origem) — o "Concluir" binário
+  // achatava tudo em "lembrei" e corrompia o espaçamento de quem tinha esquecido.
   const acoes = it.acoes
     ? `<button class="rev-remover" data-action="rev-remover" data-id="${it.id}" data-tip="Remover da fila de revisão">${icone("trash-2")}</button>
        <button class="btn btn-ghost btn-sm" data-action="rev-reprogramar" data-id="${it.id}" data-tip="Adiar para outra data">${icone("calendar-days")} Reprogramar</button>
-       <button class="btn btn-ghost btn-sm" data-action="rev-concluir" data-id="${it.id}" data-tip="Dar baixa (já revisei)">${icone("check")} Concluir</button>`
+       <span class="rev-grad u-flex-6" role="group" aria-label="Dar baixa: como foi lembrar?">
+         <button class="btn-grad bg-esqueci" data-action="rev-concluir" data-id="${it.id}" data-r="esqueci" data-tip="Esqueci — reinicia a curva (volta em 24h)">Esqueci</button>
+         <button class="btn-grad bg-lembrei" data-action="rev-concluir" data-id="${it.id}" data-r="lembrei" data-tip="Lembrei — sobe um degrau na escada">Lembrei</button>
+         <button class="btn-grad bg-facil" data-action="rev-concluir" data-id="${it.id}" data-r="facil" data-tip="Fácil — sobe dois degraus">Fácil</button>
+       </span>`
     : "";
   return `<div class="rev-item rev-${it.status}" style="--cor:${ti.cor}" data-id="${it.id}">
       <span class="rev-ico">${icone(ti.ico)}</span>
@@ -118,7 +124,7 @@ export default function renderCentralRevisoes(root, app) {
     </section>
 
     ${pendentesFoco.length ? `<div class="rev-foco-cta">
-      <button class="btn fc-foco-btn" data-action="rev-foco-tudo" data-tip="Percorre suas revisões vencidas uma a uma, em tela cheia, sem distração (flashcards têm foco próprio).">${icone("expand")} Revisar tudo em foco <span class="rev-foco-n">${pendentesFoco.length}</span></button>
+      <button class="btn fc-foco-btn" data-action="rev-foco-tudo" data-tip="Revise tudo de hoje em sequência, em tela cheia. Ao final, emendamos os flashcards.">${icone("expand")} Revisar tudo em foco <span class="rev-foco-n">${pendentesFoco.length}</span></button>
     </div>` : ""}
 
     <section class="card rev-filtros">
@@ -161,6 +167,7 @@ export default function renderCentralRevisoes(root, app) {
     "rev-foco-tudo": () => {
       // Enriquece os tópicos com o conteúdo do "reler" (palavras-chave marcadas 🟡 +
       // resumos vinculados) para o reveal ter substância, não só um prompt.
+      focoRev.fcVenc = store.flashcardsVencidos().length;
       focoRev.fila = pendentesFoco.map((it) => {
         if (it.tipo === "topico") {
           it._keywords = store.palavrasChaveDoTopico(it.refId);
@@ -183,12 +190,18 @@ export default function renderCentralRevisoes(root, app) {
     "foco-proximo": () => { if (focoRev.idx < focoRev.fila.length) { focoRev.idx++; focoRev.revelado = false; atualizarFocoRev(root, store); } },
     "rev-foco-concluir": (el) => {
       const id = el.getAttribute("data-id");
-      const dias = store.concluirRevisao(id, el.getAttribute("data-titulo") || "");
+      const grau = el.getAttribute("data-r") || "lembrei";
+      const dias = store.concluirRevisao(id, el.getAttribute("data-titulo") || "", grau);
       focoRev.feitas[id] = true;
-      if (dias != null) toast(`Revisada — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`, "ok");
+      if (dias != null) toast(grau === "esqueci" ? `Volta ${dias === 1 ? "amanhã" : `em ${dias} dias`} para fixar.` : `Revisada — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`, "ok");
       focoRev.idx++;
       focoRev.revelado = false;
       atualizarFocoRev(root, store);
+    },
+    // Fase 1: ao fim da fila da Central, emenda os flashcards vencidos (funil único do dia).
+    "rev-foco-flashcards": () => {
+      focoRev.ativo = false;
+      app.navigate("flashcards", { iniciarFoco: true });
     },
     "rev-foco-pular": () => { focoRev.idx++; focoRev.revelado = false; atualizarFocoRev(root, store); },
     "sair-foco": () => { focoRev.ativo = false; app.refresh(); },
@@ -212,11 +225,15 @@ export default function renderCentralRevisoes(root, app) {
     "rev-concluir": (el) => {
       const it = store.revisoesConsolidadas().find((x) => x.id === el.getAttribute("data-id"));
       if (!it) return;
-      const dias = store.concluirRevisao(it.id, it.titulo);
+      const grau = el.getAttribute("data-r") || "lembrei";
+      const dias = store.concluirRevisao(it.id, it.titulo, grau);
       if (dias == null) return;
       // Ponte: oferece REGISTRAR O TEMPO da revisão (abre o registro pré-preenchido: tópico + fase R).
+      const msg = grau === "esqueci"
+        ? `Sem problema — volta ${dias === 1 ? "amanhã" : `em ${dias} dias`} para fixar.`
+        : `Revisão concluída — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`;
       toast(
-        `Revisão concluída — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`,
+        msg,
         "ok",
         it.topicoId ? { acaoLabel: "Registrar tempo", duracao: 6500, onAcao: () => abrirRegistroSessao(store, app, { modo: "manual", fasePadrao: "R", topicoPadrao: it.topicoId }) } : undefined
       );
@@ -266,7 +283,9 @@ export default function renderCentralRevisoes(root, app) {
       if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="revelar-rev"]')?.click(); }
       return;
     }
-    if (e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="rev-foco-concluir"]')?.click(); }
+    if (e.key === "Enter" || e.key === "2") { e.preventDefault(); root.querySelector('[data-action="rev-foco-concluir"][data-r="lembrei"]')?.click(); }
+    else if (e.key === "1") { e.preventDefault(); root.querySelector('[data-action="rev-foco-concluir"][data-r="esqueci"]')?.click(); }
+    else if (e.key === "3") { e.preventDefault(); root.querySelector('[data-action="rev-foco-concluir"][data-r="facil"]')?.click(); }
     else if (e.key === " ") { e.preventDefault(); root.querySelector('[data-action="rev-foco-pular"]')?.click(); }
   }
   document.addEventListener("keydown", onKey);
@@ -279,6 +298,7 @@ export default function renderCentralRevisoes(root, app) {
 // e o overlay "pisca" (parece fechar e reabrir).
 function atualizarFocoRev(root, store) {
   const foco = root.querySelector(".fc-foco");
+  focoRev.fcVenc = store.flashcardsVencidos().length; // mantém a oferta de emenda atualizada
   const novoHTML = focoRevOverlayHTML(store.get(), "fade");
   if (!foco) return;
   const tmp = document.createElement("div");
@@ -345,20 +365,26 @@ function revCardHTML(st, it, revelado, feita) {
     ${conteudoRevelado(st, it)}
     <div class="fq-rev-acoes">
       <button class="btn btn-ghost" data-action="rev-foco-pular" data-tip="Não dar baixa agora (Espaço)">Pular</button>
-      <button class="btn btn-primary" data-action="rev-foco-concluir" data-id="${it.id}" data-titulo="${esc(it.titulo)}" data-tip="Dar baixa e reprogramar a próxima (Enter)">${icone("check")} Revisei</button>
+      <span class="rev-grad u-flex-6" role="group" aria-label="Como foi lembrar?">
+        <button class="btn-grad bg-esqueci" data-action="rev-foco-concluir" data-id="${it.id}" data-titulo="${esc(it.titulo)}" data-r="esqueci" data-tip="Reinicia a curva — volta em 24h (tecla 1)">Esqueci</button>
+        <button class="btn-grad bg-lembrei" data-action="rev-foco-concluir" data-id="${it.id}" data-titulo="${esc(it.titulo)}" data-r="lembrei" data-tip="Sobe um degrau na escada (tecla 2 ou Enter)">Lembrei</button>
+        <button class="btn-grad bg-facil" data-action="rev-foco-concluir" data-id="${it.id}" data-titulo="${esc(it.titulo)}" data-r="facil" data-tip="Sobe dois degraus (tecla 3)">Fácil</button>
+      </span>
     </div>
-    <div class="fc-atalhos muted small">${icone("keyboard")} <b>Enter</b> revisei · <b>Espaço</b> pular</div>
+    <div class="fc-atalhos muted small">${icone("keyboard")} <b>1</b> esqueci · <b>2</b>/<b>Enter</b> lembrei · <b>3</b> fácil · <b>Espaço</b> pular</div>
   </div>`;
 }
 
 function revConclusaoHTML(feitas, total) {
+  const fc = focoRev.fcVenc || 0;
   return `<div class="fq-panel fq-conclusao">
       <div class="fq-check">${icone("check-check")}</div>
       <h2>Revisões em dia</h2>
       <p class="muted">Você concluiu <b>${feitas}</b> de ${total} ${total === 1 ? "revisão" : "revisões"} nesta sessão.</p>
       <div class="fq-conclusao-acoes">
+        ${fc ? `<button class="btn btn-primary btn-lg" data-action="rev-foco-flashcards" data-tip="Emenda a revisão de flashcards em tela cheia — fecha o dia num funil só.">${icone("layers")} Continuar com ${fc} ${fc === 1 ? "flashcard" : "flashcards"}</button>` : ""}
         ${feitas ? `<button class="btn btn-soft btn-lg" data-action="rev-foco-registrar" data-tip="Lança o tempo desta sessão de revisão (usa o cronômetro do foco).">${icone("clock-3")} Registrar tempo</button>` : ""}
-        <button class="btn btn-primary btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>
+        <button class="btn ${fc ? "btn-ghost" : "btn-primary"} btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>
       </div>
     </div>`;
 }

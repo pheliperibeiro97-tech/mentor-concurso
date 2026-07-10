@@ -6839,18 +6839,22 @@ export const store = {
     else if (tipo === "ind") { const o = state.indicacoes.find((x) => x.id === refId); if (o && o.revisao) o.revisao.proxima = novaData; }
     commit();
   },
-  // Conclui uma revisão (baixa rápida "já revisei"): avança pela escada do tipo + registra no log.
-  concluirRevisao(itemId, titulo) {
+  // Conclui uma revisão avançando pela escada do tipo + registra no log.
+  // Fase 1: aceita a GRADUAÇÃO ("esqueci" reinicia · "lembrei" sobe 1 · "facil" sobe 2),
+  // preservando a inteligência do espaçamento também quando a baixa é dada pela Central.
+  concluirRevisao(itemId, titulo, grau = "lembrei") {
     if (!itemId) return null;
     const [tipo, refId] = itemId.split(":");
+    const g = grau === "esqueci" || grau === "facil" ? grau : "lembrei";
+    const gOk = g === "lembrei" ? "ok" : g; // resumo/mapa/ind usam "ok" no degrau do meio
     let dias = null;
-    if (tipo === "topico") dias = this.revisarTopico(refId, "lembrei");
-    else if (tipo === "resumo") dias = this.revisarResumo(refId, "ok");
-    else if (tipo === "mapa") dias = this.revisarMapa(refId, "ok");
-    else if (tipo === "ind") dias = this.revisarMemoria(refId, "ok");
+    if (tipo === "topico") dias = this.revisarTopico(refId, g);
+    else if (tipo === "resumo") dias = this.revisarResumo(refId, gOk);
+    else if (tipo === "mapa") dias = this.revisarMapa(refId, gOk);
+    else if (tipo === "ind") dias = this.revisarMemoria(refId, gOk);
     if (dias === null) return null;
     if (!Array.isArray(state.revisoesFeitas)) state.revisoesFeitas = [];
-    state.revisoesFeitas.push({ id: uid("revf"), item: itemId, tipo, refId, titulo: titulo || "", data: nowISO() });
+    state.revisoesFeitas.push({ id: uid("revf"), item: itemId, tipo, refId, titulo: titulo || "", grau: g, data: nowISO() });
     commit();
     return dias;
   },

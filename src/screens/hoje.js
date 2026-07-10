@@ -467,14 +467,16 @@ function hubRevisoesHTML(store) {
   }
   const item = (n, ico, sing, plur, rota) =>
     n ? `<button class="revitem" data-action="hub-ir" data-rota="${rota}">${ico}<b>${n}</b> ${n === 1 ? sing : plur}</button>` : "";
+  // Fase 1: "abrir tudo" e os itens de tópico/resumo/mapa apontam para a CENTRAL —
+  // é ela quem lista e dá baixa graduada; as telas de origem guardam só o conteúdo.
   return `<section class="plano-sec revhub-sec">
-    ${cab(`<a data-action="hub-ir" data-rota="revtopico">abrir tudo →</a>`)}
+    ${cab(`<a data-action="hub-ir" data-rota="revisoes">abrir tudo →</a>`)}
     <div class="revstrip">
       ${item(fc, icone("layers"), "flashcard", "flashcards", "flashcards")}
       ${item(mem, icone("brain"), "item de lei seca", "itens de lei seca", "leiseca")}
-      ${item(top, icone("repeat-2"), "revisão de tópico", "revisões de tópico", "revtopico")}
-      ${item(res, icone("file-text"), "resumo", "resumos", "resumos")}
-      ${item(mapasRev, icone("network"), "mapa mental", "mapas mentais", "mapas")}
+      ${item(top, icone("repeat-2"), "revisão de tópico", "revisões de tópico", "revisoes")}
+      ${item(res, icone("file-text"), "resumo", "resumos", "revisoes")}
+      ${item(mapasRev, icone("network"), "mapa mental", "mapas mentais", "revisoes")}
     </div>
   </section>`;
 }

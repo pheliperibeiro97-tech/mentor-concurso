@@ -83,6 +83,20 @@ export default function renderFlashcards(root, app) {
     filtroRev.sel = [app.params.topicoId];
     app.params.topicoId = null;
   }
+  // Fase 1: emenda vinda da Central ("Continuar com os N flashcards") — entra DIRETO
+  // no modo foco com todos os vencidos, sem exigir mais um clique.
+  if (app.params && app.params.iniciarFoco) {
+    app.params.iniciarFoco = null;
+    filtroRev.sel = [];
+    filtroTipo = "todos";
+    puladosSessao = new Set();
+    focoFila = store.flashcardsVencidos().map((c) => c.id);
+    focoIdx = 0;
+    focoPlacar = {};
+    focoAtivo = focoFila.length > 0;
+    revelado = false;
+    perguntandoMotivoId = null;
+  }
   // #4: veio de uma geração → estuda SÓ os recém-gerados (some ao clicar "Ver todos" ou ao concluir).
   if (app.params && app.params.lote) {
     filtroLote = app.params.lote;

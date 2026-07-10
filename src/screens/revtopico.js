@@ -21,6 +21,21 @@ export default function renderRevTopico(root, app) {
   const proximas = store.proximasRevisoesTopico();
   const optIn = !!st.config.revisaoTopicoAuto;
 
+  // Fase 1: a Central navega para cá com { topicoId } para abrir DIRETO o fluxo de
+  // revisão (reler/escrever+IA) — a listagem de vencimentos agora vive só na Central.
+  if (app.params && app.params.topicoId) {
+    const tid = app.params.topicoId;
+    app.params.topicoId = null;
+    if (st.topicos.some((t) => t.id === tid)) {
+      ativo = tid;
+      modo = null;
+      revelado = false;
+      recallFeedback = null;
+      braindumpTexto = "";
+      feedbackFalou = false;
+    }
+  }
+
   // Fluxo de revisão aberto?
   if (ativo) {
     const topico = st.topicos.find((t) => t.id === ativo);
@@ -66,48 +81,16 @@ export default function renderRevTopico(root, app) {
     }
 
     <section class="card revtop-hoje">
-      <div class="plano-h"><h2>Para revisar hoje</h2>${vencidas.length ? `<span class="cnt">${vencidas.length}</span>` : ""}</div>
-      ${
-        vencidas.length
-          ? `<ul class="revtop-lista">
-              ${vencidas
-                .map(({ rev, topico }) => {
-                  const atraso = daysBetween(rev.proxima, todayISO());
-                  return `<li class="revtop-item">
-                    <div class="revtop-corpo">
-                      <span class="revtop-nome">${esc(nomeTopico(st, topico))}</span>
-                      <span class="muted small">${escadaLabel(rev.intervalo)}${atraso > 0 ? ` · atrasada ${plural(atraso, "dia", "dias")}` : ""}</span>
-                    </div>
-                    <div class="revtop-acoes">
-                      <button class="btn btn-primary btn-sm" data-action="revisar" data-id="${topico.id}">Revisar</button>
-                      <button class="mover-btn" data-action="cancelar" data-id="${topico.id}" data-tip-pos="cima-dir" data-tip="Tirar este tópico da curva de revisão">${icone("x")}</button>
-                    </div>
-                  </li>`;
-                })
-                .join("")}
-            </ul>`
-          : vazio("Tudo em dia por aqui!\nNenhum tópico vencido para revisar agora. Continue estudando que eles voltam na hora certa.", "", icone("party-popper"))
-      }
-    </section>
-
-    ${
-      proximas.length
-        ? `<details class="card revtop-agendadas">
-            <summary>${icone("calendar")} Agendadas <span class="revtop-contador revtop-contador-soft">${proximas.length}</span></summary>
-            <ul class="lista-simples">
-              ${proximas
-                .map(({ rev, topico }) => {
-                  const dif = daysBetween(todayISO(), rev.proxima);
-                  const quando = dif === 1 ? "amanhã" : `em ${dif} dias`;
-                  return `<li>${esc(nomeTopico(st, topico))} <span class="muted">· ${fmtData(rev.proxima)} (${quando}) · ${escadaLabel(rev.intervalo)}</span></li>`;
-                })
-                .join("")}
-            </ul>
-          </details>`
-        : ""
-    }`;
+      <div class="plano-h"><h2>Suas revisões vivem na Central</h2></div>
+      <p class="muted small u-m-0 u-mb-12">A fila do dia (tópicos, resumos, mapas, lei e flashcards) fica num lugar só — a <b>Central de Revisões</b>. Ela traz você para cá quando um tópico precisa ser revisado.</p>
+      <div class="u-flex u-wrap">
+        <button class="btn btn-primary btn-sm" data-action="ir-central">${icone("calendar-check")} Abrir a Central${vencidas.length ? ` (${vencidas.length} ${vencidas.length === 1 ? "tópico vencido" : "tópicos vencidos"})` : ""}</button>
+        ${proximas.length ? `<span class="muted small">${proximas.length} ${proximas.length === 1 ? "agendada" : "agendadas"} para os próximos dias</span>` : ""}
+      </div>
+    </section>`;
 
   bindActions(root, {
+    "ir-central": () => app.navigate("revisoes"),
     "ativar-optin": () => {
       store.setConfig({ revisaoTopicoAuto: true });
       toast("Revisão automática de tópicos ligada.");
