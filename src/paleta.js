@@ -18,6 +18,9 @@ export function abrirPaleta(app) {
   const EXTRAS = [
     { id: "ajuda", label: "Guia do sistema", icone: "circle-help", grupo: "Sistema" },
     { id: "comecar", label: "Por onde começar", icone: "rocket", grupo: "Sistema" },
+    // Fase 1: telas que saíram da barra continuam alcançáveis pela paleta.
+    { id: "revtopico", label: "Revisão de Tópicos", icone: "repeat-2", grupo: "Revisão" },
+    { id: "pratica-ce", label: "Questões C/E", icone: "check-check", grupo: "Prática" },
   ];
   const telas = [...NAV_ITENS, ...EXTRAS].map((it) => ({ kind: "nav", label: it.label, sub: it.grupo, icone: it.icone, run: () => app.navigate(it.id) }));
   const atalhos = (cfg.atalhos || []).map((a) => ({ kind: "nav", label: a.nome, sub: "Atalho", icone: a.icone || "star", run: () => ativarAtalho(app, a) }));

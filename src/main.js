@@ -54,22 +54,26 @@ const ROTAS = [
   { id: "diagnostico", label: "Acompanhamento", icone: "trending-up", cor: "#60a5fa", grupo: "Rotina", render: renderDiagnostico },
   { id: "mentor", label: "Mentor IA", icone: "compass", cor: "#4f9bf5", grupo: "Rotina", render: renderMentor },
 
-  { id: "edital", label: "Edital", icone: "list-checks", cor: "#6d28d9", grupo: "Estudo", render: renderEdital },
+  { id: "edital", label: "Edital", icone: "list-checks", cor: "#7c3aed", grupo: "Estudo", render: renderEdital },
   { id: "documentos", label: "Materiais", icone: "library", cor: "#7c3aed", grupo: "Estudo", render: renderDocumentos },
-  { id: "leiseca", label: "Lei Seca", icone: "scroll-text", cor: "#8b5cf6", grupo: "Estudo", render: renderLeiSeca },
-  { id: "jurisprudencia", label: "Jurisprudência", icone: "scale", cor: "#a855f7", grupo: "Estudo", render: renderJurisprudencia },
+  { id: "leiseca", label: "Lei Seca", icone: "scroll-text", cor: "#7c3aed", grupo: "Estudo", render: renderLeiSeca },
+  { id: "jurisprudencia", label: "Jurisprudência", icone: "scale", cor: "#7c3aed", grupo: "Estudo", render: renderJurisprudencia },
+  // Fase 1: Resumos e Mapas são ARTEFATOS DE ESTUDO (criação); a revisão deles vive na Central.
+  { id: "resumos", label: "Resumos", icone: "file-text", cor: "#7c3aed", grupo: "Estudo", render: renderResumos },
+  { id: "mapas", label: "Mapas mentais", icone: "network", cor: "#7c3aed", grupo: "Estudo", render: renderMapas },
 
   { id: "pratica", label: "Questões", icone: "pencil-line", cor: "#059669", grupo: "Prática", render: renderPratica },
-  { id: "pratica-ce", label: "Questões C/E", icone: "check-check", cor: "#0d9488", grupo: "Prática", render: renderPraticaCE },
-  { id: "correcao", label: "Discursiva e redação", icone: "square-pen", cor: "#10b981", grupo: "Prática", render: renderCorrecao },
-  { id: "simulados", label: "Simulados", icone: "clipboard-list", cor: "#047857", grupo: "Prática", render: renderSimulados },
+  // Fase 1: "Questões C/E" saiu da barra — vira modo dentro de Questões (rota preservada p/ deep-links).
+  { id: "pratica-ce", label: "Questões C/E", icone: "check-check", cor: "#059669", grupo: "Prática", semNav: true, render: renderPraticaCE },
+  { id: "correcao", label: "Discursiva e redação", icone: "square-pen", cor: "#059669", grupo: "Prática", render: renderCorrecao },
+  { id: "simulados", label: "Simulados", icone: "clipboard-list", cor: "#059669", grupo: "Prática", render: renderSimulados },
 
-  { id: "revisoes", label: "Central de Revisões", icone: "calendar-check", cor: "#f59e0b", grupo: "Revisão", render: renderCentralRevisoes },
-  { id: "flashcards", label: "Flashcards", icone: "layers", cor: "#fbbf24", grupo: "Revisão", render: renderFlashcards },
-  { id: "revtopico", label: "Revisão de Tópicos", icone: "repeat-2", cor: "#f59e0b", grupo: "Revisão", render: renderRevTopico },
+  { id: "revisoes", label: "Revisões", icone: "calendar-check", cor: "#f59e0b", grupo: "Revisão", render: renderCentralRevisoes },
+  { id: "flashcards", label: "Flashcards", icone: "layers", cor: "#f59e0b", grupo: "Revisão", render: renderFlashcards },
+  // Fase 1: a LISTAGEM de Revisão de Tópicos é subconjunto da Central; o FLUXO continua
+  // acessível (a Central e o Hoje navegam para cá) — só sai da barra lateral.
+  { id: "revtopico", label: "Revisão de Tópicos", icone: "repeat-2", cor: "#f59e0b", grupo: "Revisão", semNav: true, render: renderRevTopico },
   { id: "erros", label: "Caderno de Erros", icone: "flag", cor: "#f59e0b", grupo: "Revisão", render: renderErros },
-  { id: "resumos", label: "Resumos", icone: "file-text", cor: "#d97706", grupo: "Revisão", render: renderResumos },
-  { id: "mapas", label: "Mapas mentais", icone: "network", cor: "#d97706", grupo: "Revisão", render: renderMapas },
 
   { id: "config", label: "Configurações", icone: "settings", cor: "#64748b", grupo: "Sistema", render: renderConfig },
   // Guia: navegável (via botão em Configurações), mas FORA da barra lateral (semNav).
