@@ -3,9 +3,10 @@
 // final e é COMPOSTO POR MATÉRIA (cotas: X questões de cada disciplina), como uma prova
 // real. Tem modos rápidos, tempo sugerido, embaralho das alternativas e resultado por
 // matéria. Cada resposta vira tentativa (Caderno de Erros + Diagnóstico).
-import { bindActions, toast, vazio, confirmar, seloBadge, imprimir, pedirNumero , plural, ativarCountUp } from "../ui.js";
+import { bindActions, toast, vazio, confirmar, seloBadge, imprimir, pedirNumero , plural, ativarCountUp, skeletonDoc, md } from "../ui.js";
 import { esc, fmtMMSS, fmtTempo, pct } from "../util.js";
 import { icone } from "../icones.js";
+import { comentarSimulado } from "../ia-provider.js";
 
 // Count-up da nota-herói só na 1ª pintura do resultado por sessão (não re-anima a cada
 // re-render, ex.: ao ligar/desligar a correção Cebraspe).
@@ -637,6 +638,9 @@ function renderResultado(root, app, st, formato) {
   }
   const mats = [...porMat.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
+  // Fase 3: erradas desta prova (CTA "Refazer as N erradas" + comentário do Mentor).
+  const erradasIds = r.itens.filter((it) => it.respondida && !it.acertou).map((it) => it.q.id);
+
   // Toggle de correção com desconto (somente formato C/E).
   const toggleCebraspeHTML =
     formato === "ce"
@@ -658,10 +662,16 @@ function renderResultado(root, app, st, formato) {
       <div class="muted small sim-resultado-meta"><span class="num">${r.respondidas}</span>/<span class="num">${r.total}</span> respondidas · <span class="num">${fmtTempo(r.tempoSeg)}</span> <span data-tip="Os erros foram salvos no Caderno de Erros e o tempo no Acompanhamento.">${icone("info")}</span></div>
       ${toggleCebraspeHTML}
       <div class="form-acoes u-center u-mt-16">
+        ${erradasIds.length ? `<button class="btn btn-primary btn-lg" data-action="refazer-erradas" data-tip="Refaz só as que você errou, no Modo Foco — o melhor momento é agora.">${icone("repeat-2")} Refazer as ${erradasIds.length} erradas</button>` : ""}
         <button class="btn btn-add btn-lg" data-action="novo">Novo simulado</button>
         <button class="btn btn-ghost" data-action="ir-erros">Ver Caderno de Erros</button>
       </div>
     </section>
+
+    ${app.store.iaDisponivel() ? `<section class="card card-ia sim-mentor">
+      <div class="plano-h"><h2 class="mentor-sec-t"><span class="orb orb-sm" aria-hidden="true"></span> O que este simulado diz sobre você</h2></div>
+      <div id="sim-mentor-slot">${ss.sim.comentIA ? `<div class="u-m-0">${md(ss.sim.comentIA)}</div>` : skeletonDoc(3, { titulo: false })}</div>
+    </section>` : ""}
 
     ${
       mats.length > 1
@@ -726,11 +736,52 @@ function renderResultado(root, app, st, formato) {
       ss.sim = null;
       app.navigate("erros");
     },
+    // Fase 3: fecha o loop no pico de motivação — refaz SÓ as erradas, direto no Modo Foco.
+    "refazer-erradas": () => {
+      const ids = erradasIds.slice();
+      ss.sim = null;
+      app.navigate(formato === "ce" ? "pratica-ce" : "pratica", { focoErrosIds: ids });
+    },
     "toggle-cebraspe": (el) => {
       app.store.setConfig({ correcaoCebraspe: !!(el && el.checked) });
       app.refresh();
     },
   });
+
+  // Fase 3: o Mentor COMENTA o resultado (1x por prova; cacheado em ss.sim.comentIA para
+  // sobreviver a re-renders como o toggle Cebraspe). Compara com a média anterior e aponta
+  // os tópicos que derrubaram — antes o app ficava mudo no momento de maior emoção.
+  if (app.store.iaDisponivel() && ss.sim && !ss.sim.comentIA && !ss.sim._comentando) {
+    ss.sim._comentando = true;
+    const historico = (st.simulados || []).map((s) => s.aproveitamento).filter((n) => typeof n === "number");
+    const anteriores = historico.slice(0, -1); // exclui o registro desta prova (auto-log)
+    const mediaAnterior = anteriores.length ? Math.round(anteriores.reduce((a, b) => a + b, 0) / anteriores.length) : null;
+    const topErr = {};
+    for (const it of r.itens) {
+      if (!it.respondida || it.acertou) continue;
+      const t = it.q.topicoId ? st.topicos.find((x) => x.id === it.q.topicoId) : null;
+      const nome = t ? t.nome : "Sem tópico";
+      topErr[nome] = (topErr[nome] || 0) + 1;
+    }
+    const dados = {
+      nota: aproveitamento,
+      mediaAnterior,
+      totalQuestoes: r.total,
+      tempoMin: Math.round(r.tempoSeg / 60),
+      porDisciplina: mats.map((m) => ({ nome: m.nome, pct: pct(m.acertos, m.total) })),
+      topicosErrados: Object.entries(topErr).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([nome, n]) => ({ nome, erros: n })),
+    };
+    comentarSimulado(app.store.get().config, dados)
+      .then((txt) => { ss.sim.comentIA = txt; })
+      .catch(() => { ss.sim.comentIA = ""; })
+      .finally(() => {
+        ss.sim._comentando = false;
+        const slot = root.querySelector("#sim-mentor-slot");
+        if (!slot) return;
+        if (ss.sim.comentIA) slot.innerHTML = `<div class="u-m-0">${md(ss.sim.comentIA)}</div>`;
+        else slot.closest(".sim-mentor")?.remove(); // falhou: sai de cena em silêncio
+      });
+  }
 }
 
 // ---------- Consulta posterior (Histórico › Ver correção) ----------

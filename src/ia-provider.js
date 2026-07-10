@@ -753,6 +753,20 @@ export async function comentarQuestao(cfg, { enunciado, alternativas, correta, f
 
 // Comenta uma PROVA inteira (sob demanda, 🤖): visão geral dos temas cobrados, nível e
 // dicas de foco. Baseia-se SÓ nos enunciados/gabaritos fornecidos.
+// Fase 3 — o Mentor comenta o RESULTADO do simulado recem-terminado (o momento de maior
+// carga emocional do concurseiro; antes o app ficava mudo aqui). 3-5 frases + 2 acoes.
+export async function comentarSimulado(cfg, dados) {
+  const system =
+    PERSONA_MENTOR +
+    " O aluno acabou de TERMINAR um simulado. Voce recebe o resultado em JSON (nota, media " +
+    "historica anterior, aproveitamento por disciplina, topicos das questoes erradas). " +
+    "Responda em 3 a 5 frases: (1) leia o resultado - compare com a media anterior quando houver; " +
+    "(2) aponte o que mais derrubou (disciplina/topicos); (3) feche com ate 2 acoes CONCRETAS " +
+    "para os proximos dias. Sem elogios vazios e sem drama. Texto corrido (markdown leve), sem JSON.";
+  const t = await chamar(cfg, { system, user: `RESULTADO DO SIMULADO:\n${JSON.stringify(dados)}`, json: false, temperature: 0.5 });
+  return String(t).trim();
+}
+
 export async function comentarProva(cfg, { titulo, questoes }) {
   const lista = (questoes || [])
     .map((q, i) => `${i + 1}. ${q.enunciado}${q.gabarito ? ` (resp.: ${q.gabarito})` : ""}`)

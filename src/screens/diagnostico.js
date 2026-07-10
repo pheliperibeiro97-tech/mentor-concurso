@@ -212,7 +212,7 @@ export default function renderDiagnostico(root, app) {
   const kpiAnima = !kpiAnimou;
   kpiAnimou = true;
   root.innerHTML = `
-    ${header("Acompanhamento", "Sua evolução, num relance.", `<button class="btn btn-ghost btn-sm" data-action="abrir-imprimir-acomp" data-tip="Escolha o que imprimir desta página">${icone("printer")} Imprimir</button>`)}
+    ${header("Acompanhamento", "Sua evolução, num relance.", `${app.store && app.store.iaDisponivel() ? `<button class="btn btn-ia btn-sm" data-action="explicar-semana" data-tip="O Mentor lê seus números da semana e explica em linguagem humana o que está bom e o que ajustar.">${icone("sparkles")} Explicar minha semana</button>` : ""}<button class="btn btn-ghost btn-sm" data-action="abrir-imprimir-acomp" data-tip="Escolha o que imprimir desta página">${icone("printer")} Imprimir</button>`)}
 
     ${
       pontoTopo
@@ -507,6 +507,21 @@ export default function renderDiagnostico(root, app) {
       corpoHTML: `<div class="grafico-ampliado">${graficoAcuraciaSemanal(store.acuraciaPorSemana(12, desempTop ? { topicoId: desempTop } : desempDisc ? { disciplinaId: desempDisc } : null))}</div>`,
       aoMontar: (ov) => ligarTooltipsGraficos(ov),
     }),
+    // Fase 3: a tela mais densa em números ganha a VOZ do Mentor (mesmo padrão do Dossiê) —
+    // manda os números da semana para o chat e ele explica em linguagem humana.
+    "explicar-semana": () => {
+      if (!app.perguntarNoChat) return;
+      const st2 = store.get();
+      const hoje = new Date();
+      const seg = new Date(hoje); seg.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
+      const iniISO = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, "0")}-${String(seg.getDate()).padStart(2, "0")}`;
+      const sem = (st2.sessoes || []).filter((s) => (s.data || "").slice(0, 10) >= iniISO);
+      const minSem = Math.round(sem.reduce((a, s) => a + (s.tempoSeg || 0), 0) / 60);
+      const tents = (st2.tentativas || []).filter((s) => (s.data || "").slice(0, 10) >= iniISO);
+      const acer = tents.filter((x) => x.acertou).length;
+      const resumoNums = `tempo ${minSem} min em ${sem.length} sessões; questões ${tents.length} (${tents.length ? Math.round((acer / tents.length) * 100) : 0}% de acerto)`;
+      app.perguntarNoChat(`Explique minha semana de estudos em linguagem simples e me diga o que ajustar (números desta semana: ${resumoNums}).`);
+    },
     // Impressão SELECIONÁVEL: o usuário escolhe quais seções da página entram no PDF/impressão.
     "abrir-imprimir-acomp": () => {
       const secoes = [...root.querySelectorAll("[data-print]")];

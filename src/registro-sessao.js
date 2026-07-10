@@ -628,8 +628,19 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
         toast(`Sessão registrada: ${partes.join(" · ")} em ${FASES[fase].nome}.`, "ok");
         celebrarMeta(store, metaAntes);
         fechar();
-        // Gatilho leve: se a análise está velha ou o dia foi concluído, propõe ajustar o plano (1 toque).
-        if (store.mentorSugereReplano && store.mentorSugereReplano()) {
+        // Fase 3 — micro-feedback do Mentor no momento certo: aproveitamento baixo com
+        // amostra razoável → oferta imediata de reconstruir a base (1 toque, via chat).
+        const totQ = ac + er;
+        if (totQ >= 5 && ac / totQ < 0.6 && topicoId && app.perguntarNoChat) {
+          const t = store.get().topicos.find((x) => x.id === topicoId);
+          const nomeT = t ? t.nome : "este tópico";
+          setTimeout(() => toast(`${Math.round((ac / totQ) * 100)}% em ${nomeT} — vale reforçar a base.`, "ok", {
+            acaoLabel: "Reforçar agora",
+            duracao: 8000,
+            onAcao: () => app.perguntarNoChat(`Errei bastante em ${nomeT} hoje (${ac}/${totQ}). Crie 5 questões fáceis de ${nomeT} para eu reconstruir a base.`),
+          }), 900);
+        } else if (store.mentorSugereReplano && store.mentorSugereReplano()) {
+          // Gatilho leve: análise velha ou dia concluído → propõe ajustar o plano (1 toque).
           store.marcarNudgeReplano();
           setTimeout(() => toast("Quer que o Mentor ajuste seu plano?", "ok", { acaoLabel: "Ajustar plano", duracao: 6500, onAcao: () => app.navigate("mentor", { autoAnalisar: true }) }), 900);
         }
