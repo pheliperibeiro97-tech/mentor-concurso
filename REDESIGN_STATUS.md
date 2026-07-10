@@ -1,0 +1,118 @@
+# REDESIGN ULTRAPREMIUM — STATUS DE EXECUÇÃO (handoff)
+
+> **Para quem for continuar (qualquer modelo/sessão):** este arquivo é a fonte de verdade
+> do que JÁ FOI FEITO e do que falta, com instruções operacionais. O plano completo
+> (achados, justificativas, microcopy, fases 0–8) está em
+> `E:\felip\Downloads\AUDITORIA-MENTOR-2026\AUDITORIA_ULTRAPREMIUM_2026.md` — leia a
+> seção 9 (Plano de Reformulação) antes de qualquer fase nova.
+
+**Branch de trabalho:** `feat/fase0-tokens` (a partir de `main` @ commit "wip(0.6.2): fotografia").
+**Última atualização:** 2026-07-10.
+
+## Protocolo obrigatório (não pule)
+
+1. **Toda mudança visual é verificada com screenshot nos DOIS temas** (claro e escuro)
+   antes de ser declarada pronta. O app roda em `http://localhost:1420` (vite já ativo
+   na máquina do usuário; se a porta estiver livre: `npm run dev`). Tema alterna pelo
+   botão de lua/sol na topbar.
+2. **JS**: `node --check <arquivo>` após cada edição. **CSS**: `npm run lint:css`
+   (warnings são o radar; não introduza NOVOS).
+3. Commits pequenos e temáticos, mensagem em pt-BR, prefixo `feat(faseN):` /
+   `refactor(faseN):`, rodapé `Co-Authored-By: Claude ...`.
+4. Regras de produto: o Mentor PROPÕE e o usuário aprova; não recriar o que existe —
+   integrar; não usar emoji em UI (Lucide via `icone()` de `src/icones.js`).
+5. Código novo: **zero `style=` de layout** (usar utilitárias `.u-*`), **zero hex**
+   (usar tokens `var(--*)`), **zero glifo de texto** (▸ ✓ etc. → Lucide).
+
+## FASE 0 — Design System (QUASE COMPLETA)
+
+### Feito (commits na branch, em ordem)
+1. **Tokens v3** no `src/styles.css` (`:root` + bloco `[data-tema="escuro"]`):
+   tints por matiz (`--tint-{amber,violet,rose,sky,green}-{bg,ink}`), `--amber` único,
+   rampa heatmap `--heat-1..4`, `--tooltip-bg/-ink`, `--toast-bg/-ink/-danger`,
+   pesos `--fw-{regular:450,medium:550,semibold:640,bold:720,black:800}`,
+   `--fs-display-1/2/3` (clamp), `--radius-lg:16px`,
+   camadas `--z-{nav:100,fab:300,overlay:500,modal:700,toast:800,tooltip:900}`.
+2. **Migração mecânica**: 516 font-weight→tokens; 361 border-radius→escala
+   {6,8,12,16,pill}; 37 media queries→breakpoints {560,900,1200} (min-901 e min-1700
+   preservados); 39 z-index→camadas (toast SEMPRE acima de FAB; FAB abaixo de modal;
+   FABs sobre o Modo Foco via `calc(var(--z-overlay) + 55/56)`); 28+43 hexes→tokens
+   (só troca por valor idêntico, com contexto claro/escuro).
+3. **CSS morto removido**: sistema de tooltip por pseudo-elemento (era 100% anulado
+   pelo portal `tooltip.js`), 9 pares de carets de texto "▸/▾" legados + unificador
+   consolidado (buscas/cfg-acordeao ficam sem caret).
+4. **Toast**: reposicionado para baixo-centro (`#toasts`), tokenizado.
+5. **`fecharAnimado()`** em `src/ui.js` + CSS `.closing`: saída animada de
+   confirmar/escolher/abrirJanela/pedirNumero/pedirTexto/opcoesImpressao/aviso-IA/paleta.
+6. **Glifos→Lucide**: chevrons e « da sidebar, ☰ mobile, ponto de selo da nav (CSS puro),
+   ＋ do editor de mapa, −＋↔ do pdfviewer, impressora única (`iconImprimir = icone("printer")`),
+   `vazio()` default = inbox, paleta sem fallback emoji, 📚 licença → graduation-cap,
+   emojis da impressão de grifos → `pontoCor()`. Ícones novos registrados em `icones.js`:
+   chevrons-left, menu, inbox, zoom-in, zoom-out, move-horizontal.
+7. **Utilitárias** `.u-*` (styles.css, bloco "Fase 0 — utilitários"): u-m-0 (ANTES das
+   margens, para compor), u-mt/mb-{4,8,12,16}, u-ml-auto, u-flex/-6/-12, u-col/-6,
+   u-row (sem align-center), u-wrap, u-center, u-between, u-items-end, u-grow/-2,
+   u-w-{64,90,120}, u-block, u-nowrap, u-fw-regular + regra `label.inline > select`.
+8. **~206 style= inline migrados** para utilitárias (4+1 agentes, 20 arquivos).
+   Restantes são: dinâmicos (`${...}`/custom props), HTML de impressão, ou sem
+   utilitária equivalente (lista nos relatórios dos commits).
+9. **Tints aplicados**: trio azul (#eff6ff/#bfdbfe/#1d4ed8) → tokens em 8 regras;
+   categorias escuras (missao-cat/item) → tints; heatmap tokenizado nos 2 temas.
+10. **Tipografia**: títulos de tela em `--fs-display-2` (page-head h1) e `-3` (ddx);
+    piso de 11px (16 tamanhos 9–10.6px elevados).
+11. **Fixes**: anel de progresso não quebra "0%" em 2 linhas (`.pring-num`);
+    chat sem `text-align: justify`.
+12. **Stylelint**: `.stylelintrc.json` (color-no-hex + no-duplicate-selectors como
+    warnings) + `npm run lint:css`. Baseline: ~700 warnings.
+13. **(agente em andamento na última sessão)** Consolidação de tabs (.ls-segmented/
+    .cur-seg/.subtabs → .seg), seg MC×C/E no header de Questões, redução de variantes
+    .btn-* one-off. VERIFICAR o resultado visual nos 2 temas se não foi verificado.
+
+### Falta da Fase 0 (backlog fino)
+- [ ] ~137 blocos `[data-tema="escuro"]` restantes → reduzir para <30 usando os tints
+      (trabalho manual, regra a regra; começar pelo cluster ~linha 4600-4750).
+- [ ] ~540 hexes restantes → `var()`. Os seguros por troca idêntica já foram; o resto
+      exige decisão (ex.: #94a3b8 slate-400 não tem token — criar `--muted-2`?).
+- [ ] ~55 grupos de seletores duplicados (mesmo seletor, corpos DIFERENTES — camadas
+      de eras; ex.: bloco fq-* definido 2×). Consolidar manualmente um a um.
+- [ ] Migrar transitions literais (.12s-.25s) para `var(--dur-*)` (139 restantes).
+- [ ] Espaçamentos gap/padding com valores ímpares (5/7/9/11/13px) → grade de 4px.
+
+## FASE 1 — Navegação (PARCIALMENTE FEITA)
+
+### Feito
+- 19 → 16 itens: Resumos e Mapas → grupo Estudar; "Questões C/E" e "Revisão de
+  Tópicos" com `semNav: true` em `main.js` (rotas vivas; paleta Ctrl+K ganhou as duas
+  em EXTRAS de `paleta.js`); Central renomeada "Revisões" na barra; 1 cor por grupo.
+- Seg MC × C/E dentro de Questões (agente da sessão anterior — VERIFICAR).
+
+### Falta da Fase 1
+- [ ] Central absorver os BOTÕES GRADUADOS (Esqueci/Lembrei/Fácil) no card e no foco —
+      hoje o "Concluir" da Central grava `revisarTopico(refId,"lembrei")` sempre
+      (`central-revisoes.js:212-224`) e corrompe o SM-2. Ver plano §Fase 1 item 2.
+- [ ] Encadeamento: fila da Central oferece os flashcards vencidos ao final.
+- [ ] Remover as listas de vencimento de `revtopico.js:68-91` e `mapas.js:135`
+      (regra: só a Central lista o que vence) — banner-link no máximo.
+- [ ] Decidir "Por onde começar" → checklist de 1ª semana no Hoje (Fase 3 do plano).
+- [ ] Avaliar fundir Resumos/Mapas dentro de Materiais (reduziria p/ ~14 itens).
+
+## PRÓXIMAS FASES (2–8)
+
+Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 2 (persona única
+"Mentor" + chat com memória + streaming real + humanizarErroIA), Fase 3 (IA proativa),
+Fase 4 (teatro de progresso no import de PDF), Fase 5 (dieta de densidade tela a tela),
+Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs com arquivo:linha),
+Fase 8 (responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
+
+## Armadilhas conhecidas (não tropece)
+
+- `.plano-h` (styles.css ~5423) vence as utilitárias por vir DEPOIS — não migrar
+  margens de elementos .plano-h para `.u-mb-*` sem mover a regra.
+- O guard de scripts de CSS: NUNCA substituir hex em regras que DEFINEM custom
+  properties (o :root chega ao parser com o comentário grudado no seletor).
+- `prefers-reduced-motion` já cobre animações; manter esse padrão nas novas.
+- O dev server na porta 1420 é do usuário — não matar o processo.
+- HTML de impressão (funções print*/imprimir*/impressaoHTML) usa style inline de
+  propósito; não migrar.
+- `--fw-regular` = 450 (não 400): trocar font-weight:400 por ele MUDA o visual — só
+  onde autorizado.
