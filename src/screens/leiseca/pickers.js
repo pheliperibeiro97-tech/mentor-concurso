@@ -6,7 +6,8 @@ import { icone } from "../../icones.js";
 import { S } from "./estado.js";
 
 export const TRIBUNAIS = ["STF", "STJ", "TJSP"]; // padrão; "Outro" no seletor cobre qualquer outro
-export const CATEGORIAS_JURIS = ["Súmula", "Súmula Vinculante", "Tema repetitivo", "Repercussão Geral", "Precedente obrigatório", "Precedente", "Tese"];
+// "Jurisprudência" é o guarda-chuva do que não se encaixa nos precedentes qualificados/súmula comum.
+export const CATEGORIAS_JURIS = ["Súmula Vinculante", "Repercussão Geral", "Tema repetitivo", "Súmula comum", "Jurisprudência"];
 // ---------- helpers ----------
 export function topicoOptions(st, disciplinaId, selecionado) {
   const tops = st.topicos.filter((t) => !disciplinaId || t.disciplinaId === disciplinaId);
