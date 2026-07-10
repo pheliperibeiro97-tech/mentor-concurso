@@ -174,10 +174,14 @@ function navHTML() {
   const revTop = store.revisoesTopicoCount();
   const resumosRev = store.resumosParaRevisar();
   const selos = {
-    mentor: store.mentorPrecisaReanalise() ? "Hora de rever seu progresso com o Mentor IA" : "",
+    // Fase 3: plano novo AINDA NÃO VISTO tem prioridade (a auto-análise roda no boot;
+    // o selo é o que leva o aluno até ela). Sem plano novo, vale o lembrete periódico.
+    mentor: store.mentorPlanoNaoVisto()
+      ? "O Mentor preparou um plano novo para você"
+      : store.mentorPrecisaReanalise() ? "Hora de rever seu progresso com o Mentor IA" : "",
     flashcards: fcVenc ? `${plural(fcVenc, "flashcard vencido", "flashcards vencidos")} para revisar` : "",
-    revtopico: revTop ? `${plural(revTop, "revisão", "revisões")} de tópico para hoje` : "",
-    resumos: resumosRev ? `${plural(resumosRev, "resumo", "resumos")} para revisar hoje` : "",
+    // Fase 1: revtopico/resumos saíram da barra — o selo de vencimentos vive na Central.
+    revisoes: revTop + resumosRev ? `${plural(revTop + resumosRev, "revisão vence", "revisões vencem")} hoje` : "",
   };
   const btn = (r, extraCls = "") =>
     r
@@ -603,9 +607,19 @@ async function bootstrap() {
   iniciarAgendadorDiario(store);
   // Checagem silenciosa de atualização (só no app empacotado e com updater configurado).
   verificarAtualizacao({ silencioso: true });
-  // Mentor IA: auto-análise SEMANAL (1×/semana, mesmo sem clique) — silenciosa; só roda se
-  // IA conectada, houver atividade, passaram ≥7 dias e o usuário não desligou em Config.
-  store.autoAnalisarMentorSeDevido();
+  // Mentor IA: auto-análise SEMANAL (1×/semana, mesmo sem clique) — só roda se IA
+  // conectada, houver atividade, ≥7 dias e o usuário não desligou em Config.
+  // Fase 3: quando ela RODA, o aluno fica sabendo (toast + selo na barra) — antes o
+  // resultado ficava mudo numa aba e o momento de maior mágica era desperdiçado.
+  store.autoAnalisarMentorSeDevido().then((rodou) => {
+    if (rodou) {
+      toast("Preparei um plano novo para você enquanto isso.", "ok", {
+        acaoLabel: "Ver plano",
+        duracao: 9000,
+        onAcao: () => app.navigate("mentor"),
+      });
+    }
+  });
   // Sincronização: ao ABRIR, puxa o mais recente da nuvem do usuário (se conectado).
   if (estadoSync().conectado) syncAgora({ motivo: "boot", silencioso: true });
   // E garante a sincronização ao FECHAR o app.

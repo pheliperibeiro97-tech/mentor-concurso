@@ -63,6 +63,9 @@ export default function renderMentor(root, app) {
 
     <p class="mentor-cross muted small">${icone("sparkles")} Para <b>conversar com o Mentor</b> em qualquer tela (perguntar, criar um flashcard, resumir um tópico), use o botão flutuante no canto inferior direito — é o mesmo Mentor, em modo conversa.</p>`;
 
+  // Fase 3: abrir a tela COM plano = plano visto (apaga o selo "plano novo" da barra).
+  if (plano && store.marcarPlanoVisto) store.marcarPlanoVisto();
+
   bindActions(root, {
     imprimir: () => imprimir("Mentor IA — Mentor Concurso", printMentor(snap, pontos, plano)),
     "adiar-atencao": (el) => {

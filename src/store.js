@@ -6269,7 +6269,23 @@ export const store = {
   async autoAnalisarMentorSeDevido() {
     if (state.config.mentorAutoSemanal === false) return;
     if (!this.mentorPrecisaReanalise()) return; // já exige IA + atividade + ≥7 dias
-    try { await this.analisarComMentor(); } catch (_) {}
+    try {
+      await this.analisarComMentor();
+      return true; // Fase 3: sinaliza ao boot que HÁ plano novo (toast "preparei um plano")
+    } catch (_) {}
+    return false;
+  },
+  // Fase 3 — plano NOVO ainda não visto pelo aluno? (a auto-análise roda no boot; sem
+  // isto o resultado ficava invisível numa aba — o momento de maior mágica, desperdiçado).
+  mentorPlanoNaoVisto() {
+    const p = state.config.mentorPlano;
+    if (!p || !p.analise) return false;
+    return (state.config.mentorPlanoVisto || "") !== (state.config.mentorUltimaAnalise || "x");
+  },
+  marcarPlanoVisto() {
+    if ((state.config.mentorPlanoVisto || "") === (state.config.mentorUltimaAnalise || "")) return;
+    state.config.mentorPlanoVisto = state.config.mentorUltimaAnalise || "";
+    commit({ semCarimbo: true });
   },
   // Dias desde a última análise do mentor (null = nunca analisou).
   diasDesdeAnaliseMentor() {

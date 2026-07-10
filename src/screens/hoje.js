@@ -315,6 +315,8 @@ export default function renderHoje(root, app) {
     },
     // "Refazer meu plano": abre o Mentor IA e dispara a reanálise (ação real, não mais chat morto).
     "refazer-plano": () => app.navigate("mentor", { autoAnalisar: true }),
+    // Fase 3: plano novo (auto-análise) — só ABRE (sem reanalisar de novo).
+    "ver-plano": () => app.navigate("mentor"),
     // Marca/desmarca uma tarefa de hoje como feita (missão ou ocorrência de rotina).
     "th-toggle": (el) => {
       const id = el.getAttribute("data-id");
@@ -431,6 +433,20 @@ function ringsHTML(store) {
 function mentorVozHTML(store, st, topicoSel, insightTxt) {
   const nomeTop = topicoSel ? rotuloTopico(st, topicoSel) : "";
   const sug = (q, lbl) => `<button class="chip hmv-sug" data-action="mentor-sug" data-q="${esc(q)}">${esc(lbl)}</button>`;
+  // Fase 3: PLANO NOVO ainda não visto tem prioridade no card — a fala genuína da IA
+  // (auto-análise do boot) aparece AQUI, não escondida numa aba.
+  const planoNovo = store.mentorPlanoNaoVisto && store.mentorPlanoNaoVisto() ? st.config.mentorPlano : null;
+  if (planoNovo && planoNovo.analise) {
+    const nSug = Object.values((planoNovo.acoes || {})).reduce((s, arr) => s + (Array.isArray(arr) ? arr.length : 0), 0);
+    const frase = String(planoNovo.analise).split(/(?<=\.)\s/)[0].slice(0, 220);
+    return `<section class="card card-ia hoje-mentor-voz">
+        <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">plano novo</span></div>
+        <p class="hmv-porque">${icone("sparkles")} <span class="hmv-txt" data-stream>Analisei seu progresso: ${esc(frase)}</span></p>
+        <div class="hmv-sugs">
+          <button class="chip hmv-sug" data-action="ver-plano" data-tip="Abre o plano completo para você revisar e aprovar.">${icone("arrow-right")} Ver o plano completo${nSug ? ` (${nSug} ${nSug === 1 ? "sugestão" : "sugestões"})` : ""}</button>
+        </div>
+      </section>`;
+  }
   const txt = insightTxt
     ? esc(insightTxt)
     : topicoSel
