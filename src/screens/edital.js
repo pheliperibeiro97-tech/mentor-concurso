@@ -270,16 +270,24 @@ function parseAulas(texto) {
       .split(/\.\s+(?=[A-ZÀ-Ý])|[;•·]|(?:\s\d+[).]\s)/)
       .map((x) => x.replace(/^[-•·\s]+/, "").replace(/[.;:\s]+$/, "").trim())
       .filter(Boolean);
+  // Rótulo + descrição na MESMA linha, sem ':' — ex.: "Aula 00 - Ortografia oficial. Acentuação
+  // gráfica. Fonemas" (formato de grade do Estratégia/Gran). Rótulo antes do traço = nome; o
+  // restante = assuntos (assim liga ao edital e o título exibido reconstrói a linha original).
+  const mTracoRe = /^(aula\s*\d+\p{L}*)\s*[-–—]\s+(.+)$/iu;
   for (const l of linhas) {
     // Cabeçalho de disciplina: "DISCIPLINA: Nome" / "Disciplina - Nome" → muda o contexto, não vira aula.
     const mDisc = l.match(/^disciplina\s*[:\-–]\s*(.+)$/i);
     if (mDisc) { disciplinaAtual = mDisc[1].trim(); continue; }
     const i = l.indexOf(":");
+    const mTraco = i < 0 ? l.match(mTracoRe) : null;
     if (i > 0) {
       const resto = l.slice(i + 1).trim();
       atual = { nome: l.slice(0, i).trim(), topicos: resto ? split(resto) : [], disciplina: disciplinaAtual };
       aulas.push(atual);
-    } else if (atual) {
+    } else if (mTraco) {
+      atual = { nome: mTraco[1].trim(), topicos: split(mTraco[2]), disciplina: disciplinaAtual };
+      aulas.push(atual);
+    } else if (atual && !/^aula\s*\d+/i.test(l)) {
       atual.topicos.push(...split(l));
     } else {
       atual = { nome: l, topicos: [], disciplina: disciplinaAtual };
@@ -287,6 +295,14 @@ function parseAulas(texto) {
     }
   }
   return aulas.filter((a) => a.nome);
+}
+// Título EXIBIDO da aula = rótulo cadastrado ("Aula 00") + a descrição de assuntos como veio do
+// cursinho, reconstruindo "Aula 00 - Ortografia oficial. Acentuação gráfica. Fonemas". O rótulo
+// fica em a.nome (usado para casar/rebater grades); os assuntos originais em a.assuntos. Sem
+// assuntos (ex.: aula criada à mão), mostra só o rótulo.
+function tituloAula(a) {
+  const ass = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean);
+  return ass.length ? `${a.nome} - ${ass.join(". ")}` : (a.nome || "");
 }
 // Convite compacto quando AINDA não há aulas: o plano do cursinho é opcional.
 // Reusa a ação "importar-aulas-mais" (abre o importador completo) — sem novo handler.
@@ -970,7 +986,7 @@ function aulasListaHTML(store, st) {
       return `<div class="cur-aula-row" data-drag-id="${a.id}">
         <div class="cur-aula-head">
           <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
-          <b class="cur-aula-nome">${esc(a.nome)}</b>
+          <b class="cur-aula-nome">${esc(tituloAula(a))}</b>
           ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
           ${tops.length ? `<span class="cur-prog" data-tip="Tópicos desta aula concluídos.">${concl}/${tops.length}</span>` : ""}
@@ -1727,7 +1743,7 @@ function printCursinho(st) {
   return aulas
     .map((a, i) => {
       const tops = (a.topicoIds || []).map((id) => nomeTop(id)).filter(Boolean);
-      return `<div class="print-aula"><b>${i + 1}. ${esc(a.nome)}</b>${tops.length ? `<div class="print-meta">No edital: ${tops.join(" · ")}</div>` : ""}</div>`;
+      return `<div class="print-aula"><b>${i + 1}. ${esc(tituloAula(a))}</b>${tops.length ? `<div class="print-meta">No edital: ${tops.join(" · ")}</div>` : ""}</div>`;
     })
     .join("");
 }

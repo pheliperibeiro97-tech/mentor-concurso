@@ -1703,7 +1703,7 @@ export const store = {
       if (renAlvoNomes.has(e.nome.toLowerCase())) continue; // já virou rename de uma existente
       const topicoIds = [];
       for (const tn of e.topicos || []) { const t = this.acharTopicoPorNome(tn); if (t && !topicoIds.includes(t.id)) topicoIds.push(t.id); }
-      state.aulas.push({ id: uid("aula"), nome: e.nome, topicoIds });
+      state.aulas.push({ id: uid("aula"), nome: e.nome, topicoIds, assuntos: e.topicos || [] });
       add++;
     }
     let rem = 0;

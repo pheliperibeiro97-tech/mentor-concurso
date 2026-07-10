@@ -946,8 +946,8 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .cur-aula-list { padding: 2px 16px 8px 19px; }
 .cur-aula-row { padding: 12px 0; border-top: 1px solid var(--border); }
 .cur-aula-row:first-child { border-top: 0; }
-.cur-aula-head { display: flex; align-items: center; gap: 10px; }
-.cur-aula-nome { font-size: .92rem; font-weight: var(--fw-medium); color: var(--text); }
+.cur-aula-head { display: flex; align-items: flex-start; gap: 10px; }
+.cur-aula-nome { flex: 0 1 auto; min-width: 0; font-size: .92rem; font-weight: var(--fw-medium); color: var(--text); line-height: 1.35; }
 .cur-prog { font: 700 .82rem/1 var(--font-mono); color: var(--text-2); }
 .cur-edit { color: var(--muted); display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 6px; flex: none; }
 .cur-edit:hover { background: var(--surface-2); color: var(--text); }
