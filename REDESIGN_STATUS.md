@@ -75,17 +75,22 @@
 - [x] `--muted-2` (#94a3b8) criado nos 2 temas; 16 usos migrados.
 - [x] Blocos escuros: 133 → 122; TODAS as redundâncias comprovadas removidas (11 blocos
       + 25 declarações). Fix: heatmaps voltaram a exibir --heat-* no escuro (verificado).
-- [ ] 122 blocos escuros restantes = DECISÃO DE DESIGN (não mecânico). Mapa por tela:
-      Hoje/Mentor 40 · Global 26 · Materiais/Resumos 21 · Foco/LeiSeca 18 · Questões 16 ·
-      Acompanhamento 15 · Edital 7 · Chat 4. Padrão dominante: inks 300-shade
-      (#93c5fd ×5, #fca5a5 ×4, #86efac ×3) — criar tokens "ink-on-soft" por matiz OU
-      aceitar mudança sutil no claro. Gradientes do Modo Foco e leitor Kindle escuro
-      são intencionais (deixar).
-- [ ] ~540 hexes restantes fora dos blocos escuros → exigem decisão caso a caso
-      (valores que NÃO batem com token; trocar mudaria o visual).
-- [ ] ~55 grupos de seletores duplicados (mesmo seletor, corpos DIFERENTES — camadas
-      de eras; ex.: bloco fq-* definido 2×). Consolidar manualmente um a um.
-- [ ] Espaçamentos gap/padding com valores ímpares (5/7/9/11/13px) → grade de 4px.
+- [x] Blocos escuros 127 → 114 via 7 tokens ink/bg novos (--ink-vermelho/-suave,
+      --ink-verde, --ink-esmeralda, --ink-ambar, --bg-amarelo, --bg-verde); 23 regras
+      migradas com par claro/escuro EXATO; 64 sondas de getComputedStyle byte-idênticas
+      nos 2 temas. Os 114 restantes são intencionais (gradientes do Modo Foco, leitor
+      Kindle, mk-*/paletas, pares var→var da paleta primária, pares literais ≤2×).
+- [x] Seletores duplicados: 28/28 grupos consolidados (no-duplicate-selectors ZERADO;
+      merge preservando o computado — base tardia + propriedades não sobrescritas).
+- [x] Grade de 4px: 376 tokens em 340 declarações (5→4, 7→8, 9→8, 11→12, 13→12);
+      excluídos 1/2/3px, em/rem/%, posicionamento e os 2 paddings de baseline do
+      registro de sessão. Warnings lint: 700 → 578 ao longo da faxina toda.
+- [x] Faxina de CSS órfão CONCLUÍDA (2 rodadas, −422 linhas: 5978 → 5529 antes da
+      grade): checkin-*, raiox-*, plan-dash antigo, mentor-hoje, onboarding antigo,
+      sidebar-colapsada (modo morto) e ~190 seletores comprovados por grep + prefixos
+      dinâmicos. Vivos de revtopico.js/nav-rail preservados.
+- [ ] ~540 hexes restantes fora dos blocos escuros = intencionais (não batem com token;
+      trocar MUDARIA o visual — só mexer com decisão de design explícita).
 
 ## FASE 1 — Navegação (PARCIALMENTE FEITA)
 
@@ -248,11 +253,7 @@
 - [x] Assinatura do dev renasceu em Config → Suporte, ao lado da versão.
 - [x] flashcards "Apagar todos os N flashcards?" sem CAPS.
 
-### Faxina de CSS órfão (pendente, styles.css)
-.periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir outros usos), .sess-mais/
-.sess-obs, .disc-row/.disc-toggle/.topico-row, .qb-card, .ed-top-links/.ed-link-chip/
-.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda*, .estudar-card-rec, .sidebar-rodape/
-.backend-tag/.assinatura-dev, blocos do pincel exclusivos da Lei Seca — grep de uso.
+### Faxina de CSS órfão — CONCLUÍDA (ver "Falta da Fase 0" acima; 2 rodadas, −422 linhas)
 
 ## FASE 7 — Bugs restantes (CONCLUÍDA)
 
@@ -271,9 +272,9 @@ Da lista de 27 do relatório, 9 já haviam caído nas fases 0-6. Fechados nesta 
 - [x] erro-log: APP_VERSION via define do Vite; EMAIL_SUPORTE fonte única (licenca
       importa); ciclo.js com comentário forte na chave legada "A".
 - [x] flashcards trunca em palavra; mapas com plural() + handlers mortos removidos.
+- [x] dossie.js: impressão de resumos também sanitiza conteudoHTML.
 - Fora por decisão: PORTEIRO_SEGREDO da licença no cliente (exigiria servidor — decisão
-  de negócio do usuário); dossie.js:358 injeta conteudoHTML cru mas só no HTML de
-  IMPRESSÃO (janela isolada; risco baixo — sanitizar se sobrar tempo).
+  de negócio do usuário).
 
 ## FASE 8 — Responsivo + a11y (CONCLUÍDA)
 
