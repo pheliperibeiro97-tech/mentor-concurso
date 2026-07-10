@@ -5912,3 +5912,40 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .sim-ext-res label { flex: 1; margin: 0; font-size: var(--fs-2xs); font-weight: var(--fw-medium); }
 .sim-res-ac { color: var(--success-ink); }
 .sim-res-er { color: var(--danger-ink); }
+
+/* ===== Fase 5 — Leitor sereno (Lei Seca) ===== */
+/* 1) Barra do leitor auto-oculta: desliza para fora ao rolar para baixo e volta ao rolar para
+   cima ou perto do topo. A classe é alternada por garantirBarraAutoOculta() (leiseca.js). */
+.ler-topo { transition: transform var(--dur-3) ease; }
+.ler-topo.ler-barra-oculta { transform: translateY(-110%); pointer-events: none; }
+/* Trilha fina de progresso: irmã imediata da barra, gruda no topo e só aparece enquanto a barra
+   está oculta. z-index local 6 = um acima do z-index 5 da .ler-topo (ambos abaixo de --z-nav).
+   Margens: -16px anula o margin-bottom da barra; 3px + 13px devolvem os 16px antes da lista. */
+.ler-prog-fina { position: sticky; top: 0; z-index: 6; height: 3px; margin: -16px 0 13px; border-radius: var(--radius-pill); overflow: hidden; pointer-events: none; opacity: 0; transition: opacity var(--dur-3) ease; }
+.ler-prog-fina > span { display: block; height: 100%; border-radius: var(--radius-pill); background: linear-gradient(90deg, var(--primary-l), var(--primary)); }
+.ler-topo.ler-barra-oculta + .ler-prog-fina { opacity: 1; }
+
+/* 2) Dropdown "Filtrar" na barra (substitui os chips-estatística permanentes) */
+.ler-filtro-tool > summary { position: relative; }
+.ler-filtro-badge { position: absolute; top: 1px; right: 1px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: var(--radius-pill); background: var(--primary); color: #fff; font-size: 10px; line-height: 14px; font-weight: var(--fw-bold); text-align: center; }
+.ler-filtro-it .ler-filtro-n { margin-left: auto; padding-left: 14px; font-variant-numeric: tabular-nums; font-size: var(--fs-xs); color: var(--muted); }
+.ler-filtro-it.on { color: var(--primary-d); background: var(--primary-soft); }
+.ler-filtro-it.on svg, .ler-filtro-it.on .ler-filtro-n { color: var(--primary-d); }
+
+/* 3) Badges de estado no cabeçalho do artigo (a AÇÃO migrou para o menu ⋯; o estado segue visível) */
+.ler-fav-mark { display: inline-flex; color: var(--primary-l); flex: 0 0 auto; }
+.ler-fav-mark svg { width: 14px; height: 14px; fill: currentColor; }
+.ler-pq-mark { display: inline-flex; color: var(--amber); flex: 0 0 auto; }
+.ler-pq-mark svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* 4) Card de jurisprudência: botão único "Estudar" (btn-soft) com menu pop no padrão .ls-mais.
+   O reset .ls-item .ls-mais > summary (30×30, cor muted) venceria o .btn — devolvemos aqui o
+   tamanho/cor do botão com a mesma especificidade, declarado depois. */
+.ls-item .ls-estudar-menu > summary { width: auto; height: auto; padding: 6px 11px; color: var(--primary-d); }
+.ls-item .ls-estudar-menu > summary:hover, .ls-item .ls-estudar-menu[open] > summary { color: var(--primary-d); background: var(--primary-soft-border); }
+.ls-estudar-menu > summary svg { width: 15px; height: 15px; }
+.ls-estudar-menu .ls-mais-pop { left: 0; min-width: 190px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ler-topo, .ler-prog-fina { transition: none; }
+}

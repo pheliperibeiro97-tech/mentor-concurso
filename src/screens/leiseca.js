@@ -120,6 +120,39 @@ function garantirScrollSpy(root) {
   atualizar();
 }
 
+// Fase 5 — LEITOR SERENO: a barra do leitor se esconde ao rolar PARA BAIXO (imersão, estilo
+// Kindle) e volta ao rolar para cima ou ao chegar perto do topo. O handler vai no scroller
+// global (.content). Anti-vazamento: (a) todo render chama garantir…() que REMOVE o listener
+// anterior antes de religar; (b) se a barra sair do DOM (troca de tela), o próprio handler se
+// desliga no 1º scroll. Só alterna classe — nada de commit/refresh no scroll (bug antigo).
+let _barraAuto = null; // { el, fn } do listener ativo
+function desligarBarraAutoOculta() {
+  if (!_barraAuto) return;
+  try { _barraAuto.el.removeEventListener("scroll", _barraAuto.fn); } catch {}
+  _barraAuto = null;
+}
+function garantirBarraAutoOculta(root) {
+  desligarBarraAutoOculta();
+  if (typeof document === "undefined") return;
+  const barra = root.querySelector(".ler-topo");
+  if (!barra) return;
+  const scEl = document.querySelector(".content");
+  const alvo = scEl || window;
+  const pos = () => (scEl ? scEl.scrollTop : window.scrollY || 0);
+  let ultimoY = pos();
+  const fn = () => {
+    if (!barra.isConnected) { desligarBarraAutoOculta(); return; }
+    const y = pos();
+    const delta = y - ultimoY;
+    ultimoY = y;
+    if (y <= 80) { barra.classList.remove("ler-barra-oculta"); return; } // perto do topo: sempre visível
+    if (delta > 0) barra.classList.add("ler-barra-oculta");      // rolando para baixo → esconde
+    else if (delta < 0) barra.classList.remove("ler-barra-oculta"); // para cima (qualquer delta) → volta
+  };
+  alvo.addEventListener("scroll", fn, { passive: true });
+  _barraAuto = { el: alvo, fn };
+}
+
 function garantirGrifoFlutuante() {
   if (typeof document === "undefined" || window.__grifoFut) return;
   window.__grifoFut = true;
@@ -973,7 +1006,7 @@ function renderIndicacoes(root, app, tipo) {
   });
   // F2/detalhes: menu flutuante de grifo/IA + rastreio de posição de leitura.
   if (modoLeitor) {
-    _leitorCtx = { store, app, norma: leiAtiva.lei }; garantirGrifoFlutuante(); garantirPopoverMarca(); garantirScrollSpy(root);
+    _leitorCtx = { store, app, norma: leiAtiva.lei }; garantirGrifoFlutuante(); garantirPopoverMarca(); garantirScrollSpy(root); garantirBarraAutoOculta(root);
     // #5 V2: persistir o recolhimento das seções do índice. O evento "toggle" NÃO borbulha → captura.
     // IMPORTANTE: o Chrome DISPARA "toggle" ao inserir cada <details open> no render; se gravássemos
     // sempre, viraria commit→render→toggle→commit… (loop). Então só grava se o estado MUDOU de fato.
@@ -988,7 +1021,7 @@ function renderIndicacoes(root, app, tipo) {
       map[leiAtiva.lei] = [...set];
       store.setLeitura({ indiceFechado: map });
     }, true);
-  }
+  } else desligarBarraAutoOculta(); // saiu do leitor (biblioteca/estudar/metas): solta o handler de scroll
   focarItem(root, focoInd);
 
   // Escopo do Estudar: itens com texto (tudo, ou só o top 20% de incidência).
@@ -2989,10 +3022,25 @@ function leitorBarraHTML(st, store, norma, normas, lista, opts = {}) {
   const filtroNovAtivo = !!lerFiltroNov.lei;
   // Filtros que o usuário escolheu esconder (gerenciado em Opções ▸ Filtros).
   const ocultos = new Set((st.config.leitura || {}).filtrosOcultos || []);
-  // Chip = filtro: clicar mostra só aqueles artigos; clicar de novo limpa.
-  // Só mostra a estatística quando há o quê (esconde os zeros — ruído), a menos que seja o filtro ativo.
-  // E respeita a escolha do usuário de ocultar aquele filtro da barra.
-  const stat = (ic, n, lbl, key) => (ocultos.has(key) && fAtivo !== key) || (!n && fAtivo !== key) ? "" : `<button class="ler-stat ${fAtivo === key ? "on" : ""}" data-action="ler-stat-filtro" data-f="${key}" data-tip="Filtrar só os ${lbl}${fAtivo === key ? " (clique para limpar)" : ""}"><span class="ler-stat-ic">${icone(ic)}</span><b>${n}</b><span class="ler-stat-lbl">${lbl}</span></button>`;
+  // Fase 5 (leitor sereno): as estatísticas-filtro saem da exibição permanente e viram um
+  // dropdown único "Filtrar" na barra. Mesmas ações/contagens (data-action="ler-stat-filtro");
+  // some o que está zerado ou oculto pelo usuário — a menos que seja o filtro ativo.
+  const filtrosDef = [
+    { ic: "check", n: lidos, lbl: "lidos", key: "lido" },
+    { ic: "bookmark", n: favs, lbl: "favoritos", key: "favorito" },
+    { ic: "flame", n: difs, lbl: "difíceis", key: "dificil" },
+    { ic: "star", n: pqs, lbl: "que mais caem", key: "pq" },
+    { ic: "highlighter", n: grifos, lbl: "grifos", key: "grifo" },
+    { ic: "sticky-note", n: notas, lbl: "anotações", key: "anotacao" },
+  ].filter((d) => fAtivo === d.key || (!ocultos.has(d.key) && d.n));
+  const filtroIt = (d) => `<button class="ler-menu-it ler-filtro-it ${fAtivo === d.key ? "on" : ""}" data-action="ler-stat-filtro" data-f="${d.key}" data-tip="${fAtivo === d.key ? "Clique para limpar o filtro" : `Mostrar só os ${d.lbl}`}">${icone(d.ic)} ${d.lbl[0].toUpperCase() + d.lbl.slice(1)}<span class="ler-filtro-n">${d.n}</span></button>`;
+  const menuFiltro = (filtrosDef.length || fAtivo)
+    ? `<details class="ls-mais ler-filtro-tool"><summary class="ler-tool ${fAtivo ? "on" : ""}" data-tip="Filtrar os artigos (lidos, favoritos, grifos…)">${icone("list-filter")}${fAtivo ? `<span class="ler-filtro-badge">1</span>` : ""}</summary><div class="ls-mais-pop ler-mais-menu">
+        <div class="ler-menu-lbl">Filtrar artigos</div>
+        ${filtrosDef.map(filtroIt).join("")}
+        ${fAtivo ? `<div class="ler-menu-sep"></div><button class="ler-menu-it" data-action="ler-limpar-filtro" data-tip="Mostrar todos os artigos">${icone("x")} Limpar filtro</button>` : ""}
+      </div></details>`
+    : "";
   // Toolbar de ícones (só ícones + tooltip). Cada botão pode ser fixado na barra via "Personalizar".
   const barra = (st.config.leitura || {}).barra || {};
   const fixado = (d) => (barra[d.k] === undefined ? !!d.def : !!barra[d.k]);
@@ -3033,6 +3081,7 @@ function leitorBarraHTML(st, store, norma, normas, lista, opts = {}) {
       <button class="ler-busca-campo" data-action="ler-buscar" data-tip="Buscar por palavra/significado ou ir para um artigo (nº)">${icone("search")}<span>Buscar ou ir para artigo…</span></button>
       <div class="ler-tools">
         ${barTools}
+        ${menuFiltro}
         ${menuMais}
       </div>
     </div>
@@ -3040,17 +3089,8 @@ function leitorBarraHTML(st, store, norma, normas, lista, opts = {}) {
       <div class="ler-prog-bar"><span style="width:${pct}%"></span></div>
       <span class="ler-prog-txt"><b>${lidos}</b> / ${total} lidos · <b>${pct}%</b></span>
     </div>
-    <div class="ler-stats">
-      ${stat("check", lidos, "lidos", "lido")}
-      ${stat("bookmark", favs, "favoritos", "favorito")}
-      ${stat("flame", difs, "difíceis", "dificil")}
-      ${stat("star", pqs, "que mais caem", "pq")}
-      ${stat("highlighter", grifos, "grifos", "grifo")}
-      ${stat("sticky-note", notas, "anotações", "anotacao")}
-      ${fAtivo ? `<button class="ler-stat-limpar" data-action="ler-limpar-filtro" data-tip="Mostrar todos os artigos">${icone("x")} limpar filtro</button>` : ""}
-    </div>
     <div class="ler-agora" hidden aria-live="polite"><span class="la-ic">${icone("map-pin")}</span><span class="la-trilha"></span></div>
-  </div>`;
+  </div><div class="ler-prog-fina" aria-hidden="true"><span style="width:${pct}%"></span></div>`;
 }
 
 // Renderiza a lista agrupada e recolhível. Se só existir o grupo "Outros" (sem norma), vai flat.
@@ -3634,8 +3674,14 @@ function renderLeiComMarcas(rawTexto, marcas, opts = {}) {
 }
 
 // Menu "⋯" do artigo (organizar/gerenciar) — usado pelo render do leitor.
+// Fase 5 (leitor sereno): favorito/difícil/"o que mais cai" saíram dos botões-ícone permanentes
+// do cabeçalho e vivem AQUI (mesmas ações/handlers); o estado segue visível nos badges do cabeçalho.
 function menuArtigoHTML(i, tipo) {
   return [
+    `<button class="lnk" data-action="toggle-favorito" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.favorito ? "Favorito (entra em revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão)."}">${icone("bookmark")} ${i.favorito ? "Tirar dos favoritos" : "Favoritar"}</button>`,
+    `<button class="lnk" data-action="toggle-dificil" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão)."}">${icone("flame")} ${i.dificil ? "Tirar dos difíceis" : "Marcar como difícil"}</button>`,
+    `<button class="lnk" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")} ${i.pq ? "Desmarcar 'o que mais cai'" : "Marcar: o que mais cai"}</button>`,
+    `<div class="ls-mais-sep"></div>`,
     i.texto ? `<button class="lnk" data-action="ler-foco-art" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste artigo.">${icone("book-open")} Ler em foco</button>` : "",
     i.texto ? `<button class="lnk" data-action="estudar-artigo" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Certo/Errado só deste artigo — testa a letra (certo/errado).">${icone("repeat-2")} Estudar este artigo</button>` : "",
     i.texto && !i.promovido ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}">${icone("brain")} Marcar para revisar</button>` : "",
@@ -3672,11 +3718,10 @@ function itemLeitorHTML(st, tipo, i, store, vincMap) {
     (i.promovido ? `<span class="mini-tag" data-tip="Na sua revisão espaçada.">${icone("brain")} revisando</span>` : "");
   const incHTML = est ? `<span class="ler-art-inc" data-tip="Incidência ${i.pqIncidencia} — o quanto cai.">${"★".repeat(est)}<span class="ler-inc-off">${"★".repeat(5 - est)}</span></span>` : "";
   const ic = (acao, on, iconeNome, tip) => `<button class="ler-ic ${on ? "on-" + on : ""}" data-action="${acao}" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="${tip}">${icone(iconeNome)}</button>`;
+  // Fase 5 (leitor sereno): UMA ação visível por artigo — "lido" + menu ⋯ (favorito/difícil/
+  // "o que mais cai" migraram para o menu; o estado ativo segue visível nos badges do cabeçalho).
   const acoes =
     ic("ler-lido", i.lido ? "ok" : "", "check", i.lido ? "Lido — clique para desmarcar." : "Marcar como lido.") +
-    ic("toggle-favorito", i.favorito ? "fav" : "", "bookmark", i.favorito ? "Favorito (entra em revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão).") +
-    ic("toggle-dificil", i.dificil ? "dif" : "", "flame", i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão).") +
-    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'.") +
     `<details class="ls-mais ler-mais"><summary data-tip="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">${menuArtigoHTML(i, tipo)}</div></details>`;
   const grifos = store ? store.marcasAncoradas("indicacao", i.id, i.texto) : [];
   return `<article class="ler-art ${i.lido ? "lida" : ""} ${i.revogado ? "revogada" : ""} ${i.favorito ? "fav" : ""} ${i.dificil ? "dif" : ""}" data-foco-id="${i.id}" data-id="${i.id}">
@@ -3685,6 +3730,8 @@ function itemLeitorHTML(st, tipo, i, store, vincMap) {
       <span class="ler-art-ref">${esc(refCurta)}</span>
       ${i.nomeJuridico ? `<span class="ler-art-nome">${esc(i.nomeJuridico)}</span>` : ""}
       ${i.dificil ? `<span class="ler-dif-mark" data-tip="Difícil">${icone("flame")}</span>` : ""}
+      ${i.favorito ? `<span class="ler-fav-mark" data-tip="Favorito">${icone("bookmark")}</span>` : ""}
+      ${i.pq && !est ? `<span class="ler-pq-mark" data-tip="Você marcou: o que mais cai">${icone("star")}</span>` : ""}
       ${incHTML}${badges}
       <span class="spacer"></span>
       <div class="ler-art-acoes">${acoes}</div>
@@ -3835,14 +3882,20 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
     : "";
   // F2 (#4) — ESTUDO ATIVO por card (o diferencial do Mentor): gera/treina direto do julgado.
   const iaOn = store && store.iaDisponivel();
+  // Fase 5 (leitor sereno): a fileira de 5 botões vira UM botão "Estudar" com menu pop —
+  // mesmos data-action/handlers de antes, só a apresentação muda.
   const estudarAcoes = (tipo === "juris" && (i.texto || "").trim() && !i.revogado)
     ? `<div class="ls-estudar-acoes">
-        <span class="lea-lbl">estudar</span>
-        <button class="lea ia" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
-        <button class="lea ia" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
-        <button class="lea ia" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
-        <button class="lea ${i.promovido ? "on" : ""}" data-action="${i.promovido ? "despromover-mem" : "promover-mem"}" data-id="${i.id}" data-tip="${i.promovido ? "Já está na revisão espaçada — clique para tirar." : "Colocar na revisão espaçada (curva do esquecimento)."}">${icone("repeat")} Revisar</button>
-        <button class="lea foco" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>
+        <details class="ls-mais ls-estudar-menu">
+          <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese: Certo/Errado, flashcard, completar, revisar ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
+          <div class="ls-mais-pop">
+            <button class="lnk" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
+            <button class="lnk" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
+            <button class="lnk" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
+            <button class="lnk" data-action="${i.promovido ? "despromover-mem" : "promover-mem"}" data-id="${i.id}" data-tip="${i.promovido ? "Já está na revisão espaçada — clique para tirar." : "Colocar na revisão espaçada (curva do esquecimento)."}">${icone("repeat")} ${i.promovido ? "Tirar da revisão" : "Revisar"}</button>
+            <button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>
+          </div>
+        </details>
       </div>`
     : "";
   return `
