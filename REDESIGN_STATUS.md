@@ -164,13 +164,34 @@
       design de onboarding contínuo; especificar antes (plano §Fase 3 item 8).
 - [ ] Briefing pré-foco e demais oportunidades do relatório (§5.6).
 
-## PRÓXIMAS FASES (4–8)
+## FASE 4 — Teatro de progresso e estados (CONCLUÍDA)
 
-Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 4 (teatro de
-progresso no import de PDF),
-Fase 4 (teatro de progresso no import de PDF), Fase 5 (dieta de densidade tela a tela),
-Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs com arquivo:linha),
-Fase 8 (responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
+### Feito (verificado ao vivo com IA real; 0 erros de console)
+- **Painel de ETAPAS no import de PDF** (`criarPainelEtapas` em documentos.js + CSS
+  `.import-etapas`): "Lendo o PDF ✓ N páginas · Montando o sumário com IA ✓ N tópicos ·
+  M vinculados ao edital · Preparando o texto ✓" — no lugar de até 6 toasts; erro marca
+  a etapa ativa; testado com PDF real (a IA leu o sumário e vinculou ao edital).
+- **OCR em lote**: um `toastCarregando` com progresso "i/N (pág. X)" + **Cancelar**
+  (novo `opts.aoCancelar` no toastCarregando de ui.js — reutilizável).
+- **Lei Seca narrada**: 4 fluxos de geração em série com "Gerando… i/total" e aviso
+  do corte de 12 ANTES (iniciarCE, flashcards, questões, grifar-IA).
+- **Celebrações**: confetti na conclusão da sessão da Central (guard 1x/sessão);
+  "Amanhã voltam N cartões; nos próximos 7 dias, mais M" no fim da fila de flashcards;
+  count-up da nota re-anima a cada novo simulado; "digitando" da discursiva idem.
+- **Estados**: skeleton de página no pdfviewer; CTA "Limpar filtros" no vazio-de-filtro
+  de Questões; CTA "Criar tema com IA" no vazio da Discursiva (reusa gerar-pergunta;
+  toggle preserva o ícone via innerHTML).
+
+### Notas
+- Riscos visuais menores apontados pelos agentes (espaçamento da linha nova nos
+  flashcards; contraste do btn-ghost no vazio) — conferir na próxima passada visual.
+
+## PRÓXIMAS FASES (5–8)
+
+Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 5 (dieta de
+densidade tela a tela), Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs
+com arquivo:linha — vários já corrigidos nas fases 0-4; conferir a lista), Fase 8
+(responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
 
 ## Armadilhas conhecidas (não tropece)
 
