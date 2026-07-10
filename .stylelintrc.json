@@ -1,0 +1,9 @@
+{
+  "rules": {
+    "no-duplicate-selectors": [true, { "severity": "warning" }],
+    "color-no-hex": [true, {
+      "severity": "warning",
+      "message": "Fase 0: cores novas devem usar tokens var(--*) — hex só nas definições do :root/tema."
+    }]
+  }
+}
