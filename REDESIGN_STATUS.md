@@ -105,10 +105,40 @@
 - [ ] Decidir "Por onde começar" → checklist de 1ª semana no Hoje (Fase 3 do plano).
 - [ ] Avaliar fundir Resumos/Mapas dentro de Materiais (reduziria p/ ~14 itens).
 
-## PRÓXIMAS FASES (2–8)
+## FASE 2 — Persona única + chat de verdade (CONCLUÍDA no essencial)
 
-Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 2 (persona única
-"Mentor" + chat com memória + streaming real + humanizarErroIA), Fase 3 (IA proativa),
+### Feito (verificado ao vivo: streaming ~2,8s até o 1º parcial, multi-turno correto,
+### rehidratação pós-reload, 0 erros de console)
+- Persona única "Mentor": FAB/painel renomeados, selo amarelo = "Criado pelo Mentor ·
+  confira", nota da tela Mentor reescrita, `PERSONA_MENTOR` (ia-provider) nos prompts
+  do chat e da análise.
+- Memória: `store.chatHistorico` (cap 30, corta 4k chars, persiste+sincroniza; migração
+  na carga); rehidratação ao montar; multi-turno (últimas 6 trocas viram `contents`).
+- Streaming REAL: `geminiStreamRaw` (SSE `streamGenerateContent?alt=sse`) +
+  `responderChatStream` exportado; markdown formatado desde o 1º chunk (md() no
+  onChunk cumulativo — retry de modelo/chave só "reinicia" o balão); botão Parar
+  (AbortController) preserva o parcial; fallback sem stream p/ claude-cli.
+- `humanizarErroIA` (util.js) em comOcupado/chat (com "Tentar de novo")/seletor-escopo/
+  mentor (que também restaura o ícone do botão no erro).
+- Orb com estados: `setOrbsOffline` (main render) → .orb--off cinza+tooltip; .is-thinking
+  morfa acelerado; velocidade lida por frame do classList do pai.
+- Chips do chat CONTEXTUAIS por tela (`app.rotaAtual`, novo getter em main.js).
+- `analisar_progresso` do chat EXECUTA (navigate mentor {autoAnalisar:true}).
+- Insight do Hoje entra com fade (fim do falso "digitando" sobre conteúdo local).
+- Tela Mentor: botão "Perguntar sobre o plano" → chat com o plano no contexto;
+  análise recebe `planoAnterior` e o prompt pede 1 frase de CONTINUIDADE.
+
+### Adiado (decisão consciente, retomar depois)
+- [ ] Fundir roteador (interpretarComando) + resposta numa chamada só: mantive as 2
+      para preservar o contrato das 13 ações do chat-executor; com o streaming, a
+      latência percebida já caiu. Retomar medindo o custo real.
+- [ ] `contextoAlunoCurto()` em comentarQuestao/comentarErro (exige tocar os callers).
+- [ ] PERSONA_MENTOR nos demais prompts (professor de cursinho, examinador da
+      discursiva…) — o examinador RIGOROSO é proposital; decidir caso a caso.
+
+## PRÓXIMAS FASES (3–8)
+
+Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 3 (IA proativa),
 Fase 4 (teatro de progresso no import de PDF), Fase 5 (dieta de densidade tela a tela),
 Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs com arquivo:linha),
 Fase 8 (responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
