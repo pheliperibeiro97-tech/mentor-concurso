@@ -931,7 +931,7 @@ function renderIndicacoes(root, app, tipo) {
         <p>Três abas, cada uma um passo: <b>Ler</b> (a letra), <b>Estudar</b> (praticar) e <b>Metas</b> (planejar).</p>
         <p>${icone("book-open")} <b>Ler</b> — a lista com o <b>texto</b> ${tipo === "juris" ? "das súmulas/teses" : "dos artigos"}. Aqui você lê, <b>grifa</b>, marca o que mais cai com a <b>★</b> (a <b>incidência</b> aparece numa mini-barra no item) e <b>importa</b>${tipo === "juris" ? " (colar o texto/informativo ou PDF)" : " (a letra oficial do Planalto/colando — detecta o revogado — ou uma lista/PDF)"}.${tipo === "lei" ? " Em <b>Conferir atualização</b>, o app compara com a fonte e mostra o que <b>mudou/entrou/foi revogado</b> (selo de novidade)." : ""}</p>
         <p>${icone("target")} <b>Estudar</b> — em tela cheia: <b>Certo/Errado</b>, <b>Completar a letra</b>, <b>Revisar o que vence</b> e <b>Refazer erros</b>${tipo === "juris" ? ", além da <b>Súmula-duelo</b> (número/tribunal trocado)" : ""}. Escolha o <b>escopo</b> (tudo ou o que mais cai); um clique já começa no padrão e, em <b>Opções…</b>, você ajusta <b>quantidade e dificuldade</b> — dá ainda para gerar <b>flashcards</b> e <b>questões</b>.</p>
-        <p>${icone("calendar-check")} <b>Metas</b> — planeje a leitura. No topo, o app mostra seu <b>progresso</b>, <b>ritmo</b> e <b>previsão de conclusão</b>; em <b>Hoje</b>, suas metas do dia e as <b>revisões que vencem</b> (com a semana à frente). Crie metas (ex.: "ler ${tipo === "juris" ? "os informativos 810–815" : "art. 1º a 20"}") que viram <b>tarefa no Planejamento</b>, mostram o <b>progresso</b> quando dá para medir, e podem ser <b>divididas em etapas</b> ou <b>importadas de um cronograma</b>.</p>
+        <p>${icone("calendar-check")} <b>Metas</b> — planeje a leitura. No topo, uma linha resume seu <b>progresso</b>, <b>ritmo</b> e <b>previsão de conclusão</b> (as metas do dia e as revisões vivem no <b>Planejamento</b>). Crie metas (ex.: "ler ${tipo === "juris" ? "os informativos 810–815" : "art. 1º a 20"}") que viram <b>tarefa no Planejamento</b>, mostram o <b>progresso</b> quando dá para medir, e podem ser <b>divididas em etapas</b> ou <b>importadas de um cronograma</b>.</p>
       </div>
     </details>
 
@@ -1170,28 +1170,40 @@ function renderIndicacoes(root, app, tipo) {
   bindActions(root, {
     imprimir: async () => {
       // Com uma lei aberta no leitor, o Imprimir é CONTEXTUAL (lei inteira / filtro / grifados;
-      // crua ou com grifos). Fora do leitor, mantém a impressão da lista por filtros.
+      // crua ou com grifos). Fora do leitor, as opções seguem o modelo ATUAL (v4): a letra
+      // (toda ou só o que mais cai), as metas de leitura e, na Jurisprudência, o filtro da tela.
       if (modoLeitor) return imprimirLeiContexto(store, leiAtiva.lei, listaLerFinal, listaLerVisivel, leiFiltro.lei);
-      // Mesmos filtros da tela (tópico/tribunal/categoria), para o modo atual OU metas+memória.
-      const listaDoModo = (md) => {
-        let l = todasDoTipo.filter((i) => (i.modo || "meta") === md && itemNoFiltro(st, i, filtroTop[tipo].sel));
-        if (tipo === "juris" && filtroTribunal !== "todos") l = l.filter((i) => i.tribunal === filtroTribunal);
-        if (tipo === "juris" && filtroCategoria !== "todas") l = l.filter((i) => i.categoria === filtroCategoria);
-        return l.sort((a, b) => (a.criadoEm < b.criadoEm ? 1 : -1));
-      };
+      const letras = todasDoTipo.filter((i) => ehLetra(i) && !i.revogado);
+      const pqs = letras.filter((i) => !!i.pq || (i.pqIncidencia || 0) > 0).sort(porIncidencia);
+      const metas = todasDoTipo.filter(ehMeta).sort((a, b) => (a.lido === b.lido ? (a.criadoEm < b.criadoEm ? 1 : -1) : a.lido ? 1 : -1));
+      if (!letras.length && !metas.length) return toast("Nada para imprimir ainda.", "erro");
+      // Na Jurisprudência a lista da tela obedece aos filtros (tribunal/tipo/ramo/tópico…).
+      const jurisTela = tipo === "juris" ? listaLer.filter((i) => !i.revogado) : [];
+      const filtroJurisAtivo = tipo === "juris" && jurisTela.length !== letras.length;
+      const escopoOpts = [];
+      if (letras.length) {
+        if (filtroJurisAtivo) escopoOpts.push({ v: "tela", rot: `Jurisprudência do filtro atual (${jurisTela.length})` });
+        escopoOpts.push({ v: "todos", rot: tipo === "juris" ? `Toda a jurisprudência (${letras.length})` : `Todos os artigos (${letras.length})` });
+      }
+      if (pqs.length) escopoOpts.push({ v: "pq", rot: `Apenas o que mais cai (${pqs.length})` });
+      if (metas.length) escopoOpts.push({ v: "metas", rot: `Metas de leitura (${metas.length})` });
       const op = await opcoesImpressao(`Imprimir ${r.titulo.toLowerCase()}`, [
-        { key: "escopo", label: "O que imprimir", opcoes: [{ v: "ambos", rot: "A cumprir + Memória" }, { v: "meta", rot: "Só a cumprir" }, { v: "memoria", rot: "Só memória" }], def: "ambos" },
-        { key: "trecho", label: "Trecho/texto", opcoes: [{ v: "com", rot: "Com o trecho" }, { v: "sem", rot: "Só a referência" }], def: "com" },
+        { key: "escopo", label: "O que imprimir", opcoes: escopoOpts, def: escopoOpts[0].v },
+        { key: "trecho", label: "Conteúdo", opcoes: [{ v: "com", rot: "Com o texto" }, { v: "sem", rot: "Só as referências" }], def: "com" },
       ]);
       if (!op) return;
-      const ct = op.trecho === "com";
-      let html;
-      if (op.escopo === "ambos") {
-        html = `<h2>A cumprir</h2>${printLista(st, listaDoModo("meta"), r, ct)}<h2 style="margin-top:18px">Memória</h2>${printLista(st, listaDoModo("memoria"), r, ct)}`;
-      } else {
-        html = printLista(st, listaDoModo(op.escopo), r, ct);
+      if (op.escopo === "metas")
+        return imprimir(`${r.titulo} — metas de leitura`, `<h2>Metas de leitura</h2>` + printLista(st, metas, r, op.trecho === "com"));
+      const sel = op.escopo === "pq" ? pqs : op.escopo === "tela" ? jurisTela : letras;
+      if (!sel.length) return toast("Nada para imprimir neste escopo.", "erro");
+      const titulo = op.escopo === "pq" ? `${r.titulo} — o que mais cai` : `${r.titulo} — Mentor Concurso`;
+      // Lei com texto: agrupa por norma e usa o MESMO formato do leitor (artigos em ordem).
+      if (tipo === "lei" && op.trecho === "com") {
+        const normas = [...new Set(sel.map((i) => normaDeRef(i.referencia) || "Outros"))].sort();
+        const html = normas.map((n) => `<h2>${esc(nomeAmigavelLei(n))}</h2>` + imprimirLeiHTML(store, sel.filter((i) => (normaDeRef(i.referencia) || "Outros") === n), n)).join("");
+        return imprimir(titulo, html, { cls: "pa-lei" });
       }
-      imprimir(`${r.titulo} — Mentor Concurso`, html);
+      imprimir(titulo, printLista(st, sel, r, op.trecho === "com"));
     },
     modo: (el) => {
       modoAtivo[tipo] = el.getAttribute("data-modo");
@@ -1345,17 +1357,8 @@ function renderIndicacoes(root, app, tipo) {
       if (!ind || !(ind.texto || "").trim()) return toast("Este artigo não tem texto para estudar.", "erro");
       iniciarCE([ind]);
     },
-    // F6 — Planejamento: define a meta quantitativa diária (só quantidade; sem dificuldade).
-    "meta-set": async (el) => {
-      const k = el.getAttribute("data-k");
-      const atual = (store.get().config.metasLeitura || {})[k] || 0;
-      const g = await pedirNumero(k === "artigosDia" ? "Meta de artigos por dia:" : "Meta de questões por dia:", { padrao: atual || (k === "artigosDia" ? 10 : 20), min: 0, max: 999 });
-      if (!g) return;
-      store.setMetaLeitura(k, g.n);
-      toast(g.n ? "Meta diária definida." : "Meta removida.");
-      app.refresh();
-    },
-    "ir-revisoes": () => app.navigate("revisoes"),
+    // Fase 5 — as metas diárias e as revisões saíram da aba Metas (vivem no Planejamento/
+    // Central); daqui só se navega para lá.
     "ir-planejamento": () => app.navigate("planejamento"),
     "limpar-novidade": (el) => { store.limparNovidade(el.getAttribute("data-id")); app.refresh(); },
     "abrir-fonte": (el) => {
@@ -3171,7 +3174,7 @@ function estudarCorpoHTML(store, st, tipo, r) {
     );
   }
 
-  // F5 — dashboard "Hoje", recomendação inteligente e caderno de erros.
+  // F5 — números do dia (tira no <details> do fim), recomendação inteligente e caderno de erros.
   const hoje = store.resumoLeituraHoje();
   const ofens = store.ofensiva();
   const dificeis = base.filter((i) => i.dificil).length;
@@ -3188,10 +3191,10 @@ function estudarCorpoHTML(store, st, tipo, r) {
   else if (foco.length) rec = { ic: "bar-chart-3", titulo: "Foque no que mais cai", desc: "Certo/Errado só com os dispositivos prioritários.", acao: "estudar-foco" };
   else rec = { ic: "repeat-2", titulo: "Certo / Errado", desc: "Treine a letra julgando afirmações certas ou erradas.", acao: "estudar-ce" };
 
-  // Tira de contexto FINA (não um painel de tiles) — números do dia em uma linha. "Revisões
-  // vencendo" sai daqui (já vive na recomendação e no card "Revisar o que vence").
+  // Tira de contexto FINA — números do dia em uma linha. Fase 5: contexto, não ação — vive
+  // recolhida no <details> "Mais" do FIM da aba (o Estudar acima da dobra é só lançador).
   const etItem = (ic, n, lbl, cls = "") => `<span class="et-item ${cls}">${icone(ic)}<b>${n}</b> ${lbl}</span>`;
-  const dashboard = `<div class="estudar-tira">
+  const tiraDia = `<div class="estudar-tira">
         ${etItem("book-open", hoje.lidosHoje, "lidos hoje")}
         ${etItem("check-check", hoje.questoesHoje, hoje.pctHoje != null ? `questões · ${hoje.pctHoje}%` : "questões")}
         ${etItem("flame", dificeis, "difíceis")}
@@ -3344,8 +3347,8 @@ function estudarCorpoHTML(store, st, tipo, r) {
       </div>
     </details>` : "";
 
-  // A recomendação do Mentor "mora" no card certo (sem hero duplicado). Recs que não têm card
-  // próprio (foco/tema fraco) apontam para o Certo/Errado, a prática universal.
+  // A recomendação do Mentor destaca o card certo (borda + tooltip, SEM selo — o selo duplicava
+  // os chips "O Mentor sugere"). Recs sem card próprio (foco/tema fraco) apontam p/ Certo/Errado.
   const recCardAcao = { "estudar-foco": "estudar-ce", "estudar-tema-fraco": "estudar-ce" }[rec.acao] || rec.acao;
   // opcoes (opcional): { acao, tip } — link "Opções…" discreto dentro do card. O clique no card
   // inicia DIRETO com o padrão; o link abre a escolha de quantidade/dificuldade (bindActions
@@ -3354,7 +3357,6 @@ function estudarCorpoHTML(store, st, tipo, r) {
     const isRec = on && acao === recCardAcao;
     return `
     <button class="estudar-card ${on ? "" : "off"} ${isRec ? "rec" : ""}" data-action="${acao}" ${on ? "" : "disabled"}${isRec ? ` data-tip="${esc(rec.desc)}"` : ""}>
-      ${isRec ? `<span class="estudar-card-rec">${icone("sparkles")} Recomendado pelo Mentor</span>` : ""}
       <span class="estudar-card-ic">${icone(ic)}</span>
       <span class="estudar-card-txt"><b>${titulo}</b><span class="muted small">${desc}</span></span>
       ${extra ? `<span class="estudar-card-n">${extra}</span>` : ""}
@@ -3369,7 +3371,6 @@ function estudarCorpoHTML(store, st, tipo, r) {
   // Erros FUNDIDOS (E5): um card só "Meus erros" com Refazer (treino) + Abrir caderno (tela dedicada).
   const isRecErros = recCardAcao === "estudar-erros";
   const errosCard = (errosN || erros.length) ? `<div class="estudar-card estudar-card-gerar ${isRecErros ? "rec" : ""}">
-      ${isRecErros ? `<span class="estudar-card-rec">${icone("sparkles")} Recomendado pelo Mentor</span>` : ""}
       <span class="estudar-card-ic">${icone("list-checks")}</span>
       <span class="estudar-card-txt"><b>Meus erros</b><span class="muted small">${erros.length ? plural(erros.length, "artigo com erro recorrente", "artigos com erros recorrentes") : "questões que você errou no treino"}</span></span>
       <span class="estudar-card-acoes">
@@ -3430,15 +3431,21 @@ function estudarCorpoHTML(store, st, tipo, r) {
       ${temMaisDeUmaLei ? `<button class="est-crosslei ${crossLei ? "on" : ""}" data-action="estudar-cross-lei" data-tip="Alternar entre estudar o tema só nesta lei ou em TODAS as leis importadas.">${icone(crossLei ? "check-check" : "layers")} ${crossLei ? "Todas as leis" : "Só esta lei"}</button>` : ""}
     </div>` : "";
 
+  // Fase 5 — Estudar como LANÇADOR: acima da dobra só o que dispara ação (chips do Mentor,
+  // escopo e os cards Revisar/Treinar/Gerar). Contexto (números do dia) e o atalho "Memorizar
+  // por tema" ficam num <details> recolhido no fim — abre expandido se um tema está ativo.
+  const maisHTML = `<details class="ed-ajuda est-mais"${estudarTemaSel ? " open" : ""}>
+      <summary>Números do dia${temTemas ? " e memorizar por tema" : ""}</summary>
+      <div class="ed-ajuda-corpo">${tiraDia}${temaChipsHTML}</div>
+    </details>`;
   return `
-    ${dashboard}
     ${sugereHTML}
-    ${temaChipsHTML}
     ${escopoSel}
     ${grupo("rotate-ccw", "Revisar", "o que você já viu", cardsRevisar)}
     ${grupo("dumbbell", "Treinar", "teste-se na letra da lei", cardsTreinar)}
     ${gerarHTML}
-    ${statsHTML}`;
+    ${statsHTML}
+    ${maisHTML}`;
 }
 
 // Aba LER — a letra (link/anotações/texto). Não lidos agrupados por norma; lidos recolhidos.
@@ -3497,7 +3504,6 @@ function progressoMeta(st, ref) {
 function metasCorpoHTML(st, tipo, lista, r, store) {
   const cta = `<button class="btn btn-add" data-action="nova-meta">${icone("calendar-check")} Nova meta de leitura</button>`;
   const pano = tipo === "lei" ? store.planejamentoLeitura(tipo) : null;
-  const dueRev = store.memoriasParaRevisar(tipo);
   const pend = lista.filter((i) => !i.lido);
   const done = lista.filter((i) => i.lido);
 
@@ -3508,56 +3514,16 @@ function metasCorpoHTML(st, tipo, lista, r, store) {
       icone("calendar-check")
     );
 
-  // F6 — DASHBOARD do Planejamento Inteligente (só lei: progresso + ritmo + previsão).
-  const dashboard = pano && pano.total ? `<div class="plan-dash">
-      <div class="pd-card pd-prog">
-        <div class="pd-lbl">Progresso da leitura</div>
-        <div class="pd-big">${pano.lidos}<span class="pd-de"> / ${pano.total}</span></div>
-        <div class="pd-bar pd-bar-dual" data-tip="${pano.pct}% lido · ${pano.pctDominado}% dominado"><span class="pdb-lido" style="width:${pano.pct}%"></span><span class="pdb-dom" style="width:${pano.pctDominado}%"></span></div>
-        <div class="pd-sub">${pano.pct}% lido · <b class="pd-dom">${pano.pctDominado}% dominado</b> · faltam ${pano.faltam}</div>
-      </div>
-      <div class="pd-card"><span class="pd-ic">${icone("zap")}</span><div class="pd-n">${pano.ritmoDia || "—"}</div><div class="pd-l">artigos/dia (seu ritmo)</div>${pano.lidosSemana ? `<div class="pd-semana">${icone("flame")} ${plural(pano.lidosSemana, "lido", "lidos")} esta semana</div>` : ""}</div>
-      <div class="pd-card"><span class="pd-ic">${icone("flag")}</span><div class="pd-n">${pano.previsaoData ? fmtData(pano.previsaoData) : "—"}</div><div class="pd-l">${pano.previsaoDias != null ? `conclusão em ~${plural(pano.previsaoDias, "dia", "dias")}` : "leia alguns dias p/ prever"}</div></div>
-    </div>` : "";
-
-  // F6 — METAS QUANTITATIVAS diárias (artigos/dia, questões/dia) com progresso de hoje.
-  const metaBar = (k, ic, lbl, feito, meta) => {
-    const pct = meta ? Math.min(100, Math.round((100 * feito) / meta)) : 0;
-    return `<div class="plan-meta ${meta && feito >= meta ? "ok" : ""}">
-        <span class="pm-ic">${icone(ic)}</span>
-        <div class="pm-body">
-          <div class="pm-top"><b>${lbl}</b>${meta ? `<span class="pm-nums">${feito} / ${meta}${meta && feito >= meta ? ` ${icone("check")}` : ""}</span>` : `<span class="muted small">sem meta definida</span>`}</div>
-          ${meta ? `<div class="pm-bar"><span style="width:${pct}%"></span></div>` : ""}
-        </div>
-        <button class="btn btn-ghost btn-sm" data-action="meta-set" data-k="${k}">${icone(meta ? "square-pen" : "plus")} ${meta ? "Ajustar" : "Definir"}</button>
-      </div>`;
-  };
-  // BLOCO 2 — "Hoje": funde metas diárias + agenda + calendário leve. UMA fonte de revisões (o
-  // calendário consolidado), então o número de hoje bate com a célula de hoje (sem inconsistência).
-  const DOW = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-  const hojeCal = todayISO();
-  const dowHoje = new Date(hojeCal + "T12:00:00").getDay();
-  const semana = []; for (let k = 0; k < 7; k++) semana.push(addDays(addDays(hojeCal, -dowHoje), k));
-  const revsAll = store.revisoesConsolidadas();
-  const revPorDia = {}; let atrasadas = 0;
-  for (const rv of revsAll) { if (rv.proxima < hojeCal) atrasadas++; else revPorDia[rv.proxima] = (revPorDia[rv.proxima] || 0) + 1; }
-  const folgasSem = st.config.diasFolga || []; const feriadosSem = st.config.diasFeriado || [];
-  const revDoDia = (d) => (d === hojeCal ? (revPorDia[d] || 0) + atrasadas : (revPorDia[d] || 0));
-  const revHoje = revDoDia(hojeCal);
-  const hojeBlock = `<section class="plan-sec plan-hoje">
-      <div class="plan-sec-head">${icone("calendar-check")} Hoje</div>
-      ${pano && pano.total ? metaBar("artigosDia", "book-open", "Ler artigos", pano.lidosHoje, pano.metaArtigosDia) + metaBar("questoesDia", "check-check", "Resolver questões", pano.questoesHoje, pano.metaQuestoesDia) : ""}
-      <div class="pa-linha"><span class="pa-ic">${icone("brain")}</span><b>${plural(revHoje, "revisão vencendo", "revisões vencendo")}</b>${revHoje ? ` <button class="lnk" data-action="ir-revisoes">revisar agora</button>` : ""}</div>
-      <div class="plan-semana-rot">Esta semana</div>
-      <div class="plan-cal plan-semana">
-        ${semana.map((d) => {
-          const dow = new Date(d + "T12:00:00").getDay();
-          const isHoje = d === hojeCal, isFolga = folgasSem.includes(dow) || feriadosSem.includes(d), n = revDoDia(d);
-          return `<div class="pc-dia ${isHoje ? "hoje" : ""} ${isFolga ? "folga" : ""}"><span class="pc-dow">${DOW[dow]}</span><span class="pc-num">${d.slice(8)}</span>${isFolga ? `<span class="pc-tag">folga</span>` : n ? `<button class="pc-rev" data-action="ir-revisoes" data-tip="${plural(n, "revisão", "revisões")}${d === hojeCal && atrasadas ? ` (${atrasadas} atrasada${atrasadas > 1 ? "s" : ""})` : ""}">${n}</button>` : `<span class="pc-vazio">—</span>`}</div>`;
-        }).join("")}
-      </div>
-      <button class="btn btn-soft btn-sm" data-action="ir-planejamento" data-tip="Cronograma da semana, replanejamento e horas — no Planejamento global.">${icone("calendar-days")} Abrir Planejamento da semana</button>
-    </section>`;
+  // Fase 5 — sem dashboard duplicado: UMA linha-resumo (progresso · ritmo · previsão) + link
+  // para o Planejamento. Metas diárias, revisões vencendo e calendário da semana vivem no
+  // Planejamento, na Central de Revisões e no Hoje — aqui ficam só as METAS de leitura.
+  const linkPlanejar = `<button class="lnk" data-action="ir-planejamento" data-tip="Cronograma da semana, metas do dia e revisões — no Planejamento global.">${icone("calendar-days")} Planejar a semana ${icone("arrow-right")}</button>`;
+  const resumo = `<div class="estudar-tira metas-resumo">
+      ${pano && pano.total ? `<span class="et-item" data-tip="${pano.lidos} de ${pano.total} lidos · ${pano.pctDominado}% dominado · faltam ${pano.faltam}">${icone("book-open")}<b>${pano.pct}%</b> lido (${pano.lidos}/${pano.total})</span>
+      <span class="et-item" data-tip="Média de artigos lidos por dia de estudo.">${icone("zap")}<b>${pano.ritmoDia || "—"}</b> artigos/dia</span>
+      <span class="et-item" data-tip="${pano.previsaoDias != null ? `Conclusão em ~${plural(pano.previsaoDias, "dia", "dias")} no ritmo atual.` : "Leia alguns dias para o app prever a conclusão."}">${icone("flag")}<span>termina ~<b>${pano.previsaoData ? fmtData(pano.previsaoData) : "—"}</b></span></span>` : ""}
+      <span class="spacer"></span>${linkPlanejar}
+    </div>`;
 
   const linha = (i) => {
     const topico = i.topicoId ? st.topicos.find((t) => t.id === i.topicoId) : null;
@@ -3594,7 +3560,7 @@ function metasCorpoHTML(st, tipo, lista, r, store) {
       </div>
       ${mostrarConcluidas[tipo] ? done.map(linha).join("") : ""}`;
   }
-  return `${dashboard}${hojeBlock}
+  return `${resumo}
     <section class="plan-sec">
       <div class="plan-sec-head">${icone("list-checks")} Metas de leitura ${pend.length ? `<span class="muted small">— ${plural(pend.length, "pendente", "pendentes")}</span>` : ""}</div>
       ${listaHTML}
@@ -3963,7 +3929,7 @@ function printLista(st, lista, r, comTrecho = true) {
       const disc = topico ? st.disciplinas.find((d) => d.id === topico.disciplinaId) : i.disciplinaId ? st.disciplinas.find((d) => d.id === i.disciplinaId) : null;
       const vinc = topico ? nomeTopico(st, topico) : disc ? disc.nome : "Geral";
       const extra = [i.tribunal, i.categoria].filter(Boolean).join(" · ");
-      return `<div class="print-item">[${i.lido && i.modo !== "memoria" ? "x" : " "}] <b>${esc(i.referencia)}</b>${extra ? ` <span class="print-meta">(${esc(extra)})</span>` : ""}
+      return `<div class="print-item">[${i.lido ? "x" : " "}] <b>${esc(i.referencia)}</b>${extra ? ` <span class="print-meta">(${esc(extra)})</span>` : ""}
         ${comTrecho && i.texto ? `<div>${esc(i.texto)}</div>` : ""}
         <div class="print-meta">${esc(vinc)}</div></div>`;
     })

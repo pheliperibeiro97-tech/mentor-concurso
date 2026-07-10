@@ -5956,3 +5956,13 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
    como o leitor: clique numa marca abre o popover (editar/remover). */
 .ls-texto mark.mk { cursor: pointer; }
 .ls-texto mark.mk-comentario { background: transparent; box-shadow: none; border-bottom: 2px dotted var(--primary); }
+
+/* ===== Fase 5 — Estudar/Metas enxutos =====
+   Estudar vira LANÇADOR: a tira de números do dia e o "Memorizar por tema" moram num
+   <details> recolhido no fim da aba (.est-mais). Metas perde o dashboard duplicado: só
+   uma linha-resumo (.metas-resumo, reusa .estudar-tira) + a lista de metas + link p/ o
+   Planejamento. */
+.est-mais .estudar-tira { margin-bottom: 12px; }
+.est-mais .estudar-tira:last-child { margin-bottom: 0; padding-bottom: 2px; border-bottom: 0; }
+.est-mais .est-temas { margin-bottom: 0; }
+.metas-resumo .lnk { display: inline-flex; align-items: center; gap: 5px; }
