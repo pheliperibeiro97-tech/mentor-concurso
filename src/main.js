@@ -414,6 +414,38 @@ function bottomBarHTML() {
   </nav>`;
 }
 
+// ===== Fase 8 (a11y): ARIA dos segmented (.seg) =====
+// O markup dos .seg nasce em ~10 telas (todas já com role="tablist" no container, mas os
+// botões sem semântica). Em vez de editar tela a tela, um pós-processo central aplica
+// role="tab" + aria-selected (espelho da classe .on/.ativo). Um MutationObserver no body
+// (childList + classe, debounce por frame) cobre re-renders internos das telas e segs
+// dentro de modais — o custo por passada é um querySelectorAll barato.
+function aplicarAriaSeg() {
+  document.querySelectorAll(".seg").forEach((seg) => {
+    if (!seg.hasAttribute("role")) seg.setAttribute("role", "tablist");
+    if (seg.getAttribute("role") !== "tablist") return; // ex.: role="group" (não são abas)
+    seg.querySelectorAll(":scope > button").forEach((b) => {
+      if (b.getAttribute("role") !== "tab") b.setAttribute("role", "tab");
+      const val = b.classList.contains("on") || b.classList.contains("ativo") ? "true" : "false";
+      if (b.getAttribute("aria-selected") !== val) b.setAttribute("aria-selected", val);
+    });
+  });
+}
+let ariaSegObserver = null;
+function iniciarAriaSeg() {
+  if (ariaSegObserver) return;
+  let agendado = false;
+  const agendar = () => {
+    if (agendado) return;
+    agendado = true;
+    requestAnimationFrame(() => { agendado = false; aplicarAriaSeg(); });
+  };
+  ariaSegObserver = new MutationObserver(agendar);
+  // Só childList/class: os setAttribute de role/aria-selected acima NÃO reentram no observer.
+  ariaSegObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  agendar();
+}
+
 function render(preservarScroll = true) {
   esconderTooltip(); // re-render/navegação destrói a âncora — sem isto o portal fica "preso" visível
   const root = document.getElementById("app");
@@ -517,6 +549,7 @@ function render(preservarScroll = true) {
   ligarFaixasIA(content, app); // camada de IA contextual: ativa faixas de insight da tela
   ativarReveal(content); // FASE 0: revela seções [data-reveal] ao entrarem na viewport
   ativarCountUp(content); // FASE 0: anima números [data-count] (KPIs)
+  iniciarAriaSeg(); // Fase 8 (a11y): role=tab/aria-selected nos .seg (liga o observer 1x)
   setOrbsOffline(!store.iaDisponivel()); // Fase 2: orb informa o estado (apagado sem IA)
   montarOrbs(document); // orb "vivo" (plasma canvas) em todo .orb novo; ignora os já montados
   if (scrollAnterior) {

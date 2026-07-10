@@ -7,7 +7,27 @@
 // (`foco-anterior`/`foco-proximo`/`sair-foco`) e chamar `bindFocoCrono(map)`.
 import { icone } from "../icones.js";
 import { fmtMMSS } from "../util.js";
+import { cicloTab } from "../ui.js";
 import * as crono from "../cronometro.js";
+
+// ---- Fase 8 (a11y): focus-trap central do Modo Foco ----
+// O shell é só HTML (os consumidores montam/desmontam o overlay como quiserem), então o
+// trap não tem ciclo de vida próprio: UM listener no document (ligado 1x, no primeiro
+// focoShellHTML) detecta o overlay .fc-foco no momento do Tab e prende o ciclo dentro
+// dele. Com um modal aberto por cima (.mm-overlay/.modal-overlay), este trap se cala —
+// o modal tem o próprio trap (prenderFoco de ui.js). Sem overlay, é no-op.
+let trapModoFocoLigado = false;
+function ligarTrapModoFoco() {
+  if (trapModoFocoLigado) return;
+  trapModoFocoLigado = true;
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab") return;
+    const ov = document.querySelector(".fc-foco");
+    if (!ov) return;
+    if (document.querySelector(".mm-overlay, .modal-overlay")) return;
+    cicloTab(ov, e);
+  }, true);
+}
 
 // ---- Cronômetro no chip (sem re-render: atualiza só o próprio chip) ----
 
@@ -153,7 +173,7 @@ function placarHTML(placar) {
   const feitos = acertos + erros;
   const pct = feitos ? Math.round((acertos / feitos) * 100) : 0;
   return `${streakChipHTML(seq)}
-    <div class="fq-placar" data-tip="Placar da sessão (acertos / erros / precisão)">
+    <div class="fq-placar" data-tip="Placar da sessão (acertos / erros / precisão)" aria-live="polite" aria-atomic="true" aria-label="Placar: ${acertos} acertos, ${erros} erros">
       <span class="fq-plc-ok">${icone("check")} ${acertos}</span>
       <span class="fq-plc-err">${icone("x")} ${erros}</span>
       <span class="fq-plc-pct">${feitos ? pct + "%" : "—"}</span>
@@ -179,6 +199,7 @@ function placarHTML(placar) {
  * @param {string} [o.acoesExtra] HTML extra na barra de ações, antes do botão Sair
  */
 export function focoShellHTML({ idx, total, fim = false, mostrarNav = true, placar = null, placarExtra = "", centro, rodape, aria = "Modo foco", anim = "in", crono = true, acoesExtra = "" }) {
+  ligarTrapModoFoco(); // Fase 8: garante o focus-trap do overlay (idempotente)
   const pctProg = total ? Math.round((Math.min(idx, total) / total) * 100) : 100;
   const posicao = Math.min(idx + (fim ? 0 : 1), total);
   const nav = mostrarNav && !fim;

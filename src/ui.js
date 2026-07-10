@@ -31,14 +31,23 @@ export function bindActions(root, handlers) {
   });
 }
 
-// opts (opcional): { acaoLabel, onAcao, duracao } — mostra um botão de 1 toque no toast.
-export function toast(msg, tipo = "ok", opts) {
+// Container único dos toasts. Fase 8 (a11y): região viva "polite" — leitores de tela
+// anunciam cada toast novo (aria-atomic=false: só o nó adicionado, não a pilha inteira).
+function containerToasts() {
   let cont = qs("#toasts");
   if (!cont) {
     cont = document.createElement("div");
     cont.id = "toasts";
+    cont.setAttribute("aria-live", "polite");
+    cont.setAttribute("aria-atomic", "false");
     document.body.appendChild(cont);
   }
+  return cont;
+}
+
+// opts (opcional): { acaoLabel, onAcao, duracao } — mostra um botão de 1 toque no toast.
+export function toast(msg, tipo = "ok", opts) {
+  const cont = containerToasts();
   const t = document.createElement("div");
   t.className = `toast toast-${tipo}`;
   const fechar = () => { t.classList.remove("show"); setTimeout(() => t.remove(), 300); };
@@ -66,8 +75,7 @@ export function toast(msg, tipo = "ok", opts) {
 // opts.aoCancelar (Fase 4): botão "Cancelar" no próprio toast — para operações em lote
 // (ex.: OCR página a página) que o usuário deve poder interromper sem perder o já feito.
 export function toastCarregando(msg = "Processando…", opts = {}) {
-  let cont = qs("#toasts");
-  if (!cont) { cont = document.createElement("div"); cont.id = "toasts"; document.body.appendChild(cont); }
+  const cont = containerToasts();
   const t = document.createElement("div");
   t.className = "toast toast-load";
   t.innerHTML = `<span class="mini-spin"></span><span class="toast-msg"></span>${opts.aoCancelar ? `<button class="toast-acao" type="button">Cancelar</button>` : ""}`;
@@ -105,6 +113,57 @@ export async function comOcupado(fn, { botao = null, msg = "Processando…", err
   }
 }
 
+// ===== Fase 8 (a11y): FOCUS-TRAP dos overlays/modais =====
+// Enquanto um modal está aberto, o Tab não pode escapar para o app atrás dele (topbar,
+// sidebar…). `prenderFoco(container)` prende o ciclo de Tab/Shift+Tab dentro do container,
+// foca o primeiro focável ao prender e devolve a função de cleanup, que restaura o foco
+// no elemento que estava ativo antes (se ainda existir). Suporta EMPILHAMENTO (modal
+// sobre modal): só o trap do topo da pilha age.
+const SELETOR_FOCAVEL = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+const pilhaTraps = [];
+
+function focaveisVisiveis(container) {
+  return Array.from(container.querySelectorAll(SELETOR_FOCAVEL))
+    .filter((el) => el.offsetParent !== null || el.getClientRects().length > 0);
+}
+
+// Um passo do ciclo de Tab dentro de `container` (chamar num keydown de Tab). Recalcula
+// os focáveis a cada tecla — sobrevive a re-renders internos do overlay. Exportado
+// também para o trap central do Modo Foco (foco-quiz.js), que não tem ciclo de vida
+// de montagem/desmontagem próprio.
+export function cicloTab(container, e) {
+  const els = focaveisVisiveis(container);
+  if (!els.length) { e.preventDefault(); return; }
+  const atual = document.activeElement;
+  const i = els.indexOf(atual);
+  if (!container.contains(atual) || i === -1) { e.preventDefault(); els[e.shiftKey ? els.length - 1 : 0].focus(); return; }
+  if (e.shiftKey && i === 0) { e.preventDefault(); els[els.length - 1].focus(); }
+  else if (!e.shiftKey && i === els.length - 1) { e.preventDefault(); els[0].focus(); }
+}
+
+export function prenderFoco(container) {
+  const anterior = document.activeElement;
+  pilhaTraps.push(container);
+  const onKey = (e) => {
+    if (e.key !== "Tab") return;
+    if (pilhaTraps[pilhaTraps.length - 1] !== container || !document.body.contains(container)) return;
+    cicloTab(container, e);
+  };
+  document.addEventListener("keydown", onKey, true);
+  const primeiro = focaveisVisiveis(container)[0];
+  if (primeiro) primeiro.focus();
+  else { container.setAttribute("tabindex", "-1"); container.focus(); }
+  let solto = false;
+  return () => {
+    if (solto) return;
+    solto = true;
+    const idx = pilhaTraps.lastIndexOf(container);
+    if (idx !== -1) pilhaTraps.splice(idx, 1);
+    document.removeEventListener("keydown", onKey, true);
+    if (anterior && typeof anterior.focus === "function" && document.body.contains(anterior)) anterior.focus();
+  };
+}
+
 // Fase 0: fechamento ANIMADO de overlays (os modais entravam animados e saíam com corte
 // seco). Adiciona .closing, espera a transição curta e remove. A Promise de quem chama
 // resolve imediatamente — só o desmonte visual é adiado.
@@ -130,7 +189,8 @@ export function confirmar(msg) {
         </div>
       </div>`;
     document.body.appendChild(ov);
-    const fim = (v) => { fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
+    const soltarFoco = prenderFoco(ov); // Fase 8: Tab preso no modal; foco volta ao gatilho no fim
+    const fim = (v) => { soltarFoco(); fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
     const onKey = (e) => { if (e.key === "Escape") fim(false); };
     document.addEventListener("keydown", onKey);
     ov.addEventListener("click", (e) => {
@@ -163,7 +223,8 @@ export function escolher(msg, opcoes, opts = {}) {
         ${corpo}
       </div>`;
     document.body.appendChild(ov);
-    const fim = (v) => { fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
+    const soltarFoco = prenderFoco(ov); // Fase 8: focus-trap + restauração do foco
+    const fim = (v) => { soltarFoco(); fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
     const onKey = (e) => { if (e.key === "Escape") fim(null); };
     document.addEventListener("keydown", onKey);
     ov.addEventListener("click", (e) => {
@@ -192,7 +253,8 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, se
       <div class="mm-corpo">${corpoHTML}</div>
     </div>`;
   document.body.appendChild(overlay);
-  const fechar = () => { fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
+  const soltarFoco = prenderFoco(overlay); // Fase 8: focus-trap (o autofocus abaixo refina o alvo)
+  const fechar = () => { soltarFoco(); fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") fechar(); };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) fechar(); });
   overlay.querySelector(".mm-close").addEventListener("click", fechar);
@@ -315,6 +377,7 @@ export function pedirNumero(
         </div>
       </div>`;
     document.body.appendChild(ov);
+    const soltarFoco = prenderFoco(ov); // Fase 8: focus-trap (o focus() abaixo leva ao campo)
     const input = ov.querySelector(".num-input");
     input.focus();
     input.select();
@@ -326,7 +389,9 @@ export function pedirNumero(
     };
     // Quando nivel=true devolve {n, dificuldade}; senão só o número (retrocompatível).
     const empacotar = (n) => (nivel ? { n, dificuldade: nivelSel } : n);
-    const fechar = (val) => { fecharAnimado(ov); resolve(val); };
+    const fechar = (val) => { soltarFoco(); fecharAnimado(ov); resolve(val); };
+    // Fase 8: Esc fecha com o foco em QUALQUER elemento do modal (antes, só no input).
+    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") fechar(null); });
     ov.addEventListener("click", (e) => {
       const chip = e.target.closest("[data-nivel]");
       if (chip) {
@@ -349,7 +414,6 @@ export function pedirNumero(
     });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { const v = ler(); if (v) fechar(empacotar(v)); }
-      else if (e.key === "Escape") fechar(null);
     });
   });
 }
@@ -375,6 +439,7 @@ export function pedirTexto(msg, { valor = "", placeholder = "", rotuloOk = "Salv
         </div>
       </div>`;
     document.body.appendChild(ov);
+    const soltarFoco = prenderFoco(ov); // Fase 8: focus-trap (o focus() abaixo leva ao campo)
     const input = ov.querySelector(".num-input");
     input.focus();
     if (input.select) input.select();
@@ -382,7 +447,9 @@ export function pedirTexto(msg, { valor = "", placeholder = "", rotuloOk = "Salv
       const v = (input.value || "").trim();
       return v || null;
     };
-    const fechar = (val) => { fecharAnimado(ov); resolve(val); };
+    const fechar = (val) => { soltarFoco(); fecharAnimado(ov); resolve(val); };
+    // Fase 8: Esc fecha com o foco em QUALQUER elemento do modal (antes, só no input).
+    ov.addEventListener("keydown", (e) => { if (e.key === "Escape") fechar(null); });
     ov.addEventListener("click", (e) => {
       const b = e.target.closest("[data-c]");
       if (!b && e.target !== ov) return;
@@ -391,7 +458,6 @@ export function pedirTexto(msg, { valor = "", placeholder = "", rotuloOk = "Salv
     });
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !multilinha) { e.preventDefault(); fechar(ler()); }
-      else if (e.key === "Escape") fechar(null);
     });
   });
 }
@@ -413,12 +479,18 @@ export function avisoIA(app, oQue = "Esta função") {
       </div>
     </div>`;
   document.body.appendChild(ov);
+  const soltarFoco = prenderFoco(ov); // Fase 8: focus-trap
+  const fechar = (ir) => {
+    soltarFoco();
+    fecharAnimado(ov);
+    if (ir && app && app.navigate) app.navigate("config");
+  };
+  // Fase 8: Esc fecha (este modal não tinha saída por teclado).
+  ov.addEventListener("keydown", (e) => { if (e.key === "Escape") fechar(false); });
   ov.addEventListener("click", (e) => {
     const b = e.target.closest("[data-c]");
     if (!b && e.target !== ov) return;
-    const ir = b && b.getAttribute("data-c") === "ir";
-    fecharAnimado(ov);
-    if (ir && app && app.navigate) app.navigate("config");
+    fechar(!!(b && b.getAttribute("data-c") === "ir"));
   });
 }
 
@@ -573,7 +645,8 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  const fechar = () => { fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
+  const soltarFoco = prenderFoco(overlay); // Fase 8: focus-trap do overlay do mapa
+  const fechar = () => { soltarFoco(); fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape" && !work) fechar(); }; // Esc não fecha durante a edição
   overlay.addEventListener("click", (e) => { if (e.target === overlay && !work) fechar(); });
   overlay.querySelector(".mm-close").addEventListener("click", fechar);

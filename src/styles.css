@@ -294,9 +294,11 @@ button { color: inherit; }
 ::selection { background: #c2d6f7; }
 [data-tema="escuro"] ::selection { background: #1e3a6b; color: #fff; }
 
-/* Acessibilidade: anel de foco visível só para teclado */
+/* Acessibilidade: anel de foco visível só para teclado. As classes extras (Fase 8) vencem
+   os "box-shadow: none" de base (.btn-ghost, .lnk, .chip…) por especificidade. */
 :focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-xs); }
-button:focus-visible, .nav-item:focus-visible, .chip:focus-visible { box-shadow: var(--ring); }
+button:focus-visible, .nav-item:focus-visible, .chip:focus-visible,
+.btn:focus-visible, .lnk:focus-visible { box-shadow: var(--ring); }
 
 /* Scrollbars ultrafinas e arredondadas (estilo macOS). */
 * { scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
@@ -3235,6 +3237,11 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .doc-mais-pop .menu-item:hover, .doc-mais-pop .lnk:hover,
 .resumo-menu-pop .menu-item:hover, .resumo-menu-pop .lnk:hover,
 .ls-mais-pop .menu-item:hover, .ls-mais-pop .lnk:hover { background: var(--surface-2); color: var(--primary-d); text-decoration: none; }
+/* Fase 8 (a11y): o "box-shadow: none" da base acima vencia o anel global de :focus-visible
+   por especificidade — o par explícito devolve o anel de teclado nos itens do menu. */
+.doc-mais-pop .menu-item:focus-visible, .doc-mais-pop .lnk:focus-visible,
+.resumo-menu-pop .menu-item:focus-visible, .resumo-menu-pop .lnk:focus-visible,
+.ls-mais-pop .menu-item:focus-visible, .ls-mais-pop .lnk:focus-visible { box-shadow: var(--ring); }
 .menu-ico { width: 18px; text-align: center; flex-shrink: 0; }
 .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
 .menu-rotulo { font-size: var(--fs-2xs); font-weight: var(--fw-medium); letter-spacing: .02em; text-transform: uppercase; color: var(--text-3); padding: 4px 10px 2px; }
@@ -5250,6 +5257,9 @@ label.inline > select{margin-left:6px}
   display:inline-flex; align-items:center; gap:7px; white-space:nowrap; }
 .seg > button svg { width: 15px; height: 15px; }
 .seg > button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); font-weight: var(--fw-semibold); }
+/* Fase 8 (a11y): o "box-shadow: none" da base do botão (acima) empatava com o anel global
+   de :focus-visible e vencia por ordem — o par explícito devolve o anel de teclado. */
+.seg > button:focus-visible { box-shadow: var(--ring); }
 /* Badge de contagem dentro de um botão do seg (ex.: revisões vencendo, metas pendentes). */
 .seg .seg-badge { min-width: 18px; height: 18px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); font-size: var(--fs-2xs); font-weight: var(--fw-bold); font-variant-numeric: tabular-nums; }
 .seg > button.on .seg-badge { background: color-mix(in srgb, var(--primary) 20%, transparent); }
