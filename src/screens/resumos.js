@@ -1,7 +1,7 @@
 // Resumos: anotações em texto rico (negrito, itálico, sublinhado, marcador, cores,
 // listas), vinculadas a uma disciplina e (opcional) a um tópico. Importa de PDF/texto,
 // permite editar e imprimir.
-import { bindActions, toast, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc } from "../ui.js";
+import { bindActions, toast, toastCarregando, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc } from "../ui.js";
 import { ligarImportArquivo } from "../pdf.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
 import { esc, fmtData, todayISO } from "../util.js";
@@ -268,7 +268,7 @@ function abrirGerarResumo(app) {
           const skel = document.createElement("div");
           skel.innerHTML = `<div class="ai-frame" style="margin-top:12px">${skeletonDoc(4)}</div>`;
           corpo.appendChild(skel);
-          toast("Sintetizando com IA…");
+          const fim = toastCarregando("Sintetizando com a IA…");
           try {
             const r = await store.gerarResumoSinteseIA(fontes, escopo);
             if (r) { toast("Resumo sintetizado pela IA. Confira e edite se quiser."); fechar(); app.refresh(); }
@@ -278,7 +278,7 @@ function abrirGerarResumo(app) {
             skel.remove();
             el.classList.remove("lnk-disabled");
             el.removeAttribute("disabled");
-          }
+          } finally { fim(); }
         },
       });
     },

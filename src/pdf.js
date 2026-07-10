@@ -70,6 +70,7 @@ const LIMIAR_VAZIA = 80;
 // como FIGURA/TABELA relevante. Logos e banners de cabeçalho (que se repetem em
 // TODA página) são pequenos e ficam abaixo disto — assim não geram falso "tem imagem".
 const LIMIAR_IMG_FRAC = 0.1;
+const LIMIAR_FUNDO = 0.82; // F1: imagem que cobre ~página inteira = fundo/marca d'água → NÃO é figura de conteúdo
 
 // Extração simples (texto corrido do PDF inteiro). Mantida para compatibilidade.
 export async function extrairPdf(file) {
@@ -85,15 +86,31 @@ export async function extrairPdf(file) {
 // Reconstrói o texto de uma página PRESERVANDO as quebras de linha (o pdf.js entrega itens
 // soltos; agrupo por posição Y → linhas; ordeno por X dentro da linha). Essencial para detectar
 // Índice/Sumário e títulos. Usa item.hasEOL quando existe; senão, diferença de Y.
-// Devolve { texto, linhas:[{texto,fontSize,bold}] } — `linhas` (com a fonte) serve à detecção de
-// títulos por TAMANHO DE FONTE (fallback p/ PDFs sem Índice). `linhas` é transitório (não é salvo).
-function reconstruirLinhas(items) {
+// Reconstrói LINHAS de uma sequência de itens JÁ em ordem de leitura (fecha a linha ao mudar a
+// altura y). Base comum; a ordem/coluna é resolvida por quem chama.
+function reconstruirLinear(items) {
   const brutas = []; // {texto, fontSize, bold}
   let curY = null, partes = [];
   const tamItem = (p) => p.height || Math.hypot(p.transform?.[2] || 0, p.transform?.[3] || 0) || 0;
   const fechar = () => {
     if (partes.length) {
-      const t = partes.map((p) => p.str).join("").replace(/[ \t]+$/g, "");
+      // Junta os runs da linha inserindo ESPAÇO quando há um vão horizontal entre eles e nenhum dos
+      // lados já tem espaço — conserta palavras coladas ("noSistemaÚnicodeSaúde") comuns quando o
+      // pdf.js emite runs adjacentes sem o espaço (típico de layout em 2 colunas). Limiar relativo ao
+      // corpo da fonte (0.2·tamanho) → ignora kerning, só separa palavras de fato.
+      let t = "";
+      for (let i = 0; i < partes.length; i++) {
+        const p = partes[i];
+        if (i > 0) {
+          const prev = partes[i - 1];
+          const gap = (p.transform?.[4] || 0) - ((prev.transform?.[4] || 0) + (prev.width || 0));
+          const size = tamItem(p) || tamItem(prev) || 0;
+          const jaTemEsp = /\s$/.test(prev.str || "") || /^\s/.test(p.str || "");
+          if (!jaTemEsp && size > 0 && gap > 0.2 * size) t += " ";
+        }
+        t += p.str;
+      }
+      t = t.replace(/[ \t]+$/g, "");
       const fontSize = Math.round(Math.max(0, ...partes.map(tamItem)) * 10) / 10;
       const bold = partes.some((p) => /bold|black|heavy|semibold|extrabold/i.test(p.fontName || ""));
       brutas.push({ texto: t, fontSize, bold });
@@ -111,8 +128,59 @@ function reconstruirLinhas(items) {
   const linhas = brutas
     .map((l) => ({ ...l, texto: (l.texto || "").replace(/\s+/g, " ").trim() }))
     .filter((l, idx, arr) => l.texto !== "" || (idx > 0 && arr[idx - 1].texto !== "")); // colapsa vazias
+  return linhas.filter((l) => l.texto !== "");
+}
+// F1 (colunas): detecta layout de 2 colunas exigindo uma CALHA VAZIA (faixa vertical central sem
+// nenhum texto) — o único sinal que separa 2 colunas reais de 1 coluna com x espalhado. Validado:
+// 0% de falso-positivo em 3 apostilas de 1 coluna, 100% na de 2 colunas. Senão null → linear (seguro).
+function detectarDuasColunas(items) {
+  const info = (items || [])
+    .filter((it) => it && it.transform && (it.str || "").trim())
+    .map((it) => ({ it, x0: it.transform[4], x1: it.transform[4] + (it.width || 0), y: it.transform[5] }))
+    .filter((o) => o.x1 > o.x0);
+  if (info.length < 30) return null;
+  const L = Math.min(...info.map((o) => o.x0));
+  const R = Math.max(...info.map((o) => o.x1));
+  const W = R - L;
+  if (W <= 50) return null;
+  const N = 200;
+  const cov = new Array(N).fill(false); // cobertura horizontal do texto em N faixas
+  for (const o of info) {
+    const i0 = Math.max(0, Math.floor(((o.x0 - L) / W) * N));
+    const i1 = Math.min(N - 1, Math.floor(((o.x1 - L) / W) * N));
+    for (let i = i0; i <= i1; i++) cov[i] = true;
+  }
+  let best = 0, cur = 0, bestEnd = -1; // maior faixa VAZIA contígua na região central [0.28,0.72]
+  const lo = Math.floor(0.28 * N), hi = Math.floor(0.72 * N);
+  for (let i = lo; i < hi; i++) {
+    if (!cov[i]) { cur++; if (cur > best) { best = cur; bestEnd = i; } } else cur = 0;
+  }
+  if (best / N < 0.03) return null; // sem calha vazia clara → 1 coluna
+  const gutter = L + ((bestEnd - best / 2) / N) * W; // centro da calha = ponto de corte
+  const centro = (o) => (o.x0 + o.x1) / 2;
+  const esq = info.filter((o) => centro(o) < gutter);
+  const dir = info.filter((o) => centro(o) >= gutter);
+  const min = info.length * 0.22;
+  if (esq.length < min || dir.length < min) return null;
+  return [esq, dir];
+}
+// Devolve { texto, linhas:[{texto,fontSize,bold}] }. Se o PDF é 2 colunas, lê COLUNA A COLUNA
+// (esquerda inteira, depois direita) — senão embaralharia o texto. `linhas` (com a fonte) serve à
+// detecção de títulos por tamanho; é transitório (não salvo).
+function reconstruirLinhas(items) {
+  const cols = detectarDuasColunas(items);
+  let linhas;
+  if (cols) {
+    linhas = [];
+    for (const grupo of cols) {
+      const ordenados = grupo.slice().sort((a, b) => b.y - a.y || a.x0 - b.x0).map((o) => o.it); // topo→base
+      linhas.push(...reconstruirLinear(ordenados));
+    }
+  } else {
+    linhas = reconstruirLinear(items);
+  }
   const texto = linhas.map((l) => l.texto).join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  return { texto, linhas: linhas.filter((l) => l.texto !== "") };
+  return { texto, linhas };
 }
 
 export async function extrairPdfPaginas(source) {
@@ -149,7 +217,8 @@ export async function extrairPdfPaginas(source) {
           const m = ops.argsArray[k]; // [a,b,c,d,e,f]
           det *= m[0] * m[3] - m[1] * m[2];
         } else if (ehImg(fn)) {
-          maxFrac = Math.max(maxFrac, Math.abs(det) / areaPagina);
+          const frac = Math.abs(det) / areaPagina;
+          if (frac < LIMIAR_FUNDO) maxFrac = Math.max(maxFrac, frac); // ignora fundo/marca d'água de página inteira
         }
       }
       temImagem = maxFrac >= LIMIAR_IMG_FRAC;

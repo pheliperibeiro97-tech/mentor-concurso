@@ -3,7 +3,7 @@
 // questões e anotações de erro. Nada é aplicado sem APROVAÇÃO (checkbox + botão).
 // É o ponto onde o sistema conversa consigo mesmo: lê sessões, erros, observações,
 // cobertura, prova e metas, e devolve ações que voltam para as outras telas.
-import { bindActions, toast, header, avisoIA, seloBadge, imprimir, botaoImprimir, vazio, skeletonDoc, plural, revelarTexto } from "../ui.js";
+import { bindActions, toast, header, avisoIA, seloBadge, imprimir, botaoImprimir, vazio, skeletonDoc, plural, revelarTexto, md } from "../ui.js";
 import { esc, fmtMin } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES } from "../ciclo.js";
@@ -125,7 +125,7 @@ export default function renderMentor(root, app) {
   // Stream do texto da análise ("digitando") na 1ª pintura pós-análise; 1x por análise.
   if (streamAnalise) {
     const alvo = root.querySelector(".mentor-analise-txt");
-    if (alvo) revelarTexto(alvo, plano.analise);
+    if (alvo) revelarTexto(alvo, plano.analise, { aoFim: () => { alvo.innerHTML = md(plano.analise); } });
     analiseStreamPlano = plano;
   }
 
@@ -219,7 +219,7 @@ function printMentor(snap, pontos, p) {
   if (snap.observacoes.length)
     h += `<h2>Observações recentes</h2><ul>${snap.observacoes.map((o) => `<li>${esc(o.nota)}${o.topico ? ` (${esc(o.topico)})` : ""}</li>`).join("")}</ul>`;
   if (p) {
-    h += `<h2>Análise do mentor</h2><p>${esc(p.analise)}</p>`;
+    h += `<h2>Análise do mentor</h2><div>${md(p.analise)}</div>`;
     if (p.atencao.length) h += `<h3>Atenção</h3><ul>${p.atencao.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
     if (p.melhorar.length) h += `<h3>Melhorar</h3><ul>${p.melhorar.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
     const a = p.acoes;
@@ -239,7 +239,7 @@ function planoHTML(p, stream = false) {
   const a = p.acoes;
   const blocos = [];
 
-  if (p.analise) blocos.push(`<div class="mentor-analise"><div class="mentor-analise-h"><span class="orb orb-sm" aria-hidden="true"></span>${seloBadge("amarelo")}</div><p class="mentor-analise-txt">${stream ? "" : esc(p.analise)}</p></div>`);
+  if (p.analise) blocos.push(`<div class="mentor-analise"><div class="mentor-analise-h"><span class="orb orb-sm" aria-hidden="true"></span>${seloBadge("amarelo")}</div><div class="mentor-analise-txt">${stream ? "" : md(p.analise)}</div></div>`);
   if (p.atencao.length || p.melhorar.length) {
     blocos.push(`<div class="mentor-listas">
       ${p.atencao.length ? `<div><b>${icone("triangle-alert")} Atenção</b><ul>${p.atencao.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}

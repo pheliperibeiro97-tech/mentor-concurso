@@ -362,7 +362,7 @@ function montarWidget() {
         <button class="cf-reg" data-cf-registrar>Registrar sessão</button>
       </div>
     </div>
-    <button class="cf-btn" data-cf-abrir data-tip="Cronômetro" aria-label="Abrir o cronômetro">${icone("clock-3")}<span class="cf-btn-t">Cronômetro</span></button>`;
+    <button class="cf-btn" data-cf-abrir aria-label="Abrir o cronômetro">${icone("clock-3")}<span class="cf-btn-t">Cronômetro</span></button>`;
   document.body.appendChild(widget);
 
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);

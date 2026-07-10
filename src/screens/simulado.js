@@ -15,7 +15,7 @@ import { focoShellHTML, focoChromeKey } from "./foco-quiz.js";
 
 // Estado independente por formato.
 function novoSS() {
-  return { cfg: { status: "todas", cotas: {}, tempoMin: 0, embaralhar: false }, addState: { aberto: false }, sim: null };
+  return { cfg: { status: "todas", material: "", topico: "", cotas: {}, tempoMin: 0, embaralhar: false }, addState: { aberto: false }, sim: null };
 }
 const SS = { mc: novoSS(), ce: novoSS() };
 let formatoAtivo = "mc";
@@ -35,20 +35,37 @@ function nomeDisc(st, key) {
   return d ? d.nome : "Sem disciplina";
 }
 
-// Pool base do formato, respeitando o filtro de SITUAÇÃO (inclui "fracos" = errei ou pendente).
-function poolBase(st, formato, status) {
+// Pool base do formato, respeitando SITUAÇÃO e (novo) o filtro por MATERIAL/TÓPICO de origem.
+// `cfg` pode ser a string de status (retrocompat) ou {status, material, topico}.
+function poolBase(st, formato, cfg) {
+  const c = typeof cfg === "string" ? { status: cfg } : (cfg || {});
+  const status = c.status || "todas";
   return st.questoes.filter((q) => {
     if (!ehDoFormato(q, formato)) return false;
+    if (c.material && !(q.fonte && q.fonte.tipo === "documento" && q.fonte.id === c.material)) return false;
+    if (c.topico && q.topicoId !== c.topico) return false;
     if (status === "todas") return true;
     const s = statusQuestao(st, q);
     if (status === "fracos") return s === "errei" || s === "pendente";
     return s === status;
   });
 }
+// Materiais que têm questões deste formato (para o seletor "por material").
+function materiaisComQuestoes(st, formato) {
+  const ids = new Set();
+  for (const q of st.questoes) if (ehDoFormato(q, formato) && q.fonte && q.fonte.tipo === "documento" && q.fonte.id) ids.add(q.fonte.id);
+  return [...ids].map((id) => st.documentos.find((d) => d.id === id)).filter(Boolean);
+}
+// Tópicos de um material que têm questões deste formato.
+function topicosDoMaterial(st, formato, docId) {
+  const ids = new Set();
+  for (const q of st.questoes) if (ehDoFormato(q, formato) && q.fonte && q.fonte.id === docId && q.topicoId) ids.add(q.topicoId);
+  return [...ids].map((id) => st.topicos.find((t) => t.id === id)).filter(Boolean);
+}
 
 // Disponível por matéria (para a tabela de cotas). Ordena por nome; "Sem matéria" por último.
-function composicaoDisponivel(st, formato, status) {
-  const base = poolBase(st, formato, status);
+function composicaoDisponivel(st, formato, cfg) {
+  const base = poolBase(st, formato, cfg);
   const mapa = new Map();
   for (const q of base) {
     const k = discKey(st, q);
@@ -72,7 +89,7 @@ function relevanciaDisc(st, key) {
 
 // Monta a lista final de questões a partir das cotas (X de cada matéria), embaralhada.
 function montarPorCotas(st, formato, ss) {
-  const base = poolBase(st, formato, ss.cfg.status);
+  const base = poolBase(st, formato, ss.cfg);
   const porDisc = new Map();
   for (const q of base) {
     const k = discKey(st, q);
@@ -130,7 +147,12 @@ export default function renderSimulado(root, app, formato = "mc") {
 function renderSetup(root, app, st, formato) {
   const ss = SS[formato];
   const cfg = ss.cfg;
-  const comp = composicaoDisponivel(st, formato, cfg.status);
+  // Guard: se o material filtrado não tem mais questões deste formato, limpa o filtro.
+  const matComQ = materiaisComQuestoes(st, formato);
+  if (cfg.material && !matComQ.some((d) => d.id === cfg.material)) { cfg.material = ""; cfg.topico = ""; }
+  const topsMat = cfg.material ? topicosDoMaterial(st, formato, cfg.material) : [];
+  if (cfg.topico && !topsMat.some((t) => t.id === cfg.topico)) cfg.topico = "";
+  const comp = composicaoDisponivel(st, formato, cfg);
   const total = totalCotas(ss);
   const sugestao = tempoSugerido(total, formato);
   const rotTotal = (n) => (n === 1 ? "questão" : "questões");
@@ -167,7 +189,27 @@ function renderSetup(root, app, st, formato) {
                 <option value="acertei" ${cfg.status === "acertei" ? "selected" : ""}>Só as que acertei</option>
                 <option value="fracos" ${cfg.status === "fracos" ? "selected" : ""}>Pontos fracos (errei + pendentes)</option>
               </select>
-            </div>`
+            </div>
+            ${
+              matComQ.length
+                ? `<div class="sim-situacao">
+                    <label for="sim-material">Material</label>
+                    <select id="sim-material" data-tip="Monta a prova só com as questões geradas/extraídas de um material.">
+                      <option value="">Todos os materiais</option>
+                      ${matComQ.map((d) => `<option value="${d.id}" ${cfg.material === d.id ? "selected" : ""}>${esc(d.titulo)}</option>`).join("")}
+                    </select>
+                    ${
+                      cfg.material && topsMat.length
+                        ? `<label for="sim-mat-topico" style="margin-left:10px">Tópico</label>
+                           <select id="sim-mat-topico">
+                             <option value="">Todos do material</option>
+                             ${topsMat.map((t) => { const disc = st.disciplinas.find((x) => x.id === t.disciplinaId); return `<option value="${t.id}" ${cfg.topico === t.id ? "selected" : ""}>${esc((disc ? disc.nome + " · " : "") + t.nome)}</option>`; }).join("")}
+                           </select>`
+                        : ""
+                    }
+                  </div>`
+                : ""
+            }`
           : ""
       }
 
@@ -226,6 +268,15 @@ function renderSetup(root, app, st, formato) {
     cfg.status = e.target.value;
     app.refresh();
   });
+  // Filtro por MATERIAL/TÓPICO de origem das questões (simulado a partir de um material).
+  root.querySelector("#sim-material")?.addEventListener("change", (e) => {
+    cfg.material = e.target.value; cfg.topico = ""; cfg.cotas = {};
+    app.refresh();
+  });
+  root.querySelector("#sim-mat-topico")?.addEventListener("change", (e) => {
+    cfg.topico = e.target.value; cfg.cotas = {};
+    app.refresh();
+  });
   // Cotas: salvar sem re-render (evita perder o foco enquanto digita); atualiza o total ao vivo.
   root.querySelectorAll(".sim-cota").forEach((inp) =>
     inp.addEventListener("input", () => {
@@ -265,7 +316,7 @@ function renderSetup(root, app, st, formato) {
     },
     "modo-fracos": () => {
       cfg.status = "fracos";
-      const comp2 = composicaoDisponivel(st, formato, "fracos");
+      const comp2 = composicaoDisponivel(st, formato, { ...cfg, status: "fracos" });
       cfg.cotas = {};
       comp2.forEach((c) => (cfg.cotas[c.key] = c.disp));
       app.refresh();
@@ -367,8 +418,16 @@ function renderEmAndamento(root, app, st, formato) {
   // Troca a questão exibida SEM re-render da tela (só o overlay, fade) — não "mexe a tela".
   function trocar(idx) {
     sim.focoIdx = Math.max(0, Math.min(idx, total - 1));
-    const el = root.querySelector(".fc-foco");
-    if (el) el.outerHTML = simOverlayHTML(sim, questoes, formato, temLimite, "fade");
+    const foco = root.querySelector(".fc-foco");
+    const novoHTML = simOverlayHTML(sim, questoes, formato, temLimite, "fade");
+    if (!foco) return;
+    // Troca só o CONTEÚDO (não o elemento .fc-foco), senão ele re-dispara a animação de entrada
+    // (animation: fq-fade) e o overlay "pisca" (parece fechar e reabrir).
+    const tmp = document.createElement("div");
+    tmp.innerHTML = novoHTML;
+    const novoFoco = tmp.querySelector(".fc-foco");
+    if (novoFoco) foco.replaceChildren(...Array.from(novoFoco.childNodes));
+    else foco.outerHTML = novoHTML;
   }
 
   function finalizar() {

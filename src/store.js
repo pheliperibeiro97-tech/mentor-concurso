@@ -11,7 +11,7 @@ import * as areas from "./areas.js";
 import { parsearLeiHTML, buscarLeiPlanalto, selecionarArtigos } from "./legis.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
-import { detectarEstrutura } from "./estrutura.js";
+import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario } from "./estrutura.js";
 import { buscarNoGuia } from "./guia.js";
 
 function defaultState() {
@@ -54,6 +54,12 @@ function defaultState() {
       dossieOrdem: [], // ordem personalizada das seções do dossiê (lista de keys)
       dossieOcultas: [], // seções do dossiê ocultadas pelo usuário (só ocultam, não removem)
       baseEstudo: "edital", // Fase 4: organizar o estudo por "edital" (padrão) ou "cursinho"
+      // Reformulação Lei Seca (F0): preferências do leitor + posição + feriados.
+      leitura: { fonte: "inter", tamanho: "media", espacamento: "normal", tema: "auto", align: "esquerda" }, // fonte inter|serif|mono · tamanho pequena|media|grande · espacamento normal|confortavel|muito · tema auto|sepia · align esquerda|justificado
+      ultimaLeitura: {}, // { [norma]: { indicacaoId, pct, em } } — "continuar leitura" por lei
+      diasFeriado: [], // datas ISO sem estudo (feriados) — além de diasFolga semanal
+      metasLeitura: { artigosDia: 0, questoesDia: 0 }, // F6: metas quantitativas diárias da Lei Seca (0 = sem meta)
+      nomesLeis: {}, // apelido de exibição por norma ({ "Lei 8.078/1990": "Código de Defesa do Consumidor" }) — corrige detecção errada
     },
     concurso: null,
     editalOficial: { conferidoEm: null, itens: [] }, // Fase 3: checklist do edital oficial (banca)
@@ -379,7 +385,8 @@ function fatiarJurisEmUnidades(texto) {
     if (/^s[úu]mula\s+vinculante/i.test(ref)) categoria = "Súmula Vinculante"; // SV do STF (vinculante)
     else if (/^s[úu]mula/i.test(ref)) categoria = "Súmula";
     else if (/^tema/i.test(ref)) categoria = "Tema repetitivo";
-    else if (/^(enunciado|oj)/i.test(ref)) categoria = "Precedente obrigatório";
+    else if (/^enunciado/i.test(ref)) categoria = "Enunciado"; // jornadas CJF/FONAJE/súmulas administrativas
+    else if (/^oj/i.test(ref)) categoria = "Precedente obrigatório"; // orientação jurisprudencial (TST)
     return { referencia: ref, texto: p.texto, observacao: "", tribunal, categoria };
   });
 }
@@ -410,16 +417,84 @@ function selecionarLacunas(texto, max = 4) {
   alvos.sort((a, b) => a.idx - b.idx);
   return alvos.slice(0, max);
 }
+// Médio (expressões): parte das palavras-chave e COMPLETA com termos de conteúdo (>=6 letras,
+// não-conectivos) até a cota — deixa a lacuna mais densa que o "fácil" sem virar digitação.
+function lacunasExpressoes(texto, max = 9) {
+  const t = String(texto || "");
+  const base = selecionarLacunas(t, max);
+  if (base.length >= max) return base;
+  const norm = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const stop = new Set(["quando", "porque", "tambem", "atraves", "conforme", "mediante", "enquanto", "respectivamente", "seguinte", "seguintes", "referido", "referida", "referidos", "presente", "qualquer", "aqueles", "aquelas", "mesmos", "mesmas", "conforme", "durante", "entretanto", "portanto", "todavia"]);
+  const ocup = base.map((b) => ({ ini: b.idx, fim: b.idx + b.len }));
+  const extra = [];
+  const re = /\b[A-Za-zÀ-ÿ]{6,}\b/g;
+  let m;
+  while ((m = re.exec(t)) && base.length + extra.length < max) {
+    const ini = m.index, fim = ini + m[0].length;
+    if (stop.has(norm(m[0]))) continue;
+    if (ocup.some((o) => ini < o.fim && fim > o.ini)) continue;
+    if (/\b(?:art(?:igo)?|s[úu]mula|tema|inciso|al[íi]nea)\.?\s*$/i.test(t.slice(Math.max(0, ini - 18), ini))) continue;
+    ocup.push({ ini, fim });
+    extra.push({ idx: ini, len: m[0].length, palavra: m[0] });
+  }
+  return base.concat(extra).sort((a, b) => a.idx - b.idx);
+}
+// Difícil (frases): tampa CLÁUSULAS inteiras (segmentos entre ; : .) alternadamente — o usuário
+// recorda trechos longos, não só palavras. Deixa a 1ª cláusula à mostra como âncora de contexto.
+function lacunasFrases(texto) {
+  const t = String(texto || "");
+  const out = [];
+  const re = /[^;:.\n]+[;:.]?/g;
+  let m, k = 0;
+  while ((m = re.exec(t))) {
+    const raw = m[0];
+    const trimmed = raw.trim();
+    if (trimmed.length < 20) continue;
+    k++;
+    if (k % 2 === 0) {
+      const lead = raw.length - raw.replace(/^\s+/, "").length;
+      out.push({ idx: m.index + lead, len: trimmed.length, palavra: trimmed });
+    }
+  }
+  return out;
+}
 // Extrai a NORMA da referência (último segmento não-posicional): "art. 37, caput, CF" → "CF".
 function normaDaReferencia(ref) {
   const segs = String(ref || "").split(",").map((s) => s.trim()).filter(Boolean);
   for (let k = segs.length - 1; k >= 0; k--) {
     const s = segs[k];
-    if (/^(caput|§|par[áa]grafo(\s*[úu]nico)?|inc\.?|inciso|al[íi]nea|[ivxlcdm]+|[a-z])$/i.test(s)) continue;
+    // O ÚLTIMO segmento é sempre a norma — não aplicar o skip de inciso/romano nele ("CDC"/"CC" são
+    // só letras romanas e seriam descartados como inciso, jogando a lei em "Outros").
+    if (k < segs.length - 1 && /^(caput|§|par[áa]grafo(\s*[úu]nico)?|inc\.?|inciso|al[íi]nea|[ivxlcdm]+|[a-z])$/i.test(s)) continue;
     if (/^art/i.test(s)) continue;
     return s;
   }
   return null;
+}
+// TAG TEMÁTICA por artigo (sub-projeto): temas comuns em provas de concurso, detectados por texto.
+// Offline/instantâneo (heurística robusta); a IA pode refinar/adicionar temas depois. Destrava o
+// "Memorizar temático" (estudar só um tema) e a "inteligência" (você erra sempre em X → recomenda).
+// Regras ajustadas para serem DISCRIMINATIVAS: um tema deve marcar o artigo QUE TRATA do assunto,
+// não todo artigo que só menciona a palavra (ex.: "pena"/"multa" aparecem em quase todo crime do CP;
+// por isso "Pena" e "Valores e multas" exigem o CONCEITO — dosimetria, regime, dias-multa…).
+const TEMAS_REGRAS = [
+  { tema: "Prazo", re: /\b\d+\s*(dias?|meses|m[êe]s|anos?|horas?)\b|\bprazo\b|decurso do tempo|decad[êe]ncia do prazo/i },
+  { tema: "Competência", re: /compet[êe]ncia|\bcompete\b|\bforo\b|jurisdi[çc]|atribui[çc][ãa]o privativa|privativamente/i },
+  { tema: "Quórum", re: /qu[óo]rum|maioria (?:absoluta|simples|qualificada|dos)|dois ter[çc]os|tr[êe]s quintos|unanimidade/i },
+  { tema: "Dosimetria da pena", re: /dosimetria|circunst[âa]ncia[s]?\s+(?:agravante|atenuante|judiciai)|\bagravante[s]?\b|\batenuante[s]?\b|fixa[çc][ãa]o da pena|regime\s+(?:inicial|fechado|semiaberto|aberto|de cumprimento)|livramento condicional|substitui[çc][ãa]o da pena|pena[s]?\s+restritiva|concurso\s+(?:material|formal)|continuidade delitiva|causa[s]? de aumento|causa[s]? de diminui[çc]/i },
+  { tema: "Multa e valores", re: /R\$|dias?[ -]multa|percentual|\bpor cento\b|%|sal[áa]rio[ -]m[íi]nimo|indeniza[çc]|valor da causa/i },
+  { tema: "Prescrição e decadência", re: /prescri[çc]|decad[êe]nc/i },
+  { tema: "Vedações", re: /\b[ée]\s+vedad|\bvedad[ao]s?\b|\bproib[ií]|\bdefes[oa]\b|n[ãa]o\s+(?:poder[áa]|ser[áa] admitid|se admite)/i },
+  { tema: "Direitos e garantias", re: /direitos?\s+(?:e garantias|fundamentai|individuai|sociai|humanos)|inviol[áa]vel|livre exerc[íi]cio|[ée]\s+assegurad|[ée]\s+garantid|liberdade de/i },
+  { tema: "Requisitos e condições", re: /requisito|somente\s+(?:se|quando)|desde que|depende de|exige-se|preencher os|condi[çc][õo]es? para/i },
+  { tema: "Procedimento e recursos", re: /procedimento|\brito\b|\brecurso[s]?\b|\bprocesso\b|dilig[êe]ncia|intima[çc]|cita[çc]/i },
+  { tema: "Princípios", re: /princ[íi]pio|dignidade da pessoa|isonomia|legalidade|moralidade|efici[êe]ncia administrativa|proporcionalidade|anterioridade/i },
+];
+function classificarTemasTexto(texto) {
+  const t = String(texto || "");
+  const out = [];
+  for (const r of TEMAS_REGRAS) if (r.re.test(t)) out.push(r.tema);
+  return out;
 }
 // Normaliza o texto de um dispositivo para comparação de NOVIDADE LEGISLATIVA: minúsculas, sem
 // acentos, só letras/números/espaços, espaços colapsados. Assim, ruído de parser/formatação
@@ -453,6 +528,78 @@ function detectarAnoJuris(s) {
 function detectarCanceladaJuris(s) {
   const t = String(s || "").slice(0, 300);
   return /\((?:\s*)(?:cancelad|superad|revogad)[ao]\b|\bs[úu]mula\s+cancelad[ao]\b|\b(?:cancelad|superad)a\s+(?:em|pel[ao])\b/i.test(t);
+}
+// F1 — CHAVE DE IDENTIDADE de um julgado (dedup entre fontes: STJ, STF, DOD do MESMO caso).
+// Prioridade: nº do processo/recurso > nº do Tema > nº da Súmula > referência normalizada.
+// Ex.: STJ·REsp 2.072.985/DF; STJ·TEMA1357; STF·SV49. "" quando não dá para identificar.
+function chaveIndic(it) {
+  const trib = String((it && it.tribunal) || "").toUpperCase().replace(/[^A-Z]/g, "");
+  const norm = (s) => String(s || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const ref = norm(it && it.referencia);
+  const proc = norm(it && it.processo);
+  const tema = it && it.tema ? "TEMA" + norm(it.tema) : "";
+  const mSum = ref.match(/(SUMULAVINCULANTE|SUMULA|SV)0*(\d+)/);
+  const sum = mSum ? (mSum[1] === "SV" || mSum[1] === "SUMULAVINCULANTE" ? "SV" : "SUM") + mSum[2] : "";
+  const core = proc || tema || sum || ref;
+  if (!core) return "";
+  // Referência genérica SEM número (ex.: "Julgado STJ", "Tese") não identifica um julgado específico —
+  // deduplicar por ela colidiria julgados distintos (o 2º seria absorvido/perdido). Não deduplica.
+  if (!proc && !tema && !sum && !/\d/.test(ref)) return "";
+  return `${trib}|${core}`;
+}
+// F1 — o texto colado/extraído é um INFORMATIVO de jurisprudência (STF/STJ)? Se sim, roteamos para
+// a extração RICA (extrairTesesInformativo), em vez do fatiador cru de súmulas/teses.
+function pareceInformativo(texto) {
+  const t = String(texto || "").slice(0, 6000);
+  if (/informativo[^\n]{0,30}\bn[º.]?\s*\d{2,4}\b/i.test(t)) return true; // "Informativo nº 894" (nº perto da palavra, não em qualquer lugar)
+  if (/jurisprud[êe]ncia\s+em\s+teses/i.test(t)) return true; // F4 — Jurisprudência em Teses (STJ)
+  if (/\bRAMO\s+DO\s+DIREITO\b/i.test(t) && /\bDESTAQUE\b|\bPROCESSO\b/i.test(t)) return true; // STJ rotulado
+  if ((t.match(/\bResumo:/gi) || []).length >= 2) return true; // STF (vários "Resumo:")
+  return false;
+}
+// F1 — PARSER DETERMINÍSTICO do informativo STJ (campos rotulados PROCESSO / RAMO DO DIREITO / TEMA /
+// DESTAQUE). Extrai os julgados SEM IA (economiza cota). Devolve itens ricos ou null (→ cai na IA).
+function parseInformativoDeterministico(texto) {
+  const t = String(texto || "").replace(/\r/g, "");
+  if (!/\bRAMO\s+DO\s+DIREITO\b/i.test(t) || !/\bDESTAQUE\b/i.test(t)) return null; // só STJ rotulado
+  const norm = (s) => String(s || "").replace(/[ \t]+/g, " ").replace(/\n{2,}/g, "\n").trim();
+  const mInf = t.match(/Informativo[^\n]*?n\.?\s*(\d+)/i);
+  const nInformativo = mInf ? mInf[1] : null;
+  const mData = t.match(/n\.?\s*\d+\s*[-–]\s*(\d{1,2}\s+de\s+[a-zç]+\s+de\s+\d{4})/i);
+  const dataDivulgacao = mData ? mData[1] : null;
+  const partes = t.split(/\n[ \t]*PROCESSO\b[ \t]*\n?/i); // cada julgado começa após o rótulo "PROCESSO" (tolera valor na mesma linha)
+  const itens = [];
+  for (let i = 1; i < partes.length; i++) {
+    const bloco = partes[i];
+    // Tolerante: o valor pode vir na linha do rótulo OU na seguinte; o terminador não exige linha isolada.
+    const seg = (a, b) => { const m = bloco.match(new RegExp(a + "\\b[ \\t]*\\n?[ \\t]*([\\s\\S]*?)(?=\\n\\s*(?:" + b + ")\\b|$)", "i")); return m ? norm(m[1]) : ""; };
+    const iRamo = bloco.search(/\n\s*RAMO\s+DO\s+DIREITO\s*\n/i);
+    const procRaw = iRamo > 0 ? bloco.slice(0, iRamo) : bloco.slice(0, 800);
+    const ramo = seg("RAMO\\s+DO\\s+DIREITO", "TEMA");
+    const temaTxt = seg("TEMA", "DESTAQUE");
+    const destaque = seg("DESTAQUE", "INFORMA[ÇC][ÕO]ES\\s+DO\\s+INTEIRO\\s+TEOR|LEGISLA[ÇC][ÃA]O|SA[ÍI]BA\\s+MAIS|VEJA\\s+TAMB[ÉE]M|PROCESSO");
+    const tese = destaque || temaTxt;
+    if (!tese || tese.length < 15) continue;
+    // Recurso + número (+ /UF opcional). Não cruza \n nem engole letras seguintes (ex.: "Rel."), senão a
+    // chave de dedup diverge entre fontes. Inclui AREsp/EAREsp/EDcl/Rcl… (comuns no STJ) — antes faltavam.
+    const mProc = procRaw.match(/\b((?:EAREsp|AREsp|EREsp|REsp|AgRg|AgInt|EDcl|RHC|RMS|ADPF|ADC|ADO|ADI|IAC|Rcl|SLS|HC|MS|CC|Pet|AR|SS|QO|RE)\s*\d[\d.]*(?:[\/\-][A-Z]{2})?)/i);
+    const processo = mProc ? norm(mProc[1]).replace(/[.,]$/, "") : "";
+    const mOrgao = procRaw.match(/\b(Corte Especial|Primeira Se[çc][ãa]o|Segunda Se[çc][ãa]o|Terceira Se[çc][ãa]o|Primeira Turma|Segunda Turma|Terceira Turma|Quarta Turma|Quinta Turma|Sexta Turma|Plen[áa]rio)\b/i);
+    const orgao = mOrgao ? norm(mOrgao[1]) : "";
+    const mDataJ = procRaw.match(/julgad[oa]\s+em\s+(\d{1,2}\/\d{1,2}\/\d{4})/i);
+    const dataJulgamento = mDataJ ? mDataJ[1] : "";
+    const mTema = (procRaw + " " + temaTxt).match(/Tema\s+(\d+)/i);
+    const tema = mTema ? mTema[1] : "";
+    const ref = tema ? `Tema ${tema} STJ` : (processo ? `${processo} STJ` : "Julgado STJ");
+    itens.push({
+      referencia: ref, texto: tese, observacao: "", tribunal: "STJ",
+      orgao, ramo: ramo || null, assunto: (temaTxt.split(/\.\s/)[0] || "").slice(0, 90) || null,
+      processo: processo || null, tema: tema || null, dataJulgamento: dataJulgamento || null,
+      categoria: tema ? "Tema repetitivo" : "Tese", status: "vigente",
+      nInformativo, dataDivulgacao,
+    });
+  }
+  return itens.length ? itens : null;
 }
 // Heurística: o texto é uma NORMA/COLETÂNEA corrida (não uma lista de referências)?
 // ≥2 marcadores, sem separador de lista "|", e com corpo (média de chars por unidade > 60).
@@ -502,6 +649,9 @@ const listeners = new Set();
 let state = defaultState();
 let saveTimer = null;
 let emitAgendado = false;
+// Lote de geração atual: quando um handler abre um lote (iniciarLoteGeracao), TODO flashcard/questão
+// criado enquanto ele estiver aberto recebe o mesmo geracaoId — permite mostrar "só os recém-gerados".
+let loteGeracao = null;
 
 function emit() {
   for (const fn of listeners) fn(state);
@@ -1603,6 +1753,75 @@ export const store = {
     commit();
     return doc;
   },
+  // F1 — descreve as FIGURAS de conteúdo (diagramas/tabelas/mapas) do material com a IA, em lote.
+  // Renderiza só as páginas COM figura (marca d'água já foi excluída na extração), deduplica por
+  // conteúdo e anexa as descrições ao texto (buscável). Cap p/ não estourar a cota. Roda em background.
+  async descreverFigurasDeDoc(docId, max = 30) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d || !d.pdfData || !Array.isArray(d.paginas) || !this.iaDisponivel()) return { descritas: 0 };
+    const figPags = d.paginas.filter((p) => p.temImagem).map((p) => p.n);
+    if (!figPags.length) return { descritas: 0 };
+    const imgs = await pdf.rasterizarPaginas(d.pdfData, figPags.slice(0, max), 1.6);
+    const vistos = new Set();
+    const figuras = [];
+    for (const im of imgs) {
+      const h = hashLei(String(im.dataUrl || "").slice(0, 3000)); // dedupe grosseiro por prefixo da imagem
+      if (vistos.has(h)) continue;
+      vistos.add(h);
+      const b64 = (im.dataUrl || "").split(",")[1] || "";
+      if (!b64) continue;
+      try {
+        const desc = await iaProv.descreverFiguras(state.config, { dataB64: b64, contexto: `pág. ${im.n}` });
+        if (desc && desc.length > 20) figuras.push({ pagina: im.n, descricao: desc });
+      } catch (e) { console.error("[figuras]", e); }
+    }
+    if (figuras.length) {
+      d.figuras = figuras;
+      // Anexa cada descrição À PÁGINA de origem: sobrevive ao recomputarTextoDoc e fica na posição
+      // certa do texto (buscável, junto do conteúdo daquela página).
+      for (const f of figuras) {
+        const pg = Array.isArray(d.paginas) ? d.paginas.find((p) => p.n === f.pagina) : null;
+        if (pg && !(pg.texto || "").includes("[Figura descrita pela IA]")) {
+          pg.texto = (pg.texto || "") + `\n\n[Figura descrita pela IA] ${f.descricao}`;
+        }
+      }
+      recomputarTextoDoc(d);
+      commit();
+    }
+    return { descritas: figuras.length, total: figPags.length };
+  },
+  // F2 — estrutura o material pela IMAGEM do SUMÁRIO (contorna o texto colado/leaders que quebram o
+  // parser determinístico). Recebe as páginas + o PDF; devolve a estrutura {origem:'ia-sumario', blocos}
+  // ou null (sem sumário, sem PDF ou sem IA). Escala: manda só 1-2 imagens (a página do sumário), não o doc.
+  async estruturarPorSumarioIA({ paginas, pdfData, numPaginas } = {}) {
+    if (!this.iaDisponivel() || !pdfData || !Array.isArray(paginas) || !paginas.length) return null;
+    const sumPag = acharPaginaSumario(paginas);
+    if (!sumPag) return null;
+    const total = numPaginas || paginas.length;
+    const pgs = [sumPag, sumPag + 1].filter((n) => n <= total); // sumário pode ocupar 2 páginas
+    let imgs;
+    try { imgs = await pdf.rasterizarPaginas(pdfData, pgs, 2); } catch (_) { return null; }
+    const imagensB64 = (imgs || []).map((im) => (im.dataUrl || "").split(",")[1] || "").filter(Boolean);
+    if (!imagensB64.length) return null;
+    let topicos;
+    try { topicos = await iaProv.estruturarSumarioVisao(state.config, { imagensB64, contexto: `pág. ${pgs.join("/")}` }); }
+    catch (e) { console.error("[sumario-ia]", e); return null; }
+    if (!topicos || !topicos.length) return null;
+    const est = montarEstruturaDeTopicos(topicos, { paginas, numPaginas: total, sumarioPag: sumPag });
+    return est && est.blocos.length ? est : null;
+  },
+  // F2 — reestrutura um material JÁ salvo pela IA do sumário e aplica ("caprichar com a IA").
+  async caprichaEstruturaDoc(docId) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d) return { ok: false };
+    const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: d.pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
+    if (!est) return { ok: false };
+    d.estrutura = est;
+    this.casarEstruturaComEdital(est);
+    this.aplicarEstruturaAoMaterial(docId, est);
+    commit();
+    return { ok: true, blocos: est.blocos.length };
+  },
   // Define os tópicos que um material cobre (Fase 1: muitos‑para‑muitos). O 1º vira o primário.
   setDocumentoTopicos(id, topicoIds) {
     const d = state.documentos.find((x) => x.id === id);
@@ -1722,8 +1941,11 @@ export const store = {
   // ---------- busca semântica (vetorial) ----------
   // Situação do índice: quantas fontes estão indexadas, quantas pendentes (novas ou
   // alteradas) e total de trechos. Serve para a UI mostrar status e o botão certo.
-  statusIndice() {
-    const fontes = fontesIndexaveis(state);
+  // opts.tipos (opcional) = restringe o status a um domínio (["material","resumo"] em Materiais;
+  // ["leiseca"] ou ["juris"] no próprio módulo). Sem opts = visão GLOBAL (a busca usa temIndice global).
+  statusIndice(opts = {}) {
+    const tipos = opts.tipos ? new Set(opts.tipos) : null;
+    const fontes = fontesIndexaveis(state).filter((f) => !tipos || tipos.has(f.tipo));
     const idx = state.embeddings || { itens: [], fontes: {} };
     let indexadas = 0;
     let pendentes = 0;
@@ -1731,23 +1953,26 @@ export const store = {
       if (idx.fontes && idx.fontes[f.id] === f.sig) indexadas++;
       else pendentes++;
     }
+    const chunks = tipos ? idx.itens.filter((it) => tipos.has(it.tipo)).length : idx.itens.length;
     return {
       indexadas,
       pendentes,
       fontes: fontes.length,
-      chunks: idx.itens.length,
-      temIndice: idx.itens.length > 0,
+      chunks,
+      temIndice: chunks > 0,
       online: this.iaDisponivel(),
     };
   },
 
   // Lista as fontes indexáveis com seu status (para a UI de seleção do índice).
   // emIndice = tem dados no índice (mesmo que desatualizados); indexada = em dia.
-  fontesIndice() {
+  // opts.tipos (opcional) filtra por domínio (material/resumo/leiseca/juris).
+  fontesIndice(opts = {}) {
+    const tipos = opts.tipos ? new Set(opts.tipos) : null;
     const idx = state.embeddings || { itens: [], fontes: {} };
     const cont = {};
     for (const it of idx.itens) cont[it.fonteId] = (cont[it.fonteId] || 0) + 1;
-    return fontesIndexaveis(state).map((f) => ({
+    return fontesIndexaveis(state).filter((f) => !tipos || tipos.has(f.tipo)).map((f) => ({
       id: f.id,
       tipo: f.tipo,
       titulo: f.titulo,
@@ -1758,17 +1983,25 @@ export const store = {
   },
   // Sincroniza o índice à seleção do usuário: indexa as desejadas (pulando as já em
   // dia) e REMOVE do índice as que não estão na seleção. Um só passo = sem redundância.
-  async sincronizarIndice(idsDesejados, onProgress) {
+  // opts.tipos (opcional) LIMITA a remoção ao domínio: assim indexar em Materiais não apaga
+  // o que Lei Seca/Jurisprudência já separou (cada módulo cuida do seu escopo).
+  async sincronizarIndice(idsDesejados, onProgress, opts = {}) {
     const desejados = new Set(idsDesejados || []);
     const idx = state.embeddings || { itens: [], fontes: {} };
+    const tipos = opts.tipos ? new Set(opts.tipos) : null;
+    // Tipo de cada fonte presente: do estado atual e, p/ fontes já removidas do módulo, do próprio índice.
+    const tipoDaFonte = {};
+    for (const it of idx.itens) tipoDaFonte[it.fonteId] = it.tipo;
+    for (const f of fontesIndexaveis(state)) tipoDaFonte[f.id] = f.tipo;
     const presentes = new Set([
       ...Object.keys(idx.fontes || {}),
       ...idx.itens.map((it) => it.fonteId),
     ]);
-    const remover = [...presentes].filter((id) => !desejados.has(id));
+    let remover = [...presentes].filter((id) => !desejados.has(id));
+    if (tipos) remover = remover.filter((id) => tipos.has(tipoDaFonte[id]));
     if (remover.length) this.removerDoIndice(remover);
     if (desejados.size) return this.indexarSemantica(onProgress, { ids: [...desejados] });
-    return { feitos: 0, chunks: state.embeddings.itens.length };
+    return { feitos: 0, chunks: (state.embeddings || idx).itens.length };
   },
 
   // (Re)indexa as fontes que mudaram. Em lote (barato). onProgress(feito, total, titulo).
@@ -1934,6 +2167,8 @@ export const store = {
       diff: diff && (diff.trechoOriginal || diff.trechoAlterado) ? { trechoOriginal: diff.trechoOriginal || "", trechoAlterado: diff.trechoAlterado || "" } : null,
       comentarioIA: null, // explicação do gabarito gerada sob demanda pela IA ()
       criadoEm: nowISO(),
+      geracaoId: loteGeracao ? loteGeracao.id : null, // lote de geração (filtro "só os recém-gerados")
+      geracaoRotulo: loteGeracao ? loteGeracao.rotulo : null,
     };
     state.questoes.push(q);
     commit();
@@ -2062,7 +2297,10 @@ export const store = {
   // Devolve { topicoId, nome } ou null. Usado no preview de importação de questões.
   sugerirTopicoPorAssunto(assunto, disciplinaHint) {
     const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    const stop = new Set(["de", "da", "do", "dos", "das", "e", "a", "o", "as", "os", "em", "no", "na", "para", "com", "disposicoes", "gerais"]);
+    // "direito/direitos" são quase-stopwords aqui: quase toda disciplina jurídica é "Direito X", então
+    // o que discrimina é o termo específico (penal/civil/...). Sem isso, "Direito Penal" casaria com
+    // "Direito Constitucional" só pela palavra "direito".
+    const stop = new Set(["de", "da", "do", "dos", "das", "e", "a", "o", "as", "os", "em", "no", "na", "para", "com", "disposicoes", "gerais", "direito", "direitos"]);
     const tokens = (s) => new Set(norm(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !stop.has(w)));
     const alvo = tokens(`${assunto || ""} ${disciplinaHint || ""}`);
     if (!alvo.size) return null;
@@ -2330,15 +2568,16 @@ export const store = {
     });
     return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId, fonte, banca }));
   },
-  async extrairQuestoesCEDeDoc(docId) {
+  async extrairQuestoesCEDeDoc(docId, bloco = null) {
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
-    const fonte = { tipo: "documento", id: doc.id, titulo: doc.titulo };
+    const { texto, topicoId, fonte } = ctxDeDoc(doc, bloco); // simetria com extrairQuestoesDeDoc: aceita bloco/tópico
+    if (!texto.trim()) return [];
     const itens = await iaProv.extrairQuestoesCE(state.config, {
-      texto: doc.texto,
-      contexto: nomeContexto(state, doc.topicoId),
+      texto,
+      contexto: nomeContexto(state, topicoId),
     });
-    return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId: doc.topicoId, fonte }));
+    return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId, fonte }));
   },
   // PREVIEW (não grava) da EXTRAÇÃO de questões já existentes no material (IA). Usa o extrator RICO:
   // captura referência/assunto/banca/ano/órgão SE estiverem no material (não inventa) e aplica o
@@ -2383,7 +2622,7 @@ export const store = {
   },
   // Comentário da QUESTÃO pela IA (sob demanda, ): explica o gabarito. A UI bloqueia
   // antes via iaDisponivel(). Guarda em q.comentarioIA.
-  async comentarQuestaoIA(questaoId) {
+  async comentarQuestaoIA(questaoId, duvida = "") {
     const q = state.questoes.find((x) => x.id === questaoId);
     if (!q) return null;
     const r = await iaProv.comentarQuestao(state.config, {
@@ -2391,6 +2630,7 @@ export const store = {
       alternativas: q.alternativas,
       correta: q.formato === "ce" ? (q.gabarito === 0 ? "Certo" : "Errado") : q.gabarito,
       formato: q.formato,
+      duvida: (duvida || "").trim() || undefined, // dúvida do aluno (opcional) considerada pela IA
     });
     q.comentarioIA = { resumido: r.resumido, detalhado: r.detalhado };
     commit();
@@ -2443,6 +2683,7 @@ export const store = {
       escolhida: q.alternativas[t.escolha],
       correta: q.alternativas[q.gabarito],
       motivo: t.motivoErro,
+      duvida: t.duvida, // a dúvida escrita pelo aluno agora é considerada pela IA
     });
     t.comentarioIA = { resumido: r.resumido, detalhado: r.detalhado };
     commit();
@@ -2645,10 +2886,23 @@ export const store = {
       fonte: fonte || null,
       sm2: sm2.novoSM2(),
       criadoEm: nowISO(),
+      geracaoId: loteGeracao ? loteGeracao.id : null, // lote de geração (filtro "só os recém-gerados")
+      geracaoRotulo: loteGeracao ? loteGeracao.rotulo : null,
     };
     state.flashcards.push(f);
     commit();
     return f;
+  },
+  // Lote de geração: o handler abre um lote antes de gerar e encerra depois; tudo criado no meio
+  // ganha o mesmo geracaoId (a tela mostra "só os recém-gerados de X" até o usuário ver todos).
+  iniciarLoteGeracao(rotulo) { loteGeracao = { id: uid("ger"), rotulo: (rotulo || "").trim(), em: nowISO() }; return loteGeracao.id; },
+  encerrarLoteGeracao() { const id = loteGeracao ? loteGeracao.id : null; loteGeracao = null; return id; },
+  limparFlashcards() { const n = state.flashcards.length; state.flashcards = []; commit(); return n; },
+  contarGeracao(geracaoId, tipo) {
+    if (!geracaoId) return 0;
+    if (tipo === "flashcards") return state.flashcards.filter((f) => f.geracaoId === geracaoId).length;
+    if (tipo === "ce") return state.questoes.filter((q) => q.geracaoId === geracaoId && q.formato === "ce").length;
+    return state.questoes.filter((q) => q.geracaoId === geracaoId && q.formato !== "ce").length;
   },
   // Geração de flashcards pela IA (online). Requer iaDisponivel() — a UI bloqueia antes.
   async gerarFlashcardsDeDoc(docId, n = 6, dificuldade = "medio", bloco = null) {
@@ -2961,7 +3215,7 @@ export const store = {
   },
 
   // ---------- lei seca / jurisprudência (META a cumprir × MEMÓRIA gravada) ----------
-  addIndicacao({ tipo, modo, disciplinaId, topicoId, referencia, texto, observacao, tribunal, categoria, revogado, semTarefa, metaLeitura, fonteUrl, leiHash, novidadeEm, revogadoEm, ano }) {
+  addIndicacao({ tipo, modo, disciplinaId, topicoId, referencia, texto, observacao, tribunal, categoria, revogado, semTarefa, metaLeitura, fonteUrl, leiHash, novidadeEm, revogadoEm, ano, estrutura, nomeJuridico, temas, favorito, dificil, lidoEm, ramo, assunto, orgao, processo, tema, dataJulgamento, dataDivulgacao, nInformativo, grupoId, status }) {
     let discId = disciplinaId || null;
     if (topicoId) {
       const t = state.topicos.find((x) => x.id === topicoId);
@@ -2982,11 +3236,30 @@ export const store = {
       tribunal: tribunal || (categoria === "Súmula Vinculante" ? "STF" : null), // SV é sempre do STF
       categoria: categoria || null, // juris: Súmula | Súmula Vinculante | Tema repetitivo | Precedente
       ano: ehJurisTipo ? (ano || detectarAnoJuris(`${referencia || ""} ${observacao || ""} ${texto || ""}`)) : null, // ano do entendimento (idade)
-      revogado: !!revogado || canceladaAuto, // lei revogada OU súmula cancelada / tese superada
-      revogadoEm: revogadoEm || (canceladaAuto ? todayISO() : null), // data marcada
+      revogado: !!revogado || canceladaAuto || status === "superado", // lei revogada OU súmula cancelada / tese superada
+      revogadoEm: revogadoEm || (canceladaAuto || status === "superado" ? todayISO() : null), // data marcada
+      // F1 — campos ricos da jurisprudência/informativo (extração enriquecida)
+      ramo: ramo || null, // ramo do direito (Direito Penal, Constitucional…)
+      assunto: assunto || null, // assunto/tema específico (Remição pelo estudo…)
+      orgao: orgao || null, // órgão julgador (Plenário, Terceira Seção…)
+      processo: processo || null, // nº do processo/recurso (REsp 2.072.985/DF, ADPF 1.292/RO)
+      temaNum: tema || null, // nº do Tema repetitivo/Repercussão Geral (1357)
+      dataJulgamento: dataJulgamento || null, // data do julgamento (do processo)
+      dataDivulgacao: dataDivulgacao || null, // data de divulgação do informativo (fonte-mãe)
+      nInformativo: nInformativo || null, // nº do informativo (fonte-mãe)
+      grupoId: grupoId || null, // agrupador da fonte-mãe (informativo/edição de Jur. em Teses)
+      status: status || (ehJurisTipo ? "vigente" : null), // vigente | superado | importante
+      chave: ehJurisTipo ? chaveIndic({ tribunal: tribunal || (categoria === "Súmula Vinculante" ? "STF" : null), processo, tema, referencia }) : null, // dedup entre fontes
       metaLeitura: !!metaLeitura, // meta CRUA de leitura (aba Metas), sem transcrever a letra
       fonteUrl: fonteUrl || null, // origem oficial (Planalto) para conferir novidade legislativa
       leiHash: leiHash || null, // hash do texto na importação (detecta mudança na reconsulta)
+      estrutura: Array.isArray(estrutura) && estrutura.length ? estrutura : null, // trilha Livro/Título/Capítulo/Seção (lei)
+      nomeJuridico: nomeJuridico || null, // rubrica marginal / nome jurídico / tipo penal ("Furto")
+      // Tag temática (F1): auto-classifica OFFLINE na importação quando há texto e nenhum tema veio pronto.
+      temas: Array.isArray(temas) && temas.length ? temas : ((texto || "").trim() && !metaLeitura ? classificarTemasTexto(texto) : []),
+      favorito: !!favorito, // leitor: barra azul à esquerda; escopo "favoritos"; entra em revisão
+      dificil: !!dificil, // leitor: marcador "Difícil"; ao ligar, agenda revisão espaçada
+      lidoEm: lidoEm || null, // datetime ISO da última marcação como lido (histórico "hoje 14:32")
       novidadeEm: novidadeEm || null, // marcada como novidade legislativa nesta data
       lido: false,
       criadoEm: nowISO(),
@@ -3028,10 +3301,214 @@ export const store = {
     const ind = state.indicacoes.find((x) => x.id === id);
     if (ind) {
       ind.lido = !ind.lido;
+      ind.lidoEm = ind.lido ? nowISO() : null; // datetime p/ "leu N hoje" e histórico de leitura
       const m = state.missoes.find((mm) => mm.indicacaoId === id);
       if (m) m.concluida = ind.lido;
       commit();
     }
+  },
+  // Marcar VÁRIOS artigos como lido/não-lido de uma vez (ferramenta geral "marcar em bloco").
+  marcarLidosIds(ids, valor = true) {
+    const set = new Set(ids || []);
+    let n = 0;
+    for (const ind of state.indicacoes) {
+      if (!set.has(ind.id)) continue;
+      if (!!ind.lido === !!valor) continue;
+      ind.lido = !!valor;
+      ind.lidoEm = valor ? nowISO() : null;
+      const m = state.missoes.find((mm) => mm.indicacaoId === ind.id);
+      if (m) m.concluida = !!valor;
+      n++;
+    }
+    if (n) commit();
+    return n;
+  },
+  // Leitor (F0): favorito = barra azul + entra em revisão espaçada.
+  toggleFavorito(id) {
+    const ind = state.indicacoes.find((x) => x.id === id);
+    if (!ind) return false;
+    ind.favorito = !ind.favorito;
+    if (ind.favorito && !ind.revisao) { ind.promovido = true; ind.revisao = { proxima: addDays(todayISO(), 1), intervalo: 1 }; }
+    commit();
+    return ind.favorito;
+  },
+  // Leitor (F0): "Difícil" → agenda revisão espaçada na escada [1,3,7,15,30,60,120] começando em 1 dia.
+  toggleDificil(id) {
+    const ind = state.indicacoes.find((x) => x.id === id);
+    if (!ind) return false;
+    ind.dificil = !ind.dificil;
+    if (ind.dificil) { ind.promovido = true; if (!ind.revisao) ind.revisao = { proxima: addDays(todayISO(), 1), intervalo: 1 }; }
+    commit();
+    return ind.dificil;
+  },
+  // Filtra artigos de uma norma por nível/rótulo da estrutura (ex.: nivel 3 "Capítulo I") — habilita
+  // metas/escopo por Título/Capítulo/Seção. Irmão de selecionarArtigos (que é só por número).
+  selecionarPorEstrutura(norma, { nivel = null, rotulo = null } = {}) {
+    return state.indicacoes.filter((i) =>
+      i.tipo === "lei" && !i.metaLeitura && normaDaReferencia(i.referencia) === norma &&
+      Array.isArray(i.estrutura) && i.estrutura.some((n) => (nivel == null || n.nivel === nivel) && (!rotulo || n.rotulo === rotulo)));
+  },
+  // Incidência (0-100) → 1-5 estrelas (0 = sem incidência marcada).
+  estrelasIncidencia(pq) { return pq == null ? 0 : Math.max(1, Math.min(5, Math.round(pq / 20))); },
+  // ---------- TAG TEMÁTICA (sub-projeto: classificar artigos por tema) ----------
+  // Classifica em lote (OFFLINE, instantâneo) por heurística de texto. Devolve nº de artigos com tema.
+  classificarTemasLote(ids) {
+    let n = 0;
+    for (const id of ids || []) {
+      const i = state.indicacoes.find((x) => x.id === id);
+      if (!i || !(i.texto || "").trim()) continue;
+      i.temas = classificarTemasTexto(i.texto);
+      if (i.temas.length) n++;
+    }
+    commit();
+    return n;
+  },
+  // Classifica com IA (temas mais finos/precisos). Cap para não estourar a cota. Mescla c/ os offline.
+  async classificarTemasIA(ids, contexto = "") {
+    if (!this.iaDisponivel()) throw new Error("IA indisponível");
+    let n = 0;
+    for (const id of (ids || []).slice(0, 40)) {
+      const i = state.indicacoes.find((x) => x.id === id);
+      if (!i || !(i.texto || "").trim()) continue;
+      try {
+        const temas = await iaProv.classificarTemas(state.config, { texto: i.texto, referencia: i.referencia + (contexto ? " · " + contexto : "") });
+        if (Array.isArray(temas) && temas.length) {
+          i.temas = [...new Set([...(i.temas || []), ...temas])].slice(0, 6);
+          n++;
+        }
+      } catch (e) { console.error("[temas IA]", e); }
+    }
+    commit();
+    return n;
+  },
+  // F3: edição manual das tags de um artigo (o tagger erra — o usuário corrige).
+  setTemasArtigo(id, temas) {
+    const i = state.indicacoes.find((x) => x.id === id);
+    if (!i) return;
+    i.temas = [...new Set((temas || []).map((t) => String(t).trim()).filter(Boolean))].slice(0, 8);
+    commit();
+  },
+  // Catálogo de temas para o editor: os temas-base (heurística) + os que já existem no acervo.
+  temasCatalogo() {
+    const base = TEMAS_REGRAS.map((r) => r.tema);
+    const usados = new Set();
+    for (const i of state.indicacoes) for (const t of i.temas || []) usados.add(t);
+    return [...new Set([...base, ...usados])].sort((a, b) => a.localeCompare(b, "pt"));
+  },
+  // Temas presentes num conjunto (para o seletor de escopo por tema) → [{ tema, n }] ordenado.
+  temasDisponiveis(ids) {
+    const set = new Set(ids || []);
+    const cont = new Map();
+    for (const i of state.indicacoes) {
+      if (!set.has(i.id) || !Array.isArray(i.temas)) continue;
+      for (const t of i.temas) cont.set(t, (cont.get(t) || 0) + 1);
+    }
+    return [...cont.entries()].map(([tema, n]) => ({ tema, n })).sort((a, b) => b.n - a.n);
+  },
+  // "Inteligência": temas onde o aluno mais ERRA (cruza errosPorArtigo × temas do artigo).
+  temasComErro(tipo = "lei") {
+    const erros = this.errosPorArtigo(tipo);
+    const cont = new Map();
+    for (const e of erros) {
+      const i = state.indicacoes.find((x) => x.id === e.indicacaoId);
+      for (const t of (i && i.temas) || []) cont.set(t, (cont.get(t) || 0) + e.erros);
+    }
+    return [...cont.entries()].map(([tema, erros]) => ({ tema, erros })).sort((a, b) => b.erros - a.erros);
+  },
+  // Posição de "continuar leitura" por lei. semCarimbo: não é dado do usuário p/ o sync (evita
+  // churn de modificadoEm a cada rolagem entre PCs).
+  setUltimaLeitura(norma, patch) {
+    if (!norma) return;
+    state.config.ultimaLeitura = state.config.ultimaLeitura || {};
+    state.config.ultimaLeitura[norma] = { ...(state.config.ultimaLeitura[norma] || {}), ...(patch || {}), em: nowISO() };
+    commit({ semCarimbo: true });
+  },
+  // F1e: preferências de leitura (fonte/tamanho/espaçamento/tema/alinhamento). Merge nested seguro.
+  setLeitura(patch) {
+    state.config.leitura = { ...(state.config.leitura || {}), ...(patch || {}) };
+    commit();
+    return state.config.leitura;
+  },
+  // Caderno de erros AGREGADO por artigo ("você errou este artigo 4x") — deriva de state.tentativas.
+  errosPorArtigo(tipo = "lei") {
+    const qDe = new Map();
+    for (const q of state.questoes) { const indId = q.treino && q.treino.indicacaoId; if (indId) qDe.set(q.id, indId); }
+    const porInd = new Map();
+    for (const t of state.tentativas) {
+      const indId = qDe.get(t.questaoId);
+      if (!indId) continue;
+      let e = porInd.get(indId);
+      if (!e) { e = { indicacaoId: indId, total: 0, erros: 0, ultimoErro: null }; porInd.set(indId, e); }
+      e.total++;
+      if (!t.acertou) { e.erros++; if (!e.ultimoErro || (t.data || "") > e.ultimoErro) e.ultimoErro = t.data || null; }
+    }
+    const out = [];
+    for (const e of porInd.values()) {
+      const ind = state.indicacoes.find((i) => i.id === e.indicacaoId);
+      if (!ind || (tipo && ind.tipo !== tipo)) continue;
+      out.push({ ...e, referencia: ind.referencia, lei: normaDaReferencia(ind.referencia),
+        pctAcerto: e.total ? Math.round((100 * (e.total - e.erros)) / e.total) : 0,
+        ultimaRevisao: ind.revisao ? ind.revisao.proxima : null });
+    }
+    return out.filter((x) => x.erros > 0).sort((a, b) => b.erros - a.erros || ((b.ultimoErro || "") > (a.ultimoErro || "") ? 1 : -1));
+  },
+  // Dashboard do Estudar/leitor: resumo de HOJE (opcionalmente de uma norma).
+  resumoLeituraHoje(norma = null) {
+    const hoje = todayISO();
+    const lei = state.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && (!norma || normaDaReferencia(i.referencia) === norma));
+    const lidosHoje = lei.filter((i) => (i.lidoEm || "").slice(0, 10) === hoje).length;
+    const qDe = new Map(state.questoes.filter((q) => q.treino && q.treino.indicacaoId).map((q) => [q.id, q.treino.indicacaoId]));
+    const tLei = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje && qDe.has(t.questaoId));
+    const acertos = tLei.filter((t) => t.acertou).length;
+    return { lidosHoje, questoesHoje: tLei.length, pctHoje: tLei.length ? Math.round((100 * acertos) / tLei.length) : null, tempoSeg: tLei.reduce((s, t) => s + (t.tempoSeg || 0), 0) };
+  },
+  // Renomear (apelido de exibição) de uma norma — corrige detecção errada de nome na importação.
+  // Não mexe nas referências ("Art. 1º, Lei 8.078/1990"), só no nome amigável mostrado no leitor.
+  definirNomeLei(norma, nome) {
+    if (!norma) return;
+    state.config.nomesLeis = state.config.nomesLeis || {};
+    const n = (nome || "").trim();
+    if (n) state.config.nomesLeis[norma] = n; else delete state.config.nomesLeis[norma];
+    commit();
+  },
+  // F6 (Planejamento): meta quantitativa diária da Lei Seca (0 = sem meta).
+  setMetaLeitura(chave, valor) {
+    if (!state.config.metasLeitura) state.config.metasLeitura = { artigosDia: 0, questoesDia: 0 };
+    state.config.metasLeitura[chave] = Math.max(0, Math.round(+valor || 0));
+    commit();
+  },
+  // F6 (Planejamento Inteligente): panorama da leitura — total/lidos/faltam, ritmo (média/dia com
+  // leitura nos últimos 21 dias) e previsão de conclusão. Alimenta o dashboard da aba Metas.
+  planejamentoLeitura(tipo = "lei") {
+    const arts = state.indicacoes.filter((i) => i.tipo === tipo && !i.metaLeitura && !i.revogado && (i.texto || "").trim());
+    const total = arts.length;
+    const lidos = arts.filter((i) => i.lido).length;
+    const faltam = total - lidos;
+    const hoje = todayISO();
+    const limite = addDays(hoje, -21);
+    const porDia = {};
+    for (const i of arts) { const d = (i.lidoEm || "").slice(0, 10); if (d && d >= limite) porDia[d] = (porDia[d] || 0) + 1; }
+    const dias = Object.keys(porDia);
+    const ritmoDia = dias.length ? dias.reduce((s, d) => s + porDia[d], 0) / dias.length : 0;
+    const previsaoDias = ritmoDia > 0 && faltam > 0 ? Math.ceil(faltam / ritmoDia) : null;
+    const resumo = this.resumoLeituraHoje();
+    const metas = state.config.metasLeitura || { artigosDia: 0, questoesDia: 0 };
+    // DOMINADO (gamificação leve): já domina o artigo se acerta ≥80% (≥2 tentativas) OU já está
+    // numa revisão espaçada com intervalo ≥15 dias. Distinto de "lido" (só passou o olho).
+    const errosMap = new Map(this.errosPorArtigo(tipo).map((e) => [e.indicacaoId, e]));
+    const dominados = arts.filter((i) => { const e = errosMap.get(i.id); return (e && e.total >= 2 && e.pctAcerto >= 80) || (i.promovido && i.revisao && i.revisao.intervalo >= 15); }).length;
+    // Leitura NESTA semana (Dom–hoje) — momento/ofensiva leve.
+    const dowHoje = new Date(hoje + "T12:00:00").getDay();
+    const inicioSem = addDays(hoje, -dowHoje);
+    const lidosSemana = arts.filter((i) => (i.lidoEm || "").slice(0, 10) >= inicioSem).length;
+    return {
+      total, lidos, faltam, pct: total ? Math.round((100 * lidos) / total) : 0,
+      dominados, pctDominado: total ? Math.round((100 * dominados) / total) : 0,
+      lidosSemana,
+      lidosHoje: resumo.lidosHoje, questoesHoje: resumo.questoesHoje,
+      ritmoDia: Math.round(ritmoDia * 10) / 10, previsaoDias, previsaoData: previsaoDias != null ? addDays(hoje, previsaoDias) : null,
+      metaArtigosDia: metas.artigosDia || 0, metaQuestoesDia: metas.questoesDia || 0,
+    };
   },
   removerIndicacao(id) {
     state.indicacoes = state.indicacoes.filter((x) => x.id !== id);
@@ -3303,7 +3780,7 @@ export const store = {
   revisarMemoria(id, resultado) {
     const ind = state.indicacoes.find((x) => x.id === id);
     if (!ind || !ind.revisao) return null;
-    const ESCADA = [1, 7, 15, 30, 60, 120];
+    const ESCADA = [1, 3, 7, 15, 30, 60, 120]; // reaproveita a escada existente + degrau 3 (difícil/leitor)
     let idx = ESCADA.indexOf(ind.revisao.intervalo);
     if (idx < 0) idx = 1;
     if (resultado === "esqueci") idx = 0;
@@ -3459,6 +3936,16 @@ export const store = {
   },
   // O que RELER na revisão do tópico: palavras-chave marcadas (tricromático, dir.4 — ainda
   // não existe) > resumo do tópico > material (fallback). Devolve {fonte, texto} ou null.
+  // Faixa de páginas que o usuário REGISTROU para este tópico em "Registrar sessão" (leitura mais
+  // recente com página). É o que liga a página registrada à revisão do tópico.
+  paginaRegistradaDoTopico(topicoId) {
+    if (!topicoId) return null;
+    const sess = state.sessoes
+      .filter((s) => s.topicoId === topicoId && s.paginaInicial && s.paginaFinal && s.paginaFinal >= s.paginaInicial)
+      .sort((a, b) => String(b.data || "").localeCompare(String(a.data || "")));
+    const s = sess[0];
+    return s ? { ini: s.paginaInicial, fim: s.paginaFinal, sessaoId: s.id } : null;
+  },
   palavrasParaReler(topicoId) {
     // 1ª escolha: palavras-chave 🟡 marcadas (tricromático, dir.4) nos itens do tópico.
     const chaves = this.palavrasChaveDoTopico(topicoId);
@@ -3466,6 +3953,16 @@ export const store = {
     const resumo = state.resumos.find((r) => r.topicoId === topicoId && stripHTML(r.conteudoHTML).trim());
     if (resumo) return { fonte: "Resumo: " + (resumo.titulo || "sem título"), texto: stripHTML(resumo.conteudoHTML).trim() };
     const docs = state.documentos.filter((d) => docCobre(d, topicoId) && (d.texto || "").trim());
+    // SINCRONIA página↔revisão: se o usuário registrou uma leitura (páginas) para este tópico,
+    // relê EXATAMENTE aquele trecho do material (prioridade sobre a página do sumário).
+    const reg = this.paginaRegistradaDoTopico(topicoId);
+    if (reg) {
+      for (const d of docs) {
+        if (!Array.isArray(d.paginas) || !d.paginas.length) continue;
+        const t = d.paginas.filter((p) => p.n >= reg.ini && p.n <= reg.fim).map((p) => p.texto || "").join("\n\n").trim();
+        if (t) return { fonte: `Trecho registrado: ${d.titulo} (p.${reg.ini}–${reg.fim})`, texto: t.slice(0, 4000), docId: d.id, pagina: reg.ini };
+      }
+    }
     if (docs.length) {
       // F5: revisão POR BLOCO — se há blocos vinculados a este tópico, relê só o(s) trecho(s)
       // daquelas páginas (preciso), em vez do material inteiro.
@@ -3516,7 +4013,7 @@ export const store = {
       .filter((m) => m.alvoTipo === alvoTipo && m.alvoId === alvoId)
       .sort((a, b) => a.inicio - b.inicio);
   },
-  addMarca({ alvoTipo, alvoId, cor, inicio, fim, texto, origem, nota }) {
+  addMarca({ alvoTipo, alvoId, cor, inicio, fim, texto, origem, nota, prefix, suffix }) {
     if (inicio == null || fim == null || fim <= inicio) return null;
     // Marca manual prevalece: remove qualquer marca que cruze o intervalo (evita sobreposição).
     // Exceção: comentários (cor 'comentario') convivem com grifos no mesmo trecho.
@@ -3526,10 +4023,45 @@ export const store = {
         (m) => !(m.alvoTipo === alvoTipo && m.alvoId === alvoId && m.cor !== "comentario" && m.inicio < fim && m.fim > inicio)
       );
     }
-    const m = { id: uid("mk"), alvoTipo, alvoId, cor: cor || "amarelo", inicio, fim, texto: texto || "", origem: origem || "manual", nota: nota || "", criadoEm: nowISO() };
+    // prefix/suffix = âncora de contexto (grifo tipo Kindle): permite reancorar se o texto mudar.
+    const m = { id: uid("mk"), alvoTipo, alvoId, cor: cor || "amarelo", inicio, fim, texto: texto || "", prefix: prefix || "", suffix: suffix || "", origem: origem || "manual", nota: nota || "", criadoEm: nowISO() };
     state.marcacoes.push(m);
     commit();
     return m;
+  },
+  // Resiliência do grifo: devolve as marcas com o offset CONFERIDO contra o texto atual. Se o
+  // offset não bate mais (o texto mudou/foi reprocessado), reancora pelo trecho exato + contexto
+  // (prefix/suffix). Não achou → marca `orfa` (não some, mas o app pode sinalizar). Não persiste
+  // aqui (roda no render); a cura vira permanente na próxima gravação do estado.
+  marcasAncoradas(alvoTipo, alvoId, rawTexto) {
+    const raw = String(rawTexto || "");
+    return this.marcasDe(alvoTipo, alvoId).map((m) => {
+      if (!m.texto || raw.slice(m.inicio, m.fim) === m.texto) return m; // offset válido (caminho rápido)
+      const alvo = this._reancorarMarca(raw, m);
+      return alvo ? { ...m, inicio: alvo.inicio, fim: alvo.fim, reancorada: true } : { ...m, orfa: true };
+    });
+  },
+  _reancorarMarca(raw, m) {
+    const exact = m.texto;
+    if (!exact) return null;
+    const pos = [];
+    let i = raw.indexOf(exact);
+    while (i >= 0 && pos.length < 50) { pos.push(i); i = raw.indexOf(exact, i + 1); }
+    if (!pos.length) return null;
+    if (pos.length === 1) return { inicio: pos[0], fim: pos[0] + exact.length };
+    // Várias ocorrências: desempata pelo contexto guardado + proximidade do offset antigo.
+    const pfx = (m.prefix || "").slice(-12), sfx = (m.suffix || "").slice(0, 12);
+    let best = pos[0], bestScore = -Infinity;
+    for (const p of pos) {
+      const antes = raw.slice(Math.max(0, p - pfx.length), p);
+      const depois = raw.slice(p + exact.length, p + exact.length + sfx.length);
+      let score = 0;
+      if (pfx && antes.endsWith(pfx)) score += 2;
+      if (sfx && depois.startsWith(sfx)) score += 2;
+      score += 1 - Math.min(1, Math.abs(p - m.inicio) / (raw.length || 1));
+      if (score > bestScore) { bestScore = score; best = p; }
+    }
+    return { inicio: best, fim: best + exact.length };
   },
   setMarcaNota(id, nota) {
     const m = state.marcacoes.find((x) => x.id === id);
@@ -3673,11 +4205,22 @@ export const store = {
   // Prosa (não-lista) via IA: na JURISPRUDÊNCIA, um informativo/narrativa → extrair TESES
   // (extrairTesesInformativo); se não vier nada, cai no estruturador de listas. Na lei, estrutura.
   async _estruturarProsa(texto, tipo) {
+    // F1 — parser DETERMINÍSTICO primeiro (STJ rotulado): extrai sem IA (economiza cota).
+    if (tipo === "juris") {
+      try { const det = parseInformativoDeterministico(texto); if (det && det.length) return det; } catch (e) { console.error(e); }
+    }
     if (!this.iaDisponivel()) return [];
     if (tipo === "juris") {
       try {
         const teses = await iaProv.extrairTesesInformativo(state.config, { texto });
-        if (teses.length) return teses.map((t) => ({ referencia: t.referencia || "Tese", texto: t.texto, observacao: "", tribunal: t.tribunal || null, categoria: t.categoria || null }));
+        if (teses.length) return teses.map((t) => ({
+          referencia: t.referencia || "Tese", texto: t.texto, observacao: "",
+          tribunal: t.tribunal || null, categoria: t.categoria || null,
+          // F1: campos ricos do informativo (fluem até o addIndicacao/preview)
+          ramo: t.ramo || null, assunto: t.assunto || null, orgao: t.orgao || null,
+          processo: t.processo || null, tema: t.tema || null, dataJulgamento: t.dataJulgamento || null,
+          status: t.status || "vigente", nInformativo: t.nInformativo || null, dataDivulgacao: t.dataDivulgacao || null,
+        }));
       } catch (e) { console.error(e); }
     }
     try {
@@ -3687,6 +4230,12 @@ export const store = {
     return [];
   },
   async prepararIndicacoesAuto(texto, tipo) {
+    // F1 — INFORMATIVO (STF/STJ): vai direto para a extração RICA (teses + ramo/processo/tema/status),
+    // em vez do fatiador cru. Só cai no resto se a IA não retornar nada.
+    if (tipo === "juris" && pareceInformativo(texto)) {
+      const rico = await this._estruturarProsa(texto, tipo);
+      if (rico.length) return rico;
+    }
     // (C1/C2) Texto CORRIDO de uma lei/coletânea (não é lista) → fatiar por artigo/súmula/tese.
     if (pareceTextoCorrido(texto, tipo)) {
       const fatiado = tipo === "juris" ? fatiarJurisEmUnidades(texto) : fatiarLeiEmArtigos(texto);
@@ -3737,8 +4286,11 @@ export const store = {
       const s = (v || "").toLowerCase();
       if (/s[uú]mula\s+vinculante|\bsv\b/.test(s)) return "Súmula Vinculante";
       if (/s[uú]mula/.test(s)) return "Súmula";
+      if (/teses/.test(s)) return "Jurisprudência em Teses";
+      if (/repercuss/.test(s)) return "Repercussão Geral";
       if (/tema/.test(s)) return "Tema repetitivo";
-      if (/precedente|enunciado|orienta/.test(s)) return "Precedente obrigatório";
+      if (/enunciado/.test(s)) return "Enunciado";
+      if (/precedente|orienta/.test(s)) return "Precedente obrigatório";
       return null;
     };
     // Referência "solta" (sem rótulo), por padrão de texto.
@@ -3812,9 +4364,23 @@ export const store = {
   // Grava as indicações aprovadas no preview. opts = vínculo/atributos comuns (disciplina/tópico,
   // e, p/ juris, tribunal/categoria padrão); cada item pode trazer os seus (têm prioridade).
   aceitarIndicacoes(itens, opts = {}) {
-    let n = 0;
+    let n = 0, enriquecidos = 0;
+    // Agrupador da fonte-mãe: se o lote veio de um informativo (mesmos nº+tribunal), cria/reusa grupoId.
+    const mae = (itens || []).find((x) => x.nInformativo);
+    const grupoId = mae && mae.nInformativo ? `grp_${String(mae.tribunal || opts.tribunal || "").toUpperCase().replace(/[^A-Z]/g, "")}_${String(mae.nInformativo).replace(/[^0-9]/g, "")}` : null;
     for (const it of itens || []) {
       if (!(it.referencia || "").trim()) continue;
+      if (it._acao === "pular") continue; // usuário marcou "já tenho" no preview
+      const chave = (opts.tipo === "juris") ? chaveIndic({ tribunal: it.tribunal || opts.tribunal, processo: it.processo, tema: it.tema, referencia: it.referencia }) : "";
+      const existente = chave ? state.indicacoes.find((x) => (x.tipo || "lei") === "juris" && x.chave === chave) : null;
+      if (existente && it._acao !== "substituir") {
+        // RECONCILIAÇÃO (padrão = enriquecer): não duplica; soma fonte, preenche campos vazios,
+        // atualiza status (ex.: veio como "superado" numa mudança de entendimento).
+        this._enriquecerIndicacao(existente, it, grupoId, opts);
+        enriquecidos++;
+        continue;
+      }
+      if (existente && it._acao === "substituir") this.removerIndicacao(existente.id);
       this.addIndicacao({
         tipo: opts.tipo,
         modo: opts.modo,
@@ -3825,10 +4391,46 @@ export const store = {
         observacao: it.observacao,
         tribunal: it.tribunal || opts.tribunal || null,
         categoria: it.categoria || opts.categoria || null,
+        ramo: it.ramo, assunto: it.assunto, orgao: it.orgao, processo: it.processo, tema: it.tema,
+        dataJulgamento: it.dataJulgamento, dataDivulgacao: it.dataDivulgacao, nInformativo: it.nInformativo,
+        grupoId, status: it.status,
       });
       n++;
     }
-    return n;
+    return n + enriquecidos; // total processado (retrocompat: número)
+  },
+  // F1 — enriquece um item existente com dados de outra fonte (ex.: DOD acrescenta ao que veio do STJ).
+  // Soma a fonte, preenche campos vazios e propaga mudança de status; NÃO sobrescreve o que já é bom.
+  _enriquecerIndicacao(ind, it, grupoId, opts = {}) {
+    ind.fontes = Array.isArray(ind.fontes) ? ind.fontes : [];
+    const fonteNova = it.nInformativo ? `${(it.tribunal || opts.tribunal || "").toUpperCase()} Inf. ${it.nInformativo}` : (opts.fonteRotulo || "outra fonte");
+    if (!ind.fontes.includes(fonteNova)) ind.fontes.push(fonteNova);
+    const preenche = (campo, val) => { if (val && !ind[campo]) ind[campo] = val; };
+    preenche("ramo", it.ramo); preenche("assunto", it.assunto); preenche("orgao", it.orgao);
+    const procAntes = ind.processo, temaAntes = ind.temaNum;
+    preenche("processo", it.processo); preenche("temaNum", it.tema); preenche("dataJulgamento", it.dataJulgamento);
+    preenche("dataDivulgacao", it.dataDivulgacao); preenche("nInformativo", it.nInformativo);
+    // Se ganhou processo/tema agora, recalcula a chave — senão uma importação futura com o processo
+    // não encontraria este item (chave presa na referência antiga) e criaria duplicata.
+    if ((ind.processo && ind.processo !== procAntes) || (ind.temaNum && ind.temaNum !== temaAntes)) {
+      ind.chave = chaveIndic({ tribunal: ind.tribunal, processo: ind.processo, tema: ind.temaNum, referencia: ind.referencia });
+    }
+    if (grupoId && !ind.grupoId) ind.grupoId = grupoId;
+    // Comentário/caso extra (ex.: o "caso concreto/fundamentos" do DOD) vai para observação, sem duplicar.
+    if (it.observacao && !(ind.observacao || "").includes(it.observacao)) ind.observacao = [(ind.observacao || "").trim(), it.observacao.trim()].filter(Boolean).join("\n");
+    // Mudança de entendimento: se a nova fonte diz que superou, marca.
+    if (it.status === "superado" && !ind.revogado) { ind.revogado = true; ind.revogadoEm = todayISO(); ind.status = "superado"; }
+    else if (it.status && !ind.status) ind.status = it.status;
+    commit();
+    return ind;
+  },
+  // F1 — o julgado do preview já está no sistema? Devolve a indicação existente (p/ o preview
+  // mostrar "já no sistema" + oferecer pular/enriquecer/substituir), ou null.
+  dupIndicacao(it) {
+    if (!it) return null;
+    const chave = chaveIndic({ tribunal: it.tribunal, processo: it.processo, tema: it.tema, referencia: it.referencia });
+    if (!chave) return null;
+    return state.indicacoes.find((x) => (x.tipo || "lei") === "juris" && x.chave === chave) || null;
   },
   // Importar LEI do texto/HTML oficial (Planalto) — letra EXATA, sem OCR. Só prepara o preview.
   // {html} (colado, com formatação p/ pegar revogado) OU {url} (busca no desktop/Tauri).
@@ -3857,6 +4459,8 @@ export const store = {
         topicoId: opts.topicoId || null,
         referencia: a.referencia,
         texto: a.texto,
+        estrutura: a.estrutura || null, // trilha hierárquica (Livro/Título/Capítulo/Seção)
+        nomeJuridico: a.nomeJuridico || null, // rubrica marginal / tipo penal ("Homicídio simples")
         fonteUrl: opts.fonteUrl || null, // origem oficial p/ conferir novidade depois
         leiHash: hashLei(a.texto), // identidade do texto na importação
       });
@@ -3882,7 +4486,7 @@ export const store = {
     for (const a of prep.artigos) {
       refsFresh.add(a.referencia);
       const g = porRef.get(a.referencia);
-      if (!g) { if (!a.revogado) novos.push({ referencia: a.referencia, texto: a.texto }); continue; }
+      if (!g) { if (!a.revogado) novos.push({ referencia: a.referencia, texto: a.texto, estrutura: a.estrutura || null }); continue; }
       if (a.revogado && !g.revogado) { revogados.push({ referencia: a.referencia, indId: g.id }); continue; }
       if (!a.revogado) {
         const hNovo = hashLei(a.texto);
@@ -3912,7 +4516,7 @@ export const store = {
       this.addIndicacao({
         tipo: "lei", modo: "meta", semTarefa: true,
         disciplinaId: decisoes.disciplinaId || null,
-        referencia: nv.referencia, texto: nv.texto,
+        referencia: nv.referencia, texto: nv.texto, estrutura: nv.estrutura || null,
         leiHash: hashLei(nv.texto), novidadeEm: hoje,
       });
       nNovo++;
@@ -3976,7 +4580,14 @@ export const store = {
     const i = state.indicacoes.find((x) => x.id === id);
     if (!i) return [];
     const texto = (i.texto || "").trim();
-    const escolhidos = selecionarLacunas(texto, max);
+    // F7 (grifo→cloze): se o usuário grifou trechos, as LACUNAS saem dos grifos (recall do que ele
+    // mesmo marcou como importante); sem grifos, cai no seletor automático de lacunas.
+    const grifos = state.marcacoes
+      .filter((m) => m.alvoTipo === "indicacao" && m.alvoId === id && m.cor !== "comentario" && texto.slice(m.inicio, m.fim) === m.texto)
+      .sort((a, b) => a.inicio - b.inicio)
+      .slice(0, max)
+      .map((m) => ({ idx: m.inicio, len: m.fim - m.inicio, palavra: m.texto }));
+    const escolhidos = grifos.length ? grifos : selecionarLacunas(texto, max);
     if (!escolhidos.length) return [];
     const fonte = { tipo: i.tipo === "juris" ? "juris" : "lei", titulo: i.referencia };
     return escolhidos.map((a) =>
@@ -3998,6 +4609,17 @@ export const store = {
     const texto = (i.texto || "").trim();
     const lacunas = selecionarLacunas(texto, max);
     return { referencia: i.referencia, texto, lacunas };
+  },
+  // #10 Completar o artigo em 4 NÍVEIS. Recebe o texto LIMPO (sem "Art. Nº") e devolve as lacunas
+  // {idx,len,palavra} para preencher inline. fácil = palavras-chave · médio = expressões ·
+  // difícil = cláusulas inteiras · extremo = digitação (sem lacunas parciais; retype completo).
+  lacunasCloze(textoLimpo, nivel = "facil") {
+    const t = String(textoLimpo || "");
+    if (nivel === "extremo") return [];
+    if (nivel === "dificil") return lacunasFrases(t);
+    if (nivel === "medio") return lacunasExpressoes(t, 9);
+    const base = selecionarLacunas(t, 3); // fácil = palavras-chave; se o texto não tiver nenhuma, cai em expressões
+    return base.length ? base : lacunasExpressoes(t, 3);
   },
   // O — VIGÊNCIA: normas (leis) cuja conferência mais recente passou de ~N meses. Data efetiva
   // de um artigo = vigenciaEm (conferida) ou criadoEm. Devolve [{norma, meses, ids}] a conferir.
@@ -5160,7 +5782,7 @@ export const store = {
     return [];
   },
   async extrairQuestoesCEDeEscopo(escopo) {
-    if (escopo && escopo.modo === "material") return this.extrairQuestoesCEDeDoc(escopo.docIds[0]);
+    if (escopo && escopo.modo === "material") return this.extrairQuestoesCEDeDoc(escopo.docIds[0], escopo.bloco || null);
     return [];
   },
   // Sintetiza UM resumo a partir do escopo (mesma IA do gerarResumoSinteseIA, sobre o
@@ -6165,7 +6787,9 @@ export const store = {
       push({ tipo: "mapa", id: "mapa:" + mp.id, refId: mp.id, titulo: mp.titulo || "Mapa mental", topicoId: mp.topicoId || null, disciplinaId: disc ? disc.id : null, disciplinaNome: disc ? disc.nome : "—", proxima: mp.revisao.proxima, rota: "mapas", acoes: true });
     }
     for (const ind of state.indicacoes) {
-      if (ind.modo !== "memoria" || !ind.revisao || !ind.revisao.proxima) continue;
+      // Inclui memórias E promovidos (favorito/difícil viram revisão espaçada) — reconcilia com
+      // memoriasParaRevisar (que conta promovido||memoria); antes promovidos sumiam da Central.
+      if (!(ind.modo === "memoria" || ind.promovido) || ind.metaLeitura || !ind.revisao || !ind.revisao.proxima) continue;
       const { disc } = ctx(ind.topicoId);
       push({ tipo: ind.tipo === "juris" ? "juris" : "lei", id: "ind:" + ind.id, refId: ind.id, titulo: (ind.referencia || ind.texto || "Item").slice(0, 90), topicoId: ind.topicoId || null, disciplinaId: (disc ? disc.id : null) || ind.disciplinaId || null, disciplinaNome: disc ? disc.nome : "—", proxima: ind.revisao.proxima, rota: ind.tipo === "juris" ? "jurisprudencia" : "leiseca", acoes: true });
     }

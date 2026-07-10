@@ -3,7 +3,7 @@
 // existentes ou gerar por IA. Usado no Treino e no setup do Simulado, em DOIS
 // formatos: 'mc' (múltipla escolha, padrão) e 'ce' (Certo/Errado). O estado
 // {aberto} é mantido pela tela que usa.
-import { toast, avisoIA, ligarDropZone, pedirNumero, abrirJanelaFluxo , plural } from "../ui.js";
+import { toast, avisoIA, ligarDropZone, pedirNumero, abrirJanelaFluxo , plural, comOcupado } from "../ui.js";
 import { lerArquivoTexto } from "../pdf.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
@@ -43,7 +43,7 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
 
   return `
     <div class="card form-questao">
-      <h3>${ce ? "Adicionar questões Certo / errado" : "Adicionar questões"}</h3>
+      <h3>${ce ? "Adicionar itens Certo/Errado" : "Adicionar questões"}</h3>
       <p class="muted small" style="margin:0 0 12px">Três jeitos de adicionar — escolha um abaixo.</p>
 
       <div class="add-via">
@@ -157,7 +157,7 @@ function qPreviewHTML(itens, ce, st) {
     <p class="muted small" style="margin:0 0 10px">O enunciado e a origem (referência/assunto/banca…) ficam visíveis; ${ce ? "o gabarito e a justificativa" : "as alternativas e a correta"} ficam ocultos para não estragar a prática — revele só se quiser conferir. Edite e remova (✕) à vontade.</p>
     <ul class="prev-editavel">${itens.map(card).join("")}</ul>
     <div class="form-acoes">
-      <button class="btn btn-ghost" data-action="voltar-q" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">← Voltar para editar</button>
+      <button class="btn btn-ghost" data-action="voltar-q" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
       <button class="btn btn-ghost" data-action="descartar-q">Descartar</button>
       <button class="btn btn-primary" data-action="aceitar-q" ${itens.length ? "" : "disabled"}>Adicionar (${itens.length})</button>
@@ -216,7 +216,7 @@ function provaImportHTML(st, estado) {
       <details class="prova-fontes">
         <summary>${icone("download")} Onde baixar provas anteriores (sites oficiais)</summary>
         <div class="prova-fontes-lista">
-          ${lista.filter((b) => b.siteOficial).map((b) => `<a href="${esc(b.siteOficial)}" target="_blank" rel="noopener">${esc(b.nome)} ↗</a>`).join("")}
+          ${lista.filter((b) => b.siteOficial).map((b) => `<a href="${esc(b.siteOficial)}" target="_blank" rel="noopener">${esc(b.nome)} ${icone("external-link")}</a>`).join("")}
         </div>
         <p class="muted small">Provas anteriores de concurso público costumam ser de acesso livre no site da banca. Baixe a prova e o gabarito e cole/importe aqui.</p>
       </details>
@@ -383,7 +383,7 @@ function abrirAddQuestoes(app, estado, formato) {
   const ce = ehCE(formato);
   estado.aberto = true; // addQuestoesPanelHTML só renderiza com aberto=true
   abrirJanelaFluxo({
-    titulo: ce ? "Adicionar questões Certo / errado" : "Adicionar questões",
+    titulo: ce ? "Adicionar itens Certo/Errado" : "Adicionar questões",
     render: (corpo) => {
       const st = store.get();
       corpo.innerHTML = addQuestoesPanelHTML(st, estado, formato);
@@ -463,22 +463,15 @@ function abrirAddQuestoes(app, estado, formato) {
         "extrair-doc": async (el) => {
           if (!store.iaDisponivel()) return avisoIA(app, ce ? "Extrair itens C/E do material" : "Extrair questões do material");
           const docId = corpo.querySelector("#q-add-doc").value;
-          el.disabled = true;
-          toast("Extraindo do material…");
-          try {
-            const itens = ce ? await store.prepararQuestoesCEDeDoc(docId) : await store.prepararQuestoesDeDoc(docId);
-            if (!itens.length) { el.disabled = false; return toast("Não encontrei nada pronto neste material.", "erro"); }
-            const doc = store.get().documentos.find((d) => d.id === docId);
-            estado.previewTop = (doc && doc.topicoId) || corpo.querySelector("#q-add-top")?.value || null;
-            estado.textoSalvo = "";
-            estado.preview = itens;
-            toast(`${plural(itens.length, ce ? "item extraído" : "questão extraída", ce ? "itens extraídos" : "questões extraídas")} (confira e ajuste).`);
-            rerender();
-          } catch (e) {
-            console.error(e);
-            toast("A IA não conseguiu concluir agora. Tente de novo em instantes.", "erro");
-            el.disabled = false;
-          }
+          const itens = await comOcupado(() => ce ? store.prepararQuestoesCEDeDoc(docId) : store.prepararQuestoesDeDoc(docId), { botao: el, msg: "Extraindo do material…" });
+          if (itens == null) return;
+          if (!itens.length) return toast("Não encontrei nada pronto neste material.", "erro");
+          const doc = store.get().documentos.find((d) => d.id === docId);
+          estado.previewTop = (doc && doc.topicoId) || corpo.querySelector("#q-add-top")?.value || null;
+          estado.textoSalvo = "";
+          estado.preview = itens;
+          toast(`${plural(itens.length, ce ? "item extraído" : "questão extraída", ce ? "itens extraídos" : "questões extraídas")} (confira e ajuste).`);
+          rerender();
         },
         // Abre o seletor de escopo (Tópico → Aula → Subtópico, ou base Material). Fecha o
         // painel de adição: o seletor é uma janela própria e grava direto + app.refresh().

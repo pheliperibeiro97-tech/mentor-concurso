@@ -42,15 +42,25 @@ import triangleAlert from "lucide-static/icons/triangle-alert.svg?raw";
 import trash2 from "lucide-static/icons/trash-2.svg?raw";
 import plugZap from "lucide-static/icons/plug-zap.svg?raw";
 import highlighter from "lucide-static/icons/highlighter.svg?raw";
+import wrench from "lucide-static/icons/wrench.svg?raw";
+import bookMarked from "lucide-static/icons/book-marked.svg?raw";
+import mapPin from "lucide-static/icons/map-pin.svg?raw";
+import listTree from "lucide-static/icons/list-tree.svg?raw";
+import dumbbell from "lucide-static/icons/dumbbell.svg?raw";
+import tags from "lucide-static/icons/tags.svg?raw";
+import fileClock from "lucide-static/icons/file-clock.svg?raw";
 import calendarCheck from "lucide-static/icons/calendar-check.svg?raw";
 import brain from "lucide-static/icons/brain.svg?raw";
 import map from "lucide-static/icons/map.svg?raw";
 import clipboardList from "lucide-static/icons/clipboard-list.svg?raw";
+import copy from "lucide-static/icons/copy.svg?raw";
 import flame from "lucide-static/icons/flame.svg?raw";
 import calendar from "lucide-static/icons/calendar.svg?raw";
 import hand from "lucide-static/icons/hand.svg?raw";
 // Edital + Planejamento
 import sparkles from "lucide-static/icons/sparkles.svg?raw";
+import wandSparkles from "lucide-static/icons/wand-sparkles.svg?raw";
+import repeat from "lucide-static/icons/repeat.svg?raw";
 import globe from "lucide-static/icons/globe.svg?raw";
 import paperclip from "lucide-static/icons/paperclip.svg?raw";
 import tag from "lucide-static/icons/tag.svg?raw";
@@ -71,6 +81,7 @@ import bookmark from "lucide-static/icons/bookmark.svg?raw";
 import files from "lucide-static/icons/files.svg?raw";
 // Materiais + Lei Seca + Questões + Acompanhamento
 import eye from "lucide-static/icons/eye.svg?raw";
+import eyeOff from "lucide-static/icons/eye-off.svg?raw";
 import expand from "lucide-static/icons/expand.svg?raw";
 import search from "lucide-static/icons/search.svg?raw";
 import lock from "lucide-static/icons/lock.svg?raw";
@@ -127,6 +138,10 @@ import strikethrough from "lucide-static/icons/strikethrough.svg?raw";
 import list from "lucide-static/icons/list.svg?raw";
 import listOrdered from "lucide-static/icons/list-ordered.svg?raw";
 import listFilter from "lucide-static/icons/list-filter.svg?raw";
+import slidersHorizontal from "lucide-static/icons/sliders-horizontal.svg?raw";
+import stickyNote from "lucide-static/icons/sticky-note.svg?raw";
+import typeIcon from "lucide-static/icons/type.svg?raw";
+import layoutPanelTop from "lucide-static/icons/layout-panel-top.svg?raw";
 import indentIncrease from "lucide-static/icons/indent-increase.svg?raw";
 import indentDecrease from "lucide-static/icons/indent-decrease.svg?raw";
 import heading from "lucide-static/icons/heading.svg?raw";
@@ -168,14 +183,24 @@ const MAPA = {
   "trash-2": trash2,
   "plug-zap": plugZap,
   highlighter,
+  wrench,
+  "book-marked": bookMarked,
+  "map-pin": mapPin,
+  "list-tree": listTree,
+  dumbbell,
+  tags,
+  "file-clock": fileClock,
   "calendar-check": calendarCheck,
   brain,
   map,
   "clipboard-list": clipboardList,
+  copy,
   flame,
   calendar,
   hand,
   sparkles,
+  "wand-sparkles": wandSparkles,
+  repeat,
   globe,
   paperclip,
   tag,
@@ -195,6 +220,7 @@ const MAPA = {
   bookmark,
   files,
   eye,
+  "eye-off": eyeOff,
   expand,
   search,
   lock,
@@ -247,6 +273,10 @@ const MAPA = {
   list,
   "list-ordered": listOrdered,
   "list-filter": listFilter,
+  "sliders-horizontal": slidersHorizontal,
+  "sticky-note": stickyNote,
+  "type": typeIcon,
+  "layout-panel-top": layoutPanelTop,
   "indent-increase": indentIncrease,
   "indent-decrease": indentDecrease,
   heading,

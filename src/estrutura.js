@@ -15,12 +15,25 @@ const RE_TITULO_CORPO = /^(\d+(?:\.\d+)*)\)?\s+(\S.*)$/;
 const RE_SO_NUMERO = /^(\d{1,4})$/; // número de página solto (no Índice)
 const RE_PONTILHADO = /^[.…·∙•\-\s_]+$/; // linha de "leaders" (.....) do índice
 const RE_TOPIC_TAG = /[?&]topic=(\d+(?:\.\d+)*)/i; // tag de seção da plataforma na página
+// Marcador "#04 – Título" / "#12) Título" (numeração de seção de alguns cursinhos, no corpo).
+const RE_MARCADOR_HASH = /^#\s*(\d{1,3})\s*[–\-)]\s+(\S.*)$/;
 
 // Acha a página do Índice/Sumário (a palavra aparece isolada ou no topo da página).
 function acharPaginaIndice(paginas) {
   for (const p of paginas) {
     const ini = (p.texto || "").slice(0, 600);
     if (/(^|\n)\s*(índice|indice|sumário|sumario)\s*(\n|$)/i.test(ini) || /\b(índice|sumário)\b/i.test(ini)) return p;
+  }
+  return null;
+}
+
+// Acha o número da página que parece ser o SUMÁRIO/ÍNDICE (para a IA lê-la por imagem).
+// Busca só nas primeiras páginas (o sumário fica no começo) para não pegar "índice" no corpo.
+export function acharPaginaSumario(paginas) {
+  const ini = (paginas || []).slice(0, 15);
+  for (const p of ini) {
+    const cab = (p.texto || "").slice(0, 700);
+    if (/(^|\n|\s)(índice|indice|sumário|sumario)(\s|\n|$)/i.test(cab) || /conteúdo\s+program/i.test(cab)) return p.n;
   }
   return null;
 }
@@ -160,22 +173,51 @@ export function detectarPorNumeracao(paginas, indicePag) {
   return entradas.length >= 3 ? entradas : [];
 }
 
+// FALLBACK 1b — títulos por MARCADOR "#NN –" (cursinhos que numeram seções com "#04 – Tema").
+// Conservador: exige ≥3 marcadores distintos; título de tamanho de linha (não parágrafo).
+export function detectarPorMarcador(paginas, indicePag) {
+  const entradas = [];
+  const vistos = new Set();
+  for (const p of paginas) {
+    if (indicePag && p.n === indicePag) continue;
+    const linhas = (p.texto || "").split(/\r?\n/).map((l) => l.trim());
+    for (const l of linhas) {
+      const m = l.match(RE_MARCADOR_HASH);
+      if (!m) continue;
+      const num = m[1];
+      const titulo = m[2].trim();
+      if (vistos.has(num)) continue;
+      if (titulo.length < 3 || titulo.length > 90) continue;
+      vistos.add(num);
+      entradas.push({ numero: num, titulo, pagina: p.n, nivel: 1 });
+    }
+  }
+  return entradas.length >= 3 ? entradas : [];
+}
+
 // FALLBACK 2 — títulos por TAMANHO DE FONTE (PDF sem Índice nem numeração). Usa linhasPorPagina
 // (com fontSize/bold) do pdf.js. Corpo = fonte mais comum (ponderada por chars); títulos = fonte
 // maior/negrito, linha curta e não repetida (ignora cabeçalho/rodapé). Nível por faixa de tamanho.
 export function detectarPorFonte(linhasPorPagina, numPaginas, indicePag) {
   if (!Array.isArray(linhasPorPagina) || !linhasPorPagina.length) return [];
   const hist = {}, cont = {};
+  let charsTotal = 0, charsBold = 0;
   for (const pg of linhasPorPagina)
     for (const l of pg.linhas || []) {
       if (!l.texto) continue;
       const fs = Math.round(l.fontSize || 0);
       if (fs > 0) hist[fs] = (hist[fs] || 0) + l.texto.length;
       cont[l.texto] = (cont[l.texto] || 0) + 1;
+      charsTotal += l.texto.length;
+      if (l.bold) charsBold += l.texto.length;
     }
   const ent = Object.entries(hist).sort((a, b) => b[1] - a[1]);
   if (!ent.length) return [];
   const bodyFs = parseInt(ent[0][0], 10);
+  // Se o documento é MAJORITARIAMENTE negrito (ex.: apostila MEGE 96% Calibri-Bold), o negrito
+  // deixa de discriminar título de corpo → usamos SÓ o tamanho de fonte. Caso normal: negrito ainda
+  // vale como sinal secundário (título curto um pouco maior e em negrito).
+  const negritoDominante = charsTotal > 0 && charsBold / charsTotal > 0.5;
   const limiteRep = Math.max(3, Math.round(linhasPorPagina.length * 0.4));
   const headings = [];
   for (const pg of linhasPorPagina) {
@@ -185,7 +227,9 @@ export function detectarPorFonte(linhasPorPagina, numPaginas, indicePag) {
       if (t.length < 3 || t.length > 90) continue;
       if ((cont[t] || 0) >= limiteRep) continue; // repetida = cabeçalho/rodapé
       const fs = l.fontSize || 0;
-      const ehTitulo = fs >= bodyFs * 1.18 || (l.bold && fs >= bodyFs * 1.02 && t.length <= 60);
+      const ehTitulo = negritoDominante
+        ? fs >= bodyFs * 1.15                                       // só tamanho (negrito não discrimina)
+        : fs >= bodyFs * 1.18 || (l.bold && fs >= bodyFs * 1.02 && t.length <= 60);
       if (ehTitulo) headings.push({ titulo: t, pagina: pg.n, fontSize: Math.round(fs * 10) / 10 });
     }
   }
@@ -193,6 +237,66 @@ export function detectarPorFonte(linhasPorPagina, numPaginas, indicePag) {
   const tams = [...new Set(headings.map((h) => Math.round(h.fontSize)))].sort((a, b) => b - a).slice(0, 3);
   const nivelDe = (fs) => { const i = tams.indexOf(Math.round(fs)); return i >= 0 ? i + 1 : 1; };
   return headings.map((h, k) => ({ numero: String(k + 1), titulo: h.titulo, pagina: h.pagina, nivel: nivelDe(h.fontSize) }));
+}
+
+// Chave de casamento robusta a texto colado/acentos: "1. Teoria da Constituição" e
+// "1.TeoriadaConstituição" viram a mesma chave "teoriadaconstituicao".
+function chaveCasamento(s) {
+  return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+// Acha a 1ª página do CORPO (após o sumário) cujo texto contém o início do título. Casa por
+// prefixo da chave normalizada (tolera palavras coladas do pdf.js e leaders do sumário).
+function paginaDoTituloTexto(paginas, titulo, aPartirDe) {
+  const alvo = chaveCasamento(titulo).slice(0, 24);
+  if (alvo.length < 6) return null; // curto demais → casamento não confiável
+  for (const p of paginas) {
+    if (aPartirDe && p.n <= aPartirDe) continue;
+    if (chaveCasamento(p.texto).includes(alvo)) return p.n;
+  }
+  return null;
+}
+
+// F2 — monta a estrutura a partir da ÁRVORE DE TÓPICOS lida pela IA no sumário.
+// topicos: [{numero, titulo, nivel, paginaImpressa}]. Mapeia cada título à página FÍSICA do corpo
+// (1ª ocorrência); onde não achar, usa o número impresso corrigido pelo offset mediano observado.
+export function montarEstruturaDeTopicos(topicos, { paginas, numPaginas, sumarioPag, aulaTitulo } = {}) {
+  paginas = paginas || [];
+  numPaginas = numPaginas || paginas.length || 0;
+  const tops = (topicos || []).filter((t) => t && t.titulo && t.titulo.trim().length >= 2);
+  if (!tops.length) return { aulaTitulo, origem: null, blocos: [] };
+
+  // 1) casa cada título ao corpo pelo texto, EM ORDEM (monotônico): o sumário está em ordem de
+  // leitura, então cada tópico só é procurado a partir da página do anterior — evita que um nome
+  // curto/comum ("Direito Penal") case cedo demais. Guarda offset (físico − impresso) dos que casaram.
+  const offsets = [];
+  let piso = sumarioPag || 0;
+  const casados = tops.map((t) => {
+    const pTexto = paginaDoTituloTexto(paginas, t.titulo, piso);
+    if (pTexto != null) { if (t.paginaImpressa != null) offsets.push(pTexto - t.paginaImpressa); piso = pTexto; }
+    return { ...t, pTexto };
+  });
+  offsets.sort((a, b) => a - b);
+  const offset = offsets.length ? offsets[Math.floor(offsets.length / 2)] : null; // mediano
+
+  // 2) resolve pIni: texto do corpo > página impressa + offset; confiança conforme a fonte.
+  const blocos = casados.map((t, k) => {
+    let pIni = null, conf;
+    if (t.pTexto != null) { pIni = t.pTexto; conf = 0.95; }
+    else if (t.paginaImpressa != null && offset != null) {
+      pIni = Math.min(numPaginas || t.paginaImpressa, Math.max(1, t.paginaImpressa + offset)); conf = 0.7;
+    } else conf = 0.4;
+    const cls = classificarTitulo(t.titulo);
+    const nivel = t.nivel || (String(t.numero || "").match(/\./g) || []).length + 1;
+    return { numero: String(t.numero || String(k + 1)), titulo: t.titulo.trim(), ...cls, nivel, pIni, pFim: null, confianca: conf };
+  });
+
+  // 3) pFim encadeado por pIni.
+  const comPag = blocos.filter((b) => b.pIni != null).sort((a, b) => a.pIni - b.pIni);
+  for (let i = 0; i < comPag.length; i++) {
+    comPag[i].pFim = i + 1 < comPag.length ? Math.max(comPag[i].pIni, comPag[i + 1].pIni - 1) : numPaginas || comPag[i].pIni;
+  }
+  return { aulaTitulo: aulaTitulo || inferirTituloAula(paginas), origem: "ia-sumario", blocos };
 }
 
 // DETECTA a estrutura: devolve { aulaTitulo, origem, blocos:[{numero,titulo,tipo,banca,assunto,nivel,pIni,pFim,confianca}] }.
@@ -216,13 +320,17 @@ export function detectarEstrutura({ paginas, outline, numPaginas, linhasPorPagin
     if (numeradas.length) { entradas = numeradas; origem = "numeracao"; }
   }
   if (!entradas.length) {
+    const marcadas = detectarPorMarcador(paginas, indicePag);
+    if (marcadas.length) { entradas = marcadas; origem = "marcador"; }
+  }
+  if (!entradas.length) {
     const porFonte = detectarPorFonte(linhasPorPagina, numPaginas, indicePag);
     if (porFonte.length) { entradas = porFonte; origem = "fonte"; }
   }
   if (!entradas.length) return { aulaTitulo, origem: null, blocos: [] };
 
   // Confiança menor para fallbacks (mais incertos → o usuário confirma na F3).
-  const tetoConf = origem === "fonte" ? 0.55 : origem === "numeracao" ? 0.72 : 0.99;
+  const tetoConf = origem === "fonte" ? 0.55 : origem === "numeracao" ? 0.72 : origem === "marcador" ? 0.82 : 0.99;
 
   // Resolve a página de início de cada entrada: tag > índice > título no corpo.
   const blocos = entradas.map((e) => {

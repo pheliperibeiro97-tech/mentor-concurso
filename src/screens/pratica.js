@@ -3,7 +3,7 @@
 //  • 'ce' = Certo/Errado     (rota "pratica-ce", título "Questões C/E")
 // Itens C/E são modelados como questão de 2 alternativas ["Certo","Errado"],
 // então tentativas, Caderno de Erros e Acompanhamento funcionam igual.
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, focarItem, explicacaoIAHTML, abrirJanela , plural } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, focarItem, explicacaoIAHTML, abrirJanela , plural, comOcupado } from "../ui.js";
 import { esc, MOTIVOS_ERRO as MOTIVOS } from "../util.js";
 import { icone } from "../icones.js";
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
@@ -88,6 +88,14 @@ function renderTreino(root, app, formato) {
     s.filtroTop.sel = [app.params.topicoId];
     app.params.topicoId = null;
   }
+  // #4: veio de uma geração → mostra SÓ as recém-geradas (some ao clicar "Ver todas").
+  if (app.params && app.params.lote) {
+    s.filtroLote = app.params.lote;
+    s.filtroLoteRotulo = app.params.loteRotulo || "";
+    app.params.lote = null; app.params.loteRotulo = null;
+    s.filtroStatus = "todas"; s.filtroTop.sel = []; s.addState.aberto = false;
+  }
+  if (s.filtroLote && !st.questoes.some((q) => q.geracaoId === s.filtroLote && ehDoFormato(q, formato))) { s.filtroLote = null; s.filtroLoteRotulo = ""; }
   // Refazer erros em foco (vindo do Caderno de Erros): entra direto no Modo Foco com a
   // fila = questões erradas passadas (pode misturar MC e C/E — o foco detecta por questão).
   if (app.params && app.params.focoErrosIds) {
@@ -114,7 +122,7 @@ function renderTreino(root, app, formato) {
 
   // Itens de TREINO (drill "letra da lei") não entram na lista de Questões — só no Treinar da Lei Seca.
   const questoes = st.questoes
-    .filter((q) => !q.treino && ehDoFormato(q, formato) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
+    .filter((q) => !q.treino && ehDoFormato(q, formato) && (!s.filtroLote || q.geracaoId === s.filtroLote) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
     .sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); // recém-criadas primeiro (padrão)
   const nErradas = st.questoes.filter((q) => !q.treino && ehDoFormato(q, formato) && statusQuestao(st, q) === "errei").length;
   // Há questões do formato, mas nenhuma passou no filtro atual? Então é um vazio de
@@ -148,7 +156,9 @@ function renderTreino(root, app, formato) {
     </div>
     ${filtroTopicosPainelHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
 
-    ${totalFormato ? `<div class="plano-h"><h2>Suas questões</h2><span class="cnt">${questoes.length}</span><span class="sp"></span></div>` : ""}
+    ${s.filtroLote ? `<div class="lote-banner">${icone("sparkles")}<span>Praticando só as <b>${questoes.length}</b> ${formato === "ce" ? "afirmações" : "questões"} recém-geradas ${esc(s.filtroLoteRotulo)}.</span><button class="lnk" data-action="lote-ver-todos" data-tip="Voltar para todas as suas ${formato === "ce" ? "afirmações" : "questões"}.">Ver todas</button></div>` : ""}
+
+    ${totalFormato ? `<div class="plano-h"><h2>${formato === "ce" ? "Seus itens" : "Suas questões"}</h2><span class="cnt">${questoes.length}</span>${questoes.length ? `<span class="tempo-est" data-tip="Tempo estimado para resolver este conjunto (${formato === "ce" ? "~1,2 min" : "~2,2 min"} por ${formato === "ce" ? "item" : "questão"}).">${icone("clock-3")} ≈ ${Math.max(1, Math.round(questoes.length * (formato === "ce" ? 1.2 : 2.2)))} min</span>` : ""}<span class="sp"></span></div>` : ""}
     <div class="lista-questoes">
       ${
         questoes.length
@@ -196,6 +206,8 @@ function renderTreino(root, app, formato) {
       app.refresh();
       abrirRegistroSessao(store, app, { modo: temTempo ? "crono" : "manual", fasePadrao: "A" });
     },
+    "lote-ver-todos": () => { s.filtroLote = null; s.filtroLoteRotulo = ""; app.refresh(); },
+    "abrir-artigo-lei": (el) => { app.navigate("leiseca", { focoIndicacaoId: el.getAttribute("data-id") }); }, // #11: abre o artigo na Lei Seca
     "treinar-erradas": () => {
       // Filtra as erradas e as apresenta EM BRANCO (sem gabarito) para refazer.
       s.filtroStatus = "errei";
@@ -274,35 +286,25 @@ function renderTreino(root, app, formato) {
       s.refazer.add(el.getAttribute("data-q"));
       app.refresh();
     },
-    "salvar-duvida": (el) => {
-      const tId = el.getAttribute("data-t");
-      const v = root.querySelector(`#duv-${tId}`).value;
-      store.setDuvida(tId, v);
-      toast("Dúvida anotada.");
-    },
     "comentar-ia": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar o erro");
-      el.disabled = true;
-      toast("Analisando o erro com IA…");
-      try {
-        await store.comentarErroIA(el.getAttribute("data-t"));
-        toast("Comentário da IA gerado.");
-      } catch (e) {
-        toast("Não consegui comentar o erro agora. Verifique a conexão e tente de novo.", "erro");
-        el.disabled = false;
-      }
+      const tId = el.getAttribute("data-t");
+      const inp = document.getElementById("duv-" + tId); // considera a dúvida digitada mesmo sem clicar "Salvar" antes
+      if (inp && inp.value.trim()) store.setDuvida(tId, inp.value.trim());
+      const r = await comOcupado(() => store.comentarErroIA(tId), { botao: el, msg: "Analisando o erro com a IA…" });
+      if (r === null) return;
+      toast(inp && inp.value.trim() ? "A IA respondeu sua dúvida." : "Comentário da IA gerado.");
     },
     "comentar-questao": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar a questão");
-      el.disabled = true;
-      toast("A IA está comentando a questão…");
-      try {
-        await store.comentarQuestaoIA(el.getAttribute("data-q"));
-        toast("Comentário gerado.");
-      } catch (e) {
-        toast("Não consegui comentar a questão agora. Verifique a conexão e tente de novo.", "erro");
-        el.disabled = false;
-      }
+      const qId = el.getAttribute("data-q");
+      const tId = el.getAttribute("data-t"); // no acerto há um campo de dúvida ligado à tentativa
+      const inp = tId ? document.getElementById("duv-" + tId) : null;
+      const duvida = inp && inp.value.trim() ? inp.value.trim() : "";
+      if (duvida && tId) store.setDuvida(tId, duvida);
+      const r = await comOcupado(() => store.comentarQuestaoIA(qId, duvida), { botao: el, msg: "A IA está comentando a questão…" });
+      if (r === null) return;
+      toast(duvida ? "A IA respondeu sua dúvida." : "Comentário gerado.");
     },
     "del-questao": async (el) => {
       if (await confirmar(formato === "ce" ? "Remover este item?" : "Remover esta questão?")) {
@@ -439,10 +441,13 @@ function questaoHTML(st, q, formato, s) {
   if (respondida) {
     const justif = ce && q.justificativa ? `<div class="ce-justif"><b>Justificativa:</b> ${esc(q.justificativa)}</div>` : "";
     if (ultima.acertou) {
-      feedback = `<div class="feedback ok">${icone("check")} Você acertou.</div>${justif}`;
+      feedback = `<div class="feedback ok">${icone("check")} Você acertou.</div>${justif}
+        <div class="duvida-row">
+          <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre esta questão? Escreva e clique em Comentar." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação do gabarito." />
+          <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
+        </div>`;
       cardAcoes = `
         <div class="questao-rodape">
-          <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito desta questão (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
           <button class="btn btn-ghost btn-sm" data-action="refazer" data-q="${q.id}" data-tip-pos="cima-esq" data-tip="Responder de novo, sem apagar o registro do acerto.">${icone("refresh-cw")} Refazer</button>
         </div>`;
     } else {
@@ -459,9 +464,8 @@ function questaoHTML(st, q, formato, s) {
             </select>
           </label>
           <div class="duvida-row">
-            <input id="duv-${ultima.id}" type="text" placeholder="Anotar dúvida ou observação..." value="${esc(ultima.duvida || "")}" title="Anote a dúvida ou uma observação sobre o erro." />
-            <button class="btn btn-ghost btn-sm" data-action="salvar-duvida" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="Salva a anotação neste erro (fica no Caderno de Erros).">Salvar</button>
-            <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e onde você se confundiu (com selo de origem).">${icone("sparkles")} Comentar com IA</button>
+            <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e clique em Comentar (opcional)." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
+            <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
           </div>
           ${explicacaoIAHTML(ultima.comentarioIA)}
         </div>`;
@@ -489,7 +493,7 @@ function questaoHTML(st, q, formato, s) {
       <div class="questao-alts">${altsHTML}</div>
       ${feedback}
       ${cardAcoes}
-      ${q.comentarioIA ? `<div class="ia-comentario"><span class="orb orb-xs" aria-hidden="true"></span>${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
+      ${q.comentarioIA ? explicacaoIAHTML(q.comentarioIA) : ""}
     </div>`;
 }
 
@@ -520,11 +524,19 @@ function focoOverlayHTML(st, s, formato, anim = "in") {
   });
 }
 
-// Atualiza o overlay do foco NO LUGAR (troca só o .fc-foco, sem re-renderizar a lista de
-// fundo) — evita o "mexer a tela" da navegação. Fade de opacidade, sem movimento.
+// Atualiza o overlay do foco NO LUGAR — troca só o CONTEÚDO de .fc-foco, mantendo o próprio
+// elemento montado. Se trocássemos o outerHTML, o novo .fc-foco re-dispararia sua animação de
+// entrada (animation: fq-fade) e o overlay "piscaria" (parece fechar e reabrir). Só o miolo
+// (.fq-stage) tem a transição de fade, sem movimento.
 function atualizarOverlayFoco(root, store, s, formato) {
-  const el = root.querySelector(".fc-foco");
-  if (el) el.outerHTML = focoOverlayHTML(store.get(), s, formato, "fade");
+  const foco = root.querySelector(".fc-foco");
+  const novoHTML = focoOverlayHTML(store.get(), s, formato, "fade");
+  if (!foco) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = novoHTML;
+  const novoFoco = tmp.querySelector(".fc-foco");
+  if (novoFoco) foco.replaceChildren(...Array.from(novoFoco.childNodes));
+  else foco.outerHTML = novoHTML;
 }
 
 // Drill "letra da lei": realça na afirmação já respondida o trecho que a banca alterou (vermelho).
@@ -539,12 +551,25 @@ function enunTreino(q, respondida) {
   return esc(q.enunciado);
 }
 // Correção colorida do drill: trecho trocado (vermelho) → texto correto guardado (verde).
-function diffTreinoHTML(q) {
+// #11: para itens de Lei Seca, mostra também a INCIDÊNCIA (★, quanto cai), o TEXTO INTEGRAL do
+// artigo e um botão para ABRIR o artigo na Lei Seca.
+function diffTreinoHTML(q, st) {
   if (!q.treino) return "";
-  if (q.diff && q.diff.trechoOriginal) {
-    return `<div class="ls-diff"><span class="ls-diff-red">${esc(q.diff.trechoAlterado)}</span> ${icone("arrow-right")} <span class="ls-diff-green">${esc(q.diff.trechoOriginal)}</span> <span class="muted small">(texto correto)</span></div>`;
-  }
-  return `<div class="ls-diff ls-diff-fiel">${icone("check")} Afirmação fiel à letra do texto.</div>`;
+  const diff = q.diff && q.diff.trechoOriginal
+    ? `<div class="ls-diff"><span class="ls-diff-red">${esc(q.diff.trechoAlterado)}</span> ${icone("arrow-right")} <span class="ls-diff-green">${esc(q.diff.trechoOriginal)}</span> <span class="muted small">(texto correto)</span></div>`
+    : `<div class="ls-diff ls-diff-fiel">${icone("check")} Afirmação fiel à letra do texto.</div>`;
+  const ind = q.treino.indicacaoId && st ? st.indicacoes.find((i) => i.id === q.treino.indicacaoId) : null;
+  if (!ind) return diff;
+  const nEstrelas = ind.pqIncidencia == null ? 0 : Math.max(1, Math.min(5, Math.round(ind.pqIncidencia / 20)));
+  const estrelas = ind.pqIncidencia != null
+    ? `<span class="ce-inc" data-tip="O quanto este artigo cai em prova (incidência).">${Array.from({ length: 5 }, (_, k) => `<span class="${k < nEstrelas ? "on" : ""}">${icone("star")}</span>`).join("")}</span>`
+    : "";
+  const ref = String(ind.referencia || "").split(",")[0].trim();
+  const texto = String(ind.texto || "").replace(/^\s*Art\.?\s*\d+\s*[ºo°]?(?:-[A-Z])?\s*[-–—.:]?\s*/i, "").trim() || ind.texto || "";
+  return diff + `<div class="ce-artigo">
+      <div class="ce-artigo-h"><b>${esc(ref)}</b>${estrelas}<span class="spacer"></span><button class="lnk" data-action="abrir-artigo-lei" data-id="${ind.id}" data-tip="Abrir este artigo na Lei Seca (com grifos e ações).">${icone("book-open")} Abrir artigo</button></div>
+      <div class="ce-artigo-txt">${esc(texto)}</div>
+    </div>`;
 }
 
 function focoQuestaoHTML(st, q, formato, s) {
@@ -558,7 +583,7 @@ function focoQuestaoHTML(st, q, formato, s) {
   const nTent = tentativas.length;
   const acT = tentativas.filter((t) => t.acertou).length;
   const histChip = nTent
-    ? `<span class="fq-tag fq-tag-hist" data-tip="Seu histórico nesta questão (todas as tentativas)">${icone("rotate-ccw")} ${nTent} ${nTent === 1 ? "tentativa" : "tentativas"} · <b class="hist-ok">${acT}✓</b> <b class="hist-err">${nTent - acT}✗</b>${!respondida ? " · nova conta" : ""}</span>`
+    ? `<span class="fq-tag fq-tag-hist" data-tip="Seu histórico nesta questão (todas as tentativas)">${icone("rotate-ccw")} ${nTent} ${nTent === 1 ? "tentativa" : "tentativas"} · <b class="hist-ok">${icone("check")} ${acT}</b> <b class="hist-err">${icone("x")} ${nTent - acT}</b>${!respondida ? " · nova conta" : ""}</span>`
     : "";
 
   let alts;
@@ -589,13 +614,13 @@ function focoQuestaoHTML(st, q, formato, s) {
     feedback = `
       <div class="fq-qfeedback">
         <div class="feedback ${ultima.acertou ? "ok" : "erro"}">${icone(ultima.acertou ? "check" : "x")} ${ultima.acertou ? "Você acertou." : "Resposta incorreta. Salva no Caderno de Erros."}</div>
-        ${diffTreinoHTML(q)}
+        ${diffTreinoHTML(q, st)}
         ${justif}
         <div class="fq-qia-topo">
           <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-tip="A IA explica o gabarito desta questão (com selo de origem). Atalho: C">${icone("sparkles")} Comentar com IA</button>
           <span class="fq-qia-dica muted small">→ ou Espaço para a próxima</span>
         </div>
-        ${q.comentarioIA ? `<div class="ia-comentario fq-qia"><span class="orb orb-xs" aria-hidden="true"></span>${seloBadge("amarelo")}<p>${esc(q.comentarioIA)}</p></div>` : ""}
+        ${q.comentarioIA ? explicacaoIAHTML(q.comentarioIA) : ""}
       </div>`;
   }
 

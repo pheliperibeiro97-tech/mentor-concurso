@@ -1,9 +1,10 @@
 // Revisão de tópico (dir.2): curva do esquecimento do CONTEÚDO estudado (24h/7d/30d...).
 // Releitura/recordação das palavras-chave do tópico, com botões graduados (Esqueci/
 // Lembrei/Fácil) que movem a escada [1,7,15,30,60,120] — generaliza a "memória" de lei/juris.
-import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural, revelarTexto } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural, revelarTexto, comOcupado, md } from "../ui.js";
 import { esc, fmtData, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
+import { abrirVisualizadorPdf } from "../pdfviewer.js";
 
 let ativo = null; // topicoId em revisão (fluxo aberto)
 let modo = null; // "escrever" (active recall) | "reler" (releitura rápida)
@@ -111,6 +112,13 @@ export default function renderRevTopico(root, app) {
       store.setConfig({ revisaoTopicoAuto: true });
       toast("Revisão automática de tópicos ligada.");
     },
+    // Abre o material no PDF na página que o usuário registrou na sessão (sincronia página↔revisão).
+    "abrir-pag-registrada": (el) => {
+      const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
+      const pag = parseInt(el.getAttribute("data-pag"), 10) || 1;
+      if (d && d.pdfData) abrirVisualizadorPdf(d.pdfData, d.titulo, pag);
+      else toast("O PDF deste material não está disponível.", "erro");
+    },
     revisar: (el) => {
       ativo = el.getAttribute("data-id");
       modo = null;
@@ -130,8 +138,12 @@ export default function renderRevTopico(root, app) {
 function reviewHTML(store, topico) {
   const st = store.get();
   const material = store.palavrasParaReler(topico.id);
+  // Se a revisão veio da PÁGINA REGISTRADA na sessão, oferece abrir o PDF exatamente naquela página.
+  const abrirPag = material && material.docId && material.pagina && (st.documentos.find((d) => d.id === material.docId) || {}).pdfData
+    ? `<button class="lnk" data-action="abrir-pag-registrada" data-id="${material.docId}" data-pag="${material.pagina}" data-tip="Abre o material no PDF, na página que você registrou.">${icone("file-text")} abrir na pág. ${material.pagina}</button>`
+    : "";
   const conteudo = material
-    ? `<div class="revtop-fonte muted small">${esc(material.fonte)}</div>
+    ? `<div class="revtop-fonte muted small">${esc(material.fonte)} ${abrirPag}</div>
        <div class="revtop-conteudo">${esc(material.texto).replace(/\n/g, "<br>")}</div>`
     : `<div class="revtop-sem-fonte">
         <p class="muted" style="margin:0 0 10px">Este tópico ainda não tem um resumo para reler. Você pode avaliar de memória pelos botões abaixo, ou criar um resumo agora para usar nas próximas revisões.</p>
@@ -278,30 +290,26 @@ function bindReview(root, app, store, topico) {
       const r = await pedirNumero("Quantos flashcards a IA deve gerar?", { padrao: 5, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      el.disabled = true;
-      toast("Gerando flashcards (tópico + avaliação)…");
-      try {
-        const cs = await store.gerarFlashcardsDeTopico(topico.id, fonteExport(store, topico), n, dificuldade);
-        toast(`${plural(cs.length, "flashcard criado", "flashcards criados")}.`);
-      } catch (e) {
-        toast("Não consegui gerar os flashcards agora. Tente de novo em instantes.", "erro");
-        el.disabled = false;
-      }
+      const rot = `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
+      const lote = store.iniciarLoteGeracao(rot);
+      const cs = await comOcupado(() => store.gerarFlashcardsDeTopico(topico.id, fonteExport(store, topico), n, dificuldade), { botao: el, msg: "Gerando flashcards (tópico + avaliação)…" });
+      store.encerrarLoteGeracao();
+      if (cs == null) return;
+      toast(`${plural(cs.length, "flashcard criado", "flashcards criados")}.`);
+      if (cs.length) app.navigate("flashcards", { lote, loteRotulo: rot });
     },
     "exp-questoes": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
       const r = await pedirNumero("Quantas questões a IA deve gerar?", { padrao: 3, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      el.disabled = true;
-      toast("Gerando questões (tópico + avaliação)…");
-      try {
-        const qs = await store.gerarQuestoesDeTopico(topico.id, fonteExport(store, topico), n, dificuldade);
-        toast(`${plural(qs.length, "questão criada", "questões criadas")}.`);
-      } catch (e) {
-        toast("Não consegui gerar as questões agora. Tente de novo em instantes.", "erro");
-        el.disabled = false;
-      }
+      const rot = `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
+      const lote = store.iniciarLoteGeracao(rot);
+      const qs = await comOcupado(() => store.gerarQuestoesDeTopico(topico.id, fonteExport(store, topico), n, dificuldade), { botao: el, msg: "Gerando questões (tópico + avaliação)…" });
+      store.encerrarLoteGeracao();
+      if (qs == null) return;
+      toast(`${plural(qs.length, "questão criada", "questões criadas")}.`);
+      if (qs.length) app.navigate("pratica", { lote, loteRotulo: rot });
     },
     nota: (el) => {
       const r = el.getAttribute("data-r");
@@ -334,11 +342,7 @@ function fonteExport(store, topico) {
 }
 
 // Markdown leve: **negrito** + quebras de linha (para o feedback da IA).
-function mdLeve(txt) {
-  return esc(txt)
-    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
-    .replace(/\n/g, "<br>");
-}
+const mdLeve = (txt) => md(txt); // usa o renderizador único (negrito/itálico/###/listas/código)
 
 function escadaLabel(intervalo) {
   const map = { 1: "24h", 7: "7 dias", 15: "15 dias", 30: "30 dias", 60: "60 dias", 120: "120 dias" };

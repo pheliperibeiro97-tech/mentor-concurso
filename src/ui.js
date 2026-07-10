@@ -61,6 +61,45 @@ export function toast(msg, tipo = "ok", opts) {
   setTimeout(fechar, (opts && opts.duracao) || 2600);
 }
 
+// Toast PERSISTENTE de "carregando" (spinner) — NÃO some sozinho; fica até a ação terminar.
+// Devolve uma função que o fecha. Dá ao usuário a certeza de que algo está sendo processado,
+// independentemente de onde o botão está (útil quando o clique fecha um menu/modal).
+export function toastCarregando(msg = "Processando…") {
+  let cont = qs("#toasts");
+  if (!cont) { cont = document.createElement("div"); cont.id = "toasts"; document.body.appendChild(cont); }
+  const t = document.createElement("div");
+  t.className = "toast toast-load";
+  t.innerHTML = `<span class="mini-spin"></span><span class="toast-msg"></span>`;
+  t.querySelector(".toast-msg").textContent = msg;
+  cont.appendChild(t);
+  setTimeout(() => t.classList.add("show"), 10);
+  let feito = false;
+  return (novaMsg) => {
+    if (novaMsg) { const m = t.querySelector(".toast-msg"); if (m) m.textContent = novaMsg; return; } // atualiza o rótulo sem fechar
+    if (feito) return; feito = true;
+    t.classList.remove("show"); setTimeout(() => t.remove(), 300);
+  };
+}
+
+// PADRÃO para toda AÇÃO ASSÍNCRONA (gerar, extrair, importar, chamar IA…): enquanto processa,
+// mostra o toast "carregando" e deixa o botão ocupado (spinner + desabilitado); ao terminar,
+// remove tudo. Em erro, mostra um toast de erro e devolve null (NÃO lança — o chamador não
+// precisa de try/catch). Uso: `const r = await comOcupado(() => store.gerarX(...), { botao, msg })`.
+export async function comOcupado(fn, { botao = null, msg = "Processando…", erro = "Não deu certo agora. Tente de novo em instantes." } = {}) {
+  const fim = toastCarregando(msg);
+  if (botao) { botao.classList.add("carregando"); botao.disabled = true; botao.setAttribute("aria-busy", "true"); }
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(e);
+    toast(erro, "erro");
+    return null;
+  } finally {
+    fim();
+    if (botao) { botao.classList.remove("carregando"); botao.disabled = false; botao.removeAttribute("aria-busy"); }
+  }
+}
+
 // Confirmação simples (Promise<boolean>).
 export function confirmar(msg) {
   return new Promise((resolve) => {
@@ -413,17 +452,44 @@ export function ligarDropZone(inputEl, opts = {}) {
 }
 
 // Exibe a explicação da IA com DOIS modos. Aceita string (legado/comentário manual) ou
+// Markdown leve → HTML limpo. Renderiza o que a IA costuma devolver para NUNCA vazar marcação
+// crua ("###", "**", "- ", "1.", "`código`", "---") na cara do usuário. Escapa antes (seguro).
+// Inline: **negrito**, *itálico*, `código`. Bloco: # títulos, listas - • * e 1./1), régua ---.
+// É o renderizador ÚNICO de resposta de IA no app (chat, explicações, correção, recall, mentor…).
+export function md(t) {
+  const inline = (s) => s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>")
+    .replace(/(?<![*\w])\*(?!\s)([^*\n]+?)(?<!\s)\*(?![*\w])/g, "<i>$1</i>");
+  const linhas = esc(t || "").split(/\n/);
+  let out = "", emUl = false, emOl = false;
+  const fecha = () => { if (emUl) { out += "</ul>"; emUl = false; } if (emOl) { out += "</ol>"; emOl = false; } };
+  for (const ln of linhas) {
+    const h = ln.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*$/);
+    if (h) { fecha(); out += `<div class="md-h md-h${h[1].length}">${inline(h[2])}</div>`; continue; }
+    if (/^\s*(?:[-•*])\s+/.test(ln)) { if (!emUl) { fecha(); out += "<ul>"; emUl = true; } out += "<li>" + inline(ln.replace(/^\s*(?:[-•*])\s+/, "")) + "</li>"; continue; }
+    const ol = ln.match(/^\s*(\d+)[.)]\s+(.+)$/);
+    if (ol) { if (!emOl) { fecha(); out += "<ol>"; emOl = true; } out += "<li>" + inline(ol[2]) + "</li>"; continue; }
+    if (/^\s*(?:---+|\*\*\*+|___+)\s*$/.test(ln)) { fecha(); out += "<hr>"; continue; }
+    fecha();
+    if (!ln.trim()) continue;
+    out += inline(ln) + "<br>";
+  }
+  fecha();
+  return out;
+}
+
 // objeto { resumido, detalhado }: mostra o resumido e oferece o detalhado (item a item)
-// em "ver explicação detalhada". O usuário lê o nível que quiser.
+// em "ver explicação detalhada". O usuário lê o nível que quiser. Passa por md() → sem markdown cru.
 export function explicacaoIAHTML(c, selo = "amarelo") {
   if (!c) return "";
-  if (typeof c === "string") return `<div class="ia-comentario">${seloBadge(selo)}<p>${esc(c)}</p></div>`;
+  if (typeof c === "string") return c.trim() ? `<div class="ia-comentario">${seloBadge(selo)}<div class="ia-coment-resumo">${md(c)}</div></div>` : "";
   const resumido = (c.resumido || "").trim();
   const detalhado = (c.detalhado || "").trim();
   if (!resumido && !detalhado) return "";
   return `<div class="ia-comentario">${seloBadge(selo)}
-    <p class="ia-coment-resumo">${esc(resumido || detalhado)}</p>
-    ${detalhado && resumido ? `<details class="ia-coment-det"><summary>Ver explicação detalhada</summary><div class="ia-coment-det-corpo">${esc(detalhado).replaceAll("\n", "<br>")}</div></details>` : ""}
+    <div class="ia-coment-resumo">${md(resumido || detalhado)}</div>
+    ${detalhado && resumido ? `<details class="ia-coment-det"><summary>Ver explicação detalhada</summary><div class="ia-coment-det-corpo">${md(detalhado)}</div></details>` : ""}
   </div>`;
 }
 

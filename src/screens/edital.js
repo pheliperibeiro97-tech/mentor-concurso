@@ -1,6 +1,6 @@
 // Tela Edital: gerenciar disciplinas, tópicos e destaques a qualquer momento
 // (o onboarding monta a estrutura inicial; aqui você acrescenta/edita depois).
-import { bindActions, toast, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar } from "../ui.js";
+import { bindActions, toast, toastCarregando, comOcupado, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar } from "../ui.js";
 import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
@@ -391,7 +391,7 @@ function abrirAddEdital(app) {
         const ehPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
         const comIA = store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024;
         if (comIA) {
-          toast("Lendo e organizando o edital com a IA… (PDF grande pode levar 1–2 min)");
+          const fim = toastCarregando("Lendo e organizando o edital com a IA… (PDF grande pode levar 1–2 min)");
           try {
             const dataB64 = await arquivoParaBase64(f);
             const ds = await store.estruturarEditalDePDF(dataB64, f.type || "application/pdf");
@@ -404,20 +404,25 @@ function abrirAddEdital(app) {
             }
             toast("A IA não retornou estrutura. Tentando extrair o texto para você revisar…", "erro");
           } catch (err) { try { console.error(err); } catch (_) {} toast("A IA não conseguiu ler o edital agora (instável?). Extraindo o texto para revisão…", "erro"); }
+          finally { fim(); }
+          const fim2 = toastCarregando("Extraindo o texto do PDF…");
           try {
             const texto = await lerArquivoTexto(f, null, "");
             preencheCaixa(texto);
             if (texto && texto.trim()) toast("Texto extraído. Clique em 'Revisar'.", "ok");
             else toast("Não consegui ler o edital agora. Tente de novo em instantes ou cole o texto.", "erro");
           } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+          finally { fim2(); }
           return;
         }
+        const fim = toastCarregando("Lendo o arquivo…");
         try {
           const texto = await lerArquivoTexto(f, cfg, "");
           preencheCaixa(texto);
           if (texto && texto.trim()) toast("Texto carregado. Clique em 'Revisar'.");
           else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
         } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+        finally { fim(); }
       });
     },
     handlers: ({ rerender, fechar, corpo }) => ({
@@ -441,12 +446,10 @@ function abrirAddEdital(app) {
         if (!store.iaDisponivel()) return avisoIA(app, "Estruturar edital com IA");
         const texto = estado.texto || corpo.querySelector("#ed-texto")?.value || "";
         if (!texto.trim()) return toast("Não há texto do edital para estruturar.", "erro");
-        el.disabled = true; el.textContent = "Estruturando…";
-        try {
-          const ds = await store.estruturarEditalIA(texto);
-          if (ds && ds.length) { estado.texto = texto; estado.preview = ds; toast(`${plural(ds.length, "disciplina estruturada", "disciplinas estruturadas")} pela IA. Revise e aplique.`, "ok"); rerender(); }
-          else { toast("A IA não retornou uma estrutura. Mantive a versão atual.", "erro"); el.disabled = false; el.textContent = "Estruturar com IA"; }
-        } catch (e) { console.error(e); toast("A IA não conseguiu estruturar agora (servidor ocupado?). Tente de novo em instantes.", "erro"); el.disabled = false; el.textContent = "Estruturar com IA"; }
+        const ds = await comOcupado(() => store.estruturarEditalIA(texto), { botao: el, msg: "Estruturando o edital com a IA…" });
+        if (ds == null) return;
+        if (ds.length) { estado.texto = texto; estado.preview = ds; toast(`${plural(ds.length, "disciplina estruturada", "disciplinas estruturadas")} pela IA. Revise e aplique.`, "ok"); rerender(); }
+        else toast("A IA não retornou uma estrutura. Mantive a versão atual.", "erro");
       },
       "remover-ed-disc": (el) => {
         const d = parseInt(el.getAttribute("data-d"), 10);
@@ -556,7 +559,7 @@ function abrirImportarAulas(app) {
         const ehPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
         const comIA = store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024;
         if (comIA) {
-          toast("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
+          const fim = toastCarregando("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
           try {
             const dataB64 = await arquivoParaBase64(f);
             const aulas = await store.estruturarAulasDePDF(dataB64, f.type || "application/pdf");
@@ -569,19 +572,24 @@ function abrirImportarAulas(app) {
             }
             toast("A IA não reconheceu aulas. Tentando extrair o texto…", "erro");
           } catch (err) { try { console.error(err); } catch (_) {} toast("A IA não conseguiu ler agora (instável?). Extraindo o texto…", "erro"); }
+          finally { fim(); }
+          const fim2 = toastCarregando("Extraindo o texto do PDF…");
           try {
             const texto = await lerArquivoTexto(f, null, "");
             preenche(texto);
             toast(texto && texto.trim() ? "Texto extraído. Clique em 'Revisar'." : "Não consegui ler agora. Tente de novo ou cole o texto.", texto && texto.trim() ? "ok" : "erro");
           } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+          finally { fim2(); }
           return;
         }
+        const fim = toastCarregando("Lendo o arquivo…");
         try {
           const texto = await lerArquivoTexto(f, cfg, "");
           preenche(texto);
           if (texto && texto.trim()) toast("Texto carregado. Clique em 'Revisar'.");
           else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
         } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+        finally { fim(); }
       });
     },
     handlers: ({ rerender, fechar, corpo }) => ({
@@ -947,6 +955,12 @@ function aulasListaHTML(store, st) {
             ? tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")
             : `<span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span>`}
         </div>
+        ${(() => {
+          // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital: no preview
+          // aparecem, mas o plano só mostrava os tópicos casados — mostramos os pendentes (não some nada).
+          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn));
+          return naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : "";
+        })()}
         ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a) : ""}
       </div>`;
   };
@@ -1197,7 +1211,7 @@ export default function renderEdital(root, app) {
       const comIA = store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024;
       const preenche = (texto) => { const ta = root.querySelector("#aulas-texto"); if (ta) ta.value = texto || ""; aulasTextoSalvo = texto || ""; };
       if (comIA) {
-        toast("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
+        const fim = toastCarregando("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
         try {
           const dataB64 = await arquivoParaBase64(f);
           const aulas = await store.estruturarAulasDePDF(dataB64, f.type || "application/pdf");
@@ -1211,20 +1225,25 @@ export default function renderEdital(root, app) {
           }
           toast("A IA não reconheceu aulas. Tentando extrair o texto…", "erro");
         } catch (err) { try { console.error(err); } catch (_) {} toast("A IA não conseguiu ler agora (instável?). Extraindo o texto…", "erro"); }
+        finally { fim(); }
         // Fallback local, sem nova chamada.
+        const fim2 = toastCarregando("Extraindo o texto do PDF…");
         try {
           const texto = await lerArquivoTexto(f, null, "");
           preenche(texto);
           toast(texto && texto.trim() ? "Texto extraído. Clique em 'Montar plano'." : "Não consegui ler agora. Tente de novo ou cole o texto.", texto && texto.trim() ? "ok" : "erro");
         } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+        finally { fim2(); }
         return;
       }
+      const fim = toastCarregando("Lendo o arquivo…");
       try {
         const texto = await lerArquivoTexto(f, cfg, "");
         preenche(texto);
         if (texto && texto.trim()) toast("Texto carregado. Clique em 'Montar plano'.");
         else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
       } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+      finally { fim(); }
     });
   }
   root.querySelector("#base-estudo")?.addEventListener("change", (e) => {

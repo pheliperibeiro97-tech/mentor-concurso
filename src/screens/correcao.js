@@ -2,7 +2,7 @@
 // (de um tópico, material ou tema livre) → você responde → a IA CORRIGE com feedback
 // rico (o que deveria constar, o que faltou, o que errou, como melhorar), com busca
 // na web opcional. Sem IA, ainda dá métricas estruturais offline.
-import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto, comOcupado, md } from "../ui.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 
@@ -163,33 +163,20 @@ export default function renderCorrecao(root, app) {
       const alvo = alvoEl ? alvoEl.value : "";
       if ((fonte === "topico" || fonte === "material") && !alvo) return toast("Escolha o assunto.", "erro");
       if (fonte === "livre" && !alvo.trim()) return toast("Digite um tema livre.", "erro");
-      el.disabled = true;
-      toast("Gerando pergunta com IA…");
-      try {
-        const enun = await store.gerarPerguntaDiscursiva({ fonte, alvo, tipo });
-        root.querySelector("#cor-enun").value = enun;
-        textoEl.focus();
-        toast("Pergunta gerada. Agora escreva sua resposta.");
-      } catch (e) {
-        toast("Não consegui gerar o tema agora. Verifique a conexão e tente de novo.", "erro");
-      } finally {
-        el.disabled = false;
-      }
+      const enun = await comOcupado(() => store.gerarPerguntaDiscursiva({ fonte, alvo, tipo }), { botao: el, msg: "Gerando pergunta com a IA…" });
+      if (enun == null) return;
+      root.querySelector("#cor-enun").value = enun;
+      textoEl.focus();
+      toast("Pergunta gerada. Agora escreva sua resposta.");
     },
     corrigir: async (el) => {
       const texto = textoEl.value.trim();
       const enun = root.querySelector("#cor-enun").value;
       if (texto.split(/\s+/).filter(Boolean).length < 10) return toast("Escreva uma resposta com ao menos 10 palavras.", "erro");
       const web = root.querySelector("#cor-web")?.checked || false;
-      el.disabled = true;
-      toast(store.iaDisponivel() ? (web ? "Corrigindo com IA + busca web…" : "Corrigindo com IA…") : "Analisando estrutura (offline)…");
-      try {
-        await store.corrigirRedacao({ tipo, enunciado: enun, texto, web });
-        toast("Resposta corrigida. Veja a análise abaixo.");
-      } catch (e) {
-        toast("Não consegui corrigir agora. Verifique a conexão e tente de novo.", "erro");
-        el.disabled = false;
-      }
+      const r = await comOcupado(() => store.corrigirRedacao({ tipo, enunciado: enun, texto, web }), { botao: el, msg: store.iaDisponivel() ? (web ? "Corrigindo com IA + busca web…" : "Corrigindo com a IA…") : "Analisando estrutura (offline)…" });
+      if (r === null) return;
+      toast("Resposta corrigida. Veja a análise abaixo.");
     },
     "cor-flashcard": (el) => {
       const r = store.get().redacoes.find((x) => x.id === el.getAttribute("data-id"));
@@ -261,8 +248,6 @@ function printRedacoes(st, comTexto = true) {
 
 function correcaoHTML(r) {
   const c = r.correcao;
-  // markdown leve: **negrito** e quebras de linha.
-  const md = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\r?\n/g, "<br>");
   const fb = c.feedbackIA;
   const fontes =
     fb && fb.fontesWeb && fb.fontesWeb.length

@@ -78,33 +78,29 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
   }
 
   function toolbarHTML() {
+    // Cores como bolinhas compactas (não emojis) — clicar seleciona o pincel; selecione o texto para grifar.
     const corBtn = (c) =>
-      `<button type="button" class="mk-brush mk-brush-${c.id} ${estado.brush === c.id ? "on" : ""}" data-brush="${c.id}" data-tip-pos="cima-esq" data-tip="Pincel ${c.nome}: selecione um trecho para grifar (clique de novo para soltar o pincel)">${c.emoji}</button>`;
+      `<button type="button" class="mk-swatch mk-${c.id} ${estado.brush === c.id ? "on" : ""}" data-brush="${c.id}" data-tip-pos="cima" data-tip="Grifar: ${c.nome}${c.nome === "livre" ? " (uso livre)" : ""}"></button>`;
     const modoBtn = (id, label, tip) =>
-      `<button type="button" class="mk-modo ${estado.modo === id ? "on" : ""}" data-modo="${id}" data-tip-pos="cima-esq" data-tip="${tip}">${label}</button>`;
+      `<button type="button" class="mk-modo ${estado.modo === id ? "on" : ""}" data-modo="${id}" data-tip-pos="cima" data-tip="${tip}">${label}</button>`;
     return `
-      <div class="mk-toolbar">
-        <div class="mk-grupo">
-          <span class="mk-rotulo muted small">Grifar:</span>
-          ${CORES_FIXAS.map(corBtn).join("")}
-          <span class="mk-divisor" title="As três acima têm significado fixo; as ao lado são de uso livre"></span>
-          ${CORES_LIVRES.map(corBtn).join("")}
-          <button type="button" class="mk-acao mk-comentar ${estado.brush === "comentario" ? "on" : ""}" data-brush="comentario" data-tip-pos="cima-esq" data-tip="Selecione um trecho para anexar um comentário/observação (pode virar resumo).">${icone("message-square")} Comentar</button>
-          <button type="button" class="mk-acao" data-acao="auto" data-tip-pos="cima-esq" data-tip="Marca automaticamente prazos/valores (🔵) e palavras restritivas (🔴) deste texto.">${icone("sparkles")} Auto</button>
-          ${store.iaDisponivel() ? `<button type="button" class="mk-acao" data-acao="ia-sugere" ${estado.sugerindo ? "disabled" : ""} data-tip-pos="cima-esq" data-tip="A IA sugere e grifa as palavras-chave (🟡) deste texto.">${estado.sugerindo ? "Sugerindo…" : "🟡 IA sugere"}</button>` : ""}
-          <button type="button" class="mk-acao" data-acao="limpar" data-tip-pos="cima-esq" data-tip="Remover todas as marcas deste texto.">${icone("eraser")} Limpar</button>
-          <button type="button" class="mk-acao" data-acao="imprimir" data-tip-pos="cima-dir" data-tip="Imprimir/PDF as marcas e comentários agrupados por cor.">${iconImprimir} Imprimir</button>
+      <div class="mk-toolbar mk-tb2">
+        <div class="mk-tb-linha">
+          <span class="mk-rotulo">Grifar</span>
+          <div class="mk-swatches">${CORES_FIXAS.map(corBtn).join("")}<span class="mk-sw-sep"></span>${CORES_LIVRES.map(corBtn).join("")}</div>
+          <button type="button" class="mk-comentar ${estado.brush === "comentario" ? "on" : ""}" data-brush="comentario" data-tip-pos="cima" data-tip="Selecione um trecho para anexar um comentário (pode virar resumo).">${icone("message-square")} Comentar</button>
+          <span class="mk-flex"></span>
+          <div class="mk-modos">${modoBtn("normal", "Texto", "Texto completo com as marcas.")}${modoBtn("marcas", "Só marcas", "Mostra apenas os trechos marcados (releitura rápida).")}${modoBtn("recordar", "Recordar", "As marcas viram lacunas: tente lembrar e clique para revelar.")}</div>
+          <details class="mk-mais">
+            <summary data-tip-pos="cima-dir" data-tip="Mais ações">${icone("ellipsis")}</summary>
+            <div class="mk-mais-pop">
+              <button type="button" class="lnk" data-acao="auto" data-tip="Marca automaticamente prazos/valores e palavras restritivas.">${icone("sparkles")} Auto (prazos/restritivas)</button>
+              ${store.iaDisponivel() ? `<button type="button" class="lnk" data-acao="ia-sugere" ${estado.sugerindo ? "disabled" : ""}>${icone("sparkles")} ${estado.sugerindo ? "Sugerindo…" : "IA sugere palavras-chave"}</button>` : ""}
+              <button type="button" class="lnk lnk-danger" data-acao="limpar">${icone("eraser")} Limpar tudo</button>
+              <button type="button" class="lnk" data-acao="imprimir">${iconImprimir} Imprimir</button>
+            </div>
+          </details>
         </div>
-        <div class="mk-grupo">
-          <span class="mk-rotulo muted small">Ler:</span>
-          ${modoBtn("normal", "Texto", "Texto completo com as marcas.")}
-          ${modoBtn("marcas", "Só as marcas", "Mostra apenas os trechos marcados (releitura rápida).")}
-          ${modoBtn("recordar", "Recordar", "As marcas viram lacunas: tente lembrar e clique para revelar.")}
-        </div>
-      </div>
-      <div class="mk-legenda">
-        ${CORES_FIXAS.map((c) => `<span class="mk-leg"><i class="mk-dot mk-${c.id}"></i>${c.nome}</span>`).join("")}
-        <span class="mk-leg mk-leg-livre"><i class="mk-dot mk-verde"></i><i class="mk-dot mk-roxo"></i><i class="mk-dot mk-laranja"></i> uso livre (marque o que quiser)</span>
       </div>`;
   }
 

@@ -274,10 +274,18 @@ export default function renderCentralRevisoes(root, app) {
   return () => { document.removeEventListener("keydown", onKey); offTick(); };
 }
 
-// Troca o overlay da sessão de revisão no lugar (fade), sem re-render da Central.
+// Troca o overlay da sessão de revisão no lugar (fade), sem re-render da Central. Troca só o
+// CONTEÚDO de .fc-foco (não o elemento), senão ele re-dispara a animação de entrada (fq-fade)
+// e o overlay "pisca" (parece fechar e reabrir).
 function atualizarFocoRev(root, store) {
-  const el = root.querySelector(".fc-foco");
-  if (el) el.outerHTML = focoRevOverlayHTML(store.get(), "fade");
+  const foco = root.querySelector(".fc-foco");
+  const novoHTML = focoRevOverlayHTML(store.get(), "fade");
+  if (!foco) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = novoHTML;
+  const novoFoco = tmp.querySelector(".fc-foco");
+  if (novoFoco) foco.replaceChildren(...Array.from(novoFoco.childNodes));
+  else foco.outerHTML = novoHTML;
 }
 
 // Conteúdo revelado por tipo (o que se tenta recordar). Resumo/lei/juris têm texto;

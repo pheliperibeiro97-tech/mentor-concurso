@@ -133,6 +133,8 @@ const app = {
     return params;
   },
 };
+// Handle de depuração (inofensivo): permite navegar/testar via console — window.app.navigate("leiseca").
+if (typeof window !== "undefined") window.app = app;
 
 function renderOnboardingFull(root) {
   root.innerHTML = `<div class="onboarding-wrap"></div>`;
@@ -555,6 +557,29 @@ async function bootstrap() {
   });
   montarCronometro(app); // cronômetro flutuante global (FAB único) que acompanha entre telas
   montarLembretesFab(store); // FAB de lembretes (acima do cronômetro), presente em todas as telas
+
+  // Scroll-chaining: em alguns WebViews (app desktop), uma caixa com scroll próprio (overflow:auto,
+  // ex.: o trecho de um tópico no sumário) "prende" a roda do mouse mesmo já no limite e a página
+  // não continua. Este handler encaminha o scroll para a área de conteúdo quando a caixa interna já
+  // chegou ao topo/fundo — mantendo o scroll interno da caixa enquanto houver o que rolar dentro.
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      const box = e.target.closest && e.target.closest(".doc-corpo");
+      if (!box) return;
+      const podeRolarBox = box.scrollHeight > box.clientHeight + 1;
+      const noLimite = !podeRolarBox || (e.deltaY > 0
+        ? Math.ceil(box.scrollTop + box.clientHeight) >= box.scrollHeight
+        : box.scrollTop <= 0);
+      if (!noLimite) return; // a caixa ainda pode rolar nessa direção → deixa a caixa rolar
+      const cont = box.closest(".content");
+      if (cont && cont.scrollHeight > cont.clientHeight + 1) {
+        cont.scrollTop += e.deltaY;
+        e.preventDefault();
+      }
+    },
+    { passive: false }
+  );
   // O botão "Registrar" do flutuante abre a janela de registro (modo cronômetro).
   setAoPedirRegistro(() => abrirRegistroSessao(store, app, { modo: "crono" }));
   montarPlexus(); // malha "plexus" animada de fundo (atmosfera); respeita reduced-motion

@@ -16,7 +16,9 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://script.google.com/*" },
-        { "url": "https://script.googleusercontent.com/*" }
+        { "url": "https://script.googleusercontent.com/*" },
+        { "url": "https://www.planalto.gov.br/*" },
+        { "url": "https://planalto.gov.br/*" }
       ]
     }
   ]

@@ -1,6 +1,6 @@
 // Helpers de mapa mental: abrir um mapa salvo com TODAS as ações (observação, remover,
 // gerar flashcards/questões a partir dele) e gerar+abrir a partir de uma fonte.
-import { abrirMapaMental, toast, avisoIA, pedirNumero, plural, abrirJanela, skeletonDoc } from "./ui.js";
+import { abrirMapaMental, toast, avisoIA, pedirNumero, plural, abrirJanela, skeletonDoc, comOcupado } from "./ui.js";
 import { icone } from "./icones.js";
 
 // Abre um mapa já salvo com as ações completas. opts.editar abre direto no modo de edição.
@@ -23,11 +23,13 @@ export function abrirMapaCompleto(store, app, mapa, opts = {}) {
           if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards do mapa");
           const r = await pedirNumero("Quantos flashcards a IA deve gerar deste mapa?", { padrao: 8, min: 1, max: 30, nivel: true });
           if (!r) return;
-          toast("Gerando flashcards com a IA…");
-          try {
-            const fc = await store.gerarFlashcardsDeMapa(mapa.id, r.n, r.dificuldade);
-            toast(fc.length ? `${plural(fc.length, "flashcard gerado", "flashcards gerados")} (confira).` : "A IA não retornou nada.", fc.length ? "ok" : "erro");
-          } catch (e) { console.error(e); toast("Não consegui gerar agora.", "erro"); }
+          const rot = `do mapa «${(mapa.titulo || "mapa").slice(0, 40)}»`;
+          const lote = store.iniciarLoteGeracao(rot);
+          const fc = await comOcupado(() => store.gerarFlashcardsDeMapa(mapa.id, r.n, r.dificuldade), { msg: "Gerando flashcards com a IA…" });
+          store.encerrarLoteGeracao();
+          if (fc == null) return;
+          toast(fc.length ? `${plural(fc.length, "flashcard gerado", "flashcards gerados")}.` : "A IA não retornou nada.", fc.length ? "ok" : "erro");
+          if (fc.length) app.navigate("flashcards", { lote, loteRotulo: rot });
         },
       },
       {
@@ -36,11 +38,13 @@ export function abrirMapaCompleto(store, app, mapa, opts = {}) {
           if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões do mapa");
           const r = await pedirNumero("Quantas questões de múltipla escolha a IA deve gerar deste mapa?", { padrao: 5, min: 1, max: 30, nivel: true });
           if (!r) return;
-          toast("Gerando questões com a IA…");
-          try {
-            const qs = await store.gerarQuestoesDeMapa(mapa.id, r.n, r.dificuldade);
-            toast(qs.length ? `${plural(qs.length, "questão gerada", "questões geradas")} (confira).` : "A IA não retornou nada.", qs.length ? "ok" : "erro");
-          } catch (e) { console.error(e); toast("Não consegui gerar agora.", "erro"); }
+          const rot = `do mapa «${(mapa.titulo || "mapa").slice(0, 40)}»`;
+          const lote = store.iniciarLoteGeracao(rot);
+          const qs = await comOcupado(() => store.gerarQuestoesDeMapa(mapa.id, r.n, r.dificuldade), { msg: "Gerando questões com a IA…" });
+          store.encerrarLoteGeracao();
+          if (qs == null) return;
+          toast(qs.length ? `${plural(qs.length, "questão gerada", "questões geradas")}.` : "A IA não retornou nada.", qs.length ? "ok" : "erro");
+          if (qs.length) app.navigate("pratica", { lote, loteRotulo: rot });
         },
       },
       {
@@ -49,11 +53,13 @@ export function abrirMapaCompleto(store, app, mapa, opts = {}) {
           if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões Certo/Errado do mapa");
           const r = await pedirNumero("Quantas afirmações Certo/Errado a IA deve gerar deste mapa?", { padrao: 6, min: 1, max: 30, nivel: true });
           if (!r) return;
-          toast("Gerando afirmações Certo/Errado com a IA…");
-          try {
-            const qs = await store.gerarQuestoesCEDeMapa(mapa.id, r.n, r.dificuldade);
-            toast(qs.length ? `${plural(qs.length, "afirmação Certo/Errado gerada", "afirmações Certo/Errado geradas")} (confira).` : "A IA não retornou nada.", qs.length ? "ok" : "erro");
-          } catch (e) { console.error(e); toast("Não consegui gerar agora.", "erro"); }
+          const rot = `do mapa «${(mapa.titulo || "mapa").slice(0, 40)}»`;
+          const lote = store.iniciarLoteGeracao(rot);
+          const qs = await comOcupado(() => store.gerarQuestoesCEDeMapa(mapa.id, r.n, r.dificuldade), { msg: "Gerando afirmações Certo/Errado com a IA…" });
+          store.encerrarLoteGeracao();
+          if (qs == null) return;
+          toast(qs.length ? `${plural(qs.length, "afirmação Certo/Errado gerada", "afirmações Certo/Errado geradas")}.` : "A IA não retornou nada.", qs.length ? "ok" : "erro");
+          if (qs.length) app.navigate("pratica-ce", { lote, loteRotulo: rot });
         },
       },
       {

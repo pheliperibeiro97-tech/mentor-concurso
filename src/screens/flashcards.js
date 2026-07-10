@@ -1,7 +1,7 @@
 // Flashcards / Revisão: recall ativo + repetição espaçada (SM-2) + exportação Anki.
 // Criar cards num painel único (digitar/colar/importar, gerar do material com IA,
 // ou gerar das questões offline). Revisão filtrável por disciplina/tópicos.
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado } from "../ui.js";
 import { esc, fmtData, todayISO, MOTIVOS_ERRO, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import * as sm2 from "../sm2.js";
@@ -25,6 +25,8 @@ let puladosSessao = new Set(); // ids pulados nesta sessão (voltam depois)
 let mostrarExport = false; // painel de exportação Anki (oculto até clicar)
 let revisarId = null; // estuda UM card específico sob demanda (da lista "Ver todos"), mesmo não vencido
 let ordemRev = "recentes"; // ordem da fila: "recentes" (recém-criados primeiro, padrão) | "vencimento"
+let filtroLote = null; // #4: quando veio de uma geração, estuda SÓ os recém-gerados (geracaoId)
+let filtroLoteRotulo = ""; // rótulo do lote (ex.: "do material «X»")
 
 // Opções de "baralho" (Todos / por disciplina / por tópico) — usado só na exportação.
 function opcoesBaralho(st, sel) {
@@ -81,9 +83,19 @@ export default function renderFlashcards(root, app) {
     filtroRev.sel = [app.params.topicoId];
     app.params.topicoId = null;
   }
-  const vencidos = store
-    .flashcardsVencidos()
-    .filter((c) => !puladosSessao.has(c.id) && questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo));
+  // #4: veio de uma geração → estuda SÓ os recém-gerados (some ao clicar "Ver todos" ou ao concluir).
+  if (app.params && app.params.lote) {
+    filtroLote = app.params.lote;
+    filtroLoteRotulo = app.params.loteRotulo || "";
+    app.params.lote = null; app.params.loteRotulo = null;
+    mostrarLista = false; revisarId = null; puladosSessao = new Set();
+    filtroRev.sel = []; filtroTipo = "todos"; // não confundir com filtros antigos
+  }
+  // Se o lote já não tem cards a estudar (todos revisados/removidos), desfaz o filtro e avisa.
+  if (filtroLote && !st.flashcards.some((c) => c.geracaoId === filtroLote && !c.suspenso)) { filtroLote = null; filtroLoteRotulo = ""; toast("Você concluiu os flashcards recém-gerados! Mostrando os demais.", "ok"); }
+  const vencidos = filtroLote
+    ? st.flashcards.filter((c) => c.geracaoId === filtroLote && !c.suspenso && !puladosSessao.has(c.id) && tipoNoFiltro(c, filtroTipo))
+    : store.flashcardsVencidos().filter((c) => !puladosSessao.has(c.id) && questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo));
   // Ordem "recém-criados primeiro": resolve o caso de gerar novos cards e querer revisá-los
   // ANTES dos pendentes antigos (sem ter que zerar a fila). Senão, ordem padrão (vencimento).
   if (ordemRev === "recentes") vencidos.sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || ""));
@@ -112,11 +124,14 @@ export default function renderFlashcards(root, app) {
         <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações: exportar para o Anki.">${icone("ellipsis")}</summary>
         <div class="doc-mais-pop" role="menu">
           <button class="menu-item" data-action="toggle-export" ${st.flashcards.length ? "" : "disabled"}>${mostrarExport ? "Fechar exportação" : "Exportar p/ Anki"}</button>
+          <button class="menu-item lnk-danger" data-action="limpar-fc" ${st.flashcards.length ? "" : "disabled"}>${icone("trash-2")} Limpar todos os flashcards</button>
         </div>
       </details>
     </div>
 
     ${editandoId ? editFormHTML(st) : ""}
+
+    ${filtroLote ? `<div class="lote-banner">${icone("sparkles")}<span>Estudando só os <b>${vencidos.length}</b> flashcards recém-gerados ${esc(filtroLoteRotulo)}.</span><button class="lnk" data-action="lote-ver-todos" data-tip="Voltar para todos os seus flashcards (fila normal de revisão).">Ver todos</button></div>` : ""}
 
     ${
       mostrarExport
@@ -224,6 +239,21 @@ export default function renderFlashcards(root, app) {
       imprimir("Flashcards — Mentor Concurso", printFlashcards(st, cards, op.lados));
     },
     "toggle-criar": () => abrirCriarFlashcards(app),
+    "lote-ver-todos": () => { filtroLote = null; filtroLoteRotulo = ""; app.refresh(); },
+    "fc-abrir-artigo": (el) => { // #13: abre o artigo de origem do flashcard (lei/juris)
+      const ref = el.getAttribute("data-ref"), t = el.getAttribute("data-tipo");
+      const ind = store.get().indicacoes.find((i) => i.tipo === t && (i.referencia || "") === ref);
+      if (!ind) return toast("Artigo de origem não encontrado (pode ter sido editado ou removido).", "erro");
+      app.navigate(t === "juris" ? "jurisprudencia" : "leiseca", { focoIndicacaoId: ind.id });
+    },
+    "limpar-fc": async () => {
+      if (!st.flashcards.length) return;
+      if (!(await confirmar(`Apagar TODOS os ${st.flashcards.length} flashcards? Esta ação não pode ser desfeita.`))) return;
+      const n = store.limparFlashcards();
+      filtroLote = null; filtroLoteRotulo = "";
+      toast(`${plural(n, "flashcard apagado", "flashcards apagados")}.`);
+      app.refresh();
+    },
     "toggle-lista": () => {
       mostrarLista = !mostrarLista;
       app.refresh();
@@ -275,15 +305,9 @@ export default function renderFlashcards(root, app) {
     },
     "comentar-fc": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar este flashcard com IA");
-      el.disabled = true;
-      toast("Explicando este card com IA…");
-      try {
-        await store.comentarFlashcardIA(el.getAttribute("data-id"));
-        toast("Comentário da IA gerado.");
-      } catch (e) {
-        toast("Não consegui comentar este card agora. Tente de novo em instantes.", "erro");
-        el.disabled = false;
-      }
+      const r = await comOcupado(() => store.comentarFlashcardIA(el.getAttribute("data-id")), { botao: el, msg: "Explicando este card com a IA…" });
+      if (r === null) return;
+      toast("Comentário da IA gerado.");
     },
     // Após "Errei": um toque classifica o motivo no registro (auto) do Caderno e avança.
     "motivo-fc": (el) => {
@@ -330,8 +354,8 @@ export default function renderFlashcards(root, app) {
       perguntandoMotivoId = null;
       app.refresh();
     },
-    "foco-anterior": () => { if (focoIdx > 0) { focoIdx--; revelado = false; app.refresh(); } },
-    "foco-proximo": () => { if (focoIdx < focoFila.length) { focoIdx++; revelado = false; app.refresh(); } },
+    "foco-anterior": () => { if (focoIdx > 0) { focoIdx--; revelado = false; atualizarFocoFlash(root, store); } },
+    "foco-proximo": () => { if (focoIdx < focoFila.length) { focoIdx++; revelado = false; atualizarFocoFlash(root, store); } },
     "sair-foco": () => {
       focoAtivo = false;
       revelado = false;
@@ -484,8 +508,14 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
           ? `<div class="add-sep">Ou gerar automaticamente:</div>
              <div class="form-row" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
                ${
+                 st.documentos.length
+                   ? `<label class="inline">Do material: <select id="fc-add-doc"><option value="">— escolher —</option>${opcoesDocs}</select></label>
+                      <button class="btn btn-ia btn-sm" data-action="gerar-do-material" data-tip="A IA extrai flashcards diretamente deste material e abre mostrando só os recém-gerados.">${icone("sparkles")} Gerar deste material</button>`
+                   : ""
+               }
+               ${
                  st.documentos.length || st.resumos.length
-                   ? `<button class="btn btn-ia btn-sm" data-action="gerar-escopo" data-tip="Escolha o tópico, a aula e (se houver índice) o subtópico; a IA gera a partir do material/resumo vinculado."><span class="orb orb-xs" aria-hidden="true"></span> Gerar com IA</button>`
+                   ? `<button class="btn btn-ghost btn-sm" data-action="gerar-escopo" data-tip="Escolha o tópico, a aula e (se houver índice) o subtópico; a IA gera a partir do material/resumo vinculado.">${icone("sparkles")} Por tópico/aula</button>`
                    : ""
                }
                ${
@@ -646,6 +676,21 @@ function abrirCriarFlashcards(app) {
         fechar();
         app.refresh();
       },
+      "gerar-do-material": async (el) => {
+        if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
+        const docId = corpo.querySelector("#fc-add-doc")?.value;
+        if (!docId) return toast("Escolha o material de onde extrair.", "erro");
+        const r = await pedirNumero("Quantos flashcards a IA deve gerar deste material?", { padrao: 6, min: 1, max: 30, nivel: true });
+        if (!r) return;
+        const doc = store.get().documentos.find((d) => d.id === docId);
+        const rot = `do material «${(doc && doc.titulo) || "material"}»`;
+        const lote = store.iniciarLoteGeracao(rot);
+        const cards = await comOcupado(() => store.gerarFlashcardsDeDoc(docId, r.n, r.dificuldade), { botao: el, msg: "Gerando flashcards…" });
+        store.encerrarLoteGeracao();
+        if (cards == null) return;
+        toast(cards.length ? `${plural(cards.length, "flashcard criado", "flashcards criados")}.` : "Nada gerado — confira se o material tem texto.", cards.length ? "ok" : "erro");
+        if (cards.length) { fechar(); app.navigate("flashcards", { lote, loteRotulo: rot }); }
+      },
       "gerar-escopo": () => abrirSeletorEscopo(app, { tipo: "flashcards", titulo: "Gerar flashcards" }),
       "gerar-questoes": () => {
         const filtro = corpo.querySelector("#fc-add-top-q").value;
@@ -699,6 +744,24 @@ function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }) {
     placar: { acertos, erros },
     centro, rodape,
   });
+}
+
+// Atualiza o overlay do foco NO LUGAR (navegação ← →), trocando só o CONTEÚDO de .fc-foco. Se
+// trocássemos o outerHTML (ou déssemos app.refresh), o .fc-foco re-dispararia sua animação de
+// entrada (fq-fade) e o overlay "piscaria" (parece fechar e reabrir). O keydown (document) e o
+// tick do cronômetro sobrevivem — buscam elementos frescos a cada evento/segundo.
+function atualizarFocoFlash(root, store) {
+  const st = store.get();
+  const card = st.flashcards.find((c) => c.id === focoFila[focoIdx] && !c.suspenso);
+  const cardMotivo = perguntandoMotivoId ? st.flashcards.find((c) => c.id === perguntandoMotivoId) : null;
+  const novoHTML = focoQuizHTML(st, { card, cardMotivo, idx: focoIdx, total: focoFila.length, placar: focoPlacar });
+  const foco = root.querySelector(".fc-foco");
+  if (!foco) return;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = novoHTML;
+  const novoFoco = tmp.querySelector(".fc-foco");
+  if (novoFoco) foco.replaceChildren(...Array.from(novoFoco.childNodes));
+  else foco.outerHTML = novoHTML;
 }
 
 function quizCardHTML(st, c) {
@@ -807,6 +870,7 @@ function cardRevisaoHTML(st, c) {
              <div class="fc-atalhos muted small">${icone("keyboard")} <b>1–4</b> nota · <b>Espaço</b> vira</div>
              <div class="fc-extra">
                <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este card para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
+               ${c.fonte && (c.fonte.tipo === "lei" || c.fonte.tipo === "juris") ? `<button class="btn btn-ghost btn-sm" data-action="fc-abrir-artigo" data-ref="${esc(c.fonte.titulo || "")}" data-tipo="${c.fonte.tipo}" data-tip="Abrir o artigo de origem na ${c.fonte.tipo === "juris" ? "Jurisprudência" : "Lei Seca"}.">${icone("book-open")} Abrir artigo</button>` : ""}
              </div>`
           : `<button class="btn btn-primary btn-lg" data-action="revelar">Mostrar resposta</button>
              <div class="fc-atalhos muted small">${icone("keyboard")} <b>Espaço</b> para mostrar</div>`

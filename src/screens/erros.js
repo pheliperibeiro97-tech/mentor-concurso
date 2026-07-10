@@ -1,12 +1,13 @@
 // Caderno de Erros: erros de questões respondidas + erros incluídos/importados
 // manualmente (vinculados a disciplina e/ou tópico). Permite classificar motivo,
 // editar o comentário e (para manuais) editar/remover.
-import { bindActions, toast, header, seloBadge, vazio, confirmar, imprimir, botaoImprimir, opcoesImpressao, avisoIA, focarItem, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, plural } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, confirmar, imprimir, botaoImprimir, opcoesImpressao, avisoIA, focarItem, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, plural, comOcupado } from "../ui.js";
 import { esc, fmtData, MOTIVOS_ERRO as MOTIVOS, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
 
 let filtroMotivo = "todos";
+let filtroFonte = "todas"; // "todas" | "lei" | "juris" | "outras" — achar erros por origem
 const filtroTop = { sel: [], aberto: false }; // multi-tópico (disciplinas/tópicos)
 let ordenar = "recente"; // recente | antigo | motivo | disciplina
 let comentando = null; // { id, manual } comentário em edição
@@ -28,10 +29,19 @@ export default function renderErros(root, app) {
     filtroTop.sel = [app.params.topicoId];
     app.params.topicoId = null;
   }
+  // Vindo do Estudar ("Abrir Caderno de Erros"): pré-filtra pela fonte (lei/juris).
+  if (app.params && app.params.fonteFiltro) {
+    filtroFonte = app.params.fonteFiltro;
+    app.params.fonteFiltro = null;
+  }
   const todos = store.cadernoErros();
   let erros = todos;
   if (filtroMotivo !== "todos") {
     erros = erros.filter((e) => (filtroMotivo === "sem" ? !e.motivoErro : e.motivoErro === filtroMotivo));
+  }
+  if (filtroFonte !== "todas") {
+    const ft = (e) => (e.questao && e.questao.fonte && e.questao.fonte.tipo) || "outras";
+    erros = erros.filter((e) => (filtroFonte === "outras" ? !["lei", "juris"].includes(ft(e)) : ft(e) === filtroFonte));
   }
   erros = erros.filter((e) => itemNoFiltro(st, e, filtroTop.sel));
   erros = ordenarErros(st, [...erros], ordenar);
@@ -58,6 +68,14 @@ export default function renderErros(root, app) {
 
     <div class="barra-acoes filtro-bar">
       ${filtroTopicosBotaoHTML(st, filtroTop.sel, filtroTop.aberto)}
+      <label class="inline">Fonte:
+        <select id="filtro-fonte">
+          <option value="todas" ${filtroFonte === "todas" ? "selected" : ""}>Todas</option>
+          <option value="lei" ${filtroFonte === "lei" ? "selected" : ""}>Lei Seca</option>
+          <option value="juris" ${filtroFonte === "juris" ? "selected" : ""}>Jurisprudência</option>
+          <option value="outras" ${filtroFonte === "outras" ? "selected" : ""}>Outras</option>
+        </select>
+      </label>
       <label class="inline">Motivo:
         <select id="filtro-motivo">
           <option value="todos">Todos</option>
@@ -90,6 +108,10 @@ export default function renderErros(root, app) {
       }
     </div>`;
 
+  root.querySelector("#filtro-fonte")?.addEventListener("change", (e) => {
+    filtroFonte = e.target.value;
+    app.refresh();
+  });
   root.querySelector("#filtro-motivo")?.addEventListener("change", (e) => {
     filtroMotivo = e.target.value;
     app.refresh();
@@ -158,15 +180,9 @@ export default function renderErros(root, app) {
     },
     "comentar-ia": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar o erro");
-      el.disabled = true;
-      toast("Analisando o erro com IA…");
-      try {
-        await store.comentarErroIA(el.getAttribute("data-id"));
-        toast("Comentário da IA gerado.");
-      } catch (e) {
-        toast("Não consegui comentar este erro agora. Tente de novo em instantes.", "erro");
-        el.disabled = false;
-      }
+      const r = await comOcupado(() => store.comentarErroIA(el.getAttribute("data-id")), { botao: el, msg: "Analisando o erro com a IA…" });
+      if (r === null) return; // erro já sinalizado
+      toast("Comentário da IA gerado.");
     },
     "gerar-flashcard": (el) => {
       const fc = store.gerarFlashcardDeErro(el.getAttribute("data-id"), el.getAttribute("data-manual") === "true");

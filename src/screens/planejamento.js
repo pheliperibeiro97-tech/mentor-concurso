@@ -1,5 +1,5 @@
 // Planejamento: ciclo de aprendizado + tarefas/trilhas + próximas revisões.
-import { bindActions, toast, header, vazio, confirmar, imprimir, botaoImprimir, ligarDropZone, focarItem, iconImprimir, abrirJanelaFluxo, plural, skeletonDoc } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, imprimir, botaoImprimir, ligarDropZone, focarItem, iconImprimir, abrirJanelaFluxo, plural, skeletonDoc, md } from "../ui.js";
 import { esc, fmtData, fmtMin, todayISO, daysBetween, addDays, weekdayISO, DIAS_SEMANA, DIAS_SEMANA_CURTO } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
@@ -1162,9 +1162,7 @@ function diagHTML(st) {
   </div>`;
 }
 
-function mdLevePlano(txt) {
-  return esc(txt).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>");
-}
+const mdLevePlano = (txt) => md(txt); // renderizador único de markdown (ui.js)
 
 // Painel do refino da IA: comentário + ajustes ACIONÁVEIS (aceita um a um = parcial).
 function refinoHTML(refino) {

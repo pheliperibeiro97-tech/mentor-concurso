@@ -7,7 +7,7 @@ import { iaDisponivel, responderChat, interpretarComando } from "./ia-provider.j
 import { executarComando } from "./chat-acoes.js";
 import { esc } from "./util.js";
 import { icone } from "./icones.js";
-import { revelarTexto, skeletonDoc, plural } from "./ui.js";
+import { revelarTexto, skeletonDoc, plural, md } from "./ui.js";
 
 export function montarChat(store, app) {
   if (document.getElementById("chat-fab")) return;
@@ -272,29 +272,7 @@ export function montarChat(store, app) {
   };
 }
 
-// Markdown leve: **negrito**, listas com "- " ou "• ", e quebras de linha.
-function md(t) {
-  const linhas = esc(t || "").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").split(/\n/);
-  let out = "";
-  let emLista = false;
-  for (const ln of linhas) {
-    if (/^\s*[-•]\s+/.test(ln)) {
-      if (!emLista) {
-        out += "<ul>";
-        emLista = true;
-      }
-      out += "<li>" + ln.replace(/^\s*[-•]\s+/, "") + "</li>";
-    } else {
-      if (emLista) {
-        out += "</ul>";
-        emLista = false;
-      }
-      out += ln + "<br>";
-    }
-  }
-  if (emLista) out += "</ul>";
-  return out;
-}
+// md() (renderizador de markdown leve) agora vive em ui.js e é importado acima — um só no app.
 
 // Mostra/oculta o botão conforme o onboarding.
 export function atualizarChatVisibilidade(onboarded) {

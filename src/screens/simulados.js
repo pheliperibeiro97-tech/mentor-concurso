@@ -74,8 +74,10 @@ export default function renderSimulados(root, app) {
     root.querySelectorAll("[data-fmt]").forEach((b) => b.addEventListener("click", () => { formatoAtivo = b.getAttribute("data-fmt"); app.refresh(); }));
     root.querySelector('[data-action="sim-imprimir"]')?.addEventListener("click", () => imprimirSimulado(app));
     // Reaproveita o MOTOR existente (config → prova cronometrada → resultado).
-    renderSimulado(root.querySelector("#sim-body"), app, formatoAtivo);
-    return;
+    // IMPORTANTE: RETORNAR o cleanup do motor — no simulado em andamento ele remove o listener de
+    // teclado (Esc) e para o timer. Sem o return, o cleanup se perdia: ao sair para outra tela o
+    // listener do simulado VAZAVA (Esc noutra tela abria "Sair do simulado?") e o timer seguia rodando.
+    return renderSimulado(root.querySelector("#sim-body"), app, formatoAtivo);
   }
 
   // ----- Histórico -----

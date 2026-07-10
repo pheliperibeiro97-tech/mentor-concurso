@@ -204,7 +204,7 @@ export default function renderHoje(root, app) {
         ${planoSec}
       </div>
       <section class="plano-sec hoje-lembretes hoje-split-side">
-        <div class="plano-h"><h2>${icone("pin")} Lembretes</h2>${lembPend ? `<span class="cnt">${lembPend}</span>` : ""}<span class="sp"></span>
+        <div class="plano-h"><h2>Lembretes</h2>${lembPend ? `<span class="cnt">${lembPend}</span>` : ""}<span class="sp"></span>
           <button class="lnk small" data-lem-novo data-tip="Adicionar um recado">${icone("plus")} Novo</button>
         </div>
         ${lembPend ? lembretesListaHTML(store, { soPendentes: true }) : `<p class="muted small lem-sec-vazia">Sem lembretes${lembTotal ? " pendentes" : ""}. Anote o que não pode esquecer — prova, inscrição, boleto… <a data-lem-novo>criar o primeiro →</a></p>`}

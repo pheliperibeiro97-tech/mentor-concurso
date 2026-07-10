@@ -722,7 +722,7 @@ export async function explicarFlashcard(cfg, { frente, verso, contexto }) {
 
 // Comenta UMA questão objetiva (sob demanda, 🤖): explica por que a alternativa correta
 // é a certa e, quando útil, por que as demais erram. Texto corrido, didático.
-export async function comentarQuestao(cfg, { enunciado, alternativas, correta, formato }) {
+export async function comentarQuestao(cfg, { enunciado, alternativas, correta, formato, duvida }) {
   const ce = formato === "ce";
   const system =
     "Você é um professor de cursinho. Explique o gabarito" +
@@ -734,11 +734,13 @@ export async function comentarQuestao(cfg, { enunciado, alternativas, correta, f
       ? "DETALHADO: explique POR QUE a afirmação está certa ou errada, apontando o conceito/regra que a sustenta ou a contradiz."
       : "DETALHADO: comente CADA alternativa, uma a uma, dizendo se está correta ou incorreta e POR QUÊ " +
         "(ex.: 'A) ... — incorreta porque ...'; 'B) ... — correta porque ...'). Deixe claro por que a correta é a melhor.") +
+    (duvida ? " IMPORTANTE: o aluno fez uma DÚVIDA específica — responda-a diretamente e em primeiro lugar no DETALHADO, sem fugir do que ele perguntou." : "") +
     " Não invente lei ou jurisprudência; se precisar citar, use termos genéricos. Responda SÓ JSON.";
   const alts = ce
     ? `Gabarito: ${correta}`
     : (alternativas || []).map((a, i) => `${String.fromCharCode(65 + i)}) ${a}${i === correta ? " [CORRETA]" : ""}`).join("\n");
-  const r = (await chamar(cfg, { system, user: `ENUNCIADO: ${enunciado}\n${alts}`, json: true, temperature: 0.4 })) || {};
+  const user = `ENUNCIADO: ${enunciado}\n${alts}` + (duvida ? `\nDÚVIDA do aluno (responda diretamente): ${duvida}` : "");
+  const r = (await chamar(cfg, { system, user, json: true, temperature: 0.4 })) || {};
   return { resumido: String(r.resumido || "").trim(), detalhado: String(r.detalhado || "").trim(), selo: "amarelo" };
 }
 
@@ -757,19 +759,21 @@ export async function comentarProva(cfg, { titulo, questoes }) {
 }
 
 // Comenta um erro do caderno: explica o porquê e como não repetir.
-export async function comentarErro(cfg, { enunciado, escolhida, correta, motivo }) {
+export async function comentarErro(cfg, { enunciado, escolhida, correta, motivo, duvida }) {
   const system =
     "Você é um mentor de concursos. Explique um erro do aluno. " +
     'Devolva DOIS níveis em JSON: {"resumido":"...","detalhado":"..."}. ' +
     "RESUMIDO: 1 a 2 frases com o ponto central (por que a correta é correta e a marcada é errada). " +
     "DETALHADO: explique por que a resposta correta é a correta e por que a escolhida está errada, " +
-    "e dê uma dica prática para não repetir o erro. Não invente jurisprudência nem números de lei; " +
-    "se citar, use termos genéricos. Responda SÓ JSON.";
+    "e dê uma dica prática para não repetir o erro. " +
+    (duvida ? "IMPORTANTE: o aluno fez uma DÚVIDA específica — responda-a diretamente e em primeiro lugar no DETALHADO, sem fugir do que ele perguntou. " : "") +
+    "Não invente jurisprudência nem números de lei; se citar, use termos genéricos. Responda SÓ JSON.";
   const user =
     `Questão/erro: ${enunciado || "(sem enunciado)"}\n` +
     `Resposta marcada (errada): ${escolhida || "(não informada)"}\n` +
     `Resposta correta: ${correta || "(não informada)"}\n` +
-    `Motivo declarado pelo aluno: ${motivo || "(não informado)"}`;
+    `Motivo declarado pelo aluno: ${motivo || "(não informado)"}` +
+    (duvida ? `\nDÚVIDA do aluno (responda diretamente): ${duvida}` : "");
   const r = (await chamar(cfg, { system, user, json: true, temperature: 0.4 })) || {};
   return { resumido: String(r.resumido || "").trim(), detalhado: String(r.detalhado || "").trim(), selo: "amarelo" };
 }
@@ -1091,19 +1095,50 @@ export async function adaptarCronograma(cfg, { texto, contexto }) {
 // Diferente de estruturarLeiSeca (que só reorganiza listas): aqui a tese É o conteúdo do julgado.
 export async function extrairTesesInformativo(cfg, { texto, n = 20 }) {
   const system =
-    "Você extrai as TESES/ENTENDIMENTOS firmados em um informativo de jurisprudência. Para cada julgado relevante, " +
-    "devolva: referencia (curta e identificável: tribunal + nº do tema/súmula/recurso quando houver, ex.: 'Tema 1234 STJ', " +
-    "'RE 999 STF', 'Info - HC 123 STJ'), texto (a TESE em 1–2 frases, FIEL ao entendimento, sem inventar), tribunal " +
-    "(sigla: STF/STJ/TST/...; \"\" se não houver) e categoria ('Súmula'/'Tema repetitivo'/'Precedente obrigatório' quando " +
-    "aplicável; \"\" caso contrário). NÃO invente teses que não estejam no texto; ignore relatório/ementa acessória. Responda só JSON.";
+    "Você extrai e CLASSIFICA os itens de um documento de jurisprudência do STF/STJ — pode ser um INFORMATIVO (vários julgados) OU uma edição de 'JURISPRUDÊNCIA EM TESES' do STJ (várias teses numeradas sobre um mesmo tema, cada uma com precedentes). Para CADA julgado/tese devolva: " +
+    "referencia (curta e identificável: tribunal + nº do tema/súmula/recurso, ex.: 'Tema 1234 STJ', 'ADPF 1.292 STF', 'Súmula 646 STF'); " +
+    "texto (a TESE/entendimento em 1–3 frases, FIEL, sem inventar); " +
+    "tribunal (sigla STF/STJ/TST/...; \"\" se não houver); " +
+    "orgao (órgão julgador: 'Plenário','Corte Especial','Primeira Turma','Terceira Seção'... ou \"\"); " +
+    "ramo (ramo do direito NORMALIZADO: 'Direito Penal','Direito Constitucional','Direito Administrativo','Direito Processual Civil',...); " +
+    "assunto (tema específico curto, ex.: 'Remição pelo estudo','Precatórios','Livre concorrência'); " +
+    "processo (nº do processo/recurso: 'REsp 2.072.985/DF','ADPF 1.292/RO' ou \"\"); " +
+    "tema (só o NÚMERO do Tema repetitivo/Repercussão Geral se houver, ex.: '1357'; senão \"\"); " +
+    "dataJulgamento (dd/mm/aaaa do julgamento se houver; senão \"\"); " +
+    "categoria (a que melhor couber: 'Súmula'|'Súmula Vinculante'|'Tema repetitivo'|'Repercussão Geral'|'Precedente obrigatório'|'Jurisprudência em Teses'|'Tese'|'Enunciado'; " +
+    "use 'Jurisprudência em Teses' para cada tese numerada de uma edição do produto 'Jurisprudência em Teses' do STJ; 'Enunciado' para enunciados de jornadas/FONAJE/súmulas administrativas); " +
+    "status ('vigente' | 'superado' (só se o texto disser que foi superado/cancelado/substituído) | 'importante'). " +
+    "NÃO invente; ignore relatório/ementa acessória. Responda só JSON.";
   const user =
-    `Extraia até ${n} teses do INFORMATIVO abaixo (uma por julgado relevante).\n\n` +
-    `INFORMATIVO:\n"""\n${corta(texto, 12000)}\n"""\n\n` +
-    `Formato EXATO: {"itens":[{"referencia":"...","texto":"...","tribunal":"...","categoria":"..."}]}`;
+    `Do DOCUMENTO abaixo, identifique o nº (do informativo OU o nº da edição de Jurisprudência em Teses) e a data (se houver) e extraia até ${n} itens (um por julgado/tese). ` +
+    `Se for Jurisprudência em Teses, use o nº da edição em "nInformativo" e repita o tema da edição no "assunto" de cada tese.\n\n` +
+    `DOCUMENTO:\n"""\n${corta(texto, 12000)}\n"""\n\n` +
+    `Formato EXATO: {"nInformativo":"894","dataDivulgacao":"30/06/2026","tribunal":"STJ","itens":[{"referencia":"...","texto":"...","tribunal":"...","orgao":"...","ramo":"...","assunto":"...","processo":"...","tema":"...","dataJulgamento":"...","categoria":"...","status":"vigente"}]}`;
   const out = await chamar(cfg, { system, user, json: true, temperature: 0.2 });
+  const meta = {
+    // nº do informativo só o número (STF às vezes vem "1221/2026" → "1221"; consistência com STJ "894").
+    nInformativo: (String(out?.nInformativo || "").match(/\d+/) || [null])[0],
+    dataDivulgacao: String(out?.dataDivulgacao || "").trim() || null,
+    tribunalInfo: String(out?.tribunal || "").trim() || null,
+  };
   const arr = Array.isArray(out) ? out : out.itens || [];
+  const s = (v) => (String(v ?? "").trim() || null);
   return arr
-    .map((x) => ({ referencia: String(x.referencia || "").trim(), texto: String(x.texto || "").trim(), tribunal: String(x.tribunal || "").trim() || null, categoria: String(x.categoria || "").trim() || null }))
+    .map((x) => ({
+      referencia: String(x.referencia || "").trim(),
+      texto: String(x.texto || "").trim(),
+      tribunal: s(x.tribunal) || meta.tribunalInfo,
+      orgao: s(x.orgao),
+      ramo: s(x.ramo),
+      assunto: s(x.assunto),
+      processo: s(x.processo),
+      tema: s(x.tema),
+      dataJulgamento: s(x.dataJulgamento),
+      categoria: s(x.categoria),
+      status: s(x.status) || "vigente",
+      nInformativo: meta.nInformativo,
+      dataDivulgacao: meta.dataDivulgacao,
+    }))
     .filter((x) => x.referencia || x.texto);
 }
 
@@ -1249,6 +1284,24 @@ export async function sugerirRelevanciaWeb(cfg, { topicos, banca, orgao, cargo, 
 
 // SUGERIR PALAVRAS-CHAVE (🟡) para a marcação tricromática: a IA identifica os termos/
 // expressões MAIS IMPORTANTES que aparecem LITERALMENTE no texto (para casar o offset).
+// Classifica um dispositivo de lei em TEMAS de estudo (sub-projeto de tag temática). Rótulos
+// canônicos e consistentes para habilitar "Memorizar por tema" e a inteligência por tema.
+export async function classificarTemas(cfg, { texto, referencia }) {
+  const system =
+    "Você classifica um dispositivo de lei em TEMAS de estudo para concurso público. " +
+    "Devolva de 1 a 4 temas CURTOS e CANÔNICOS. Para temas GERAIS, prefira estes rótulos exatos quando couber: " +
+    "Prazo, Competência, Quórum, Prescrição e decadência, Dosimetria da pena, Direitos e garantias, Vedações, " +
+    "Requisitos e condições, Procedimento e recursos, Princípios, Multa e valores. " +
+    "ALÉM disso, quando o dispositivo tratar de um INSTITUTO PRÓPRIO da matéria, adicione 1 tema ESPECÍFICO " +
+    "(ex.: na Constituição — 'Controle de constitucionalidade', 'Remédios constitucionais', 'Organização dos poderes'; " +
+    "no Penal — 'Extinção da punibilidade', 'Concurso de pessoas', 'Crimes contra a vida'; " +
+    "no Civil/Processo — 'Negócio jurídico', 'Responsabilidade civil', 'Recursos'). Use a norma citada para inferir a matéria. " +
+    "Só o essencial (não force 4). Use SEMPRE o mesmo rótulo para o mesmo tema (consistência). Responda só JSON.";
+  const user = `Dispositivo (norma indica a matéria): ${referencia || ""}\n\nTEXTO:\n"""\n${corta(texto, 3000)}\n"""\n\nResponda EXATAMENTE: {"temas":["...","..."]}`;
+  const r = await chamar(cfg, { system, user, json: true, temperature: 0.1 });
+  const arr = r && Array.isArray(r.temas) ? r.temas : [];
+  return arr.map((s) => String(s).trim()).filter(Boolean).slice(0, 4);
+}
 export async function sugerirPalavrasChave(cfg, { texto, contexto }) {
   const system =
     "Você ajuda um concurseiro a GRIFAR as palavras-chave de um texto de estudo. " +
@@ -1528,6 +1581,68 @@ export async function extrairTextoArquivo(cfg, { dataB64, mimeType, nomeArquivo,
     "NÃO resuma, NÃO comente, NÃO invente nada: devolva somente o texto útil. Se não houver conteúdo relevante, devolva uma string vazia.";
   const user = `Extraia o conteúdo relevante deste arquivo${nomeArquivo ? ` ("${nomeArquivo}")` : ""}, conforme a finalidade.`;
   return chamarVisao(cfg, { system, user, mimeType, dataB64, temperature: 0 });
+}
+
+// F1 — descreve as FIGURAS/diagramas/tabelas de UMA página (imagem). O texto corrido já foi
+// extraído em separado; aqui só o conteúdo VISUAL. Devolve "" quando a página não tem figura real.
+export async function descreverFiguras(cfg, { dataB64, contexto = "" }) {
+  if (!visaoDisponivel(cfg)) return "";
+  const system =
+    "Você olha a IMAGEM de UMA página de um material de estudo. O TEXTO corrido dela já foi extraído à parte — " +
+    "NÃO o repita. Descreva APENAS o conteúdo VISUAL relevante para estudo: diagramas, esquemas, mapas mentais, " +
+    "fluxogramas, tabelas, quadros comparativos, linhas do tempo — transcrevendo/organizando a informação de forma " +
+    "FIEL e útil (texto ou markdown, sem inventar). Se a página NÃO tiver figura de conteúdo (só texto, logotipo ou " +
+    "marca d'água), devolva EXATAMENTE uma string vazia. Seja objetivo.";
+  const user = `Descreva as figuras/diagramas/tabelas desta página${contexto ? ` (${contexto})` : ""}.`;
+  const t = await chamarVisao(cfg, { system, user, mimeType: "image/jpeg", dataB64, temperature: 0 });
+  return String(t || "").trim();
+}
+
+// F2 — lê a IMAGEM da(s) página(s) de SUMÁRIO/ÍNDICE e devolve a árvore de tópicos FIEL.
+// A leitura por imagem contorna os defeitos do texto extraído (leaders "....", palavras coladas,
+// numeração "1." sem parêntese, títulos sem número) que fazem o parser determinístico falhar.
+// Devolve [{numero, titulo, nivel, paginaImpressa}]; mapeamento título→página física é feito depois.
+export async function estruturarSumarioVisao(cfg, { imagensB64 = [], contexto = "" }) {
+  if (!visaoDisponivel(cfg)) {
+    const e = new Error("A estruturação por sumário usa o Google Gemini ou o Claude Code local.");
+    e.code = "IA_OFFLINE";
+    throw e;
+  }
+  const imgs = (imagensB64 || []).filter(Boolean);
+  if (!imgs.length) return [];
+  const system =
+    "Você recebe a IMAGEM da(s) página(s) de SUMÁRIO/ÍNDICE/CONTEÚDO de um material de estudo (apostila, aula, resumo). " +
+    "Extraia a LISTA DE TÓPICOS exatamente como está, PRESERVANDO A HIERARQUIA (seções, subseções). Devolva SÓ JSON. " +
+    "Para cada tópico: 'numero' = a numeração impressa se houver ('1', '1.2', '3.1.2') senão string vazia; " +
+    "'titulo' = o texto do tópico, fiel, sem os pontos de preenchimento ('....') e sem o número de página; " +
+    "'nivel' = a profundidade (1 = tópico principal/disciplina, 2 = subtópico, 3 = sub-subtópico), inferida pela " +
+    "numeração e pela indentação/hierarquia visual; 'paginaImpressa' = o número de página que aparece à direita do " +
+    "tópico, se houver, senão null. " +
+    "REGRAS: (1) NÃO invente tópicos que não estejam na imagem; (2) NÃO inclua a palavra 'SUMÁRIO'/'ÍNDICE'/'CONTEÚDO' " +
+    "como tópico; (3) junte palavras quebradas por hífen ou por falha de digitalização; (4) mantenha a ORDEM da página; " +
+    "(5) se a imagem NÃO for um sumário (for conteúdo corrido), devolva lista vazia.";
+  const user =
+    `Extraia o sumário desta(s) página(s)${contexto ? ` (${contexto})` : ""} no formato JSON.\n` +
+    `Formato EXATO: {"topicos":[{"numero":"1","titulo":"Teoria da Constituição","nivel":1,"paginaImpressa":5}]}`;
+  // chamarVisaoJson aceita 1 imagem; para várias páginas de sumário, concatena os resultados.
+  const todos = [];
+  for (const dataB64 of imgs) {
+    try {
+      const out = await chamarVisaoJson(cfg, { system, user, mimeType: "image/jpeg", dataB64, temperature: 0 });
+      const arr = out && Array.isArray(out.topicos) ? out.topicos : Array.isArray(out) ? out : [];
+      for (const t of arr) {
+        const titulo = String((t && t.titulo) || "").replace(/\.{2,}.*$/, "").replace(/\s{2,}/g, " ").trim();
+        if (!titulo || titulo.length < 2) continue;
+        todos.push({
+          numero: String((t && t.numero) || "").trim(),
+          titulo,
+          nivel: Math.max(1, Math.min(4, parseInt((t && t.nivel) || 1, 10) || 1)),
+          paginaImpressa: t && t.paginaImpressa != null && !isNaN(parseInt(t.paginaImpressa, 10)) ? parseInt(t.paginaImpressa, 10) : null,
+        });
+      }
+    } catch (e) { console.error("[sumario-visao]", e); }
+  }
+  return todos;
 }
 
 // Prompt (system) comum dos mapas mentais. `comOCR` adiciona a instrução de leitura
