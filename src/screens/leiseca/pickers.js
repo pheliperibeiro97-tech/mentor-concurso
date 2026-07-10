@@ -6,8 +6,9 @@ import { icone } from "../../icones.js";
 import { S } from "./estado.js";
 
 export const TRIBUNAIS = ["STF", "STJ", "TJSP"]; // padrão; "Outro" no seletor cobre qualquer outro
-// "Jurisprudência" é o guarda-chuva do que não se encaixa nos precedentes qualificados/súmula comum.
-export const CATEGORIAS_JURIS = ["Súmula Vinculante", "Repercussão Geral", "Tema repetitivo", "Súmula comum", "Jurisprudência"];
+// "Jurisprudência" é o guarda-chuva do que não se encaixa nos precedentes qualificados/súmula comum
+// (inclui IRDR/IAC e demais decisões isoladas).
+export const CATEGORIAS_JURIS = ["Súmula Vinculante", "Repercussão Geral", "Tema repetitivo", "Controle concentrado (ADI/ADC/ADPF)", "Súmula comum", "Jurisprudência"];
 // ---------- helpers ----------
 export function topicoOptions(st, disciplinaId, selecionado) {
   const tops = st.topicos.filter((t) => !disciplinaId || t.disciplinaId === disciplinaId);
