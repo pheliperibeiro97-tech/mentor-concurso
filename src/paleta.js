@@ -5,6 +5,7 @@
 import { NAV_ITENS } from "./main.js";
 import { icone } from "./icones.js";
 import { esc } from "./util.js";
+import { fecharAnimado } from "./ui.js";
 
 let aberta = false;
 
@@ -36,7 +37,7 @@ export function abrirPaleta(app) {
   let sel = 0;
   let resultados = [];
 
-  const fechar = () => { if (!aberta) return; aberta = false; ov.remove(); document.removeEventListener("keydown", onEscGlobal, true); };
+  const fechar = () => { if (!aberta) return; aberta = false; fecharAnimado(ov); document.removeEventListener("keydown", onEscGlobal, true); };
 
   function filtrar(q) {
     const t = q.trim().toLowerCase();
@@ -55,7 +56,7 @@ export function abrirPaleta(app) {
           if (r.kind === "ia") {
             return `<button class="paleta-item ${on}" data-i="${i}">${icone("sparkles")}<span class="paleta-lbl">Perguntar / fazer: <b>“${esc(r.texto)}”</b></span><span class="paleta-sub">IA</span></button>`;
           }
-          const ico = r.icone ? icone(r.icone) : r.emoji ? `<span class="paleta-emoji">${esc(r.emoji)}</span>` : "";
+          const ico = r.icone ? icone(r.icone) : icone("corner-down-right");
           return `<button class="paleta-item ${on}" data-i="${i}">${ico}<span class="paleta-lbl">${esc(r.label)}</span><span class="paleta-sub">${esc(r.sub || "")}</span></button>`;
         })
         .join("") || `<div class="paleta-vazio muted">Nada encontrado. Pressione Enter para perguntar à IA.</div>`;

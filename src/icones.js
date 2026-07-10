@@ -122,6 +122,12 @@ import chevronRight from "lucide-static/icons/chevron-right.svg?raw";
 import gripVertical from "lucide-static/icons/grip-vertical.svg?raw";
 import cornerDownRight from "lucide-static/icons/corner-down-right.svg?raw";
 import chevronLeft from "lucide-static/icons/chevron-left.svg?raw";
+import chevronsLeft from "lucide-static/icons/chevrons-left.svg?raw";
+import menu from "lucide-static/icons/menu.svg?raw";
+import inbox from "lucide-static/icons/inbox.svg?raw";
+import zoomIn from "lucide-static/icons/zoom-in.svg?raw";
+import zoomOut from "lucide-static/icons/zoom-out.svg?raw";
+import moveHorizontal from "lucide-static/icons/move-horizontal.svg?raw";
 import barChart3 from "lucide-static/icons/bar-chart-3.svg?raw";
 import ellipsis from "lucide-static/icons/ellipsis.svg?raw";
 import externalLink from "lucide-static/icons/external-link.svg?raw";
@@ -258,6 +264,12 @@ const MAPA = {
   "grip-vertical": gripVertical,
   "corner-down-right": cornerDownRight,
   "chevron-left": chevronLeft,
+  "chevrons-left": chevronsLeft,
+  menu,
+  inbox,
+  "zoom-in": zoomIn,
+  "zoom-out": zoomOut,
+  "move-horizontal": moveHorizontal,
   "bar-chart-3": barChart3,
   ellipsis,
   "external-link": externalLink,

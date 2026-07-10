@@ -19,6 +19,7 @@
 // "COLE_AQUI...", o portão fica DESLIGADO (útil para builds de teste).
 
 import { esc } from "./util.js";
+import { icone } from "./icones.js";
 
 const APP_ID = "mentor-concurso";
 const EMAIL_CONTATO = "phelipe.ribeiro97@gmail.com";
@@ -217,7 +218,7 @@ function renderTela(maquina, { erro, offline } = {}) {
   root.innerHTML = `
     <div class="licenca-portao">
       <div class="licenca-card">
-        <div class="licenca-marca">📚 Mentor Concurso</div>
+        <div class="licenca-marca">${icone("graduation-cap")} Mentor Concurso</div>
         <h1>${esc(titulo)}</h1>
         <p class="licenca-intro">${esc(intro)}</p>
         ${erro ? `<p class="licenca-erro">${esc(erro)}</p>` : ""}

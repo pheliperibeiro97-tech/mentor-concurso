@@ -27,9 +27,9 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
         <label class="pdf-goto">Pág.
           <input id="pdf-num" type="number" min="1" value="1" /> / <span id="pdf-total">…</span>
         </label>
-        <button class="pdf-btn" data-p="zoomout" title="Diminuir">−</button>
-        <button class="pdf-btn" data-p="zoomin" title="Aumentar">＋</button>
-        <button class="pdf-btn" data-p="fit" title="Ajustar à largura">↔</button>
+        <button class="pdf-btn" data-p="zoomout" title="Diminuir">${icone("zoom-out")}</button>
+        <button class="pdf-btn" data-p="zoomin" title="Aumentar">${icone("zoom-in")}</button>
+        <button class="pdf-btn" data-p="fit" title="Ajustar à largura">${icone("move-horizontal")}</button>
         <button class="pdf-btn" data-p="download" title="Baixar PDF">${icone("download")}</button>
         <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
       </div>

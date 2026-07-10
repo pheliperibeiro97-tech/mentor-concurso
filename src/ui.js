@@ -3,9 +3,8 @@ import { SELO } from "./ia.js";
 import { esc } from "./util.js";
 import { icone } from "./icones.js";
 
-// Ícone de impressora (SVG, herda a cor do texto) — visual nítido e consistente em todo o app.
-export const iconImprimir =
-  '<svg class="ico-print" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>';
+// Ícone de impressora — Lucide único (Fase 0: fim do SVG desenhado à mão em paralelo).
+export const iconImprimir = icone("printer", "ico-print");
 
 // Ícone de MAPA MENTAL (SVG monocromático, herda a cor — como os demais ícones de botão).
 // Um nó central ligado a dois ramos: leitura de "mapa mental". Escala com a fonte (1em).
@@ -100,6 +99,17 @@ export async function comOcupado(fn, { botao = null, msg = "Processando…", err
   }
 }
 
+// Fase 0: fechamento ANIMADO de overlays (os modais entravam animados e saíam com corte
+// seco). Adiciona .closing, espera a transição curta e remove. A Promise de quem chama
+// resolve imediatamente — só o desmonte visual é adiado.
+export function fecharAnimado(ov) {
+  if (!ov || !document.body.contains(ov)) return;
+  const reduz = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduz) { ov.remove(); return; }
+  ov.classList.add("closing");
+  setTimeout(() => ov.remove(), 160);
+}
+
 // Confirmação simples (Promise<boolean>).
 export function confirmar(msg) {
   return new Promise((resolve) => {
@@ -114,7 +124,7 @@ export function confirmar(msg) {
         </div>
       </div>`;
     document.body.appendChild(ov);
-    const fim = (v) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+    const fim = (v) => { fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
     const onKey = (e) => { if (e.key === "Escape") fim(false); };
     document.addEventListener("keydown", onKey);
     ov.addEventListener("click", (e) => {
@@ -147,7 +157,7 @@ export function escolher(msg, opcoes, opts = {}) {
         ${corpo}
       </div>`;
     document.body.appendChild(ov);
-    const fim = (v) => { ov.remove(); document.removeEventListener("keydown", onKey); resolve(v); };
+    const fim = (v) => { fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
     const onKey = (e) => { if (e.key === "Escape") fim(null); };
     document.addEventListener("keydown", onKey);
     ov.addEventListener("click", (e) => {
@@ -176,7 +186,7 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, se
       <div class="mm-corpo">${corpoHTML}</div>
     </div>`;
   document.body.appendChild(overlay);
-  const fechar = () => { overlay.remove(); document.removeEventListener("keydown", onKey); };
+  const fechar = () => { fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") fechar(); };
   overlay.addEventListener("click", (e) => { if (e.target === overlay) fechar(); });
   overlay.querySelector(".mm-close").addEventListener("click", fechar);
@@ -310,7 +320,7 @@ export function pedirNumero(
     };
     // Quando nivel=true devolve {n, dificuldade}; senão só o número (retrocompatível).
     const empacotar = (n) => (nivel ? { n, dificuldade: nivelSel } : n);
-    const fechar = (val) => { ov.remove(); resolve(val); };
+    const fechar = (val) => { fecharAnimado(ov); resolve(val); };
     ov.addEventListener("click", (e) => {
       const chip = e.target.closest("[data-nivel]");
       if (chip) {
@@ -366,7 +376,7 @@ export function pedirTexto(msg, { valor = "", placeholder = "", rotuloOk = "Salv
       const v = (input.value || "").trim();
       return v || null;
     };
-    const fechar = (val) => { ov.remove(); resolve(val); };
+    const fechar = (val) => { fecharAnimado(ov); resolve(val); };
     ov.addEventListener("click", (e) => {
       const b = e.target.closest("[data-c]");
       if (!b && e.target !== ov) return;
@@ -401,7 +411,7 @@ export function avisoIA(app, oQue = "Esta função") {
     const b = e.target.closest("[data-c]");
     if (!b && e.target !== ov) return;
     const ir = b && b.getAttribute("data-c") === "ir";
-    ov.remove();
+    fecharAnimado(ov);
     if (ir && app && app.navigate) app.navigate("config");
   });
 }
@@ -557,7 +567,7 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  const fechar = () => { overlay.remove(); document.removeEventListener("keydown", onKey); };
+  const fechar = () => { fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape" && !work) fechar(); }; // Esc não fecha durante a edição
   overlay.addEventListener("click", (e) => { if (e.target === overlay && !work) fechar(); });
   overlay.querySelector(".mm-close").addEventListener("click", fechar);
@@ -710,7 +720,7 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
         const path = prefix === "" ? String(i) : prefix + "." + i;
         return `<li><span class="mm-edit-row">
             <input class="mm-edit-titulo" data-path="${path}" value="${esc(r.titulo)}" />
-            <button class="lnk mm-edit-add" data-path="${path}" data-tip="Adicionar sub-ramo">＋</button>
+            <button class="lnk mm-edit-add" data-path="${path}" data-tip="Adicionar sub-ramo">${icone("plus")}</button>
             <button class="lnk lnk-danger mm-edit-del" data-path="${path}" data-tip="Remover este ramo">${icone("x")}</button>
           </span>${treeEditHTML(r.ramos, path)}</li>`;
       }).join("")}</ul>`;
@@ -721,7 +731,7 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
         <input class="mm-edit-root" value="${esc(work.titulo || "")}" placeholder="Tema central do mapa" />
         ${treeEditHTML(work.ramos, "")}
         <div class="barra-acoes" style="margin-top:8px">
-          <button class="btn btn-soft btn-sm mm-edit-addraiz">＋ Ramo principal</button>
+          <button class="btn btn-soft btn-sm mm-edit-addraiz">${icone("plus")} Ramo principal</button>
           <span class="spacer"></span>
           <button class="btn btn-sm mm-edit-cancelar">Cancelar</button>
           <button class="btn btn-primary btn-sm mm-edit-salvar">Salvar</button>
@@ -888,7 +898,7 @@ export function opcoesImpressao(titulo, grupos) {
         </div>
       </div>`;
     document.body.appendChild(ov);
-    const fechar = (val) => { ov.remove(); resolve(val); };
+    const fechar = (val) => { fecharAnimado(ov); resolve(val); };
     ov.addEventListener("click", (e) => {
       if (e.target === ov) return fechar(null);
       const x = e.target.closest("[data-x]");
@@ -1008,14 +1018,14 @@ export function pontoCor(cor) {
 }
 
 // Estado vazio premium. `msg` pode ser "Título" ou "Título\nSubtítulo" (1ª linha vira
-// título forte; o resto, subtítulo). `cta` é HTML de um botão (opcional). `icone` é um
-// emoji contextual (opcional). Compatível com as chamadas antigas vazio(msg, cta).
-export function vazio(msg, cta = "", icone = "∅") {
+// título forte; o resto, subtítulo). `cta` é HTML de um botão (opcional). `ico` é o HTML
+// de um ícone Lucide contextual (opcional; padrão = inbox). Compatível com vazio(msg, cta).
+export function vazio(msg, cta = "", ico = "") {
   const linhas = String(msg || "").split("\n");
   const titulo = esc(linhas.shift() || "");
   const sub = esc(linhas.join(" ").trim());
   return `<div class="empty">
-    <div class="empty-icon">${icone}</div>
+    <div class="empty-icon">${ico || icone("inbox")}</div>
     <p class="empty-titulo">${titulo}</p>
     ${sub ? `<p class="empty-sub">${sub}</p>` : ""}
     ${cta ? `<div class="empty-acao">${cta}</div>` : ""}

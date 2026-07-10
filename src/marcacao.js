@@ -4,7 +4,7 @@
 // Modos de leitura ativa: normal · só as marcas · recordar (marcas viram lacunas).
 import { esc } from "./util.js";
 import { icone } from "./icones.js";
-import { toast, imprimir, iconImprimir, plural } from "./ui.js";
+import { toast, imprimir, iconImprimir, plural, pontoCor } from "./ui.js";
 
 // 3 cores de SIGNIFICADO FIXO + cores de USO LIVRE (o usuário marca o que quiser).
 const CORES_FIXAS = [
@@ -144,7 +144,7 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
       const itens = todas.filter((m) => m.cor === g.id).sort((a, b) => a.inicio - b.inicio);
       if (!itens.length) continue;
       temAlgo = true;
-      const rotulo = g.nome === "livre" ? `${g.emoji} marcações livres` : `${g.emoji} ${g.nome}`;
+      const rotulo = g.nome === "livre" ? `${pontoCor(g.id)} marcações livres` : `${pontoCor(g.id)} ${g.nome}`;
       html += `<h3 style="margin:12px 0 4px">${rotulo}</h3><ul style="margin:0">${itens.map((m) => `<li>${esc(m.texto)}</li>`).join("")}</ul>`;
     }
     const coments = comentarios().sort((a, b) => a.inicio - b.inicio);

@@ -175,7 +175,7 @@ function navHTML() {
     r
       ? `<button class="nav-item ${extraCls} ${r.id === rotaAtual ? "ativo" : ""}" data-rota="${r.id}" title="${esc(r.label)}">
           <span class="nav-ico">${icone(r.icone)}</span><span>${esc(r.label)}</span>
-          ${selos[r.id] ? `<span class="nav-selo" data-tip="${esc(selos[r.id])}" data-tip-pos="cima-dir">●</span>` : ""}
+          ${selos[r.id] ? `<span class="nav-selo" data-tip="${esc(selos[r.id])}" data-tip-pos="cima-dir"></span>` : ""}
         </button>`
       : "";
 
@@ -225,8 +225,8 @@ function navHTML() {
     return `<div class="nav-sec ${aberto ? "aberta" : ""}">
         <button class="nav-sec-head" data-grupo="${grupo}">
           <span class="nav-sec-label">${esc(label)}</span>
-          ${temSelo ? `<span class="nav-selo" data-tip="Há pendências aqui dentro" data-tip-pos="cima-dir">●</span>` : ""}
-          <span class="nav-chev">${aberto ? "▾" : "▸"}</span>
+          ${temSelo ? `<span class="nav-selo" data-tip="Há pendências aqui dentro" data-tip-pos="cima-dir"></span>` : ""}
+          <span class="nav-chev">${icone(aberto ? "chevron-down" : "chevron-right")}</span>
         </button>
         ${aberto ? `<div class="nav-sec-itens">${visiveis.map((it) => btn(rotaPorId(it.id))).join("")}</div>` : ""}
       </div>`;
@@ -244,7 +244,7 @@ function navHTML() {
           <div class="brand-nome">Mentor Concurso</div>
           <div class="brand-sub">${esc(c ? c.cargo : "")}</div>
         </div>
-        <button class="sidebar-toggle" data-toggle-sidebar title="Recolher / expandir o menu" aria-label="Recolher ou expandir o menu">«</button>
+        <button class="sidebar-toggle" data-toggle-sidebar title="Recolher / expandir o menu" aria-label="Recolher ou expandir o menu">${icone("chevrons-left")}</button>
       </div>
       <nav class="nav">
         <div class="nav-areas">${areasHTML}</div>
@@ -390,7 +390,7 @@ function bottomBarHTML() {
   }).join("");
   return `<nav class="mobile-bottombar">
     ${itens}
-    <button class="mbb-item mbb-mais" data-mbb-mais><span class="mbb-ico">☰</span><span class="mbb-lbl">Mais</span></button>
+    <button class="mbb-item mbb-mais" data-mbb-mais><span class="mbb-ico">${icone("menu")}</span><span class="mbb-lbl">Mais</span></button>
   </nav>`;
 }
 
