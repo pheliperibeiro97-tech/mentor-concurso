@@ -2657,6 +2657,14 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .cl-blank:focus { outline: none; background: color-mix(in srgb, var(--primary) 8%, transparent); border-bottom-color: var(--primary); }
 .cl-blank.ok { color: var(--verde-leitura); border-bottom-color: color-mix(in srgb, var(--verde-leitura) 55%, transparent); font-weight: var(--fw-medium); }
 .cl-blank.revelado { color: var(--muted); font-weight: var(--fw-regular); font-style: italic; }
+.cl-blank.errado { color: var(--danger); border-bottom-color: color-mix(in srgb, var(--danger) 55%, transparent); font-weight: var(--fw-medium); }
+/* Cloze dentro do foco da Central de Revisões (lei/juris → Completar): texto à esquerda, contido. */
+.fq-cloze .cl-corpo { text-align: left; max-width: 620px; margin: 6px auto 2px; font-size: var(--fs-md); line-height: 1.95; }
+.fq-cloze .fq-q-sm { font-size: var(--fs-md); }
+.rev-cl-grade { font-weight: var(--fw-semibold); padding: 6px 10px; border-radius: 8px; }
+.rev-cl-facil { color: var(--verde-leitura); }
+.rev-cl-lembrei { color: var(--primary); }
+.rev-cl-esqueci { color: var(--danger); }
 .cl-hide { display: inline; cursor: pointer; color: color-mix(in srgb, var(--primary) 80%, var(--text)); background: color-mix(in srgb, var(--primary) 8%, transparent); border-bottom: 1px dashed color-mix(in srgb, var(--primary) 40%, var(--border)); border-radius: 4px; padding: 1px 6px; transition: background var(--dur-2); }
 .cl-hide svg { width: 13px; height: 13px; vertical-align: -2px; margin-right: 4px; opacity: .7; }
 .cl-hide i { font-style: normal; font-size: .82em; }

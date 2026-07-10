@@ -8,7 +8,23 @@ import { icone } from "../icones.js";
 import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
 import { abrirRegistroSessao } from "../registro-sessao.js";
 import { sanitize } from "./resumos.js"; // sanitiza conteudoHTML também na LEITURA (sync/import antigo pode não ter passado pelo save)
+import { corpoArtigoLimpo } from "./leiseca/leitor.js"; // limpa o texto do artigo p/ a cloze do foco
 import * as crono from "../cronometro.js";
+
+// Cloze do foco (lei/juris): normaliza (acento/caixa) e renderiza o texto com <input> nas lacunas.
+const _clNorm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+function clozeInputsHTML(clean, lac) {
+  const ls = [...lac].sort((a, b) => a.idx - b.idx);
+  let out = "", pos = 0;
+  ls.forEach((l, k) => {
+    out += esc(clean.slice(pos, l.idx));
+    const w = Math.max(3, Math.min(l.palavra.length, 14));
+    out += `<input class="cl-blank" data-k="${k}" data-resp="${esc(l.palavra)}" style="width:${w}ch" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="lacuna ${k + 1}">`;
+    pos = l.idx + l.len;
+  });
+  out += esc(clean.slice(pos));
+  return out;
+}
 
 // Filtros (persistem entre re-renders da sessão). "" = sem filtro.
 let filtroStatus = "pendentes"; // pendentes | todas | atrasada | hoje | proxima | concluidas
@@ -184,6 +200,11 @@ export default function renderCentralRevisoes(root, app) {
         if (it.tipo === "topico") {
           it._keywords = store.palavrasChaveDoTopico(it.refId);
           it._resumos = st.resumos.filter((r) => r.topicoId === it.refId);
+        } else if (it.tipo === "lei" || it.tipo === "juris") {
+          // Lei/Juris no foco = Completar a letra (cloze, médio). Precomputa aqui (offline).
+          const ind = st.indicacoes.find((x) => x.id === it.refId);
+          it._clean = ind ? corpoArtigoLimpo(ind.texto || "") : "";
+          it._lac = it._clean ? store.lacunasCloze(it._clean, "medio") : [];
         }
         return it;
       }); // objetos (snapshot estável na sessão)
@@ -207,6 +228,35 @@ export default function renderCentralRevisoes(root, app) {
       const dias = store.concluirRevisao(id, el.getAttribute("data-titulo") || "", grau);
       focoRev.feitas[id] = true;
       if (dias != null) toast(grau === "esqueci" ? `Volta ${dias === 1 ? "amanhã" : `em ${dias} dias`} para fixar.` : `Revisada — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`, "ok");
+      focoRev.idx++;
+      focoRev.revelado = false;
+      atualizarFocoRev(root, store);
+    },
+    // Completar (lei/juris): confere as lacunas, revela as certas e AUTO-nota pela pontuação.
+    "rev-cloze-conferir": () => {
+      const card = root.querySelector(".fq-revcard.fq-cloze"); if (!card) return;
+      const blanks = [...card.querySelectorAll(".cl-blank")]; if (!blanks.length) return;
+      let ok = 0;
+      blanks.forEach((b) => {
+        const certo = _clNorm(b.value) === _clNorm(b.getAttribute("data-resp"));
+        if (certo) { ok++; b.classList.add("ok"); } else { b.classList.add("errado"); b.value = b.getAttribute("data-resp"); }
+        b.setAttribute("readonly", "");
+      });
+      const total = blanks.length;
+      const grau = ok === total ? "facil" : ok >= Math.ceil(total * 0.6) ? "lembrei" : "esqueci";
+      focoRev.clozeGrau = grau;
+      const sc = card.querySelector(".cl-score");
+      if (sc) sc.innerHTML = `<b class="${ok === total ? "cl-full" : ""}">${ok}/${total}</b> ${ok === total ? "— completou! " + icone("party-popper") : "corretas"}`;
+      const acoes = card.querySelector(".fq-rev-acoes");
+      if (acoes) acoes.innerHTML = `<span class="rev-cl-grade rev-cl-${grau}">${grau === "esqueci" ? "Esqueci" : grau === "facil" ? "Fácil" : "Lembrei"} · automático</span><button class="btn btn-primary" data-action="rev-cloze-continuar">${icone("arrow-right")} Continuar</button>`;
+    },
+    "rev-cloze-continuar": () => {
+      const it = focoRev.fila[focoRev.idx]; if (!it) return;
+      const grau = focoRev.clozeGrau || "lembrei";
+      const dias = store.concluirRevisao(it.id, it.titulo, grau);
+      focoRev.feitas[it.id] = true;
+      if (dias != null) toast(grau === "esqueci" ? `Volta ${dias === 1 ? "amanhã" : `em ${dias} dias`} para fixar.` : `Revisada — próxima em ${dias} ${dias === 1 ? "dia" : "dias"}.`, "ok");
+      focoRev.clozeGrau = null;
       focoRev.idx++;
       focoRev.revelado = false;
       atualizarFocoRev(root, store);
@@ -293,11 +343,26 @@ export default function renderCentralRevisoes(root, app) {
 
   // ===== Sessão única em foco: teclado + cronômetro vivo =====
   if (!focoRev.ativo) return;
+  // Live-check das lacunas (cloze de lei/juris no foco): verde ao acertar; pula p/ a próxima.
+  function onInput(e) {
+    const b = e.target.closest && e.target.closest(".cl-blank"); if (!b) return;
+    if (_clNorm(b.value) === _clNorm(b.getAttribute("data-resp"))) {
+      b.classList.add("ok");
+      const nx = b.parentElement.querySelector(".cl-blank:not(.ok)"); nx && nx.focus();
+    } else b.classList.remove("ok");
+  }
+  root.addEventListener("input", onInput);
   function onKey(e) {
     const chrome = focoChromeKey(e, { root }); // Esc/setas/campo do cronômetro
     if (chrome) return;
+    if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return; // digitando (cloze/cronômetro) — não sequestrar teclas
     const card = root.querySelector(".fq-revcard");
     if (!card) return; // conclusão
+    // Cloze (lei/juris): Enter confere e, depois, continua. Sem atalhos de nota (a nota é automática).
+    if (card.classList.contains("fq-cloze") || card.querySelector('[data-action="rev-cloze-continuar"]')) {
+      if (e.key === "Enter") { e.preventDefault(); (root.querySelector('[data-action="rev-cloze-conferir"]') || root.querySelector('[data-action="rev-cloze-continuar"]'))?.click(); }
+      return;
+    }
     if (!focoRev.revelado && !card.classList.contains("is-feita")) {
       if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="revelar-rev"]')?.click(); }
       return;
@@ -309,7 +374,7 @@ export default function renderCentralRevisoes(root, app) {
   }
   document.addEventListener("keydown", onKey);
   const offTick = ligarTickCrono(root);
-  return () => { document.removeEventListener("keydown", onKey); offTick(); };
+  return () => { document.removeEventListener("keydown", onKey); root.removeEventListener("input", onInput); offTick(); };
 }
 
 // Troca o overlay da sessão de revisão no lugar (fade), sem re-render da Central. Troca só o
@@ -368,6 +433,22 @@ function revCardHTML(st, it, revelado, feita) {
       <div class="fq-rev-feita">${icone("check-check")} Revisada nesta sessão</div>
       <div class="fq-rev-titulo-sm">${esc(it.titulo)}</div>
       <div class="fq-rev-acoes"><button class="fq-mostrar" data-action="foco-proximo">${icone("arrow-right")} Continuar</button></div>
+    </div>`;
+  }
+  // Lei/Juris → Completar a letra (cloze, nível médio) com nota AUTOMÁTICA pela pontuação.
+  // Texto sem lacunas suficientes cai no recordar→revelar padrão (abaixo).
+  if ((it.tipo === "lei" || it.tipo === "juris") && it._lac && it._lac.length) {
+    return `<div class="fq-revcard fq-cloze" data-id="${it.id}">
+      ${tags}
+      <div class="fq-rev-cue">Complete a letra de</div>
+      <div class="fq-q fq-q-sm">${esc(it.titulo)}</div>
+      <div class="cl-corpo">${clozeInputsHTML(it._clean, it._lac)}</div>
+      <div class="cl-score" aria-live="polite"></div>
+      <div class="fq-rev-acoes">
+        <button class="btn btn-ghost" data-action="rev-foco-pular" data-tip="Não dar baixa agora">Pular</button>
+        <button class="btn btn-primary" data-action="rev-cloze-conferir">${icone("check")} Conferir</button>
+      </div>
+      <div class="fc-atalhos muted small">${icone("keyboard")} Preencha as lacunas · <b>Enter</b> confere · acerto vira a nota</div>
     </div>`;
   }
   if (!revelado) {
