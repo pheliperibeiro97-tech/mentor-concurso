@@ -1654,7 +1654,10 @@ body.onboarding #crono-fab { display: none !important; }
 .ls-fpill.on .ls-fpill-lbl { color: var(--primary); }
 .ls-fpill-sel { border: 0; background-color: transparent; background-image: none; color: var(--fg); font-size: var(--fs-xs); font-weight: var(--fw-medium); padding: 0 2px; cursor: pointer; max-width: 150px; appearance: none; -webkit-appearance: none; -moz-appearance: none; color-scheme: light dark; }
 .ls-fpill-sel::-ms-expand { display: none; }
-[data-tema="escuro"] .ls-fpill-sel { color-scheme: dark; }
+/* No escuro, a regra global [data-tema="escuro"] select reinjeta o chevron e apareciam DUAS
+   setas (o chevron do select + o triângulo ::after da pílula). A pílula usa o ::after, então
+   zeramos o chevron aqui também (no claro o .ls-fpill-sel já o removia). */
+[data-tema="escuro"] .ls-fpill-sel { color-scheme: dark; background-image: none; }
 /* O <select> é transparente; sem cor/fundo explícitos as opções somem no tema escuro. */
 .ls-fpill-sel option { background: var(--surface); color: var(--text); }
 .ls-fpill-sel:focus { outline: none; }
