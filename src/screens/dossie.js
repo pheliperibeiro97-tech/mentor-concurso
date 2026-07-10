@@ -9,6 +9,7 @@ import { progressRing } from "../viz.js";
 import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, relNamedValor, relNamedNome, abrirAnexarLink } from "./edital.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { gerarEAbrirMapa, abrirMapaCompleto } from "../mapa-mental.js";
+import { sanitize } from "./resumos.js"; // conteudoHTML pode vir de sync/import antigo sem passar pelo save
 
 // Ordenação/edição das SESSÕES do tópico (mesma lógica do Acompanhamento, sem as
 // colunas de disciplina/tópico — aqui já está tudo vinculado a um tópico).
@@ -355,7 +356,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     "del-ind": (el) => store.removerIndicacao(el.getAttribute("data-id")),
     // Impressão POR SEÇÃO (cada uma imprime só o seu conteúdo).
     "print-material": () => imprimir(`Material — ${t.nome}`, printSecLista(dos.documentos, (d) => esc(d.titulo))),
-    "print-resumos": () => imprimir(`Resumos — ${t.nome}`, dos.resumos.map((r) => `<h2>${esc(r.titulo)}</h2><div>${r.conteudoHTML || ""}</div>`).join("")),
+    "print-resumos": () => imprimir(`Resumos — ${t.nome}`, dos.resumos.map((r) => `<h2>${esc(r.titulo)}</h2><div>${sanitize(r.conteudoHTML || "")}</div>`).join("")),
     "print-marcacoes": () => imprimir(`Marcações — ${t.nome}`, marcacoesDossieHTML(marc, true)),
     "print-erros": () => imprimir(`Caderno de Erros — ${t.nome}`, printSecLista(meusErros, (e) => {
       const txt = e.manual ? e.descricao : e.questao ? e.questao.enunciado : "";
