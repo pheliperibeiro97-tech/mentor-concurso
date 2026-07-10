@@ -2405,9 +2405,10 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 /* Uma linha: [Minhas leis (largura do texto)] [nome da lei] [Buscar (cresce)] [ferramentas → direita]. */
 .ler-topo-l1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ler-topo-l1 > .ler-voltar-biblio { flex: 0 0 auto; }
-.ler-topo-l1 > .ler-norma { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+/* nome empurra o resto p/ a direita → [Minhas leis] [nome] ····· [Buscar] [ferramentas] */
+.ler-topo-l1 > .ler-norma { flex: 0 1 auto; min-width: 0; max-width: 100%; margin-right: auto; }
 .ler-topo-l1 > .ler-busca-campo { flex: 0 1 340px; width: auto; max-width: 340px; }
-.ler-topo-l1 > .ler-tools { flex: 0 0 auto; margin-left: auto; }
+.ler-topo-l1 > .ler-tools { flex: 0 0 auto; }
 /* Selo de vigência (frescor da lei) — conferida (discreto) ou "confira" (nudge clicável). */
 .ler-norma { font-size: var(--fs-cap); font-weight: var(--fw-bold); letter-spacing: -.01em; color: var(--text); }
 .ler-goto { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin: 0; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; padding: 0 12px; color: var(--muted); background: var(--surface-2); cursor: text; transition: border-color var(--mo-fav), box-shadow var(--mo-fav), background var(--mo-fav); }

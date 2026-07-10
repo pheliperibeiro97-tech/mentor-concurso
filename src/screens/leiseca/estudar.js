@@ -248,7 +248,7 @@ export function estudarCorpoHTML(store, st, tipo, r) {
     errosCard,
   ];
   const cardsTreinar = [
-    card("repeat-2", "Certo / Errado", tipo === "juris" ? "Afirmações sobre a súmula/tese — você julga Certo ou Errado. Um clique já começa (4 itens, nível médio)." : "Uma palavra é trocada no texto; você caça a pegadinha (diff colorido). Um clique já começa (4 itens, nível médio).", "estudar-ce", nEsc ? `${nEsc}` : "", !!nEsc, { acao: "estudar-ce-opcoes", tip: "Escolher quantidade e dificuldade antes de começar." }),
+    card("repeat-2", "Certo / Errado", tipo === "juris" ? "Afirmações sobre a súmula/tese — você julga Certo ou Errado. Você escolhe quantidade e nível." : "Uma palavra é trocada no texto; você caça a pegadinha (diff colorido). Você escolhe quantidade e nível.", "estudar-ce", nEsc ? `${nEsc}` : "", !!nEsc),
     card("puzzle", "Completar o artigo", tipo === "juris" ? "Recall por lacunas nos pontos-chave da tese." : "Preencha as lacunas em 4 níveis — do fácil ao redigitar de memória.", "estudar-cloze", "", !!nEsc),
     tipo === "juris" ? card("scale", "Súmula-duelo", "Troca-se o número/tribunal da súmula — você diz se a atribuição está certa (offline).", "estudar-duelo", "", !!base.length) : "",
   ];

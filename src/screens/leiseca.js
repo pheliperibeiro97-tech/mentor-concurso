@@ -508,13 +508,8 @@ function renderIndicacoes(root, app, tipo) {
     "estudar-tema-chip": (el) => { const t = el.getAttribute("data-tema"); S.estudarTemaSel = S.estudarTemaSel === t ? null : t; S.estudarSecaoSel = null; S.estudarArtFiltro = ""; app.refresh(); }, // F2: atalho memorizar por tema
     "estudar-tema-limpar": () => { S.estudarTemaSel = null; app.refresh(); },
     "estudar-cross-lei": () => { S.estudarLeiSel = S.estudarLeiSel === "todas" ? null : "todas"; S.estudarSecaoSel = null; app.refresh(); }, // F2: tema em todas as leis
-    // 1 clique = começa DIRETO no padrão (4 itens, dificuldade média, escopo atual).
-    // Quantidade/dificuldade viram o link "Opções…" do card (handler -opcoes abaixo).
-    "estudar-ce": () => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar Certo/Errado");
-      iniciarCE(escopoItens(), { n: 4, dificuldade: "medio", regenerate: true });
-    },
-    "estudar-ce-opcoes": async () => {
+    // Certo/Errado: perguntar quantidade+nível é o PADRÃO (igual a flashcards/questões).
+    "estudar-ce": async () => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar Certo/Errado");
       const g = await pedirNumero("Quantos itens Certo/Errado por dispositivo?", { padrao: 4, min: 1, max: 8, nivel: true });
       if (!g) return;
