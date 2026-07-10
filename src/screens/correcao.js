@@ -160,7 +160,8 @@ export default function renderCorrecao(root, app) {
       const oculto = box.hasAttribute("hidden");
       if (oculto) box.removeAttribute("hidden");
       else box.setAttribute("hidden", "");
-      el.textContent = oculto ? "Fechar gerador" : "Criar tema com IA";
+      // innerHTML preserva o ícone (textContent apagava o sparkles ao alternar).
+      el.innerHTML = oculto ? `${icone("x")} Fechar gerador` : `${icone("sparkles")} Criar tema com IA`;
     },
     "gerar-pergunta": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar pergunta discursiva");
