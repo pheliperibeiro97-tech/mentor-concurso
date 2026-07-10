@@ -107,8 +107,9 @@ export function estudarCorpoHTML(store, st, tipo, r) {
     : [];
   const filtrado = tipo === "lei" && (S.estudarSecaoSel || S.estudarArtFiltro || S.estudarTemaSel || esc2 === "incidencia");
   const escopoLeiHTML = tipo !== "lei" ? "" : `<div class="estudar-escopo ${S._escopoAberto ? "aberto" : ""}">
-      <button class="est-escopo-btn ${filtrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Escolher a lei a estudar (e, se quiser, refinar por parte, artigos ou incidência)">
-        ${icone("book-open")}<span class="ee-resumo"><b class="ee-lei">${esc(leiNome)}</b><span class="ee-refino"> · ${esc(refinoPartes.join(" · "))}</span></span><span class="escopo-cont">${plural(nEsc, "artigo", "artigos")}</span>${icone("chevron-down")}
+      <span class="ee-label">${icone("target")} O que estudar</span>
+      <button class="est-escopo-btn ${filtrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Clique para escolher a lei e, se quiser, refinar por parte, artigos ou incidência.">
+        ${icone("book-open")}<span class="ee-resumo"><b class="ee-lei">${esc(leiNome)}</b><span class="ee-refino"> · ${esc(refinoPartes.join(" · "))}</span></span><span class="escopo-cont">${plural(nEsc, "artigo", "artigos")}</span><span class="ee-alterar">Alterar</span>${icone("chevron-down")}
       </button>
       ${S._escopoAberto ? `<div class="est-escopo-pop">
         <div class="ee-sec-lbl">${icone("book-open")} Lei a estudar</div>
@@ -139,8 +140,9 @@ export function estudarCorpoHTML(store, st, tipo, r) {
   const jRefino = [S.estudarJurisTrib && S.estudarJurisTrib !== jResumo ? S.estudarJurisTrib : "", S.estudarJurisAssunto, S.estudarJurisCat && S.estudarJurisCat !== jResumo ? S.estudarJurisCat : "", S.estudarTemaSel ? `tema: ${S.estudarTemaSel}` : "", esc2 === "incidencia" ? "o que mais cai" : ""].filter(Boolean);
   const jSel = (act, val, opts, todos) => `<select class="escopo-sel" data-action="${act}"><option value="">${todos}</option>${opts.map((o) => `<option value="${esc(o)}" ${val === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
   const escopoJurisHTML = tipo !== "juris" ? "" : `<div class="estudar-escopo ${S._escopoAberto ? "aberto" : ""}">
-      <button class="est-escopo-btn ${jFiltrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Recortar o que estudar: tribunal, ramo, assunto, categoria ou tema">
-        ${icone("scale")}<span class="ee-resumo"><b class="ee-lei">${esc(jResumo)}</b><span class="ee-refino">${jRefino.length ? " · " + esc(jRefino.join(" · ")) : ""}</span></span><span class="escopo-cont">${plural(nEsc, "julgado", "julgados")}</span>${icone("chevron-down")}
+      <span class="ee-label">${icone("target")} O que estudar</span>
+      <button class="est-escopo-btn ${jFiltrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Clique para recortar: tribunal, ramo, assunto, categoria ou tema.">
+        ${icone("scale")}<span class="ee-resumo"><b class="ee-lei">${esc(jResumo)}</b><span class="ee-refino">${jRefino.length ? " · " + esc(jRefino.join(" · ")) : ""}</span></span><span class="escopo-cont">${plural(nEsc, "julgado", "julgados")}</span><span class="ee-alterar">Alterar</span>${icone("chevron-down")}
       </button>
       ${S._escopoAberto ? `<div class="est-escopo-pop">
         <div class="ee-sec-lbl">${icone("scale")} Recorte da jurisprudência <span>— tudo opcional</span></div>
