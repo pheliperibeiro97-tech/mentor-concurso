@@ -275,7 +275,7 @@ export default function renderFlashcards(root, app) {
     },
     "limpar-fc": async () => {
       if (!st.flashcards.length) return;
-      if (!(await confirmar(`Apagar TODOS os ${st.flashcards.length} flashcards? Esta ação não pode ser desfeita.`))) return;
+      if (!(await confirmar(`Apagar todos os ${st.flashcards.length} flashcards? Esta ação não pode ser desfeita.`))) return;
       const n = store.limparFlashcards();
       filtroLote = null; filtroLoteRotulo = "";
       toast(`${plural(n, "flashcard apagado", "flashcards apagados")}.`);

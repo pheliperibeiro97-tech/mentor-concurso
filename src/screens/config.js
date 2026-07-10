@@ -166,7 +166,7 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("calendar-check")} Dias de estudo</h3>
-      <p class="muted small">Marque os dias da semana em que você pretende estudar. Os dias desmarcados são considerados <b>folga</b>: somem da agenda do Planejamento e não interrompem a sua sequência de dias seguidos (a ofensiva). O contador "${esc("X/N")}" do Hoje usa o total de dias marcados aqui.</p>
+      <p class="muted small">Marque os dias da semana em que você pretende estudar. Os dias desmarcados são considerados <b>folga</b>: somem da agenda do Planejamento e não interrompem a sua sequência de dias seguidos. O contador "${esc("X/N")}" do Hoje usa o total de dias marcados aqui.</p>
       <div class="dias-estudo-grid">
         ${DIAS_SEMANA.map((nome, d) => {
           const estuda = !store.diaEhFolga(d);
@@ -349,7 +349,7 @@ export default function renderConfig(root, app) {
         <button class="btn btn-ghost btn-sm" data-action="gerar-diagnostico" data-tip="Gera um arquivo com informações técnicas (versão, sistema, erros recentes) para você anexar num e-mail de suporte. Não inclui o conteúdo dos seus estudos.">${icone("life-buoy")} Relatar um problema (gerar diagnóstico)</button>
         <button class="btn btn-ghost btn-sm" data-action="buscar-update" data-tip="Verifica se há uma versão mais nova (só no aplicativo instalado).">${icone("refresh-cw")} Procurar atualizações</button>
       </div>
-      <p class="muted small u-m-0 u-mt-8">Versão ${esc(APP_VERSION)}</p>
+      <p class="muted small u-m-0 u-mt-8">Versão ${esc(APP_VERSION)} · Desenvolvido por <b>Phelipe Ribeiro da Silva</b></p>
     </section>
 
     <section class="card">

@@ -6193,7 +6193,7 @@ export const store = {
     // Ofensiva prestes a quebrar: você tem sequência de dias mas ainda não estudou hoje.
     const ofens = (snap.comportamento && snap.comportamento.ofensivaDias) || 0;
     const estudouHoje = (state.sessoes || []).some((s) => (s.data || "").slice(0, 10) === todayISO());
-    if (ofens >= 3 && !estudouHoje) lista.push({ key: "ofensiva", icone: "flame", txt: `Sua ofensiva de ${ofens} dias quebra hoje se você não estudar`, acao: { rota: "hoje", label: "Estudar agora" } });
+    if (ofens >= 3 && !estudouHoje) lista.push({ key: "ofensiva", icone: "flame", txt: `Sua sequência de ${ofens} dias quebra hoje se você não estudar`, acao: { rota: "hoje", label: "Estudar agora" } });
     // Simulados: queda no último vs. sua média; ou, sem nenhum simulado e prova perto, um diagnóstico.
     const simList = this.simuladosLista();
     const simRes = this.simuladosResumo();
