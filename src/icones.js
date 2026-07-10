@@ -128,6 +128,7 @@ import inbox from "lucide-static/icons/inbox.svg?raw";
 import zoomIn from "lucide-static/icons/zoom-in.svg?raw";
 import zoomOut from "lucide-static/icons/zoom-out.svg?raw";
 import moveHorizontal from "lucide-static/icons/move-horizontal.svg?raw";
+import circleStop from "lucide-static/icons/circle-stop.svg?raw";
 import barChart3 from "lucide-static/icons/bar-chart-3.svg?raw";
 import ellipsis from "lucide-static/icons/ellipsis.svg?raw";
 import externalLink from "lucide-static/icons/external-link.svg?raw";
@@ -270,6 +271,7 @@ const MAPA = {
   "zoom-in": zoomIn,
   "zoom-out": zoomOut,
   "move-horizontal": moveHorizontal,
+  "circle-stop": circleStop,
   "bar-chart-3": barChart3,
   ellipsis,
   "external-link": externalLink,

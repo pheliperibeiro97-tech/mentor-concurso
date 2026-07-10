@@ -136,6 +136,10 @@ const app = {
   get params() {
     return params;
   },
+  // Fase 2: o chat do Mentor usa a rota atual para chips/contexto por tela.
+  get rotaAtual() {
+    return rotaAtual;
+  },
 };
 // Handle de depuração (inofensivo): permite navegar/testar via console — window.app.navigate("leiseca").
 if (typeof window !== "undefined") window.app = app;

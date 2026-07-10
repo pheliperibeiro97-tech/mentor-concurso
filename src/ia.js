@@ -7,7 +7,7 @@
 
 export const SELO = {
   verde: { icone: "book-open", rotulo: "Extraído do seu material" },
-  amarelo: { icone: "bot", rotulo: "Gerado pela IA · confira" },
+  amarelo: { icone: "bot", rotulo: "Criado pelo Mentor · confira" },
   manual: { icone: "notebook-pen", rotulo: "Inserido por você" },
   oficial: { icone: "landmark", rotulo: "Prova oficial · gabarito da banca" },
 };

@@ -10,6 +10,13 @@
 //
 // Para "enlatar" o app, cada usuário cola a própria chave grátis em Configurações.
 
+// Fase 2 — PERSONA ÚNICA: o app tem UM personagem de IA ("Mentor"), em todas as
+// superfícies (chat flutuante, tela Mentor, gerações). Prefixo compartilhado dos
+// system prompts voltados ao aluno — o papel específico de cada tarefa vem depois.
+export const PERSONA_MENTOR =
+  "Você é o Mentor: o treinador de estudos pessoal do aluno para concursos públicos. " +
+  "Fale em 1ª pessoa, tom direto, encorajador e tecnicamente preciso (sem bajulação).";
+
 export const MODELO_PADRAO = {
   // gemini-3.1-flash-lite: maior cota grátis observada (≈500 req/dia no free tier) e rápido,
   // dá conta das tarefas do app (extração/geração/Visão). Confirme o ID em AI Studio se mudar.
@@ -817,7 +824,7 @@ export async function responderChat(cfg, { pergunta, fontes, web, perfil }) {
 
   if (web && cfg.iaProvider === "gemini") {
     const system =
-      "Você é o mentor de estudos do usuário. Responda à pergunta usando BUSCA NA WEB quando " +
+      PERSONA_MENTOR + " Responda à pergunta usando BUSCA NA WEB quando " +
       "ajudar, e também os trechos do material dele. Adapte a resposta ao PERFIL do aluno (concurso, " +
       "prova, pontos fracos) quando fizer sentido. Cite as fontes. IMPORTANTE: para concursos, " +
       "leis e prazos mudam — avise que a resposta pode estar desatualizada e oriente conferir a " +
@@ -827,7 +834,7 @@ export async function responderChat(cfg, { pergunta, fontes, web, perfil }) {
   }
 
   const system =
-    "Você é o mentor de estudos do usuário. Responda à pergunta APOIANDO-SE nos trechos do " +
+    PERSONA_MENTOR + " Responda à pergunta APOIANDO-SE nos trechos do " +
     "material dele (fornecidos abaixo). Adapte a resposta ao PERFIL do aluno (concurso, prova, " +
     "pontos fracos) quando fizer sentido. Se os trechos bastarem, responda com base neles e cite " +
     "a fonte entre colchetes, ex.: [1]. Se não bastarem, responda com seu conhecimento geral, mas " +
@@ -836,6 +843,115 @@ export async function responderChat(cfg, { pergunta, fontes, web, perfil }) {
   const user = `${perfilLinha}PERGUNTA: ${pergunta}\n\n${ancora}`;
   const texto = await chamar(cfg, { system, user, json: false, temperature: 0.4 });
   return { texto: String(texto).trim(), selo: "amarelo", fontesWeb: [] };
+}
+
+// ===== Fase 2 — STREAMING REAL (SSE) + MULTI-TURNO =====
+// O chat deixou de "digitar" uma resposta já pronta: o texto chega token a token do
+// streamGenerateContent do Gemini. `contents` é a conversa completa (turnos user/model);
+// `onChunk(textoAcumulado)` é chamado a cada pedaço — como recebe o texto ACUMULADO,
+// um retry de modelo/chave (resiliente) apenas "reinicia" o balão, sem duplicar.
+async function geminiStreamRaw(cfg, { system, contents, temperature = 0.4, tools, onChunk, signal }) {
+  const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.gemini;
+  const url =
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:streamGenerateContent` +
+    `?alt=sse&key=${encodeURIComponent(cfg.iaKey.trim())}`;
+  const body = {
+    contents,
+    generationConfig: { temperature },
+    ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}),
+    ...(tools ? { tools } : {}),
+  };
+  let resp;
+  try {
+    resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+  } catch (e) {
+    if (e && e.name === "AbortError") throw e; // parada pedida pelo usuário: propaga como está
+    const err = new Error(`Gemini: falha de conexão (${e && e.message ? e.message : "rede"}).`);
+    err.code = "NETWORK";
+    err.transiente = true;
+    throw err;
+  }
+  if (!resp.ok) throw await mensagemErro(resp, "Gemini");
+  if (!resp.body || !resp.body.getReader) {
+    // Ambiente sem ReadableStream (raro): degrada para a resposta inteira de uma vez.
+    const data = await resp.json();
+    const cand = data && data.candidates && data.candidates[0];
+    const texto = cand && cand.content && cand.content.parts ? cand.content.parts.map((p) => p.text || "").join("") : "";
+    if (!texto) throw new Error("A IA não retornou conteúdo.");
+    if (onChunk) onChunk(texto);
+    return { texto: texto.trim(), fontesWeb: [] };
+  }
+  const reader = resp.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "";
+  let texto = "";
+  const fontesWeb = [];
+  const vistos = new Set();
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const linha = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!linha.startsWith("data:")) continue;
+      const payload = linha.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let j;
+      try { j = JSON.parse(payload); } catch (_) { continue; }
+      const cand = j.candidates && j.candidates[0];
+      if (!cand) continue;
+      const t = cand.content && cand.content.parts ? cand.content.parts.map((p) => p.text || "").join("") : "";
+      if (t) {
+        texto += t;
+        if (onChunk) onChunk(texto);
+      }
+      const gchunks = (cand.groundingMetadata && cand.groundingMetadata.groundingChunks) || [];
+      for (const c of gchunks) {
+        if (c.web && c.web.uri && !vistos.has(c.web.uri)) {
+          vistos.add(c.web.uri);
+          fontesWeb.push({ titulo: c.web.title || c.web.uri, uri: c.web.uri });
+        }
+      }
+    }
+  }
+  if (!texto) throw new Error("A IA não retornou conteúdo.");
+  return { texto: texto.trim(), fontesWeb };
+}
+
+// Chat com streaming + memória de turnos. `historico` = [{who:"user"|"bot", texto}] (as
+// últimas trocas); vira `contents` multi-turno para follow-ups ("e o prazo disso?").
+// Fallback sem streaming (claude-cli): responde inteiro e dispara onChunk uma vez.
+export async function responderChatStream(cfg, { pergunta, fontes, web, perfil, historico, onChunk, signal }) {
+  const contexto = (fontes || []).map((f, i) => `[${i + 1}] (${f.origem})\n${f.trecho}`).join("\n\n");
+  const ancora = contexto ? `TRECHOS DO MATERIAL DO USUÁRIO:\n${corta(contexto, 6000)}` : "(Sem trechos relevantes no material do usuário.)";
+  const perfilLinha = perfil ? `PERFIL DO ALUNO (para personalizar; não repita literalmente): ${perfil}\n\n` : "";
+  const system = web && cfg.iaProvider === "gemini"
+    ? PERSONA_MENTOR +
+      " Responda à pergunta usando BUSCA NA WEB quando ajudar, e também os trechos do material do aluno. " +
+      "Cite as fontes. IMPORTANTE: para concursos, leis e prazos mudam — avise que a resposta pode estar " +
+      "desatualizada e oriente conferir a fonte oficial. Seja direto e didático. Texto corrido."
+    : PERSONA_MENTOR +
+      " Responda à pergunta APOIANDO-SE nos trechos do material do aluno (fornecidos abaixo). Se os trechos " +
+      "bastarem, responda com base neles e cite a fonte entre colchetes, ex.: [1]. Se não bastarem, responda " +
+      "com seu conhecimento geral, mas AVISE que é conhecimento geral (não do material dele) e sugira o que " +
+      "estudar. Considere a CONVERSA anterior ao interpretar a pergunta. Seja direto e didático. Texto corrido.";
+  // Conversa anterior (últimos turnos) + pergunta atual com o contexto RAG.
+  const turnos = (historico || [])
+    .slice(-6)
+    .filter((m) => m && m.texto)
+    .map((m) => ({ role: m.who === "user" ? "user" : "model", parts: [{ text: corta(m.texto, 1500) }] }));
+  const contents = [...turnos, { role: "user", parts: [{ text: `${perfilLinha}PERGUNTA: ${pergunta}\n\n${ancora}` }] }];
+
+  if (cfg.iaProvider !== "gemini") {
+    // claude-cli: sem streaming — usa a rota clássica e entrega o texto inteiro.
+    const r = await responderChat(cfg, { pergunta, fontes, web: false, perfil });
+    if (onChunk) onChunk(r.texto);
+    return { texto: r.texto, fontesWeb: [] };
+  }
+  const tools = web ? [{ google_search: {} }] : undefined;
+  return geminiResiliente(cfg, (c) => geminiStreamRaw(c, { system, contents, temperature: 0.4, tools, onChunk, signal }));
 }
 
 // Chamada Gemini com a ferramenta de Busca Google (grounding). Devolve texto + fontes web.

@@ -186,8 +186,9 @@ export async function executarComando(store, app, acao, params = {}) {
       return `Abrindo ${NOME_TELA[tela] || tela}.`;
     }
     case "analisar_progresso": {
-      app.navigate("mentor");
-      return `Abri o Mentor IA — clique em "Analisar meu progresso" para a análise.`;
+      // Fase 2: o usuário JÁ pediu a análise — executa (a tela auto-dispara via autoAnalisar).
+      app.navigate("mentor", { autoAnalisar: true });
+      return `Analisando seu progresso agora — o plano aparece na tela do Mentor em instantes.`;
     }
     case "criar_lembrete": {
       const texto = (p.texto || "").trim();

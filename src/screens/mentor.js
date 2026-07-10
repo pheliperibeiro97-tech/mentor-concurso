@@ -61,7 +61,7 @@ export default function renderMentor(root, app) {
       }</div>
     </section>
 
-    <p class="mentor-cross muted small">${icone("sparkles")} Para <b>perguntas ou ações rápidas</b> em qualquer tela (criar um flashcard, resumir um tópico, abrir uma tela), use o <b>Assistente inteligente</b> — o botão flutuante no canto inferior direito.</p>`;
+    <p class="mentor-cross muted small">${icone("sparkles")} Para <b>conversar com o Mentor</b> em qualquer tela (perguntar, criar um flashcard, resumir um tópico), use o botão flutuante no canto inferior direito — é o mesmo Mentor, em modo conversa.</p>`;
 
   bindActions(root, {
     imprimir: () => imprimir("Mentor IA — Mentor Concurso", printMentor(snap, pontos, plano)),

@@ -767,6 +767,7 @@ export const store = {
       if (!Array.isArray(state.config.disciplinasAdiadas)) state.config.disciplinasAdiadas = [];
       if (!Array.isArray(state.revisoesTopico)) state.revisoesTopico = [];
       if (!Array.isArray(state.revisoesFeitas)) state.revisoesFeitas = []; // log de conclusões (Central de Revisões)
+      if (!Array.isArray(state.chatHistorico)) state.chatHistorico = []; // memória do chat do Mentor (Fase 2)
       if (!Array.isArray(state.simulados)) state.simulados = []; // histórico de simulados (app + externos)
       if (state.config.revisaoTopicoAuto === undefined) state.config.revisaoTopicoAuto = false;
       if (!Array.isArray(state.marcacoes)) state.marcacoes = [];
@@ -6858,6 +6859,25 @@ export const store = {
     commit();
     return dias;
   },
+  // ---------- Memória do chat do Mentor (Fase 2) ----------
+  // Guarda as últimas trocas para (a) rehidratar o painel ao reabrir o app e
+  // (b) dar CONTEXTO multi-turno às respostas ("e o prazo disso?"). Textos são
+  // cortados e a lista é capada para não inchar o estado/sync.
+  chatHistorico() {
+    return Array.isArray(state.chatHistorico) ? state.chatHistorico : [];
+  },
+  chatRegistrar(who, texto) {
+    if (!texto || !String(texto).trim()) return;
+    if (!Array.isArray(state.chatHistorico)) state.chatHistorico = [];
+    state.chatHistorico.push({ who: who === "user" ? "user" : "bot", texto: String(texto).slice(0, 4000), data: nowISO() });
+    if (state.chatHistorico.length > 30) state.chatHistorico = state.chatHistorico.slice(-30);
+    commit();
+  },
+  chatLimpar() {
+    state.chatHistorico = [];
+    commit();
+  },
+
   // Remove uma revisão da FILA (não apaga o item em si — tópico/resumo/mapa/indicação
   // continuam; só deixam de estar agendados para revisão).
   removerRevisao(itemId) {

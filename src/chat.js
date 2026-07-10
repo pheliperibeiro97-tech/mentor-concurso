@@ -1,13 +1,12 @@
-// Assistente — chat flutuante. Faz MAIS que o Mentor IA (que é o painel proativo):
-// responde com base no conteúdo do usuário (material, resumos, lei/jurisprudência,
-// flashcards, questões) SEMPRE indicando a origem , gera respostas elaboradas com a
-// IA conectada () e, opcionalmente, busca ao vivo na web (). Por isso se chama
-// "Assistente", para não se confundir com o "Mentor IA" da barra lateral.
-import { iaDisponivel, responderChat, interpretarComando } from "./ia-provider.js";
+// MENTOR — chat flutuante. Fase 2: persona ÚNICA (o mesmo Mentor da barra lateral,
+// aqui em modo conversa), com MEMÓRIA persistente (últimas trocas guardadas no store,
+// multi-turno no prompt) e STREAMING REAL (o texto chega token a token, com markdown
+// formatado desde o primeiro pedaço; botão Parar disponível durante a geração).
+import { iaDisponivel, responderChatStream, interpretarComando } from "./ia-provider.js";
 import { executarComando } from "./chat-acoes.js";
-import { esc } from "./util.js";
+import { esc, humanizarErroIA } from "./util.js";
 import { icone } from "./icones.js";
-import { revelarTexto, skeletonDoc, plural, md } from "./ui.js";
+import { skeletonDoc, plural, md } from "./ui.js";
 
 export function montarChat(store, app) {
   if (document.getElementById("chat-fab")) return;
@@ -15,8 +14,8 @@ export function montarChat(store, app) {
   const fab = document.createElement("button");
   fab.id = "chat-fab";
   fab.className = "chat-fab";
-  fab.title = "Assistente: pergunte OU peça uma ação (ele executa)";
-  // Ícone do assistente = símbolo de IA (estrelinhas) VIVO: brilha/pisca (twinkle) e o
+  fab.title = "Mentor: pergunte ou peça uma ação — eu proponho, você confirma";
+  // Ícone do Mentor = símbolo de IA (estrelinhas) VIVO: brilha/pisca (twinkle) e o
   // círculo tem pulso próprio. Assinatura da inteligência, distinta do orb dos cartões.
   fab.innerHTML = icone("sparkles");
 
@@ -25,7 +24,7 @@ export function montarChat(store, app) {
   panel.className = "chat-panel oculto";
   panel.innerHTML = `
     <div class="chat-head">
-      <div class="chat-head-id"><b>Assistente Inteligente</b><div class="chat-sub">responde com seu material e <b>executa ações</b></div></div>
+      <div class="chat-head-id"><b>Mentor</b><div class="chat-sub">responde com seu material e <b>executa ações</b></div></div>
       <span class="spacer"></span>
       <button class="chat-exp" title="Expandir / recolher o chat">${icone("maximize-2")}</button>
       <button class="chat-x" title="Fechar">${icone("x")}</button>
@@ -33,11 +32,11 @@ export function montarChat(store, app) {
     <div class="chat-webbar">
       <button class="chat-web" aria-pressed="false" title="Busca ao vivo na internet. Requer uma IA conectada com suporte a busca na web.">${icone("globe")} Buscar na web: desligada</button>
       <span class="spacer"></span>
-      <button class="chat-limpar" title="Limpar a conversa">Limpar conversa</button>
+      <button class="chat-limpar" title="Apagar a conversa (inclusive a memória salva)">Limpar conversa</button>
     </div>
-    <div class="chat-msgs" id="chat-msgs">${msgInicial(store)}</div>
+    <div class="chat-msgs" id="chat-msgs"></div>
     <div class="chat-input">
-      <textarea id="chat-in" rows="1" placeholder="Pergunte OU peça uma ação (ex.: crie 5 flashcards de...)"></textarea>
+      <textarea id="chat-in" rows="1" placeholder="Pergunte ou peça uma ação (ex.: crie 5 flashcards de...)"></textarea>
       <button id="chat-send" title="Enviar">${icone("send")}</button>
     </div>`;
 
@@ -46,6 +45,20 @@ export function montarChat(store, app) {
 
   const msgs = panel.querySelector("#chat-msgs");
   const input = panel.querySelector("#chat-in");
+
+  // MEMÓRIA: rehidrata a conversa salva (o Mentor não tem mais amnésia entre sessões).
+  function renderConversa() {
+    const hist = store.chatHistorico();
+    if (!hist.length) {
+      msgs.innerHTML = msgInicial(store, app.rotaAtual);
+      return;
+    }
+    msgs.innerHTML = hist
+      .map((m) => `<div class="chat-msg ${m.who}">${m.who === "user" ? esc(m.texto) : `<p>${md(m.texto)}</p>`}</div>`)
+      .join("");
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  renderConversa();
 
   const abrir = () => {
     panel.classList.remove("oculto");
@@ -59,7 +72,8 @@ export function montarChat(store, app) {
   fab.addEventListener("click", () => (panel.classList.contains("oculto") ? abrir() : fechar()));
   panel.querySelector(".chat-x").addEventListener("click", fechar);
   panel.querySelector(".chat-limpar").addEventListener("click", () => {
-    msgs.innerHTML = msgInicial(store);
+    store.chatLimpar();
+    renderConversa();
   });
   // Expandir / recolher o painel (tamanho padrão menor, opção de ampliar).
   panel.querySelector(".chat-exp").addEventListener("click", () => {
@@ -84,7 +98,7 @@ export function montarChat(store, app) {
     add(
       webOn
         ? `<p class="chat-nota">${icone("globe")} Busca na web <b>ligada</b> (requer uma IA conectada com busca web). As respostas virão com fontes da internet — confira sempre, leis e prazos mudam.</p>`
-        : `<p class="chat-nota">${icone("globe")} Busca na web desligada. Volto a responder pelo seu material + conhecimento do modelo.</p>`,
+        : `<p class="chat-nota">${icone("globe")} Busca na web desligada. Volto a responder pelo seu material e pelo que eu já sei.</p>`,
       "bot"
     );
   });
@@ -152,8 +166,8 @@ export function montarChat(store, app) {
     });
   }
 
-  // Sem IA: só recuperação (offline). Com IA conectada: resposta elaborada ,
-  // ancorada nos mesmos trechos do material do usuário (sempre com origem).
+  // Sem IA: só recuperação (offline). Com IA conectada: STREAMING REAL — o texto chega
+  // token a token, já formatado (markdown) desde o primeiro pedaço, com botão Parar.
   async function responderPergunta(q) {
     const cfg = store.get().config;
     const res = await store.recuperarTrechos(q);
@@ -165,10 +179,37 @@ export function montarChat(store, app) {
 
     if (iaDisponivel(cfg)) {
       const pensando = addPensando();
-      try {
-        const r = await responderChat(cfg, { pergunta: q, fontes: res, web: webOn, perfil: store.contextoAlunoCurto() });
+      // Conversa anterior SEM o turno do usuário que acabou de entrar (a pergunta vai à parte).
+      const historico = store.chatHistorico().slice(0, -1);
+      const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const d = document.createElement("div");
+      d.className = "chat-msg bot";
+      let comecou = false;
+      const comecar = () => {
+        if (comecou) return;
+        comecou = true;
         pensando.remove();
-        const texto = md(r.texto);
+        d.innerHTML = `<p class="chat-stream-md"></p><p class="chat-nota chat-parar-linha"><button class="lnk chat-parar">${icone("circle-stop")} Parar</button></p>`;
+        msgs.appendChild(d);
+        d.querySelector(".chat-parar").addEventListener("click", () => ctrl && ctrl.abort());
+      };
+      const pertoDoFim = () => msgs.scrollHeight - msgs.scrollTop - msgs.clientHeight < 80;
+      try {
+        const r = await responderChatStream(cfg, {
+          pergunta: q,
+          fontes: res,
+          web: webOn,
+          perfil: store.contextoAlunoCurto(),
+          historico,
+          signal: ctrl ? ctrl.signal : undefined,
+          onChunk: (parcial) => {
+            comecar();
+            const rolarJunto = pertoDoFim();
+            const alvo = d.querySelector(".chat-stream-md");
+            if (alvo) alvo.innerHTML = md(parcial);
+            if (rolarJunto) msgs.scrollTop = msgs.scrollHeight;
+          },
+        });
         const webHTML = r.fontesWeb && r.fontesWeb.length
           ? `<div class="chat-web-fontes"><b class="chat-nota">${icone("globe")} Fontes da web:</b>${r.fontesWeb
               .slice(0, 6)
@@ -181,31 +222,41 @@ export function montarChat(store, app) {
         if (webOn) {
           rodape =
             webHTML +
-            `<p class="chat-nota">${icone("bot")} ${icone("globe")} Resposta gerada por IA com busca na web — confira a fonte oficial.</p>` +
+            `<p class="chat-nota">${icone("bot")} ${icone("globe")} Respondi com busca na web — confira a fonte oficial.</p>` +
             (fontesHTML ? `<details class="chat-fontes-det"><summary>${icone("book-open")} Trechos do seu material (${res.length})</summary>${fontesHTML}</details>` : "");
         } else if (res.length) {
-          rodape = `<details class="chat-fontes-det chat-origem-det"><summary>${icone("bot")} Resposta gerada por IA, apoiada em <b>${plural(res.length, "fonte", "fontes")} do seu material</b> — confira</summary>${fontesHTML}</details>`;
+          rodape = `<details class="chat-fontes-det chat-origem-det"><summary>${icone("bot")} Baseei-me em <b>${plural(res.length, "trecho", "trechos")} do seu material</b> — toque para conferir</summary>${fontesHTML}</details>`;
         } else {
-          rodape = `<p class="chat-nota">${icone("bot")} Resposta gerada por IA (conhecimento geral do modelo, não do seu material) — confira.</p>`;
+          rodape = `<p class="chat-nota">${icone("bot")} Respondi com meu conhecimento geral — esse tema ainda não está no seu material. Confira.</p>`;
         }
-        // Revelação progressiva (sensação de resposta ao vivo): mostra o texto puro
-        // surgindo com cursor; ao terminar (ou num clique, que pula), troca pelo HTML
-        // final formatado + rodapé de fontes.
-        const d = document.createElement("div");
-        d.className = "chat-msg bot";
-        d.innerHTML = `<p class="chat-stream"></p>`;
-        msgs.appendChild(d);
-        const rolar = setInterval(() => { msgs.scrollTop = msgs.scrollHeight; }, 120);
-        revelarTexto(d.querySelector(".chat-stream"), r.texto, {
-          aoFim: () => {
-            clearInterval(rolar);
-            d.innerHTML = `<p>${texto}</p>` + rodape;
-            msgs.scrollTop = msgs.scrollHeight;
-          },
-        });
+        comecar(); // caso raro: resposta veio inteira sem chunks intermediários
+        d.innerHTML = `<p>${md(r.texto)}</p>` + rodape;
+        msgs.scrollTop = msgs.scrollHeight;
+        store.chatRegistrar("bot", r.texto);
       } catch (e) {
         pensando.remove();
-        add(`<p class="chat-nota">Falha ao consultar a IA: ${esc(e.message)}</p>` + (fontesHTML ? `<p>Enquanto isso, achei estes trechos no seu material:</p>${fontesHTML}` : ""), "bot");
+        if (e && e.name === "AbortError") {
+          // Parada pedida: preserva o parcial e sinaliza.
+          const parcial = d.querySelector(".chat-stream-md");
+          const linha = d.querySelector(".chat-parar-linha");
+          if (linha) linha.outerHTML = `<p class="chat-nota">${icone("circle-stop")} Geração interrompida por você.</p>`;
+          if (parcial && parcial.textContent.trim()) store.chatRegistrar("bot", parcial.textContent);
+          else d.remove();
+          return;
+        }
+        if (comecou) d.remove();
+        const dd = document.createElement("div");
+        dd.className = "chat-msg bot";
+        dd.innerHTML =
+          `<p class="chat-nota">${icone("triangle-alert")} ${esc(humanizarErroIA(e))}</p>` +
+          `<p class="chat-nota"><button class="btn btn-sm btn-ghost chat-retry">${icone("refresh-cw")} Tentar de novo</button></p>` +
+          (fontesHTML ? `<details class="chat-fontes-det"><summary>${icone("book-open")} Enquanto isso, trechos do seu material (${res.length})</summary>${fontesHTML}</details>` : "");
+        msgs.appendChild(dd);
+        msgs.scrollTop = msgs.scrollHeight;
+        dd.querySelector(".chat-retry").addEventListener("click", () => {
+          dd.remove();
+          responderPergunta(q);
+        });
       }
       return;
     }
@@ -229,7 +280,7 @@ export function montarChat(store, app) {
   function addPensando() {
     const d = document.createElement("div");
     d.className = "chat-msg bot chat-pensando";
-    d.innerHTML = `<p class="chat-nota chat-pensando-linha"><span class="orb orb-xs is-thinking" aria-hidden="true"></span> pensando <span class="typing" aria-label="digitando"><i></i><i></i><i></i></span></p>${skeletonDoc(2, { titulo: false })}`;
+    d.innerHTML = `<p class="chat-nota chat-pensando-linha"><span class="orb orb-xs is-thinking" aria-hidden="true"></span> lendo seu material <span class="typing" aria-label="digitando"><i></i><i></i><i></i></span></p>${skeletonDoc(2, { titulo: false })}`;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
     return d;
@@ -238,7 +289,10 @@ export function montarChat(store, app) {
   function enviar(texto) {
     const q = (texto != null ? texto : input.value).trim();
     if (!q) return;
+    // Se a conversa ainda mostra só a saudação, limpa antes do 1º turno real.
+    if (!store.chatHistorico().length) msgs.innerHTML = "";
     add(esc(q), "user");
+    store.chatRegistrar("user", q); // memória (multi-turno + rehidratação)
     input.value = "";
     ajustarAltura();
     setTimeout(() => responder(q), 120);
@@ -282,20 +336,33 @@ export function atualizarChatVisibilidade(onboarded) {
   if (!onboarded && panel) panel.classList.add("oculto");
 }
 
-function msgInicial(store) {
+// Saudação inicial — Fase 2: persona única (Mentor) + CHIPS CONTEXTUAIS pela tela
+// em que o usuário está (o Mentor parece atento ao que você está fazendo agora).
+function msgInicial(store, rota) {
   const st = store.get();
   const tops = st.topicos.slice(0, 3);
+  const chip = (q, rotulo, ia) => `<button class="chat-chip" data-q="${esc(q)}">${ia ? icone("sparkles") + " " : ""}${esc(rotulo)}</button>`;
+  const porRota = {
+    pratica: [chip("Comente meus erros mais recentes de questões", "Comentar meus erros recentes", true), tops[0] ? chip(`Crie 5 questões de ${tops[0].nome}`, `Criar questões de ${tops[0].nome}`, true) : ""],
+    "pratica-ce": [chip("Comente meus erros mais recentes de questões", "Comentar meus erros recentes", true)],
+    erros: [chip("Qual padrão você vê nos meus erros?", "Padrão dos meus erros", true)],
+    edital: [chip("Onde estou mais fraco no edital?", "Onde estou mais fraco?", true)],
+    leiseca: [tops[0] ? chip(`Crie 5 flashcards de ${tops[0].nome}`, `Flashcards de ${tops[0].nome}`, true) : ""],
+    diagnostico: [chip("Explique minha semana de estudos", "Explicar minha semana", true)],
+    revisoes: [chip("O que devo revisar primeiro hoje?", "O que revisar primeiro?", true)],
+    flashcards: [tops[0] ? chip(`Crie 5 flashcards de ${tops[0].nome}`, `Flashcards de ${tops[0].nome}`, true) : ""],
+  };
+  const contexto = (porRota[rota] || []).filter(Boolean).join("");
   const chips =
-    (tops[0] ? `<button class="chat-chip" data-q="Crie 5 flashcards de ${esc(tops[0].nome)}">${icone("sparkles")} Criar flashcards de ${esc(tops[0].nome)}</button>` : "") +
-    `<button class="chat-chip" data-q="Abra meu acompanhamento">${icone("sparkles")} Abrir Acompanhamento</button>` +
-    (tops[1] ? `<button class="chat-chip" data-q="Resuma o que eu tenho sobre ${esc(tops[1].nome)}">Resumir: ${esc(tops[1].nome)}</button>` : "") +
-    `<button class="chat-chip" data-q="Quais são meus erros mais recentes?">Meus erros recentes</button>` +
-    `<button class="chat-chip" data-q="Como funciona o app?">Como usar o app?</button>`;
+    contexto +
+    (tops[0] && !contexto.includes("flashcards de") ? chip(`Crie 5 flashcards de ${tops[0].nome}`, `Criar flashcards de ${tops[0].nome}`, true) : "") +
+    (tops[1] ? chip(`Resuma o que eu tenho sobre ${tops[1].nome}`, `Resumir: ${tops[1].nome}`, false) : "") +
+    chip("Quais são meus erros mais recentes?", "Meus erros recentes", false) +
+    chip("Como funciona o app?", "Como usar o app?", false);
   return `<div class="chat-msg bot">
-      <p>Oi! Sou seu <b>assistente inteligente</b>. Faço duas coisas:</p>
-      <p>${icone("search")} <b>Respondo</b> com base no que você cadastrou (material, resumos, lei/juris, flashcards, questões), sempre com a <b>origem</b> — e explico <b>como usar o app</b>.</p>
-      <p>${icone("sparkles")} <b>Executo ações</b> para você: criar flashcards/questões, adicionar tarefa, agendar revisão, registrar sessão, iniciar o cronômetro, abrir telas e mais. Eu sempre <b>proponho e peço sua confirmação</b> antes de fazer.</p>
-      <p class="chat-nota">Aqui é para <b>perguntas e ações rápidas</b>. Para uma <b>análise completa do seu progresso</b> e um <b>plano de estudos</b> para aprovar, use o <b>Mentor IA</b> (na barra lateral).</p>
+      <p>Oi! Sou o <b>Mentor</b> — pergunte qualquer coisa ou peça uma ação.</p>
+      <p>${icone("search")} <b>Respondo</b> com base no que você cadastrou (material, resumos, lei/juris, flashcards, questões), sempre com a <b>origem</b>.</p>
+      <p>${icone("sparkles")} <b>Executo ações</b>: criar flashcards/questões, agendar revisão, registrar sessão, abrir telas e mais — eu proponho, você confirma.</p>
       <div class="chat-sugestoes">${chips}</div>
     </div>`;
 }
