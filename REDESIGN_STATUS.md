@@ -64,9 +64,11 @@
     chat sem `text-align: justify`.
 12. **Stylelint**: `.stylelintrc.json` (color-no-hex + no-duplicate-selectors como
     warnings) + `npm run lint:css`. Baseline: ~700 warnings.
-13. **(agente em andamento na última sessão)** Consolidação de tabs (.ls-segmented/
-    .cur-seg/.subtabs → .seg), seg MC×C/E no header de Questões, redução de variantes
-    .btn-* one-off. VERIFICAR o resultado visual nos 2 temas se não foi verificado.
+13. **Tabs unificados em `.seg`** (leiseca, edital, simulados, config, planejamento;
+    CSS de .ls-segmented/.cur-seg/.subtabs apagado; modificadores novos .seg-badge/
+    .seg-badge-due/.seg-txt). **Seg MC × C/E no header de Questões** (alterna as rotas
+    pratica/pratica-ce). **Botões 18→14 variantes** (mortas removidas: btn-success,
+    btn-dossie, btn-zerar, btn-ico). Verificado nos 2 temas, 0 erros de console.
 
 ### Falta da Fase 0 (backlog fino)
 - [ ] ~137 blocos `[data-tema="escuro"]` restantes → reduzir para <30 usando os tints
