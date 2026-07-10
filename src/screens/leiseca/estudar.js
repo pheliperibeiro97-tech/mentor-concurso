@@ -254,12 +254,10 @@ export function estudarCorpoHTML(store, st, tipo, r) {
       <div class="estudar-grid">
         <div class="estudar-card estudar-card-gerar">
           <span class="estudar-card-ic">${icone("sparkles")}</span>
-          <span class="estudar-card-txt"><b>Gerar material</b><span class="muted small">A IA cria a partir do escopo e abre a aba correspondente. Um clique gera no padrão; em Opções… você escolhe quantidade e dificuldade.</span></span>
+          <span class="estudar-card-txt"><b>Gerar material</b><span class="muted small">A IA cria a partir do escopo e abre a aba correspondente. Você escolhe quantidade e nível.</span></span>
           <span class="estudar-card-acoes">
-            <button class="btn btn-sm btn-soft" data-action="estudar-flashcards" data-tip="Gerar já: 3 flashcards por artigo, nível médio.">${icone("layers")} Flashcards</button>
-            <button class="lnk small" data-action="estudar-flashcards-opcoes" data-tip="Escolher quantidade e dificuldade dos flashcards.">Opções…</button>
-            <button class="btn btn-sm btn-soft" data-action="estudar-questoes" data-tip="Gerar já: 2 questões por artigo, nível médio.">${icone("notebook-pen")} Questões</button>
-            <button class="lnk small" data-action="estudar-questoes-opcoes" data-tip="Escolher quantidade e dificuldade das questões.">Opções…</button>
+            <button class="btn btn-sm btn-soft" data-action="estudar-flashcards" data-tip="Gerar flashcards do escopo — você escolhe quantidade e nível.">${icone("layers")} Flashcards</button>
+            <button class="btn btn-sm btn-soft" data-action="estudar-questoes" data-tip="Gerar questões de múltipla escolha do escopo — você escolhe quantidade e nível.">${icone("notebook-pen")} Questões</button>
           </span>
         </div>
       </div>

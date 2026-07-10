@@ -2406,7 +2406,7 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .ler-topo-l1 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ler-topo-l1 > .ler-voltar-biblio { flex: 0 0 auto; }
 .ler-topo-l1 > .ler-norma { flex: 0 1 auto; min-width: 0; max-width: 100%; }
-.ler-topo-l1 > .ler-busca-campo { flex: 1 1 200px; width: auto; }
+.ler-topo-l1 > .ler-busca-campo { flex: 0 1 340px; width: auto; max-width: 340px; }
 .ler-topo-l1 > .ler-tools { flex: 0 0 auto; margin-left: auto; }
 /* Selo de vigência (frescor da lei) — conferida (discreto) ou "confira" (nudge clicável). */
 .ler-norma { font-size: var(--fs-cap); font-weight: var(--fw-bold); letter-spacing: -.01em; color: var(--text); }

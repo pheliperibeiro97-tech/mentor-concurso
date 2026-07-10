@@ -541,15 +541,14 @@ function renderIndicacoes(root, app, tipo) {
     },
     // Gerar material do escopo: flashcards (IA, com fallback offline) e questões de múltipla escolha.
     // 1 clique gera DIRETO no padrão; o link "Opções…" do card abre o pedirNumero de antes.
-    "estudar-flashcards": (el) => gerarFlashcardsEscopo(el, 3, "medio"),
-    "estudar-flashcards-opcoes": async (el) => {
+    // "Gerar material": perguntar quantidade+nível é o PADRÃO (não há mais "Opções…").
+    "estudar-flashcards": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const g = await pedirNumero("Quantos flashcards por artigo?", { padrao: 3, min: 1, max: 6, nivel: true });
       if (!g) return;
       gerarFlashcardsEscopo(el, g.n, g.dificuldade);
     },
-    "estudar-questoes": (el) => gerarQuestoesEscopo(el, 2, "medio"),
-    "estudar-questoes-opcoes": async (el) => {
+    "estudar-questoes": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
       const g = await pedirNumero("Quantas questões de múltipla escolha por artigo?", { padrao: 2, min: 1, max: 5, nivel: true });
       if (!g) return;

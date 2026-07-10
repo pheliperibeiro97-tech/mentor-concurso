@@ -30,7 +30,7 @@ export const S = {
   _scrollSpyArtIO: null,
   _savePosT: null,
   _barraAuto: null, // { el, fn } do listener ativo da barra auto-oculta do leitor
-  _completarNivel: "facil", // nível do "Completar o artigo" (facil|medio|dificil|extremo)
+  _completarNivel: "medio", // nível padrão do "Completar o artigo" (facil|medio|dificil|extremo)
   filtroTop: { lei: { sel: [], aberto: false }, juris: { sel: [], aberto: false } }, // filtro multitópico
   filtroTribunal: "todos", // só jurisprudência
   filtroCategoria: "todas", // só jurisprudência
