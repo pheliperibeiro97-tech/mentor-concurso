@@ -212,17 +212,32 @@
   NÃO marca mais artigo como lido ao exibi-lo — lido = avançar ou botão. As métricas
   de progresso da lei voltam a ser verdadeiras.
 
-### Falta da Fase 5 (estrutural da Lei Seca — sessão dedicada)
-- [ ] Barra do leitor auto-oculta ao rolar (leitor sereno; ~13 controles hoje).
-- [ ] 1 ação visível por artigo + "···" (favorito/difícil/incidência via seleção).
-- [ ] UM sistema de grifo (aposentar painel-pincel; menu flutuante reposiciona no scroll).
-- [ ] Estudar sem dashboard (estatísticas em details); Metas sem dashboard duplicado.
-- [ ] Impressão reescrita p/ modelo atual (~1062-1079 usa modo meta/memoria da v3).
-- [ ] Card de juris: fileira "estudar" (5 botões) → 1 botão "Estudar" (split/menu).
-- [ ] Split do arquivo (280KB) em ~6 módulos (leitor/biblioteca/estudar/metas/import/juris).
+### Estrutural da Lei Seca — FEITO (3 agentes sequenciais, verificado ao vivo)
+- [x] LEITOR SERENO: barra auto-oculta ao rolar (volta ao subir; trilha fina de progresso
+      permanece; reduced-motion ok; handler anti-vazamento em 3 camadas); estatísticas-
+      filtro → dropdown "Filtrar"; barra ~13+6 → 7 controles.
+- [x] 1 ação por artigo (check + ⋯; favorito/difícil/o-que-mais-cai no menu; badges de
+      estado visíveis) — ~1.500 → ~600 nós numa lei de 300 artigos.
+- [x] GRIFO ÚNICO: painel-pincel aposentado na Lei Seca (documentos/resumos intactos);
+      gesto de seleção (menu flutuante) em leitor, Foco E cards de juris; "Revisar as
+      marcas" guarda modos Texto/Só marcas/Recordar + imprimir; cores com fonte única
+      (marcacao.js exporta); menu REPOSICIONA no scroll (não fecha mais).
+- [x] Foco: "Anotar" abre direto o modo nota (fim do toast-instrução); "Grifar" removido.
+- [x] Card de juris: 5 botões → 1 "Estudar" com menu.
+- [x] ESTUDAR = lançador (Mentor sugere + escopo + Revisar + Treinar + Gerar; números/
+      temas recolhidos); selo duplicado removido. METAS = resumo 1 linha + lista + link
+      Planejamento (dashboard "Hoje" removido). IMPRESSÃO no modelo atual (fim do
+      modo meta/memoria da v3).
+
+### Falta da Fase 5 (baixa prioridade / faxina)
+- [ ] Split do leiseca.js (280KB) em ~6 módulos (leitor/biblioteca/estudar/metas/import/
+      juris) — refactor mecânico grande; fazer numa sessão dedicada COM o app estável
+      (roteiro: mover blocos por aba, manter leiseca.js como roteador; conferir imports
+      circulares com marcacao/foco-quiz).
 - [ ] CSS órfão das dietas: .periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir
       outros usos), .sess-mais/.sess-obs, .disc-row/.disc-toggle/.topico-row, .qb-card,
-      .ed-top-links/.ed-link-chip/.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda* — faxina.
+      .ed-top-links/.ed-link-chip/.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda*,
+      .estudar-card-rec, blocos do pincel na Lei Seca — faxina com grep de uso.
 
 ## PRÓXIMAS FASES (6–8)
 
