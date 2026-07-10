@@ -3,7 +3,7 @@
 // final e é COMPOSTO POR MATÉRIA (cotas: X questões de cada disciplina), como uma prova
 // real. Tem modos rápidos, tempo sugerido, embaralho das alternativas e resultado por
 // matéria. Cada resposta vira tentativa (Caderno de Erros + Diagnóstico).
-import { bindActions, toast, vazio, confirmar, seloBadge, imprimir, pedirNumero , plural, ativarCountUp, skeletonDoc, md } from "../ui.js";
+import { bindActions, toast, vazio, confirmar, escolher, seloBadge, imprimir, pedirNumero , plural, ativarCountUp, skeletonDoc, md } from "../ui.js";
 import { esc, fmtMMSS, fmtTempo, pct } from "../util.js";
 import { icone } from "../icones.js";
 import { comentarSimulado } from "../ia-provider.js";
@@ -140,6 +140,7 @@ export default function renderSimulado(root, app, formato = "mc") {
   const st = store.get();
   const ss = SS[formato];
   if (ss.sim && ss.sim.resultado) return renderResultado(root, app, st, formato);
+  if (ss.sim && ss.sim.pausado) return renderPausado(root, app, formato); // prova pausada (Esc → "Pausar e continuar depois")
   if (ss.sim) return renderEmAndamento(root, app, st, formato);
   return renderSetup(root, app, st, formato);
 }
@@ -158,11 +159,29 @@ function renderSetup(root, app, st, formato) {
   const sugestao = tempoSugerido(total, formato);
   const rotTotal = (n) => (n === 1 ? "questão" : "questões");
 
+  // Simulado RÁPIDO (1 clique): N = min(20, disponível) distribuídas pela relevância do
+  // edital (mesmos helpers do "Pelo edital": distribuir + tempoSugerido), início direto.
+  const dispTotal = comp.reduce((a, c) => a + c.disp, 0);
+  const nRapido = Math.min(20, dispTotal);
+  const minRapido = tempoSugerido(nRapido, formato);
+  const temPesoEdital = comp.some((c) => c.peso > 0);
+
   root.innerHTML = `
+    ${
+      nRapido
+        ? `<section class="card foco-hero sim-rapido-hero">
+            <div class="foco-eyebrow">Simulado rápido</div>
+            <p class="foco-desc"><b>${nRapido}</b> ${rotTotal(nRapido)} distribuídas ${temPesoEdital ? "pela relevância do seu edital" : "pelas suas disciplinas"} · ~<b>${minRapido} min</b>. Sem configurar nada: a prova começa agora.</p>
+            <div class="foco-acoes">
+              <button class="btn btn-primary btn-lg" data-action="sim-rapido" data-tip="Monta e inicia a prova num clique. Para escolher as cotas, use Personalizar abaixo.">${icone("play")} Começar</button>
+            </div>
+          </section>`
+        : ""
+    }
     <section class="card sim-setup-card">
       <header class="sim-setup-head">
         <div>
-          <h3>Monte sua prova</h3>
+          <h3>${nRapido ? "Personalizar a prova" : "Monte sua prova"}</h3>
           <p class="muted small">Escolha <b>quantas questões de cada disciplina</b>, como numa prova real. É cronometrado e o gabarito só aparece ao finalizar.</p>
         </div>
         ${addQuestoesBotaoHTML(ss.addState.aberto, formato)}
@@ -348,15 +367,29 @@ function renderSetup(root, app, st, formato) {
     iniciar: () => {
       const escolhidas = montarPorCotas(st, formato, ss);
       if (!escolhidas.length) return toast("Defina ao menos uma cota maior que zero.", "erro");
-      const ordens = {};
-      if (cfg.embaralhar && formato !== "ce") {
-        for (const q of escolhidas) ordens[q.id] = embaralhar(q.alternativas.map((_, i) => i));
-      }
-      ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: cfg.tempoMin * 60, intervalId: null, resultado: null, focoIdx: 0 };
-      notaAnimou = false; // novo simulado → a nota do resultado volta a animar (o guard é por prova, não por sessão do app)
-      app.refresh();
+      iniciarProva(escolhidas, cfg.tempoMin);
+    },
+    // 1 clique: cotas pelo edital (distribuir) + tempo sugerido, e a prova já começa.
+    "sim-rapido": () => {
+      if (!nRapido) return toast("Nada disponível para montar o simulado.", "erro");
+      cfg.cotas = distribuir(nRapido, comp.map((c) => ({ key: c.key, peso: c.peso, max: c.disp })));
+      cfg.tempoMin = minRapido;
+      const escolhidas = montarPorCotas(st, formato, ss);
+      if (!escolhidas.length) return toast("Nada disponível para montar o simulado.", "erro");
+      iniciarProva(escolhidas, minRapido);
     },
   });
+
+  // Início comum (botão Iniciar e Simulado rápido): monta o estado da prova e re-renderiza.
+  function iniciarProva(escolhidas, tempoMin) {
+    const ordens = {};
+    if (cfg.embaralhar && formato !== "ce") {
+      for (const q of escolhidas) ordens[q.id] = embaralhar(q.alternativas.map((_, i) => i));
+    }
+    ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: (tempoMin || 0) * 60, intervalId: null, resultado: null, focoIdx: 0 };
+    notaAnimou = false; // novo simulado → a nota do resultado volta a animar (o guard é por prova, não por sessão do app)
+    app.refresh();
+  }
 }
 
 // Atualiza o total e o tempo sugerido sem re-render completo (preserva foco nos inputs).
@@ -500,13 +533,25 @@ function renderEmAndamento(root, app, st, formato) {
       if (faltando > 0 && !(await confirmar(`Faltam ${faltando} sem resposta. Finalizar mesmo assim?`))) return;
       finalizar();
     },
-    // No foco, "sair" (× / Esc) = cancelar a prova (com confirmação).
+    // No foco, "sair" (× / Esc) oferece 3 caminhos: pausar (mantém a prova para retomar
+    // depois), descartar (comportamento antigo) ou voltar. O overlay só fecha via
+    // app.refresh() (ss.sim decide a tela), então pausar = flag + refresh.
     "sair-foco": async () => {
-      if (await confirmar("Sair do simulado? As respostas serão descartadas.")) {
+      const op = await escolher("Sair do simulado?", [
+        { label: "Pausar e continuar depois", value: "pausar", cls: "btn-primary" },
+        { label: "Descartar a prova", value: "descartar", cls: "btn-danger" },
+        { label: "Voltar à prova", value: "voltar" },
+      ]);
+      if (op === "pausar") {
+        pararTimer(); // o relógio congela junto: retomar religa o setInterval
+        sim.pausado = true;
+        app.refresh();
+      } else if (op === "descartar") {
         pararTimer();
         ss.sim = null;
         app.refresh();
       }
+      // "voltar" / fechar fora: nada — a prova continua.
     },
   });
 
@@ -526,6 +571,37 @@ function renderEmAndamento(root, app, st, formato) {
   document.addEventListener("keydown", onKey);
 
   return () => { pararTimer(); document.removeEventListener("keydown", onKey); };
+}
+
+// ---------- Pausado ----------
+// Prova pausada (Esc → "Pausar e continuar depois"): mantém ss.sim intacto (respostas,
+// tempo decorrido, embaralho) e mostra um cartão de retomada no lugar do setup — assim
+// não dá para sobrescrever a prova pausada sem descartá-la de propósito.
+function renderPausado(root, app, formato) {
+  const ss = SS[formato];
+  const sim = ss.sim;
+  const total = sim.questaoIds.length;
+  const respondidas = Object.keys(sim.respostas).length;
+  root.innerHTML = `
+    <section class="card foco-hero sim-pausado">
+      <div class="foco-eyebrow">Prova pausada</div>
+      <p class="foco-desc">Você respondeu <b>${respondidas}</b> de <b>${total}</b> ${total === 1 ? "questão" : "questões"} · <b>${fmtMMSS(sim.elapsed)}</b> decorridos${sim.target > 0 ? ` (limite ${fmtMMSS(sim.target)})` : ""}. O relógio está congelado — volta a correr quando você retomar.</p>
+      <div class="foco-acoes">
+        <button class="btn btn-primary btn-lg" data-action="retomar">${icone("play")} Retomar a prova</button>
+        <button class="btn btn-ghost lnk-danger" data-action="descartar-pausado" data-tip="Apaga as respostas desta prova pausada.">${icone("trash-2")} Descartar</button>
+      </div>
+    </section>`;
+  bindActions(root, {
+    retomar: () => {
+      sim.pausado = false;
+      app.refresh();
+    },
+    "descartar-pausado": async () => {
+      if (!(await confirmar("Descartar a prova pausada? As respostas serão perdidas."))) return;
+      ss.sim = null;
+      app.refresh();
+    },
+  });
 }
 
 // Overlay do simulado em andamento (shell compartilhado). Uma questão por vez, timer da

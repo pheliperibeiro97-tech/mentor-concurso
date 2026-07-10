@@ -107,8 +107,6 @@ let ocrEmCurso = false;
 let semQuery = ""; // busca semântica
 let semResultados = null; // null = ainda não buscou; [] = buscou e nada
 let semBuscando = false;
-let semSelMostrar = false; // lista de seleção de fontes p/ indexar (oculta até clicar)
-let semSel = null; // Set de ids selecionados; null = ainda não inicializado
 // Fase 6 — Materiais indexa só material/resumo; Lei Seca/Jurisprudência têm índice no próprio módulo.
 const SEM_ESCOPO_MAT = { tipos: ["material", "resumo"] };
 
@@ -183,13 +181,13 @@ function estruturaResumoHTML(est, store, docId) {
         <div class="estr-edit-l1">
           <span class="estr-num">${esc(b.numero || "")}</span>${aviso}
           <input class="prev-inp estr-titulo" data-i="${i}" value="${esc(b.titulo)}" />
-          <button class="prev-remover" data-action="estr-remover" data-i="${i}"${dAttr} data-tip="Remover este bloco">${icone("x")}</button>
+          <button class="prev-remover" data-action="estr-remover" data-i="${i}"${dAttr} data-tip="Remover este tópico do material">${icone("x")}</button>
         </div>
         <div class="estr-edit-l2">
           <label class="inline small">Tópico <select class="estr-topico" data-i="${i}"${dAttr}>${topOpts(b.topicoId)}</select></label>
           <label class="inline small">págs <input type="number" min="1" class="estr-pini" data-i="${i}"${dAttr} value="${b.pIni || ""}" />–<input type="number" min="1" class="estr-pfim" data-i="${i}"${dAttr} value="${b.pFim || ""}" /></label>
           ${tipoTag}
-          <button class="lnk" data-action="estr-thumb" data-i="${i}" data-pag="${b.pIni}"${dAttr} data-tip="Ver a página inicial deste bloco">${icone("eye")} pág. ${b.pIni}</button>
+          <button class="lnk" data-action="estr-thumb" data-i="${i}" data-pag="${b.pIni}"${dAttr} data-tip="Ver a página inicial deste tópico">${icone("eye")} pág. ${b.pIni}</button>
         </div>
         <div class="estr-thumb-host" data-i="${i}"></div>
       </li>`;
@@ -208,7 +206,7 @@ function estruturaResumoHTML(est, store, docId) {
     ? `<button class="btn btn-ghost btn-sm" data-action="caprichar-estrutura" data-doc="${docId}" data-tip="A IA relê a página do sumário (imagem) e reconstrói os tópicos com fidelidade.">${icone("wand-sparkles")} Refazer tópicos pelo sumário (IA)</button>`
     : "";
   const aplicar = docId
-    ? `<button class="btn btn-primary btn-sm" data-action="aplicar-estrutura" data-doc="${docId}" data-tip="Vincula o material aos tópicos dos blocos (com as faixas de página).">${icone("check")} Aplicar tópicos ao material</button>`
+    ? `<button class="btn btn-primary btn-sm" data-action="aplicar-estrutura" data-doc="${docId}" data-tip="Vincula o material aos tópicos do sumário (com as faixas de página).">${icone("check")} Aplicar tópicos ao material</button>`
     : `<span class="muted small">Os tópicos são aplicados ao salvar o material.</span>`;
   const nB = est.blocos.length;
 
@@ -229,7 +227,7 @@ function estruturaResumoHTML(est, store, docId) {
       })
       .join("");
     return `<div class="estr-card estr-pronto">
-      <div class="estr-pronto-head">${icone("list-tree")} <b>${nB}</b> ${nB === 1 ? "tópico" : "tópicos"} detectado${nB === 1 ? "" : "s"}${aula} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span>${avisoConf}</div>
+      <div class="estr-pronto-head">${icone("list-tree")} Sumário: <b>${nB}</b> ${nB === 1 ? "tópico do material" : "tópicos do material"}${aula} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span>${avisoConf}</div>
       <ul class="estr-preview">${listaLimpa}</ul>
       <details class="estr-avancado">
         <summary>${icone("sliders-horizontal")} Ajustar tópicos (avançado)</summary>
@@ -243,7 +241,7 @@ function estruturaResumoHTML(est, store, docId) {
 
   // MODO COMPLETO (card do material salvo): editor técnico direto, com aplicar/caprichar.
   return `<details class="estr-card" open>
-    <summary>${icone("files")} Estrutura — <b>${nB}</b> ${nB === 1 ? "bloco" : "blocos"} · ${comTopico}/${nB} com tópico${aula}${avisoConf} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span></summary>
+    <summary>${icone("files")} Sumário — <b>${nB}</b> ${nB === 1 ? "tópico do material" : "tópicos do material"} · ${comTopico}/${nB} vinculado${comTopico === 1 ? "" : "s"} ao edital${aula}${avisoConf} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span></summary>
     <p class="muted small u-mt-8 u-mb-8">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique ${icone("eye")} para conferir a página.</p>
     <ul class="estr-lista">${linhas}</ul>
     <div class="estr-acoes u-mt-8 u-flex u-wrap">${caprichar}${refino}${aplicar}</div>
@@ -310,13 +308,13 @@ function sumarioNavegavelHTML(d, store) {
     const ehQuestoes = b.tipo === "questoes" || b.tipo === "lista";
     const gerar = temIA
       ? `<details class="doc-mais sum-gerar-menu">
-           <summary class="lnk" data-tip="Gera a partir DESTE conteúdo (págs. ${b.pIni}–${b.pFim}).">${icone("sparkles")} Gerar deste bloco ${icone("chevron-down")}</summary>
+           <summary class="lnk" data-tip="Gera a partir DESTE conteúdo (págs. ${b.pIni}–${b.pFim}).">${icone("sparkles")} Gerar deste tópico ${icone("chevron-down")}</summary>
            <div class="doc-mais-pop" role="menu">
              <button class="menu-item" data-action="bloco-flashcards" data-id="${d.id}" data-bi="${i}">${icone("layers")} Flashcards</button>
              <button class="menu-item" data-action="bloco-questoes" data-id="${d.id}" data-bi="${i}">${icone("notebook-pen")} Questões</button>
              <button class="menu-item" data-action="bloco-questoes-ce" data-id="${d.id}" data-bi="${i}">${icone("check")} Questões C/E</button>
              <button class="menu-item" data-action="bloco-mapa" data-id="${d.id}" data-bi="${i}">${iconMapa} Mapa mental</button>
-             ${ehQuestoes ? `<button class="menu-item" data-action="bloco-extrair" data-id="${d.id}" data-bi="${i}" data-tip="Extrai as questões já prontas deste bloco (não inventa).">${icone("clipboard-list")} Extrair questões prontas</button>` : ""}
+             ${ehQuestoes ? `<button class="menu-item" data-action="bloco-extrair" data-id="${d.id}" data-bi="${i}" data-tip="Extrai as questões já prontas deste tópico do material (não inventa).">${icone("clipboard-list")} Extrair questões prontas</button>` : ""}
            </div>
          </details>`
       : "";
@@ -324,7 +322,7 @@ function sumarioNavegavelHTML(d, store) {
     const revBtn = b.topicoId
       ? `<button class="lnk" data-action="sum-revisar-topico" data-top="${b.topicoId}" data-tip="Programa uma revisão espaçada deste tópico (aparece na Central de Revisões).">${icone("repeat")} Revisar este tópico</button>`
       : "";
-    const aviso = (b.confianca || 1) < 0.6 ? `<span class="estr-aviso" data-tip="Baixa confiança — confira em ✎ revisar estrutura.">${icone("triangle-alert")}</span> ` : "";
+    const aviso = (b.confianca || 1) < 0.6 ? `<span class="estr-aviso" data-tip="Baixa confiança — confira no Sumário (menu do material).">${icone("triangle-alert")}</span> ` : "";
     const filhosHTML = nd.filhos.length ? `<div class="sum-filhos">${nd.filhos.map(render).join("")}</div>` : "";
     return `<details class="sum-bloco" data-niv="${b.nivel || 1}">
       <summary>${icone("chevron-right")}<span class="estr-num">${esc(b.numero || "")}</span> ${aviso}<span class="sum-titulo">${esc(b.titulo)}</span> <span class="muted small">p.${b.pIni}–${b.pFim}</span> ${tipoTag} ${tn ? `<span class="estr-top">→ ${esc(tn)}</span>` : ""} ${rotuloRevisao(st, b.topicoId)}</summary>
@@ -405,7 +403,7 @@ export default function renderDocumentos(root, app) {
     ${
       docs.length
         ? faixaIA({
-            texto: "Cada material vira <b>flashcards</b> e <b>questões</b> com a IA, pelo menu <b>Mais</b> da aula.",
+            texto: "Cada material vira <b>flashcards</b> e <b>questões</b> com a IA, pelo botão <b>Gerar com IA</b> da aula.",
             key: "materiais-gerar",
           })
         : ""
@@ -450,19 +448,6 @@ export default function renderDocumentos(root, app) {
   root.querySelector("#doc-group")?.addEventListener("change", (e) => {
     store.setConfig({ materialAgrupamento: e.target.value });
     app.refresh();
-  });
-
-  // Checkboxes de seleção de fontes para indexar (não via bindActions: o preventDefault
-  // do clique impediria o checkbox de marcar).
-  root.querySelectorAll(".sem-fonte-chk").forEach((chk) => {
-    chk.addEventListener("change", () => {
-      const id = chk.getAttribute("data-id");
-      if (semSel === null) semSel = new Set();
-      if (chk.checked) semSel.add(id);
-      else semSel.delete(id);
-      const btn = root.querySelector('[data-action="aplicar-sel"]');
-      if (btn) btn.textContent = `Separar selecionados (${semSel.size})`;
-    });
   });
 
   // Editor de tópicos do material (muitos‑para‑muitos): aplica na hora ao marcar/desmarcar.
@@ -510,7 +495,7 @@ export default function renderDocumentos(root, app) {
 
   // F5: gera/extrai a partir de UM bloco do sumário (herda tópico + páginas + banca).
   async function gerarDoBloco(el, tipo) {
-    if (!store.iaDisponivel()) return avisoIA(app, "Gerar deste bloco");
+    if (!store.iaDisponivel()) return avisoIA(app, "Gerar deste tópico");
     const id = el.getAttribute("data-id");
     const bi = parseInt(el.getAttribute("data-bi"), 10);
     const d = store.get().documentos.find((x) => x.id === id);
@@ -521,14 +506,14 @@ export default function renderDocumentos(root, app) {
     if (tipo === "extrair") {
       const qs = await comOcupado(() => store.extrairQuestoesDeDoc(id, bloco), { botao: el, msg: `Extraindo questões de "${rotulo}"…` });
       if (qs == null) return;
-      toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} de "${rotulo}".` : "Não encontrei questões prontas neste bloco.", qs.length ? "ok" : "erro");
+      toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} de "${rotulo}".` : "Não encontrei questões prontas neste tópico do material.", qs.length ? "ok" : "erro");
       if (qs.length) app.navigate("pratica");
       return;
     }
     const perguntas = {
-      flashcards: ["Quantos flashcards a IA deve gerar deste bloco?", 6],
-      questoes: ["Quantas questões a IA deve gerar deste bloco?", 5],
-      ce: ["Quantos itens Certo/Errado a IA deve gerar deste bloco?", 6],
+      flashcards: ["Quantos flashcards a IA deve gerar deste tópico?", 6],
+      questoes: ["Quantas questões a IA deve gerar deste tópico?", 5],
+      ce: ["Quantos itens Certo/Errado a IA deve gerar deste tópico?", 6],
     }[tipo];
     const r = await pedirNumero(perguntas[0], { padrao: perguntas[1], min: 1, max: 30, nivel: true });
     if (!r) return;
@@ -555,7 +540,7 @@ export default function renderDocumentos(root, app) {
     if (blocos.length < 2 && nPag < 2) return { bloco: null }; // nada a escolher → material inteiro
     const opcoes = [
       { label: "Todo o material", value: "-1", cls: "btn-soft" },
-      ...blocos.map((b, i) => ({ label: `${b.numero || ""} ${b.titulo}`.trim() || `Bloco ${i + 1}`, value: String(i) })),
+      ...blocos.map((b, i) => ({ label: `${b.numero || ""} ${b.titulo}`.trim() || `Tópico ${i + 1}`, value: String(i) })),
     ];
     if (nPag >= 2) opcoes.push({ label: `Escolher páginas… (1–${nPag})`, value: "pag" });
     const v = await escolher("Gerar a partir de qual parte do material?", opcoes, { lista: true });
@@ -775,8 +760,8 @@ export default function renderDocumentos(root, app) {
     "redetectar-estrutura": (el) => {
       const id = el.getAttribute("data-id");
       const est = store.redetectarEstruturaDoc(id);
-      if (est) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast(`Estrutura re-detectada: ${plural(est.blocos.length, "bloco", "blocos")}.`, "ok"); }
-      else toast("Não consegui detectar uma estrutura no texto atual (sem Índice/numeração).", "erro");
+      if (est) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast(`Sumário refeito: ${plural(est.blocos.length, "tópico do material", "tópicos do material")}.`, "ok"); }
+      else toast("Não consegui montar um sumário do texto atual (sem Índice/numeração).", "erro");
       app.refresh();
     },
     // F4: alterna entre o sumário navegável e o texto bruto completo.
@@ -810,6 +795,7 @@ export default function renderDocumentos(root, app) {
 
     // Gerar a partir do material (pergunta o escopo: inteiro × tópico do sumário × faixa de páginas).
     "doc-mapa": async (el) => {
+      el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar mapa mental");
       const id = el.getAttribute("data-id");
       const escopo = await escolherEscopoGeracao(id);
@@ -917,37 +903,24 @@ export default function renderDocumentos(root, app) {
       await processarOcr(app, store, d, [n]);
     },
 
-    // ---- busca semântica ----
-    "toggle-sel-index": () => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Busca semântica");
-      semSelMostrar = !semSelMostrar;
-      // Seleção reflete o que JÁ está no índice (marcado = está; desmarcar = sai).
-      if (semSelMostrar) {
-        semSel = new Set(store.fontesIndice(SEM_ESCOPO_MAT).filter((f) => f.emIndice).map((f) => f.id));
-      }
-      app.refresh();
-    },
-    "sel-todos": () => {
-      semSel = new Set(store.fontesIndice(SEM_ESCOPO_MAT).map((f) => f.id));
-      aplicarSelNoDOM(root, semSel); // sem re-render → não fecha o painel de busca
-    },
-    "sel-nenhum": () => {
-      semSel = new Set();
-      aplicarSelNoDOM(root, semSel);
-    },
-    "aplicar-sel": async () => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Busca semântica");
-      const ids = [...(semSel || [])];
-      toast(ids.length ? "Aplicando seleção…" : "Removendo do índice…");
+    // ---- busca inteligente (semântica) ----
+    // Reprocessa em LOTE os materiais pendentes/desatualizados do índice. Depois disto,
+    // salvar/atualizar material mantém o índice em dia sozinho (indexarFonteAuto).
+    "atualizar-indice": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Busca inteligente");
+      const pend = store.fontesIndice(SEM_ESCOPO_MAT).filter((f) => !f.indexada).map((f) => f.id);
+      if (!pend.length) return toast("A busca inteligente já está em dia.", "ok");
+      el.disabled = true;
+      const fim = toastCarregando("Preparando os materiais para a busca inteligente…");
       try {
-        const r = await store.sincronizarIndice(ids, (feito, total, titulo) =>
-          toast(`Indexando ${feito}/${total}: ${titulo}`), SEM_ESCOPO_MAT
-        );
-        toast(`Índice: ${plural(r.chunks, "trecho", "trechos")}.`, "ok");
-        semSelMostrar = false;
+        const r = await store.indexarSemantica((feito, total, titulo) =>
+          fim(`Atualizando índice… ${feito}/${total}: ${titulo}`), { ids: pend });
+        fim();
+        toast(`Busca inteligente atualizada (${plural(r.feitos, "material", "materiais")}).`, "ok");
       } catch (e) {
+        fim();
         console.error(e);
-        toast("Não consegui separar os materiais agora. Tente de novo em instantes.", "erro");
+        toast("Não consegui atualizar o índice agora. Tente de novo em instantes.", "erro");
       }
       app.refresh();
     },
@@ -986,7 +959,7 @@ export default function renderDocumentos(root, app) {
       semQuery = q;
       if (!q) return toast("Digite o que procurar.", "erro");
       if (!store.iaDisponivel()) return avisoIA(app, "Busca semântica");
-      if (!store.statusIndice().temIndice) return toast("Indexe o material primeiro.", "erro");
+      if (!store.statusIndice().temIndice) return toast("Ative a busca inteligente primeiro (botão “Atualizar índice”).", "erro");
       semBuscando = true;
       app.refresh();
       try {
@@ -1078,30 +1051,17 @@ async function processarOcr(app, store, doc, listaN) {
   }
 }
 
-// Texto de ajuda: qual busca usar conforme o objetivo.
 // Materiais filtrados pela busca textual E pelo filtro multi-tópico.
 function docsFiltrados(store, st) {
   return store.buscarDocumentos(busca).filter((d) => itemNoFiltro(st, d, filtroTop.sel));
 }
 
-function ajudaBuscasHTML() {
-  return `
-    <details class="sem-ajuda">
-      <summary>Qual busca usar?</summary>
-      <div class="sem-ajuda-corpo">
-        <p><b>${icone("search")} No material (palavra exata):</b> acha a palavra exata que você digita. É rápida, funciona offline (sem IA) e busca conforme você digita. Boa quando você sabe o termo certo (por exemplo "autoexecutoriedade" ou o nome de uma aula).</p>
-        <p><b>${icone("puzzle")} Por significado (semântica):</b> acha trechos pelo sentido, mesmo escritos com outras palavras. Por exemplo: "casa que perde a proteção contra penhora" encontra "impenhorabilidade do bem de família". Usa IA e precisa separar os materiais antes (indexar). Boa para perguntas e conceitos quando você não lembra o termo exato.</p>
-      </div>
-    </details>`;
-}
-
-// Busca semântica como SUB-BLOCO do card "Buscas". Indexar é PRÉ-REQUISITO: sem índice,
-// a busca por significado não tem o que consultar — por isso "1. Indexar" vem primeiro e
-// o campo de busca fica desabilitado até haver índice.
 // Busca por SIGNIFICADO (semântica/IA) — sem campo próprio: usa o MESMO termo digitado no
-// campo unificado (#busca). Aqui ficam só as ações (separar índice + buscar) e os resultados.
+// campo unificado (#busca). Sem aparato: 1 linha de status + "Atualizar índice" quando há
+// pendências. Material salvo/atualizado entra sozinho no índice (indexarFonteAuto) depois
+// que a busca foi ativada uma vez.
 function buscaSemanticaHTML(store) {
-  const s = store.statusIndice(SEM_ESCOPO_MAT); // "Separar" cuida só de material/resumo
+  const s = store.statusIndice(SEM_ESCOPO_MAT); // status só de material/resumo (este módulo)
   const g = store.statusIndice(); // busca consulta TODO o índice (inclui Lei Seca/Jurisprudência)
   if (!s.online && !g.temIndice) {
     // Mesmo sem IA, o botão APARECE (suspenso) para não contradizer o texto "use o botão abaixo".
@@ -1111,66 +1071,21 @@ function buscaSemanticaHTML(store) {
       <span class="sem-status muted small">Conecte uma IA em Configurações para habilitar a busca por <b>significado</b>.</span>
     </div>`;
   }
-  const statusTxt = s.temIndice
-    ? `Separados para busca por significado: <b>${s.indexadas}</b> de ${s.fontes} (${plural(s.chunks, "trecho", "trechos")})${s.pendentes ? ` · <b>${s.pendentes} para separar</b>` : ""}.`
-    : `Nenhum material separado ainda (${plural(s.fontes, "disponível", "disponíveis")}) — separe para habilitar a busca por significado.`;
-  const labelSeparar = semSelMostrar
-    ? `${icone("chevron-down")} Fechar`
+  const statusTxt = !s.fontes
+    ? "Busca inteligente: sem materiais ainda."
     : s.temIndice
-    ? s.pendentes
-      ? `Separar (${plural(s.pendentes, "pendente", "pendentes")})`
-      : "Separar de novo"
-    : "Separar materiais";
+    ? `Busca inteligente: ativa em <b>${s.indexadas}</b> de ${s.fontes} ${s.fontes === 1 ? "material" : "materiais"}.`
+    : `Busca inteligente: ainda não ativada — clique em “Atualizar índice”.`;
+  const btnAtualizar = s.online && s.pendentes
+    ? `<button class="btn btn-ghost btn-sm" data-action="atualizar-indice" data-tip="Prepara os materiais novos ou alterados para a busca por significado. Depois, novos materiais entram sozinhos.">${icone("refresh-cw")} Atualizar índice (${s.pendentes})</button>`
+    : "";
   return `
     <div class="busca-sem-barra">
-      ${s.online ? `<button class="btn btn-ghost btn-sm" data-action="toggle-sel-index" data-tip="Separa (indexa) os materiais escolhidos para a busca por significado (faça uma vez; repita ao adicionar material novo).">${labelSeparar}</button>` : ""}
-      <button class="btn btn-ia btn-sm" data-action="buscar-sem" ${s.online && g.temIndice ? "" : "disabled"} data-tip="${g.temIndice ? "Busca por significado (IA) usando o que você digitou acima." : "Separe ao menos um material antes de buscar por significado."}">${semBuscando ? "Buscando…" : `${icone("sparkles")} Buscar por significado (IA)`}</button>
+      <button class="btn btn-ia btn-sm" data-action="buscar-sem" ${s.online && g.temIndice ? "" : "disabled"} data-tip="${g.temIndice ? "Busca por significado (IA) usando o que você digitou acima." : "Ative a busca inteligente (Atualizar índice) antes de buscar por significado."}">${semBuscando ? "Buscando…" : `${icone("sparkles")} Buscar por significado (IA)`}</button>
+      ${btnAtualizar}
       <span class="sem-status muted small">${statusTxt}</span>
     </div>
-    ${semSelMostrar ? selecaoFontesHTML(store) : ""}
     ${semResultados !== null ? resultadosSemHTML(semResultados) : ""}`;
-}
-
-// Aplica a seleção `sel` aos checkboxes JÁ renderizados (sem re-render — não fecha o painel de
-// busca, que é um <details> só-open-se-há-busca). Atualiza também o botão.
-function aplicarSelNoDOM(root, sel) {
-  root.querySelectorAll(".sem-fonte-chk").forEach((chk) => { chk.checked = sel.has(chk.getAttribute("data-id")); });
-  const btn = root.querySelector('[data-action="aplicar-sel"]');
-  if (btn) btn.textContent = `Separar selecionados (${sel.size})`;
-}
-// Lista (oculta até clicar em Indexar) onde o checkbox É a participação no índice:
-// marcado = está na busca semântica; desmarcar + Aplicar = sai. Um só botão sincroniza.
-function selecaoFontesHTML(store) {
-  // Fase 6 — aqui em Materiais só materiais e resumos. Lei Seca e Jurisprudência têm o
-  // próprio "Buscar por significado" dentro de cada módulo (não poluem este seletor).
-  const fontes = store.fontesIndice(SEM_ESCOPO_MAT);
-  if (!fontes.length) {
-    return `<div class="muted small u-mt-12">Nenhum material ou resumo para indexar ainda.</div>`;
-  }
-  const sel = semSel || new Set();
-  const statusFonte = (f) =>
-    f.indexada ? `${icone("check")} separado (${plural(f.chunks, "trecho", "trechos")})` : f.emIndice ? `${icone("refresh-cw")} desatualizado (reprocessar)` : "ainda não separado";
-  const linhaFonte = (f) => `
-    <label class="sem-fonte">
-      <input type="checkbox" class="sem-fonte-chk" data-id="${f.id}" ${sel.has(f.id) ? "checked" : ""} />
-      <span class="sem-fonte-nome">${esc(f.titulo)}</span>
-      ${f.tipo === "resumo" ? `<span class="mini-tag">Resumo</span>` : ""}
-      <span class="sem-fonte-status ${f.indexada ? "ok" : f.emIndice ? "pend" : ""}">${statusFonte(f)}</span>
-    </label>`;
-  return `
-    <div class="sem-sel">
-      <div class="sem-sel-top">
-        <span class="muted small">Marque os materiais que entram na busca por significado (separar 1 trecho = 1 requisição à IA):</span>
-        <span class="spacer"></span>
-        <button class="lnk" data-action="sel-todos">marcar todos</button> ·
-        <button class="lnk" data-action="sel-nenhum">desmarcar todos</button>
-      </div>
-      <div class="sem-sel-lista">${fontes.map(linhaFonte).join("")}</div>
-      <div class="sem-sel-acoes">
-        <button class="btn btn-primary btn-sm" data-action="aplicar-sel">Separar selecionados (${sel.size})</button>
-        <span class="muted small">Desmarcar e aplicar remove o material da busca.</span>
-      </div>
-    </div>`;
 }
 
 // Lista de materiais agrupada (por disciplina/tópico) ou plana.
@@ -1368,7 +1283,7 @@ function abrirImportarMaterial(app) {
               pend.img = await fileToDataUrl(f);
               pend.paginas = [{ n: 1, texto: "", vazia: true, temImagem: true, ocr: false }];
               corpo.querySelector("#doc-texto").value = "";
-              toast(iaOn ? "Imagem carregada. Salve e clique em “Processar com Visão” para extrair o texto." : "Imagem carregada. O texto será extraído por Visão quando você conectar a IA (fica pendente).", "ok");
+              toast(iaOn ? "Imagem carregada. Salve e clique em “Ler páginas escaneadas” para extrair o texto." : "Imagem carregada. O texto será extraído por Visão quando você conectar a IA (fica pendente).", "ok");
             } else {
               texto = await f.text();
               corpo.querySelector("#doc-texto").value = texto;
@@ -1404,6 +1319,7 @@ function abrirImportarMaterial(app) {
             const ok = await confirmar(`Já existe um material chamado "${titulo}". Atualizar ele com esta importação (mantém as questões/flashcards/marcações e os tópicos já confirmados)? Escolha Cancelar para criar um novo.`);
             if (ok) {
               store.atualizarMaterialDeImport(existente.id, { texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
+              store.indexarFonteAuto(existente.id); // busca inteligente: reindexa em background (no-op se não ativada)
               toast("Material atualizado (mesmo id; vínculos preservados).", "ok");
               fechar();
               app.refresh();
@@ -1423,11 +1339,14 @@ function abrirImportarMaterial(app) {
             estrutura: pend.estrutura,
           });
           if (doc && pend.estrutura) store.aplicarEstruturaAoMaterial(doc.id, pend.estrutura);
+          // Busca inteligente: indexa o material novo em background (silencioso; no-op se a
+          // busca nunca foi ativada ou a IA está desconectada).
+          if (doc) store.indexarFonteAuto(doc.id);
           // F1 — descrever FIGURAS de conteúdo com a IA, automático e em BACKGROUND (não bloqueia).
           const temFig = doc && store.iaDisponivel() && Array.isArray(pend.paginas) && pend.paginas.some((p) => p.temImagem);
           if (temFig) {
             const fim = toastCarregando("Descrevendo as figuras do material com a IA…");
-            store.descreverFigurasDeDoc(doc.id).then((r) => { fim(); if (r && r.descritas) toast(`${plural(r.descritas, "figura descrita", "figuras descritas")} pela IA (já entram na busca).`, "ok"); }).catch(() => fim());
+            store.descreverFigurasDeDoc(doc.id).then((r) => { fim(); if (r && r.descritas) toast(`${plural(r.descritas, "figura descrita", "figuras descritas")} pela IA (já entram na busca).`, "ok"); store.indexarFonteAuto(doc.id); /* o texto ganhou as descrições → reindexa */ }).catch(() => fim());
           }
           if (store.get().config.descartarPdfAposImport && doc && (doc.pdfData || doc.imgData) && store.paginasPendentes(doc).length === 0 && !temFig) {
             store.descartarBinarioDoc(doc.id);
@@ -1502,6 +1421,20 @@ function docHTML(store, st, d, busca) {
           ${pend ? `<span class="tag-ocr">${icone("hourglass")} ${pend} pág. p/ OCR</span>` : ""}
           ${d.binarioDescartado ? `<span class="muted small" data-tip="O PDF original foi descartado; o texto extraído foi mantido." data-tip-pos="cima-dir">${icone("file-text")} PDF descartado</span>` : ""}
           <button class="lnk doc-acao-primaria" data-action="abrir" data-id="${d.id}">${aberto ? `${icone("chevron-down")} ocultar texto` : `${icone("chevron-right")} ver texto extraído`}</button>
+          ${
+            (d.texto || "").trim()
+              ? `<details class="doc-mais doc-gerar-menu">
+                   <summary class="lnk" data-tip-pos="cima-dir" data-tip="Criar flashcards, questões e mapa mental a partir deste material.">${icone("sparkles")} Gerar com IA ${icone("chevron-down")}</summary>
+                   <div class="doc-mais-pop" role="menu">
+                     <button class="menu-item" data-action="doc-flashcards" data-id="${d.id}" data-tip="A IA CRIA flashcards (frente/verso) a partir do conteúdo deste material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("layers")}</span> Flashcards</button>
+                     <button class="menu-item" data-action="doc-questoes" data-id="${d.id}" data-tip="A IA gera questões de múltipla escolha novas a partir do conteúdo." data-tip-pos="cima-esq"><span class="menu-ico">${icone("notebook-pen")}</span> Questões (múltipla escolha)</button>
+                     <button class="menu-item" data-action="doc-questoes-ce" data-id="${d.id}" data-tip="A IA gera afirmações Certo/Errado novas a partir do conteúdo." data-tip-pos="cima-esq"><span class="menu-ico">${icone("check")}</span> Questões Certo/Errado</button>
+                     <button class="menu-item" data-action="doc-extrair" data-id="${d.id}" data-tip="TRANSCREVE as questões que JÁ existem no material (ex.: 'Questões Comentadas'), com o gabarito quando está no texto. Não inventa." data-tip-pos="cima-esq"><span class="menu-ico">${icone("clipboard-list")}</span> Extrair questões prontas</button>
+                     <button class="menu-item" data-action="doc-mapa" data-id="${d.id}" data-tip="A IA monta um mapa mental do conteúdo deste material." data-tip-pos="cima-esq"><span class="menu-ico">${iconMapa}</span> Mapa mental</button>
+                   </div>
+                 </details>`
+              : ""
+          }
           <details class="doc-mais">
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este material.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
@@ -1510,32 +1443,25 @@ function docHTML(store, st, d, busca) {
               ${(d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Mostra o texto completo extraído, em vez do sumário. É o que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Texto corrido"}</button>` : ""}
               ${(d.texto || "").trim() ? `<button class="menu-item" data-action="toggle-marcar" data-id="${d.id}" data-tip="Grifar o texto (palavras-chave, prazos/valores, restritivas). O grifo de palavras-chave vira a fonte da revisão do tópico." data-tip-pos="cima-esq"><span class="menu-ico">${icone("square-pen")}</span> ${marcarAberto.has(d.id) ? "Fechar marcação" : "Marcar / grifar"}</button>` : ""}
               ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Refaz UMA página com a Visão (tabela/organograma cujo texto saiu fora de ordem, ou página escaneada)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Reprocessar página (Visão)</button>` : ""}
+              <div class="menu-sep"></div>
+              <div class="menu-rotulo">Sumário e edital</div>
               ${
-                (d.texto || "").trim()
-                  ? `<div class="menu-sep"></div>
-                     <div class="menu-rotulo">Gerar com IA</div>
-                     <button class="menu-item" data-action="doc-flashcards" data-id="${d.id}" data-tip="A IA CRIA flashcards (frente/verso) a partir do conteúdo deste material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("layers")}</span> Flashcards</button>
-                     <button class="menu-item" data-action="doc-questoes" data-id="${d.id}" data-tip="A IA gera questões de múltipla escolha novas a partir do conteúdo." data-tip-pos="cima-esq"><span class="menu-ico">${icone("notebook-pen")}</span> Questões (múltipla escolha)</button>
-                     <button class="menu-item" data-action="doc-questoes-ce" data-id="${d.id}" data-tip="A IA gera afirmações Certo/Errado novas a partir do conteúdo." data-tip-pos="cima-esq"><span class="menu-ico">${icone("check")}</span> Questões Certo/Errado</button>
-                     <button class="menu-item" data-action="doc-extrair" data-id="${d.id}" data-tip="TRANSCREVE as questões que JÁ existem no material (ex.: 'Questões Comentadas'), com o gabarito quando está no texto. Não inventa." data-tip-pos="cima-esq"><span class="menu-ico">${icone("clipboard-list")}</span> Extrair questões prontas</button>
-                     <button class="menu-item" data-action="doc-mapa" data-id="${d.id}" data-tip="A IA monta um mapa mental do conteúdo deste material." data-tip-pos="cima-esq"><span class="menu-ico">${iconMapa}</span> Mapa mental</button>`
-                  : ""
+                d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
+                  ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Ver e editar o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Sumário</button>`
+                  : d.pdfData && store.iaDisponivel()
+                    ? `<button class="menu-item" data-action="caprichar-estrutura" data-doc="${d.id}" data-tip="A IA lê a página de sumário do próprio PDF e monta os tópicos do material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("wand-sparkles")}</span> Montar sumário (IA)</button>`
+                    : ""
               }
+              <button class="menu-item" data-action="editar-topicos" data-id="${d.id}" data-tip="Escolher quais tópicos do edital este material cobre (dentro do painel, a IA pode sugerir)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("link")}</span> Vincular ao edital</button>
               <div class="menu-sep"></div>
-              <div class="menu-rotulo">Estrutura e tópicos</div>
-              ${d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Editar títulos, tópicos do edital e faixas de página dos blocos do sumário." data-tip-pos="cima-esq"><span class="menu-ico">${icone("square-pen")}</span> Revisar estrutura</button>` : ""}
-              ${d.pdfData && store.iaDisponivel() ? `<button class="menu-item" data-action="caprichar-estrutura" data-doc="${d.id}" data-tip="A IA relê a página de sumário do próprio PDF e refaz os tópicos com fidelidade." data-tip-pos="cima-esq"><span class="menu-ico">${icone("wand-sparkles")}</span> Refazer sumário (IA)</button>` : ""}
-              <button class="menu-item" data-action="editar-topicos" data-id="${d.id}" data-tip="Escolher à mão quais tópicos do edital este material cobre." data-tip-pos="cima-esq"><span class="menu-ico">${icone("link")}</span> Vincular ao edital (à mão)</button>
-              ${(d.texto || "").trim() && store.iaDisponivel() ? `<button class="menu-item" data-action="detectar-topicos" data-id="${d.id}" data-tip="A IA lê o material e sugere quais tópicos do edital ele aborda (você confere)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Vincular ao edital (IA)</button>` : ""}
-              <div class="menu-sep"></div>
-              ${d.pdfData ? `<button class="menu-item menu-item-danger" data-action="descartar-pdf" data-id="${d.id}" data-tip="Apaga só o arquivo PDF para liberar espaço; o texto extraído e a estrutura permanecem." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Descartar PDF original</button>` : ""}
+              ${d.pdfData ? `<button class="menu-item menu-item-danger" data-action="descartar-pdf" data-id="${d.id}" data-tip="Apaga só o arquivo PDF para liberar espaço; o texto extraído e o sumário permanecem." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Descartar PDF original</button>` : ""}
               <button class="menu-item menu-item-danger" data-action="del-doc" data-id="${d.id}"><span class="menu-ico">${icone("x")}</span> Remover material</button>
             </div>
           </details>
         </div>
       </div>
       ${trecho ? `<div class="doc-snippet">${realcar(esc(trecho), busca.trim())}</div>` : ""}
-      ${topicosDocAberto === d.id ? topicosEditorHTML(st, d) : ""}
+      ${topicosDocAberto === d.id ? topicosEditorHTML(store, st, d) : ""}
       ${detectDoc === d.id ? detectPainelHTML() : ""}
       ${
         marcarAberto.has(d.id)
@@ -1563,7 +1489,7 @@ function docHTML(store, st, d, busca) {
                  d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
                    ? estruturaEditando.has(d.id)
                      ? `${estruturaResumoHTML(d.estrutura, store, d.id)}
-                        <button class="btn btn-ghost btn-sm u-mt-8" data-action="estr-edit-toggle" data-id="${d.id}">${icone("check")} concluir revisão da estrutura</button>`
+                        <button class="btn btn-ghost btn-sm u-mt-8" data-action="estr-edit-toggle" data-id="${d.id}">${icone("check")} concluir revisão do sumário</button>`
                      : textoBrutoAberto.has(d.id)
                        ? `<div class="doc-corpo"><div class="muted small u-mb-8">${icone("file-text")} Texto corrido completo (alimenta busca e IA). <button class="lnk" data-action="menu-texto-corrido" data-id="${d.id}">voltar ao sumário</button></div>${esc(d.texto) || "<i>vazio</i>"}</div>`
                        : sumarioNavegavelHTML(d, store)
@@ -1580,7 +1506,9 @@ function docHTML(store, st, d, busca) {
 
 // Editor dos tópicos que um material COBRE (Fase 1: muitos‑para‑muitos). Uma aula pode
 // cobrir vários assuntos — marque todos. Aplica na hora (sem botão de salvar).
-function topicosEditorHTML(st, d) {
+// O "Sugerir com IA" dispara a detecção existente (detectar-topicos) — o painel de
+// sugestões abre logo abaixo e o usuário confirma o que vincular.
+function topicosEditorHTML(store, st, d) {
   const sel = new Set(d.topicoIds && d.topicoIds.length ? d.topicoIds : d.topicoId ? [d.topicoId] : []);
   const maxPag = (d.paginas || []).length || 9999;
   const grupos = st.disciplinas
@@ -1602,10 +1530,13 @@ function topicosEditorHTML(st, d) {
       </div>`;
     })
     .join("");
+  const sugerirIA = (d.texto || "").trim() && store.iaDisponivel()
+    ? `<button class="btn btn-ia btn-sm" data-action="detectar-topicos" data-id="${d.id}" data-tip="A IA lê o material e sugere quais tópicos do edital ele aborda (você confere e confirma).">${icone("sparkles")} Sugerir com IA</button>`
+    : "";
   return `<div class="card doc-top-editor">
     <div class="muted small u-mb-8">${icone("files")} <b>Tópicos que este material cobre</b> — marque todos (uma aula pode cobrir vários). Em cada um, opcionalmente diga <b>quais páginas</b> o cobrem (deixe vazio = a aula inteira). Salva automaticamente.</div>
     ${grupos || `<p class="muted small u-m-0">Nenhum tópico cadastrado. Adicione no Edital.</p>`}
-    <div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="editar-topicos" data-id="${d.id}">Fechar</button></div>
+    <div class="form-acoes">${sugerirIA}<button class="btn btn-ghost btn-sm" data-action="editar-topicos" data-id="${d.id}">Fechar</button></div>
   </div>`;
 }
 
@@ -1614,7 +1545,7 @@ function detectPainelHTML() {
   if (detectando) return `<div class="card detect-painel"><p class="muted small u-m-0">${icone("search")} A IA está lendo o material e detectando os tópicos…</p></div>`;
   const res = detectResultado || [];
   return `<div class="card detect-painel">
-    <h3 class="u-mb-4">${icone("search")} Tópicos detectados no material</h3>
+    <h3 class="u-mb-4">${icone("sparkles")} Tópicos do edital sugeridos pela IA</h3>
     ${
       res.length
         ? `<p class="muted small u-m-0 u-mb-8">A IA identificou estes tópicos do edital. Marque os que quer colocar na <b>curva de revisão</b> (você confirma):</p>
@@ -1651,7 +1582,7 @@ function ocrAlertaHTML(store, d) {
       <span>${icone("hourglass")} <b>${pend.length}</b> ${pend.length === 1 ? "página escaneada" : "páginas escaneadas"}/sem texto (pág. ${lista})</span>
       ${
         iaOn
-          ? `<button class="btn btn-primary btn-sm" data-action="ocr-doc" data-id="${d.id}">${icone("search")} Processar com Visão (${pend.length} req.)</button>`
+          ? `<button class="btn btn-primary btn-sm" data-action="ocr-doc" data-id="${d.id}">${icone("sparkles")} Ler páginas escaneadas (${pend.length})</button>`
           : `<span class="muted small">Conecte o Gemini em Configurações para processar (fica pendente até lá).</span>`
       }
     </div>

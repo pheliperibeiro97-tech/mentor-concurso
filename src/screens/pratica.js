@@ -3,19 +3,20 @@
 //  • 'ce' = Certo/Errado     (rota "pratica-ce", título "Questões C/E")
 // Itens C/E são modelados como questão de 2 alternativas ["Certo","Errado"],
 // então tentativas, Caderno de Erros e Acompanhamento funcionam igual.
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, focarItem, explicacaoIAHTML, abrirJanela , plural, comOcupado } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, pedirTexto, focarItem, explicacaoIAHTML, abrirJanela , plural, comOcupado } from "../ui.js";
 import { esc, MOTIVOS_ERRO as MOTIVOS } from "../util.js";
 import { icone } from "../icones.js";
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, questaoNoFiltro } from "./questoes-filtro.js";
-import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
+import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono, streakChipHTML } from "./foco-quiz.js";
 import { abrirRegistroSessao } from "../registro-sessao.js";
 import * as crono from "../cronometro.js";
 
 // Estado independente por formato (Questões e Questões C/E não se misturam).
 function novoEstado() {
   return { subModo: "treino", filtroTop: { sel: [], aberto: false }, filtroStatus: "todas", addState: { aberto: false }, editandoId: null, refazer: new Set(),
-    focoAtivo: false, focoFila: [], focoIdx: 0, focoPlacar: {}, focoAnimEntrada: false }; // Modo Foco: quiz imersivo
+    focoAtivo: false, focoFila: [], focoIdx: 0, focoPlacar: {}, focoAnimEntrada: false,
+    focoStreak: 0, focoMelhorSeq: 0 }; // Modo Foco: quiz imersivo (+ sequência de acertos da sessão)
 }
 const S = { mc: novoEstado(), ce: novoEstado() };
 
@@ -118,6 +119,8 @@ function renderTreino(root, app, formato) {
     s.focoFila.forEach((id) => s.refazer.add(id)); // começam EM BRANCO (refazer, não rever)
     s.focoIdx = 0;
     s.focoPlacar = {};
+    s.focoStreak = 0;
+    s.focoMelhorSeq = 0;
     s.focoAtivo = s.focoFila.length > 0;
     s.focoAnimEntrada = true;
   }
@@ -138,6 +141,12 @@ function renderTreino(root, app, formato) {
     .filter((q) => !q.treino && ehDoFormato(q, formato) && (!s.filtroLote || q.geracaoId === s.filtroLote) && questaoNoFiltro(q, s.filtroTop.sel) && (s.filtroStatus === "todas" || statusQuestao(st, q) === s.filtroStatus))
     .sort((a, b) => (b.criadoEm || "").localeCompare(a.criadoEm || "")); // recém-criadas primeiro (padrão)
   const nErradas = st.questoes.filter((q) => !q.treino && ehDoFormato(q, formato) && statusQuestao(st, q) === "errei").length;
+  // Fila inteligente do herói "Praticar agora": dentro do FILTRO atual, erradas primeiro,
+  // depois pendentes, e por fim as já acertadas (revisão). O herói só aparece se houver
+  // pendência real (errada ou pendente) — senão o botão "Modo foco" da barra cobre a revisão.
+  const filaErradas = questoes.filter((q) => statusQuestao(st, q) === "errei").map((q) => q.id);
+  const filaPendentes = questoes.filter((q) => statusQuestao(st, q) === "pendente").map((q) => q.id);
+  const nPraticar = filaErradas.length + filaPendentes.length;
   // Há questões do formato, mas nenhuma passou no filtro atual? Então é um vazio de
   // filtro (não "não tem nada"): mostra mensagem orientando a ajustar os filtros.
   const totalFormato = st.questoes.filter((q) => !q.treino && ehDoFormato(q, formato)).length;
@@ -148,10 +157,15 @@ function renderTreino(root, app, formato) {
   root.innerHTML = `
     <div class="barra-acoes">
       ${addQuestoesBotaoHTML(s.addState.aberto, formato)}
-      <button class="btn btn-sm fc-foco-btn" data-action="entrar-foco" ${questoes.length ? "" : "disabled"} data-tip="Resolver uma a uma, em tela cheia, sem distração (respeita o filtro atual).">${icone("expand")} Modo foco</button>
+      ${nPraticar ? "" : `<button class="btn btn-sm fc-foco-btn" data-action="entrar-foco" ${questoes.length ? "" : "disabled"} data-tip="Resolver uma a uma, em tela cheia, sem distração (respeita o filtro atual).">${icone("expand")} Modo foco</button>`}
       <button class="btn btn-sm btn-treinar" data-action="treinar-erradas" ${nErradas ? "" : "disabled"} data-tip="Refaz, em branco, todas as que você errou. Cada uma sai da lista quando você acerta.">Treinar erros (<span class="num">${nErradas}</span>)</button>
       <span class="spacer"></span>
-      <button class="btn btn-sm btn-ghost lnk-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito.">${icone("trash-2")} Limpar (<span class="num">${questoes.length}</span>)</button>
+      <details class="doc-mais prat-mais">
+        <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações.">${icone("ellipsis")}</summary>
+        <div class="doc-mais-pop" role="menu">
+          <button class="menu-item menu-item-danger" data-action="limpar-questoes" ${questoes.length ? "" : "disabled"} data-tip-pos="cima-dir" data-tip="Apaga as ${formato === "ce" ? "afirmações" : "questões"} que estão no filtro atual (tópico + situação). Não pode ser desfeito."><span class="menu-ico">${icone("trash-2")}</span> Limpar (${questoes.length})</button>
+        </div>
+      </details>
     </div>
 
     ${editObj ? editFormHTML(st, editObj, opcoesVincular, formato) : ""}
@@ -170,6 +184,15 @@ function renderTreino(root, app, formato) {
     ${filtroTopicosPainelHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
 
     ${s.filtroLote ? `<div class="lote-banner">${icone("sparkles")}<span>Praticando só as <b>${questoes.length}</b> ${formato === "ce" ? "afirmações" : "questões"} recém-geradas ${esc(s.filtroLoteRotulo)}.</span><button class="lnk" data-action="lote-ver-todos" data-tip="Voltar para todas as suas ${formato === "ce" ? "afirmações" : "questões"}.">Ver todas</button></div>` : ""}
+
+    ${nPraticar ? `
+    <section class="card foco-hero pratica-hero">
+      <div class="foco-eyebrow">Pronto para treinar</div>
+      <p class="foco-desc">Você tem <b>${nPraticar}</b> ${formato === "ce" ? (nPraticar === 1 ? "afirmação" : "afirmações") : (nPraticar === 1 ? "questão" : "questões")} para resolver neste filtro${filaErradas.length ? " — as erradas entram primeiro na fila, depois as pendentes" : ""}. Entre no Modo Foco e resolva uma a uma, sem distração.</p>
+      <div class="foco-acoes">
+        <button class="btn btn-primary btn-lg" data-action="praticar-agora" data-tip="Modo Foco com a fila inteligente: erradas e pendentes primeiro.">${icone("play")} Praticar agora (${nPraticar})</button>
+      </div>
+    </section>` : ""}
 
     ${totalFormato ? `<div class="plano-h"><h2>${formato === "ce" ? "Seus itens" : "Suas questões"}</h2><span class="cnt">${questoes.length}</span>${questoes.length ? `<span class="tempo-est" data-tip="Tempo estimado para resolver este conjunto (${formato === "ce" ? "~1,2 min" : "~2,2 min"} por ${formato === "ce" ? "item" : "questão"}).">${icone("clock-3")} ≈ ${Math.max(1, Math.round(questoes.length * (formato === "ce" ? 1.2 : 2.2)))} min</span>` : ""}<span class="sp"></span></div>` : ""}
     <div class="lista-questoes">
@@ -210,8 +233,36 @@ function renderTreino(root, app, formato) {
       s.focoFila = questoes.map((q) => q.id);
       s.focoIdx = 0;
       s.focoPlacar = {};
+      s.focoStreak = 0;
+      s.focoMelhorSeq = 0;
       s.focoAtivo = true;
       s.focoAnimEntrada = true; // só a 1ª aparição tem animação plena (as demais, fade)
+      app.refresh();
+    },
+    // Herói "Praticar agora": Modo Foco com a fila INTELIGENTE do filtro atual —
+    // erradas primeiro (em branco, para refazer), depois pendentes, e as acertadas por fim.
+    "praticar-agora": () => {
+      const acertadas = questoes.filter((q) => statusQuestao(st, q) === "acertei").map((q) => q.id);
+      s.focoFila = [...filaErradas, ...filaPendentes, ...acertadas];
+      filaErradas.forEach((id) => s.refazer.add(id)); // erradas recomeçam EM BRANCO
+      s.focoIdx = 0;
+      s.focoPlacar = {};
+      s.focoStreak = 0;
+      s.focoMelhorSeq = 0;
+      s.focoAtivo = true;
+      s.focoAnimEntrada = true;
+      app.refresh();
+    },
+    // Conclusão do foco: refaz SÓ as erradas DESTA sessão (nova rodada, em branco).
+    "foco-refazer-erradas": () => {
+      const ids = Object.entries(s.focoPlacar).filter(([, v]) => v === false).map(([id]) => id);
+      if (!ids.length) return;
+      s.focoFila = ids;
+      ids.forEach((id) => s.refazer.add(id));
+      s.focoIdx = 0;
+      s.focoPlacar = {};
+      s.focoStreak = 0;
+      s.focoMelhorSeq = 0;
       app.refresh();
     },
     "foco-anterior": () => { if (s.focoIdx > 0) { s.focoIdx--; atualizarOverlayFoco(root, store, s, formato); } },
@@ -243,11 +294,20 @@ function renderTreino(root, app, formato) {
       if (s.filtroTop.sel.length) desc.push(s.filtroTop.sel.length === 1 ? "do tópico selecionado" : "dos tópicos selecionados");
       if (s.filtroStatus !== "todas") desc.push(`com situação "${s.filtroStatus}"`);
       const ctx = desc.length ? " " + desc.join(" e ") : " (todos os tópicos e situações)";
-      if (await confirmar(`Apagar ${plural(questoes.length, formato === "ce" ? "afirmação" : "questão", formato === "ce" ? "afirmações" : "questões")}${ctx}? Esta ação não pode ser desfeita.`)) {
-        questoes.forEach((q) => store.removerQuestao(q.id));
-        toast(`${plural(questoes.length, formato === "ce" ? "item removido" : "questão removida", formato === "ce" ? "itens removidos" : "questões removidas")}.`);
-        app.refresh();
+      // Lotes grandes (> 50) exigem confirmação FORTE: digitar o número exato.
+      if (questoes.length > 50) {
+        const digitado = await pedirTexto(
+          `Apagar ${plural(questoes.length, formato === "ce" ? "afirmação" : "questão", formato === "ce" ? "afirmações" : "questões")}${ctx}? Esta ação não pode ser desfeita. Digite ${questoes.length} para confirmar.`,
+          { placeholder: String(questoes.length), rotuloOk: "Apagar" }
+        );
+        if (digitado === null) return; // cancelou
+        if (digitado.trim() !== String(questoes.length)) return toast("Número não confere — nada foi apagado.", "erro");
+      } else if (!(await confirmar(`Apagar ${plural(questoes.length, formato === "ce" ? "afirmação" : "questão", formato === "ce" ? "afirmações" : "questões")}${ctx}? Esta ação não pode ser desfeita.`))) {
+        return;
       }
+      questoes.forEach((q) => store.removerQuestao(q.id));
+      toast(`${plural(questoes.length, formato === "ce" ? "item removido" : "questão removida", formato === "ce" ? "itens removidos" : "questões removidas")}.`);
+      app.refresh();
     },
     // PILOTO de "janela": editar abre numa JANELA modal premium (antes expandia inline + scrollIntoView).
     editar: (el) => {
@@ -292,11 +352,18 @@ function renderTreino(root, app, formato) {
         // No foco: registra no placar da sessão e atualiza SÓ o miolo + o placar, no lugar
         // (sem app.refresh, senão o overlay re-anima e "parece recarregar").
         s.focoPlacar[qId] = t.acertou;
+        // Sequência de acertos: soma no acerto, zera no erro; guarda a melhor da sessão.
+        if (t.acertou) {
+          s.focoStreak = (s.focoStreak || 0) + 1;
+          if (s.focoStreak > (s.focoMelhorSeq || 0)) s.focoMelhorSeq = s.focoStreak;
+        } else {
+          s.focoStreak = 0;
+        }
         const st2 = store.get();
         const q = st2.questoes.find((x) => x.id === qId);
         const stage = root.querySelector(".fq-stage");
         if (stage && q) stage.innerHTML = focoQuestaoHTML(st2, q, formato, s);
-        atualizarPlacarFoco(root, s.focoPlacar);
+        atualizarPlacarFoco(root, s);
         return;
       }
       if (t) toast(t.acertou ? "Acertou!" : "Errou. Registrado no caderno.", t.acertou ? "ok" : "erro");
@@ -529,15 +596,15 @@ function focoOverlayHTML(st, s, formato, anim = "in") {
   const vals = Object.values(s.focoPlacar);
   const acertos = vals.filter((v) => v === true).length;
   const erros = vals.filter((v) => v === false).length;
-  const centro = q ? focoQuestaoHTML(st, q, formato, s) : focoConclusaoHTML(acertos, erros);
+  const centro = q ? focoQuestaoHTML(st, q, formato, s) : focoConclusaoHTML(acertos, erros, s);
   const rodape = !q
     ? `<kbd>Esc</kbd> sair`
     : q.formato === "ce" // legenda por questão (sessão pode ser mista, ex.: refazer erros)
       ? `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>C</kbd> certo · <kbd>E</kbd> errado · <kbd>Espaço</kbd> próxima`
-      : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>1</kbd>–<kbd>4</kbd> responder · <kbd>Espaço</kbd> próxima · <kbd>C</kbd> comentar`;
+      : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>1</kbd>–<kbd>${Math.min(q.alternativas.length, 6)}</kbd> responder · <kbd>Espaço</kbd> próxima · <kbd>C</kbd> comentar`;
   return focoShellHTML({
     idx, total, fim: !q, anim,
-    placar: { acertos, erros },
+    placar: { acertos, erros, seq: s.focoStreak || 0 },
     centro, rodape,
     aria: formato === "ce" ? "Modo foco Certo/Errado" : "Modo foco Questões",
   });
@@ -665,29 +732,52 @@ function focoQuestaoHTML(st, q, formato, s) {
     </div>`;
 }
 
-function focoConclusaoHTML(acertos, erros) {
+// Conclusão SENSÍVEL AO DESEMPENHO: 3 faixas de mensagem (≥80% / 50–79% / <50%) e CTA
+// primário contextual — com erros, "Refazer as N erradas" (foco só com as erradas DESTA
+// sessão); sem erros, "Concluir". Mostra também a melhor sequência de acertos da sessão.
+function focoConclusaoHTML(acertos, erros, s) {
   const feitos = acertos + erros;
   const pct = feitos ? Math.round((acertos / feitos) * 100) : 0;
+  const melhorSeq = (s && s.focoMelhorSeq) || 0;
+  let titulo = "Sessão concluída";
+  let msg = `Você resolveu <b>${feitos}</b> ${feitos === 1 ? "questão" : "questões"} neste foco.`;
+  if (feitos) {
+    if (pct >= 80) {
+      titulo = `Mandou bem: ${acertos} de ${feitos} (${pct}%)`;
+      msg = erros ? `Só <b>${erros}</b> ${erros === 1 ? "escapou" : "escaparam"} — dá para zerar agora.` : `Aproveitamento cheio — sessão impecável.`;
+    } else if (pct >= 50) {
+      titulo = `Bom treino: ${acertos} de ${feitos}`;
+      msg = `As <b>${erros}</b> que escaparam já estão prontas para refazer.`;
+    } else {
+      titulo = `Treino difícil — vamos reconstruir a base?`;
+      msg = `Refazer as <b>${erros}</b> erradas agora, com calma, é o caminho mais curto.`;
+    }
+  }
   return `
     <div class="fq-panel fq-conclusao">
       <div class="fq-check">${icone("check")}</div>
-      <h2>Sessão concluída</h2>
-      <p class="muted">Você resolveu <b>${feitos}</b> ${feitos === 1 ? "questão" : "questões"} neste foco.</p>
+      <h2>${titulo}</h2>
+      <p class="muted">${msg}</p>
       ${feitos ? `<div class="fq-conc-placar">
         <div class="fq-conc-item ok"><strong>${acertos}</strong><span>acertos</span></div>
         <div class="fq-conc-item err"><strong>${erros}</strong><span>erros</span></div>
         <div class="fq-conc-item pct"><strong>${pct}%</strong><span>precisão</span></div>
+        ${melhorSeq >= 2 ? `<div class="fq-conc-item seq"><strong>${melhorSeq}</strong><span>melhor sequência</span></div>` : ""}
       </div>` : ""}
       <div class="fq-conclusao-acoes">
         ${feitos ? `<button class="btn btn-soft btn-lg" data-action="foco-registrar-tempo" data-tip="Lança o TEMPO desta sessão de prática (as questões já foram contadas uma a uma).">${icone("clock-3")} Registrar tempo</button>` : ""}
-        <button class="btn btn-primary btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>
+        ${erros
+          ? `<button class="btn btn-primary btn-lg" data-action="foco-refazer-erradas" data-tip="Nova rodada, em branco, só com as que você errou nesta sessão.">${icone("repeat-2")} Refazer as ${erros} erradas</button>
+             <button class="btn btn-ghost btn-lg" data-action="sair-foco">Concluir</button>`
+          : `<button class="btn btn-primary btn-lg" data-action="sair-foco">${icone("check")} Concluir</button>`}
       </div>
     </div>`;
 }
 
 // Atualiza o placar da sessão no lugar (sem re-render), após responder no foco.
-function atualizarPlacarFoco(root, placar) {
-  const vals = Object.values(placar);
+// Também cuida do chip de SEQUÊNCIA (aparece com 3+ acertos seguidos, some ao errar).
+function atualizarPlacarFoco(root, s) {
+  const vals = Object.values(s.focoPlacar);
   const acertos = vals.filter((v) => v === true).length;
   const erros = vals.filter((v) => v === false).length;
   const feitos = acertos + erros;
@@ -699,6 +789,19 @@ function atualizarPlacarFoco(root, placar) {
   if (er) er.innerHTML = `${icone("x")} ${erros}`;
   const pc = box.querySelector(".fq-plc-pct");
   if (pc) pc.textContent = feitos ? Math.round((acertos / feitos) * 100) + "%" : "—";
+  // Chip de streak, no lugar: atualiza o número, insere ao chegar em 3 ou remove ao zerar.
+  const seq = s.focoStreak || 0;
+  const chip = root.querySelector(".fq-seq");
+  if (seq >= 3) {
+    if (chip) {
+      const n = chip.querySelector(".fq-seq-n");
+      if (n) n.textContent = `${seq} seguidas`;
+    } else {
+      box.insertAdjacentHTML("beforebegin", streakChipHTML(seq));
+    }
+  } else if (chip) {
+    chip.remove();
+  }
 }
 
 function printQuestoes(st, questoes, formato, comGab = true) {

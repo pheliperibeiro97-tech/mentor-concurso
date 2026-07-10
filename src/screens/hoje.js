@@ -98,15 +98,12 @@ export default function renderHoje(root, app) {
   // contagem genérica. Tem prioridade sobre o ponto de atenção comum.
   const revFoco = topicoSel ? store.revisaoTopicoDe(topicoSel.id) : null;
   const focoRevVenceHoje = !!(revFoco && revFoco.proxima && revFoco.proxima <= todayISO());
-  // "Plano de hoje do Mentor": o mentor FALA na Home — 2 a 4 acionáveis derivados do
-  // que o app já sabe (pontos de atenção, tópico sugerido, revisões, prova). Cada um
-  // com um botão que EXECUTA (não é aviso decorativo). Substitui a faixinha discreta.
-  // "Plano de hoje" em BLOCOS: Foco sugerido (Mentor) + tarefas planejadas (você) + adicionar.
-  // Absorve as tarefas e o "adicionar" num painel só (como no protótipo). As linhas-rec antigas
-  // (ponto de atenção, flashcards, contagem de tarefas) já vivem no card do Mentor / faixa de Revisões.
+  // "Plano de hoje": SÓ as tarefas planejadas pelo usuário + "Adicionar ao dia". O foco
+  // sugerido pelo Mentor vive apenas no card-herói acima — repeti-lo aqui era duplicação
+  // na mesma viewport (achado P-05 da auditoria). Contadores contam só o que resta.
   const tarefasDia = store.tarefasDoDia(todayISO());
-  const nPlano = (topicoSel ? 1 : 0) + tarefasDia.length;
-  const minPlano = (topicoSel ? st.config.pomodoroFoco || 25 : 0) + tarefasDia.reduce((a, x) => a + (x.estimMin || 0), 0);
+  const nPlano = tarefasDia.length;
+  const minPlano = tarefasDia.reduce((a, x) => a + (x.estimMin || 0), 0);
   const pbTask = (it) => {
     const cor = it.tipo === "rotina" ? "#f472b6" : "#818cf8";
     return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${!it.concluida && (it.topicoId || it.estimMin) ? ` data-action="focar-topico"${it.topicoId ? ` data-top="${it.topicoId}"` : ""} data-min="${it.estimMin || ""}"${it.tipo === "missao" ? ` data-missao="${it.id}"` : ""}` : ""}>
@@ -118,18 +115,7 @@ export default function renderHoje(root, app) {
   const planoSec = `
     <section class="plano-sec">
       <div class="plano-h"><h2>Plano de hoje</h2>${nPlano ? `<span class="cnt">${plural(nPlano, "item", "itens")}${minPlano ? ` · ${fmtMin(minPlano)}` : ""}</span>` : ""}<span class="sp"></span><a data-action="hub-ir" data-rota="planejamento">Ver semana →</a></div>
-      <p class="plano-note muted small">${icone("sparkles")} <b>Mentor sugere</b> · o resto é o que você planejou — comece pelo que quiser.</p>
       <div class="plano-blocos">
-        ${
-          topicoSel
-            ? `<div class="pb pb-ai" style="--c:${focoEhSugestao ? "var(--accent)" : "var(--primary)"}" data-action="focar-topico" data-top="${topicoSel.id}" data-fase="${sel.fase}">
-          <span class="pb-stripe"></span>
-          <div class="pb-top"><span class="pb-tag">Foco</span>${focoEhSugestao ? `<span class="pb-src pb-ai-src">${icone("sparkles")} Mentor</span>` : `<span class="pb-src pb-you">Você escolheu</span>`}<span class="pb-tm">agora</span></div>
-          <h4>${esc(topicoSel.nome)}</h4>
-          <div class="pb-meta">${esc(faseInfo.nome)} · ~${st.config.pomodoroFoco || 25} min${focoEhSugestao ? " · sugerido do seu edital" : ""}</div>
-        </div>`
-            : ""
-        }
         ${tarefasDia.map(pbTask).join("")}
         <button class="pb pb-add" data-action="hub-ir" data-rota="planejamento">
           <span class="pb-add-pl">${icone("plus")}</span><span class="pb-add-t">Adicionar ao dia</span><span class="pb-add-m">Outra matéria, tarefa ou sessão</span>
@@ -137,12 +123,9 @@ export default function renderHoje(root, app) {
       </div>
     </section>`;
 
-  // Recomposição visual (gap nº1): o card de FOCO é o herói (topo). "Plano de hoje" e a
-  // ofensiva descem para depois do herói. Info a mais no card de foco (porquê + meta) que
-  // antes ficava espalhada — mesma informação, disposição diferente.
+  // Recomposição visual (gap nº1): o card de FOCO é o herói (topo) e é o ÚNICO lugar do
+  // foco sugerido — o "Plano de hoje" abaixo lista só o que o usuário planejou.
   const porqueHoje = topicoSel ? porqueFoco(store, st, topicoSel) : "";
-  const dossieTop = topicoSel ? store.dossie(topicoSel.id) : null;
-  const dominio = dossieTop && dossieTop.totalTentativas > 0 ? Math.round((dossieTop.acertos / dossieTop.totalTentativas) * 100) : null;
   const discFoco = topicoSel ? st.disciplinas.find((d) => d.id === topicoSel.disciplinaId) : null;
   const ondePareiFase = ultimaSess ? (FASES[ultimaSess.fase] && FASES[ultimaSess.fase].nome) || "" : "";
 
@@ -171,14 +154,13 @@ export default function renderHoje(root, app) {
       ${discFoco ? `<div class="foco-disc">${esc(discFoco.nome)}</div>` : ""}
       <div class="foco-topline">
         <div class="foco-topico-nome">${topicoSel ? esc(topicoSel.nome) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
-        ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico — você decide.">${icone("repeat-2")} Trocar tópico</button>` : ""}
+        ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico.">${icone("repeat-2")} Trocar tópico</button>` : ""}
       </div>
       ${
         st.topicos.length
           ? `<div class="foco-meta">
         <div class="fm"><span class="fm-k">Bloco${sel.blocoMin ? " · do plano" : ""}</span><span class="fm-v">${sel.blocoMin || st.config.pomodoroFoco || 25} min</span></div>
         ${ondePareiFase ? `<div class="fm"><span class="fm-k">Onde parei</span><span class="fm-v">${esc(ondePareiFase)}</span></div>` : ""}
-        <div class="fm"><span class="fm-k">Domínio</span><span class="fm-v">${dominio != null ? dominio + "%" : "—"}</span></div>
       </div>`
           : ""
       }
@@ -443,14 +425,14 @@ function mentorVozHTML(store, st, topicoSel, insightTxt) {
         <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">plano novo</span></div>
         <p class="hmv-porque">${icone("sparkles")} <span class="hmv-txt" data-stream>Analisei seu progresso: ${esc(frase)}</span></p>
         <div class="hmv-sugs">
-          <button class="chip hmv-sug" data-action="ver-plano" data-tip="Abre o plano completo para você revisar e aprovar.">${icone("arrow-right")} Ver o plano completo${nSug ? ` (${nSug} ${nSug === 1 ? "sugestão" : "sugestões"})` : ""}</button>
+          <button class="chip hmv-sug" data-action="ver-plano" data-tip="Abre o plano completo para você revisar.">${icone("arrow-right")} Ver o plano completo${nSug ? ` (${nSug} ${nSug === 1 ? "sugestão" : "sugestões"})` : ""}</button>
         </div>
       </section>`;
   }
   const txt = insightTxt
     ? esc(insightTxt)
     : topicoSel
-    ? "Peça questões, um resumo ou o replanejamento do dia — eu proponho, você aprova."
+    ? "Peça questões, um resumo ou o replanejamento do dia."
     : "Escolha um tópico e eu ajudo com questões, resumo e plano.";
   return `<section class="card card-ia hoje-mentor-voz">
       <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">sugere</span></div>
@@ -458,7 +440,7 @@ function mentorVozHTML(store, st, topicoSel, insightTxt) {
       <div class="hmv-sugs">
         ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
         ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}
-        <button class="chip hmv-sug" data-action="refazer-plano" data-tip="Abre o Mentor IA e reanalisa seu progresso — propõe metas, tarefas e revisões pra você aprovar.">${icone("refresh-cw")} Refazer meu plano</button>
+        <button class="chip hmv-sug" data-action="refazer-plano" data-tip="Abre o Mentor IA e reanalisa seu progresso — metas, tarefas e revisões.">${icone("refresh-cw")} Refazer meu plano</button>
       </div>
       <div class="hmv-nota muted small">O Mentor propõe; você aprova antes de qualquer ação.</div>
     </section>`;

@@ -2045,6 +2045,25 @@ export const store = {
     return { feitos, chunks: idx.itens.length };
   },
 
+  // Indexação AUTOMÁTICA de UMA fonte recém-salva/atualizada para a busca semântica.
+  // Best-effort e SILENCIOSA (nunca lança; devolve null quando não age): só roda quando
+  // a IA/embeddings estão configurados E a busca por significado já foi ativada alguma
+  // vez (índice não vazio) — assim salvar material não dispara requisições involuntárias
+  // para quem nunca usou a busca. A primeira ativação continua explícita, pela UI
+  // ("Atualizar índice" em Materiais). Se a fonte já está em dia (mesma assinatura),
+  // indexarSemantica não refaz nada.
+  async indexarFonteAuto(id) {
+    try {
+      if (!id || !this.iaDisponivel()) return null;
+      const idx = state.embeddings;
+      if (!idx || (!idx.itens.length && !Object.keys(idx.fontes || {}).length)) return null;
+      return await this.indexarSemantica(null, { ids: [id] });
+    } catch (e) {
+      console.warn("[busca] indexação automática falhou (o material fica pendente):", e);
+      return null;
+    }
+  },
+
   // Remove fontes específicas do índice (apaga seus trechos e a assinatura) — assim
   // a fonte deixa de aparecer na busca semântica e pode ser reindexada depois.
   removerDoIndice(ids) {

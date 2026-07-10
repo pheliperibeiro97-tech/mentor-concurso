@@ -1,13 +1,12 @@
 // Acompanhamento: controle das sessões por período (botões), por dia (calendário
 // mensal navegável) e desempenho por disciplina/tópico (com último dia estudado).
 // SEM "previsão de aprovação" (decisão do plano).
-import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, skeletonDoc , plural, defMetrica } from "../ui.js";
+import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, plural, defMetrica } from "../ui.js";
 import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { linhaConstanciaMes, progressRing } from "../viz.js";
 import { ligarTooltipsGraficos, tipAttrs } from "../chart-tooltip.js";
-import { revelarTexto } from "../ui.js";
 import { iaDisponivel as _iaOn, responderChat as _responderChat } from "../ia-provider.js";
 
 let periodoSel = "hoje"; // hoje | semana | mes | tudo
@@ -30,7 +29,6 @@ let statsDetAbertas = false; // lembra se "Estatísticas detalhadas" está abert
 let sessAberto = false; // lembra se o bloco recolhível "Sessões" está aberto (sobrevive ao re-render)
 let calDetAberto = false; // lembra se o bloco recolhível "Calendário" está aberto (sobrevive ao re-render)
 let kpiAnimou = false; // count-up dos KPIs só na 1ª renderização da sessão (não re-anima a cada ação)
-const discAberta = new Set();
 const sessEdit = new Set(); // ids de sessões em edição
 const sessDet = new Set(); // ids de sessões com o detalhamento (materiais) aberto
 
@@ -255,6 +253,8 @@ export default function renderDiagnostico(root, app) {
       </div>
     </section>
 
+    ${metasCompactasHTML(m)}
+
     ${
       revCont.total
         ? `<button type="button" class="card card-click rev-resumo-card ${revCont.atrasadas ? "rev-resumo-alerta" : ""}" data-action="ir-central-revisoes" data-tip="Abrir a Central de Revisões">
@@ -269,20 +269,6 @@ export default function renderDiagnostico(root, app) {
         : ""
     }
 
-    <section class="card metas-card" data-print="metas" data-print-label="Metas">
-      <div class="plano-h"><h2>${icone("target")} Metas</h2></div>
-      ${barraMeta("Hoje", m.feitoHojeMin, m.metaDiariaMin)}
-      ${barraMeta("Esta semana", m.feitoSemanaMin, m.metaSemanalMin)}
-      ${barraMeta("Este mês", m.feitoMesMin, m.metaMensalMin)}
-      ${
-        m.dispDiariaMin
-          ? `<p class="muted small disp-info">Disponibilidade: <b>${fmtMin(m.dispDiariaMin)}</b>/dia · ${fmtMin(m.dispSemanaMin)}/semana${m.dispAteProvaMin != null ? ` · ~${Math.round(m.dispAteProvaMin / 60)}h até a prova` : ""}.</p>`
-          : !(m.metaDiariaMin || m.metaSemanalMin || m.metaMensalMin)
-          ? `<p class="muted small">Defina suas metas em <b>Configurações</b>.</p>`
-          : ""
-      }
-    </section>
-
     <!-- 2) CONSTÂNCIA (assinatura, compacta e sempre visível). -->
     <section class="card constancia-card" data-print="constancia" data-print-label="Constância (heatmap)">
       <div class="plano-h" style="margin-bottom:4px">
@@ -294,18 +280,7 @@ export default function renderDiagnostico(root, app) {
       ${linhaConstanciaMes(store.get().sessoes, { folgaDias: store.get().config.diasFolga || [] })}
     </section>
 
-    <!-- 2b) POR PERÍODO (logo abaixo da Constância: visão de tempo por janela). -->
-    <section class="card" data-print="periodo" data-print-label="Por período">
-      <div class="plano-h"><h2>${icone("bar-chart-3")} Por período</h2><span class="muted small" data-tip="Clique em um período para ver as sessões correspondentes no histórico abaixo.">${icone("info")}</span></div>
-      <div class="periodos-grid">
-        ${periodoBtn("hoje", "Hoje", hist.periodos.hoje)}
-        ${periodoBtn("semana", "Últimos 7 dias", hist.periodos.semana)}
-        ${periodoBtn("mes", "Mês atual", hist.periodos.mes)}
-        ${periodoBtn("tudo", "Todo o período", hist.periodos.tudo)}
-      </div>
-    </section>
-
-    <!-- 2c) CALENDÁRIO (sempre visível, logo abaixo de Por período). -->
+    <!-- 2b) CALENDÁRIO (recolhível, logo abaixo da Constância). -->
     <details class="bloco-recolhe" id="cal-det" data-print="calendario" data-print-label="Calendário" ${calDetAberto ? "open" : ""}>
       <summary><span class="sum-tit">${icone("calendar-days")} Calendário</span><span class="sum-dica muted small">clique num dia para ver as sessões</span></summary>
       <div class="card card-plano">
@@ -314,7 +289,7 @@ export default function renderDiagnostico(root, app) {
     </details>
 
     <details class="bloco-recolhe" id="stats-det" data-print="stats" data-print-label="Estatísticas detalhadas (gráficos + por disciplina)" ${statsDetAbertas ? "open" : ""}>
-      <summary><span class="sum-tit">${icone("bar-chart-3")} Estatísticas detalhadas</span><span class="sum-dica muted small">gráficos · por disciplina · materiais · comportamento</span></summary>
+      <summary><span class="sum-tit">${icone("bar-chart-3")} Estatísticas detalhadas</span><span class="sum-dica muted small">gráficos · por disciplina · banca · materiais · comportamento</span></summary>
       <div class="card card-plano">
         <div class="stat-sub stat-sub--top"><span class="stat-sub-tit">${icone("trending-up")} Evolução</span> <span class="muted small">esforço e desempenho no tempo</span></div>
         <!-- Ordem lógica: TEMPO/esforço (dia → semana) · composição · DESEMPENHO (acurácia → por disciplina). -->
@@ -375,6 +350,7 @@ export default function renderDiagnostico(root, app) {
             : vazio("Nenhuma disciplina ainda\nCadastre disciplinas e tópicos no Edital para acompanhar o desempenho.", "", icone("library"))
         }
         ${pontosFracosHTML(store, diag.porDisciplina)}
+        ${blocoPorBanca(store, store.questoesRelatorio())}
 
         <div class="stat-sub"><span class="stat-sub-tit">${icone("layers")} Volume por tipo</span> <span class="muted small">quanto de cada material você consumiu</span></div>
         <div data-print="volume" data-print-label="Volume por tipo de estudo">${blocoEsforcoTipo(store.esforcoPorTipo())}</div>
@@ -424,9 +400,12 @@ export default function renderDiagnostico(root, app) {
       <div class="plano-h" style="margin-bottom:10px">
         <h2>${icone("clock-3")} ${esc(tituloSessoes)}</h2>
         <span class="cnt" id="sess-count">${plural(sessoesFiltradas.length, "sessão", "sessões")}</span>
-        ${diaSel ? `<button class="btn btn-ghost btn-sm" data-action="limpar-dia">← Voltar ao período</button>` : ""}
+        ${diaSel ? `<button class="btn btn-ghost btn-sm" data-action="limpar-dia">${icone("arrow-left")} Voltar ao período</button>` : ""}
         <span class="sp"></span>
         <button class="btn btn-ghost btn-sm ${sessFiltrosAbertos || nCatFiltros ? "on" : ""}" data-action="sess-filtros-toggle" data-tip="Filtrar por data, fase, disciplina, tópico ou observação.">${icone("list-filter")} Filtros${nCatFiltros ? ` <span class="cnt">${nCatFiltros}</span>` : ""}</button>
+      </div>
+      <div class="u-flex u-wrap u-mb-8" role="group" aria-label="Período do histórico" data-ui="sess-presets">
+        ${["hoje", "semana", "mes", "tudo"].map((p) => `<button class="btn btn-ghost btn-sm ${!sessFiltroIni && !sessFiltroFim && !diaSel && periodoSel === p ? "on" : ""}" data-action="periodo" data-p="${p}">${LABEL[p]}</button>`).join("")}
       </div>
       ${sessChipsHTML(st)}
       ${sessPainelHTML(st)}
@@ -435,13 +414,9 @@ export default function renderDiagnostico(root, app) {
           ? `<table class="tabela tabela-sessoes">
               <thead><tr>
                 ${thSort("data", "Data")}
-                ${thSort("fase", "Fase")}
-                ${thSort("disciplina", "Disciplina")}
-                ${thSort("topico", "Tópico")}
+                ${thSort("disciplina", "Disciplina / Tópico")}
                 ${thSort("tempo", "Tempo", " num")}
-                <th class="num">Páginas</th>
                 ${thSort("questoes", "Questões", " num")}
-                <th>Observação</th>
                 <th class="th-acoes"></th>
               </tr></thead>
               <tbody>${sessoesFiltradas.map((s) => linhaSessao(s, st, sessEdit.has(s.id))).join("")}</tbody>
@@ -560,7 +535,7 @@ export default function renderDiagnostico(root, app) {
                 // Tira TODOS os controles de UI que não fazem sentido no papel (ampliar, filtros,
                 // navegação, expandir-detalhes, setas de ordenação) SEM remover os cards de
                 // conteúdo (que também são <button>). Cabeçalhos de ordenação viram texto simples.
-                clone.querySelectorAll('.grafico-tit-acoes, [data-action^="ampliar"], [data-action="ir-central-revisoes"], [data-action="sess-filtros-toggle"], .sess-filtros-painel, [data-action="toggle-sess-det"], .sort-ar').forEach((el) => el.remove());
+                clone.querySelectorAll('.grafico-tit-acoes, [data-action^="ampliar"], [data-action="ir-central-revisoes"], [data-action="sess-filtros-toggle"], .sess-filtros-painel, [data-ui="sess-presets"], [data-action="toggle-sess-det"], .sort-ar').forEach((el) => el.remove());
                 clone.querySelectorAll('[data-action="sort-sessao"]').forEach((th) => { th.removeAttribute("data-action"); th.classList.remove("sortavel"); });
                 return `<section class="print-sec">${clone.innerHTML}</section>`;
               })
@@ -572,15 +547,14 @@ export default function renderDiagnostico(root, app) {
       });
     },
     "ir-mentor": () => app.navigate("mentor"),
-    "disc-edital": (el) => app.navigate("edital", { focoDisciplinaId: el.getAttribute("data-id") }),
     "disc-painel": (el) => app.navigate("edital", { dossieDiscId: el.getAttribute("data-id") }),
+    // Presets de período do histórico (chips dentro da própria seção — sem rolagem).
     periodo: (el) => {
       periodoSel = el.getAttribute("data-p");
       diaSel = null;
       sessFiltroIni = "";
       sessFiltroFim = "";
       sessAberto = true;
-      rolarParaSessoes = true;
       app.refresh();
     },
     "limpar-dia": () => {
@@ -598,12 +572,6 @@ export default function renderDiagnostico(root, app) {
       sessFiltroIni = "";
       sessFiltroFim = "";
       if (diaSel) { rolarParaSessoes = true; sessAberto = true; }
-      app.refresh();
-    },
-    "toggle-disc": (el) => {
-      const id = el.getAttribute("data-id");
-      if (discAberta.has(id)) discAberta.delete(id);
-      else discAberta.add(id);
       app.refresh();
     },
     "sort-sessao": (el) => {
@@ -762,24 +730,10 @@ export default function renderDiagnostico(root, app) {
     if (tbody)
       tbody.innerHTML = ss.length
         ? ss.map((s) => linhaSessao(s, st, sessEdit.has(s.id))).join("")
-        : `<tr><td colspan="9" class="muted small" style="text-align:center;padding:14px">Nenhuma sessão com esse texto.</td></tr>`;
+        : `<tr><td colspan="5" class="muted small" style="text-align:center;padding:14px">Nenhuma sessão com esse texto.</td></tr>`;
     const cnt = root.querySelector("#sess-count");
     if (cnt) cnt.textContent = plural(ss.length, "sessão", "sessões");
   });
-}
-
-// ----- período (botão clicável) -----
-function periodoBtn(id, rotulo, p) {
-  const ativo = periodoSel === id && !diaSel;
-  return `
-    <button class="periodo-card ${ativo ? "ativo" : ""}" data-action="periodo" data-p="${id}">
-      <div class="periodo-rotulo">${esc(rotulo)}</div>
-      <div class="periodo-tempo">${fmtTempoCurto(p.tempoSeg)}</div>
-      <div class="periodo-detalhe">
-        <span>${p.sessoes} sessões · ${p.paginas} págs.</span>
-        <span>${p.questoesTotal} questões${p.percent !== null ? ` · ${p.percent}%` : ""}</span>
-      </div>
-    </button>`;
 }
 
 // Re-renderiza SÓ o calendário (mês/filtro) sem app.refresh — evita fechar o bloco.
@@ -848,14 +802,6 @@ function calendarioHTML(store) {
     <div class="cal-grid">${celulas}</div>
     <div class="cal-total">Total do mês${calFiltro !== "tudo" ? ` <span style="color:${corFiltro}">(${FASES[calFiltro].nome})</span>` : ""}: <b>${fmtMin(totalMesSeg / 60)}</b> <span class="muted">· ${plural(totalMesSess, calFiltro === "tudo" ? "sessão" : "dia", calFiltro === "tudo" ? "sessões" : "dias")}</span></div>`;
 }
-// Cor "dominante" de um dia no modo Tudo = a fase com mais tempo naquele dia.
-function corFaseDominante(reg) {
-  if (!reg || !reg.fases) return "var(--accent)";
-  let melhor = null, max = -1;
-  for (const [f, seg] of Object.entries(reg.fases)) if (seg > max && FASES[f]) { max = seg; melhor = f; }
-  return melhor ? FASES[melhor].cor : "var(--accent)";
-}
-
 function deslocaMes(mesISO, delta) {
   let [ano, mes] = mesISO.split("-").map(Number);
   mes += delta;
@@ -878,9 +824,8 @@ function ordenarSessoes(lista, sort) {
   const dir = sort.dir === "asc" ? 1 : -1;
   const chaves = {
     data: (s) => s.data,
-    fase: (s) => ORDEM_FASES.indexOf(s.fase),
-    disciplina: (s) => (s.disciplinaNome || "").toLowerCase(),
-    topico: (s) => (s.topicoNome || "").toLowerCase(),
+    // Coluna unificada "Disciplina / Tópico": ordena por disciplina e, dentro dela, por tópico.
+    disciplina: (s) => `${(s.disciplinaNome || "").toLowerCase()} · ${(s.topicoNome || "").toLowerCase()}`,
     tempo: (s) => s.tempoSeg || 0,
     questoes: (s) => aprovSessao(s),
   };
@@ -901,24 +846,17 @@ function thSort(col, label, extra = "") {
   </th>`;
 }
 
-// Uma sessão tem "detalhes" (que valem uma linha expansível) quando guarda mais do que
-// os campos legados já mostrados na linha: aula, domínio, várias leituras/vídeos ou link.
-function temDetalhes(s) {
-  const m = s.materiais || {};
-  return !!(
-    s.aulaId ||
-    s.questoesLink ||
-    (m.leituras && (m.leituras.length > 1 || m.leituras.some((l) => l.titulo))) ||
-    (m.videos && m.videos.length) ||
-    (m.questoes && m.questoes.link) ||
-    m.leiSeca || m.jurisprudencia || m.flashcards || m.resumo || m.mapa
-  );
-}
-
-// Painel de detalhamento (materiais múltiplos + aula + domínio), aberto sob a linha.
+// Painel de detalhamento aberto sob a linha. Depois da dieta de colunas (9→4), é ele que
+// carrega fase, páginas e observação (que saíram da linha), além dos materiais múltiplos.
 function detalhesSessao(s, st) {
   const m = s.materiais || {};
   const blocos = [];
+  const fi = FASES[s.fase];
+  if (fi) blocos.push(`<span class="sd-chip">${icone("layers")} ${esc(fi.nome)}</span>`);
+  const nLeit = (m.leituras && m.leituras.length) || 0;
+  if (s.paginaInicial && s.paginaFinal)
+    blocos.push(`<span class="sd-chip">${icone("book-open")} págs. ${s.paginaInicial}–${s.paginaFinal} (${s.paginas})${nLeit > 1 ? ` <span class="muted">+${nLeit - 1} leituras</span>` : ""}</span>`);
+  else if (s.paginas) blocos.push(`<span class="sd-chip">${icone("book-open")} ${plural(s.paginas, "página lida", "páginas lidas")}</span>`);
   if (s.aulaId) {
     const a = st.aulas.find((x) => x.id === s.aulaId);
     if (a) blocos.push(`<span class="sd-chip">${icone("graduation-cap")} ${esc(a.nome)}</span>`);
@@ -955,46 +893,37 @@ function detalhesSessao(s, st) {
   if (m.mapa) extras.push(`<li>${icone("brain")} <b>Mapa mental:</b> ${esc(m.mapa)}</li>`);
   const listaExtras = extras.length ? `<div class="sd-grupo"><b>${icone("library")} Lei, jurisprudência e revisões</b><ul>${extras.join("")}</ul></div>` : "";
 
-  return `<div class="sess-det">${chips}${listaLeituras}${listaVideos}${linkQ}${listaExtras}</div>`;
+  const obs = s.comentario ? `<div class="sd-grupo"><b>${icone("message-square")} Observação</b><ul><li>${esc(s.comentario)}</li></ul></div>` : "";
+
+  return `<div class="sess-det">${chips}${listaLeituras}${listaVideos}${linkQ}${listaExtras}${obs}</div>`;
 }
 
 // ----- linha de sessão (+ edição inline) -----
+// Dieta de colunas (Fase 5): a linha mostra só Data · Disciplina/Tópico · Tempo · Questões.
+// Fase, páginas e observação moram no detalhamento expansível (toda linha tem o botão).
 function linhaSessao(s, st, editando) {
   const traco = `<span class="cel-vazia">–</span>`;
   const tq = s.qAcertos + s.qErros;
   const q = tq ? `${s.qAcertos}/${tq} (${Math.round((s.qAcertos / tq) * 100)}%)` : traco;
   const fi = FASES[s.fase];
   const cor = fi ? fi.cor : "var(--muted)";
-  const faseTd = fi ? esc(fi.nome) : esc(s.fase);
-  const discTd = s.disciplinaNome && s.disciplinaNome !== "—" ? esc(s.disciplinaNome) : traco;
-  const topTd = s.topicoNome && s.topicoNome !== "—" ? esc(s.topicoNome) : traco;
-  const nLeit = (s.materiais && s.materiais.leituras && s.materiais.leituras.length) || 0;
-  const pagBase = s.paginaInicial && s.paginaFinal ? `${s.paginaInicial}–${s.paginaFinal} (${s.paginas})` : s.paginas ? `${s.paginas}` : traco;
-  const pagTd = nLeit > 1 ? `${pagBase} <span class="sess-mais" data-tip="${nLeit} leituras nesta sessão">+${nLeit - 1}</span>` : pagBase;
-  const obsTd = s.comentario
-    ? `<span class="sess-obs" data-tip="${esc(s.comentario)}">${icone("message-square")} ${esc(s.comentario.length > 40 ? s.comentario.slice(0, 40) + "…" : s.comentario)}</span>`
-    : traco;
-  const tem = temDetalhes(s);
+  const disc = s.disciplinaNome && s.disciplinaNome !== "—" ? esc(s.disciplinaNome) : "";
+  const top = s.topicoNome && s.topicoNome !== "—" ? esc(s.topicoNome) : "";
+  const discTopTd = disc || top ? `${disc || top}${disc && top ? `<div class="muted small">${top}</div>` : ""}` : traco;
   const aberto = sessDet.has(s.id);
-  const btnDet = tem
-    ? `<button class="mover-btn sess-det-btn ${aberto ? "on" : ""}" data-action="toggle-sess-det" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="${aberto ? "Ocultar" : "Ver"} detalhes">${icone("chevron-down")}</button>`
-    : "";
+  const btnDet = `<button class="mover-btn sess-det-btn ${aberto ? "on" : ""}" data-action="toggle-sess-det" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="${aberto ? "Ocultar" : "Ver"} detalhes (fase, páginas, observação, materiais)">${icone("chevron-down")}</button>`;
   const linha = `<tr class="sess-row ${aberto ? "det-aberto" : ""}" style="--cor:${cor}" data-foco-id="${s.id}">
     <td>${fmtData(s.data)}</td>
-    <td>${faseTd}</td>
-    <td>${discTd}</td>
-    <td>${topTd}</td>
+    <td>${discTopTd}</td>
     <td class="num">${fmtTempoCurto(s.tempoSeg)}</td>
-    <td class="num">${pagTd}</td>
     <td class="num">${q}</td>
-    <td>${obsTd}</td>
     <td class="sess-acoes">
       ${btnDet}
       <button class="mover-btn" data-action="edit-sessao" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="Editar sessão">${icone("square-pen")}</button>
       <button class="mover-btn mover-del" data-action="del-sessao" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="Remover sessão">${icone("x")}</button>
     </td>
   </tr>`;
-  const detRow = tem && aberto && !editando ? `<tr class="sess-det-row"><td colspan="9">${detalhesSessao(s, st)}</td></tr>` : "";
+  const detRow = aberto && !editando ? `<tr class="sess-det-row"><td colspan="5">${detalhesSessao(s, st)}</td></tr>` : "";
   if (!editando) return linha + detRow;
 
   const topOpts =
@@ -1008,7 +937,7 @@ function linhaSessao(s, st, editando) {
         .map((a) => `<option value="${a.id}" ${a.id === s.aulaId ? "selected" : ""}>${esc(a.nome)}</option>`)
         .join("")}</select></label>`
     : "";
-  const form = `<tr class="sess-edit-row"><td colspan="9">
+  const form = `<tr class="sess-edit-row"><td colspan="5">
     <div class="sess-edit">
       <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${s.data.slice(0, 10)}" /></label>
       <label class="inline">Fase <select class="se-fase" data-id="${s.id}">${faseOpts}</select></label>
@@ -1081,76 +1010,26 @@ function cardDisciplina(l, store) {
   </button>`;
 }
 
-function linhaDisciplina(l, store) {
-  const aberta = discAberta.has(l.disciplina.id);
-  const aprov = l.percentAcerto;
-  const aprovTxt =
-    aprov === null
-      ? `<span class="muted">sem questões</span>`
-      : `${barra(aprov, `<span class="${perfClasse(store, aprov)}">${aprov}%</span>`)}`;
-  const ultimo = l.ultimoEstudo
-    ? `${fmtData(l.ultimoEstudo)} <span class="muted">(${haQuantoTempo(l.ultimoEstudo)})</span>`
-    : `<span class="muted">nunca</span>`;
-
-  let linhas = `<tr class="disc-row" data-action="toggle-disc" data-id="${l.disciplina.id}">
-    <td><span class="disc-toggle">${aberta ? icone("chevron-down") : icone("chevron-right")}</span> <span class="disc-cor" style="background:${store.corDisciplina(l.disciplina.id)}"></span> ${esc(l.disciplina.nome)} <button class="disc-ir-edital" data-action="disc-painel" data-id="${l.disciplina.id}" data-tip="Painel da disciplina: KPIs, semáforo por tópico e análise do Mentor." data-tip-pos="cima-dir" aria-label="Painel da disciplina">${icone("table")}</button> <button class="disc-ir-edital" data-action="disc-edital" data-id="${l.disciplina.id}" data-tip="Abrir no Edital" data-tip-pos="cima-dir" aria-label="Abrir no Edital">${icone("external-link")}</button></td>
-    <td><div class="cel-barra">${aprovTxt}</div></td>
-    <td><div class="cel-barra">${barra(l.cobertura, `${l.cobertura}%`)}</div></td>
-    <td>${fmtTempoCurto(l.tempoSeg)}</td>
-    <td>${ultimo}</td>
-  </tr>`;
-
-  if (aberta) {
-    linhas += l.topicos.length
-      ? l.topicos
-          .map(
-            (t) => `<tr class="topico-row">
-        <td class="topico-nome">${icone("corner-down-right")} ${esc(t.nome)}</td>
-        <td colspan="2" class="muted">—</td>
-        <td>${fmtTempoCurto(t.tempoSeg)}</td>
-        <td>${t.ultimoEstudo ? `${fmtData(t.ultimoEstudo)} <span class="muted">(${haQuantoTempo(t.ultimoEstudo)})</span>` : `<span class="muted">nunca</span>`}</td>
-      </tr>`
-          )
-          .join("")
-      : `<tr class="topico-row"><td colspan="5" class="muted">Sem tópicos.</td></tr>`;
-  }
-  return linhas;
-}
-
-function barra(v, txt) {
-  const cor = v >= 70 ? "bom" : v >= 50 ? "medio" : "ruim";
-  return `<div class="barra"><div class="barra-fill ${cor}" style="width:${v}%"></div></div><span class="barra-num">${txt}</span>`;
-}
-
-function barraMeta(label, feito, meta) {
-  if (!meta) {
-    return `<div class="meta-linha"><span class="meta-label">${label}</span><div class="barra barra-vazia"></div><span class="barra-num">${fmtMin(feito)} <span class="muted">(sem meta)</span></span></div>`;
-  }
-  const pctReal = Math.round((feito / meta) * 100); // pode passar de 100%
-  const pct = Math.min(100, pctReal);
-  const batida = pctReal >= 100;
-  const cor = batida ? "bom" : pctReal >= 60 ? "medio" : "ruim";
-  return `<div class="meta-linha ${batida ? "meta-batida" : ""}">
-    <span class="meta-label">${label}</span>
-    <div class="barra"><div class="barra-fill ${cor}" style="width:${pct}%"></div></div>
-    <span class="barra-num">${fmtMin(feito)} / ${fmtMin(meta)} <b>(${pctReal}%)</b>${batida ? ` <span class="meta-tag-ok">${icone("check")} meta batida</span>` : ""}</span>
-  </div>`;
-}
-
-function cicloDistribHTML(hist) {
-  const totalSess = ORDEM_FASES.reduce((a, f) => a + (hist.porFase[f] || 0), 0);
-  if (!totalSess) return `<p class="muted">Nenhuma sessão registrada.</p>`;
-  return ORDEM_FASES.map((f) => {
-    const info = FASES[f];
-    const n = hist.porFase[f] || 0;
-    const pctv = Math.round((n / totalSess) * 100);
-    return `
-      <div class="etapa-linha">
-        <span class="etapa-nome" style="color:${info.cor}">${info.nome}</span>
-        <div class="barra"><div class="barra-fill" style="width:${pctv}%;background:${info.cor}"></div></div>
-        <span class="barra-num">${n} (${pctv}%) · ${fmtTempoCurto(hist.tempoFase[f] || 0)}</span>
-      </div>`;
-  }).join("");
+// ----- metas: linha única compacta (o card de 3 barras virou este resumo; a meta
+// aparece UMA vez na tela — os valores são configurados em Configurações) -----
+function metasCompactasHTML(m) {
+  const partes = [];
+  const parte = (rot, feito, meta) => {
+    const pct = Math.round((feito / meta) * 100);
+    return `<span>${rot} <b>${fmtMin(feito)} / ${fmtMin(meta)}</b> <span class="muted">(${pct}%)</span>${pct >= 100 ? ` <span class="meta-tag-ok">${icone("check")} batida</span>` : ""}</span>`;
+  };
+  if (m.metaDiariaMin) partes.push(parte("Hoje", m.feitoHojeMin, m.metaDiariaMin));
+  if (m.metaSemanalMin) partes.push(parte("Semana", m.feitoSemanaMin, m.metaSemanalMin));
+  if (m.metaMensalMin) partes.push(parte("Mês", m.feitoMesMin, m.metaMensalMin));
+  const corpo = partes.length
+    ? partes.join(`<span class="muted">·</span>`)
+    : `<span class="muted">Defina suas metas em <b>Configurações</b>.</span>`;
+  const tip = m.dispDiariaMin
+    ? ` data-tip="Disponibilidade: ${fmtMin(m.dispDiariaMin)}/dia · ${fmtMin(m.dispSemanaMin)}/semana${m.dispAteProvaMin != null ? ` · ~${Math.round(m.dispAteProvaMin / 60)}h até a prova` : ""}"`
+    : "";
+  return `<section class="card metas-card" data-print="metas" data-print-label="Metas">
+    <p class="u-m-0 small u-flex u-wrap"${tip}>${icone("target")} <b>Metas</b><span class="muted">·</span>${corpo}</p>
+  </section>`;
 }
 
 // ----- ofensiva (constância): linha discreta, sem caixa -----
@@ -1218,6 +1097,7 @@ function blocoFlashcards(store) {
 }
 
 // Desempenho por BANCA (barras) + por TIPO (MC × C/E). Só aparece com questões praticadas.
+// Religado dentro de "Estatísticas detalhadas" (Fase 5): o card solto tinha se perdido do render.
 function blocoPorBanca(store, rel) {
   if (!rel || !rel.total) return "";
   const bancas = rel.porBanca.filter((b) => b.banca !== "Sem banca");
@@ -1231,11 +1111,11 @@ function blocoPorBanca(store, rel) {
         <span class="qb-tot muted small">${b.total}q</span>
       </div>`).join("")}</div>`
     : `<p class="muted small u-m-0 u-mt-8">Importe questões de provas com banca (em Prática/Questões) para ver o desempenho por banca.</p>`;
-  return `<section class="card qb-card" data-print="banca" data-print-label="Desempenho por banca / tipo">
-    <div class="plano-h" style="margin-bottom:2px"><h2>${icone("clipboard-list")} Desempenho por banca</h2></div>
+  return `<div class="stat-sub"><span class="stat-sub-tit">${icone("clipboard-list")} Por banca</span> <span class="muted small">acerto nas questões praticadas, por banca e tipo</span></div>
+  <div data-print="banca" data-print-label="Desempenho por banca / tipo">
     <p class="muted small u-m-0 u-mb-12">${rel.total} praticadas no treino · ${tipo("Múltipla escolha", mc)}${mc.total && ce.total ? " · " : ""}${tipo("Certo/Errado", ce)}</p>
     ${lista}
-  </section>`;
+  </div>`;
 }
 
 // Heatmap "quando você rende mais": dia da semana (linhas) × faixa do dia (colunas), célula
@@ -1335,69 +1215,6 @@ function graficoTempoPizza(tempoFase) {
 }
 
 // ----- gráficos SVG (vanilla, sem dependências) -----
-
-// Barras horizontais: cobertura (var(--primary)) e aproveitamento (var(--accent))
-// por disciplina. Usa diag.porDisciplina (cobertura 0-100; percentAcerto 0-100|null).
-function graficoDisciplinas(porDisciplina) {
-  const linhas = (porDisciplina || []).filter((l) => l.totalTopicos > 0 || l.cobertura > 0 || l.percentAcerto !== null);
-  if (!linhas.length) return vazio("Sem dados de evolução ainda\nCadastre disciplinas e materiais para ver cobertura e aproveitamento.", "", icone("trending-up"));
-
-  const rowH = 34; // altura por disciplina
-  const padTop = 8;
-  const padBottom = 22; // espaço para o eixo 0–100
-  const labelW = 168; // coluna de rótulos à esquerda (cabe "DIREITO PROCESSUAL CIVIL")
-  const trackW = 340; // largura útil da barra (0–100%)
-  const barH = 9;
-  const gap = 4; // entre as duas barras da mesma disciplina
-  const W = labelW + trackW + 46;
-  const H = padTop + linhas.length * rowH + padBottom;
-
-  const barras = linhas
-    .map((l, i) => {
-      const y = padTop + i * rowH;
-      const cob = Math.max(0, Math.min(100, l.cobertura || 0));
-      const aprov = l.percentAcerto === null ? null : Math.max(0, Math.min(100, l.percentAcerto));
-      const nomeCompleto = esc(l.disciplina.nome);
-      const nome = esc(l.disciplina.nome.length > 26 ? l.disciplina.nome.slice(0, 25) + "…" : l.disciplina.nome);
-      const yc = y + 4;
-      const ya = y + 4 + barH + gap;
-      const cobTip = tipAttrs(l.disciplina.nome, `Cobertura · ${cob}%`, "var(--primary)");
-      const aprovTip = tipAttrs(l.disciplina.nome, `Aproveitamento · ${aprov === null ? "sem questões" : aprov + "%"}`, "var(--accent)");
-      const aprovBar =
-        aprov === null
-          ? `<text x="${labelW + 6}" y="${ya + barH - 1}" class="g-na">sem questões</text>`
-          : `<rect x="${labelW}" y="${ya}" width="${(aprov / 100) * trackW}" height="${barH}" rx="3" class="g-bar-aprov"></rect>
-             <text x="${labelW + (aprov / 100) * trackW + 5}" y="${ya + barH - 1}" class="g-val">${aprov}%</text>`;
-      return `
-        <text x="${labelW - 8}" y="${y + rowH / 2 + 1}" class="g-lbl" text-anchor="end"><title>${nomeCompleto}</title>${nome}</text>
-        <rect x="${labelW}" y="${yc}" width="${trackW}" height="${barH}" rx="3" class="g-track g-track-hit"${cobTip}></rect>
-        <rect x="${labelW}" y="${yc}" width="${(cob / 100) * trackW}" height="${barH}" rx="3" class="g-bar-cob"></rect>
-        <text x="${labelW + (cob / 100) * trackW + 5}" y="${yc + barH - 1}" class="g-val">${cob}%</text>
-        <rect x="${labelW}" y="${ya}" width="${trackW}" height="${barH}" rx="3" class="g-track g-track-hit"${aprovTip}></rect>
-        ${aprovBar}`;
-    })
-    .join("");
-
-  const grades = [0, 25, 50, 75, 100]
-    .map((p) => {
-      const x = labelW + (p / 100) * trackW;
-      return `<line x1="${x}" y1="${padTop}" x2="${x}" y2="${H - padBottom}" class="g-grade"></line>
-              <text x="${x}" y="${H - 6}" class="g-eixo" text-anchor="middle">${p}</text>`;
-    })
-    .join("");
-
-  return `
-    <div class="grafico-legenda">
-      <span class="leg-item"><i class="leg-cob"></i>Cobertura</span>
-      <span class="leg-item"><i class="leg-aprov"></i>Aproveitamento</span>
-    </div>
-    <div class="grafico-svg-wrap">
-      <svg viewBox="0 0 ${W} ${H}" class="grafico-svg" data-gtip="barras" role="img" aria-label="Cobertura e aproveitamento por disciplina">
-        ${grades}
-        ${barras}
-      </svg>
-    </div>`;
-}
 
 // Série temporal real: hist.porDia[] (14 dias) com tempoSeg por dia.
 // Gráfico de linha do tempo em foco; pontos marcados, eixo de datas espaçado.

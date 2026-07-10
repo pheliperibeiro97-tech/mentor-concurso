@@ -137,14 +137,22 @@ function cronoChipHTML() {
     </div>`;
 }
 
-// Placar da sessão (✓ acertos · ✗ erros · precisão). Aceita objeto {acertos, erros} ou
-// null (esconde — ex.: simulado, para não entregar o gabarito).
+// Chip de SEQUÊNCIA (acertos seguidos na sessão): aparece com 3+, some ao errar.
+// Exportado para as telas atualizarem o chip NO LUGAR (sem re-render do overlay).
+export function streakChipHTML(seq) {
+  if (!seq || seq < 3) return "";
+  return `<span class="fq-chip fq-seq" data-tip="Acertos seguidos nesta sessão (zera ao errar)">${icone("flame")} <span class="fq-seq-n">${seq} seguidas</span></span>`;
+}
+
+// Placar da sessão (✓ acertos · ✗ erros · precisão). Aceita objeto {acertos, erros, seq?}
+// ou null (esconde — ex.: simulado, para não entregar o gabarito). `seq` (opcional) é a
+// sequência atual de acertos: com 3+ ganha um chip de streak ao lado do placar.
 function placarHTML(placar) {
   if (!placar) return "";
-  const { acertos = 0, erros = 0 } = placar;
+  const { acertos = 0, erros = 0, seq = 0 } = placar;
   const feitos = acertos + erros;
   const pct = feitos ? Math.round((acertos / feitos) * 100) : 0;
-  return `
+  return `${streakChipHTML(seq)}
     <div class="fq-placar" data-tip="Placar da sessão (acertos / erros / precisão)">
       <span class="fq-plc-ok">${icone("check")} ${acertos}</span>
       <span class="fq-plc-err">${icone("x")} ${erros}</span>

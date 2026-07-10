@@ -4742,6 +4742,20 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 /* selects dentro de label.inline respiram sem precisar de style= */
 label.inline > select{margin-left:6px}
 
+/* ===== Fase 5 — ganchos das dietas de tela ===== */
+/* CRÍTICO: o accordion da disciplina tem overflow:hidden e cortava o popover do novo
+   menu ··· do summary quando fechado. Libera o overflow enquanto o menu está aberto. */
+.ed-disc-acc:has(> summary .doc-mais[open]) { overflow: visible; }
+/* Coluna "Estudo" (funde Vezes + Última vez) com largura estável. */
+.edc-est { width: 118px; }
+/* Chip de SEQUÊNCIA no placar do foco (3+ acertos seguidos) — cor de chama. */
+.fq-chip.fq-seq { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.fq-chip.fq-seq .ico { color: var(--amber); }
+.fq-conc-item.seq strong { color: var(--amber); }
+/* Botão visível "Gerar com IA" no card do material: realce de IA no summary. */
+.doc-gerar-menu > summary { color: var(--accent-d); font-weight: var(--fw-semibold); }
+[data-tema="escuro"] .doc-gerar-menu > summary { color: var(--accent); }
+
 /* Fase 4 — skeleton de página no visualizador de PDF (primeira abertura). */
 .pdf-load { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 0; color: #cbd5e1; }
 .pdf-skel-pag { width: min(420px, 70vw); aspect-ratio: 210 / 297; border-radius: 6px; }

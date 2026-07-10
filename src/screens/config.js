@@ -43,7 +43,7 @@ export default function renderConfig(root, app) {
   const iaInativa = ["offline"].includes(cfg.iaProvider);
   // Provedores que NÃO usam chave de API (Claude Code local usa a autenticação local da CLI).
   const semChave = cfg.iaProvider === "claude-cli";
-  // "Meta não definida": nenhuma das 3 metas definida.
+  // "Sem meta por enquanto": nenhuma das 3 metas definida.
   const semMetas = !cfg.metaDiariaMin && !cfg.metaSemanalMin && !cfg.metaMensalMin;
   const nt = cfg.notificacoes || {};
   const sy = cfg.sync || {};
@@ -70,7 +70,7 @@ export default function renderConfig(root, app) {
       <button data-aba-btn="estudo">${icone("target")} Estudo &amp; prova</button>
       <button data-aba-btn="ia">${icone("bot")} IA</button>
       <button data-aba-btn="aparencia">${icone("palette")} Aparência</button>
-      <button data-aba-btn="conta">${icone("graduation-cap")} Conta &amp; dados</button>
+      <button data-aba-btn="conta">${icone("graduation-cap")} Dados &amp; concurso</button>
     </div>
 
     <div class="cfg-aba" data-aba="aparencia" ${abaCfg === "aparencia" ? "" : "hidden"}>
@@ -139,15 +139,14 @@ export default function renderConfig(root, app) {
         <label class="u-mb-8">Data da prova
           <input id="cfg-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
         </label>
-        <label class="inline small u-fw-regular"><input id="cfg-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
+        <label class="inline small u-fw-regular"><input id="cfg-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Ainda sem data de prova</label>
       </div>
       <div class="form-row">
         <label>Meta diária ${campoHM("cfg-meta-dia", cfg.metaDiariaMin, semMetas)}</label>
         <label>Meta semanal ${campoHM("cfg-meta-sem", cfg.metaSemanalMin, semMetas)}</label>
         <label>Meta mensal ${campoHM("cfg-meta-mes", cfg.metaMensalMin, semMetas)}</label>
       </div>
-      <label class="inline small" style="font-weight:400; margin-bottom:12px; display:flex; width:fit-content"><input id="cfg-meta-pre" type="checkbox" ${semMetas ? "checked" : ""} /> Meta não definida</label>
-      <button class="btn btn-primary btn-sm" data-action="salvar-metas">Salvar metas/prova</button>
+      <label class="inline small" style="font-weight:400; margin-bottom:12px; display:flex; width:fit-content"><input id="cfg-meta-pre" type="checkbox" ${semMetas ? "checked" : ""} /> Sem meta por enquanto</label>
     </section>
 
     <section class="card">
@@ -161,7 +160,6 @@ export default function renderConfig(root, app) {
         </select>
       </label>
       <div class="form-acoes u-mt-12">
-        <button class="btn btn-primary btn-sm" data-action="salvar-alarme">Salvar</button>
         <button class="btn btn-ghost btn-sm" data-action="testar-alarme">${icone("bell")} Testar</button>
       </div>
     </section>
@@ -200,7 +198,6 @@ export default function renderConfig(root, app) {
           <input id="cfg-perf-bom" type="number" min="0" max="100" value="${Number(cfg.perfBom ?? 80)}" />
         </label>
       </div>
-      <button class="btn btn-primary btn-sm" data-action="salvar-perf">Salvar limites</button>
     </section>
 
     </div>
@@ -333,7 +330,7 @@ export default function renderConfig(root, app) {
     </div>
 
     <div class="cfg-aba" data-aba="conta" ${abaCfg === "conta" ? "" : "hidden"}>
-    <h2 class="cfg-grupo-titulo">Concurso &amp; dados</h2>
+    <h2 class="cfg-grupo-titulo">Dados &amp; concurso</h2>
     <p class="cfg-grupo-sub">Seu concurso-alvo, backup dos dados e a zona de risco (apagar tudo).</p>
 
     <section class="card">
@@ -342,7 +339,6 @@ export default function renderConfig(root, app) {
         <label class="u-grow-2">Cargo <input id="cfg-cargo" type="text" value="${esc(c ? c.cargo : "")}" /></label>
         <label class="u-grow">Banca <input id="cfg-banca" type="text" value="${esc(c ? c.banca : "")}" /></label>
       </div>
-      <button class="btn btn-primary btn-sm" data-action="salvar-conc">Salvar concurso</button>
       <p class="muted small">Multi-concurso e modo fusão chegam na v3.</p>
     </section>
 
@@ -358,7 +354,13 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("refresh-cw")} Sincronização na nuvem <span class="muted small">(opcional)</span></h3>
-      <p class="muted small">Use os seus dados em <b>mais de um computador, de graça e na SUA nuvem</b>. Você conecta um arquivo dentro de uma pasta que o seu <b>Google Drive</b> ou <b>OneDrive</b> já sincroniza: o app grava ali os seus dados e o <b>texto</b> dos materiais, e o seu Drive leva isso para as outras máquinas. Os <b>PDFs ficam só nesta máquina</b> (não sobem). Nada passa por servidor nosso — é a sua conta de nuvem.</p>
+      <p class="muted small">Sincronize entre computadores pela sua própria nuvem (Drive/OneDrive e afins) — nada passa por servidores nossos.</p>
+      <details class="ed-ajuda">
+        <summary>Como funciona</summary>
+        <div class="ed-ajuda-corpo">
+          <p>Você conecta um arquivo dentro de uma pasta que o seu <b>Google Drive</b> ou <b>OneDrive</b> já sincroniza: o app grava ali os seus dados e o <b>texto</b> dos materiais, e o seu Drive leva isso para as outras máquinas. Os <b>PDFs ficam só nesta máquina</b> (não sobem). Nada passa por servidor nosso — é a sua conta de nuvem.</p>
+        </div>
+      </details>
       ${
         syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">
@@ -492,7 +494,7 @@ export default function renderConfig(root, app) {
     "abrir-guia": () => abrirGuia(),
     "enviar-sugestao": () => {
       // E-mail do desenvolvedor que recebe as sugestões (exclusivo do Mentor).
-      const para = "phelipe.ribeiro97@gmail.com";
+      const para = EMAIL_SUPORTE;
       const assunto = encodeURIComponent("Sugestão / problema — Mentor Concurso");
       const corpo = encodeURIComponent(
         "Descreva sua sugestão ou o problema (quanto mais detalhe, melhor):\n\n\n" +
@@ -609,55 +611,10 @@ export default function renderConfig(root, app) {
         el.textContent = txtOrig;
       }
     },
-    "salvar-alarme": () => {
-      const v = root.querySelector("#cfg-alarme").value;
-      store.setConfig({ somAlarme: v });
-      setEstiloAlarme(v);
-      toast("Som do alarme salvo.");
-    },
     "testar-alarme": () => {
       const v = root.querySelector("#cfg-alarme").value;
       setEstiloAlarme(v);
       tocarAlarmeTeste();
-    },
-    "salvar-metas": () => {
-      const hm = (base) => {
-        const h = Math.max(0, parseInt(root.querySelector(`#${base}-h`)?.value, 10) || 0);
-        const m = Math.max(0, parseInt(root.querySelector(`#${base}-m`)?.value, 10) || 0);
-        return h * 60 + m;
-      };
-      const metaPre = root.querySelector("#cfg-meta-pre").checked;
-      store.setConfig({
-        dataProva: root.querySelector("#cfg-prova-pre").checked ? null : (root.querySelector("#cfg-prova").value || null),
-        metaDiariaMin: metaPre ? 0 : hm("cfg-meta-dia"),
-        metaSemanalMin: metaPre ? 0 : hm("cfg-meta-sem"),
-        metaMensalMin: metaPre ? 0 : hm("cfg-meta-mes"),
-        // Disponibilidade diária = meta diária (mesmo conceito); alimenta o Mentor.
-        dispDiariaMin: metaPre ? 0 : hm("cfg-meta-dia"),
-      });
-      toast("Metas e prova salvas.");
-    },
-    "salvar-perf": () => {
-      let ruim = parseInt(root.querySelector("#cfg-perf-ruim")?.value, 10);
-      let bom = parseInt(root.querySelector("#cfg-perf-bom")?.value, 10);
-      if (isNaN(ruim)) ruim = 60;
-      if (isNaN(bom)) bom = 80;
-      ruim = Math.max(0, Math.min(100, ruim));
-      bom = Math.max(0, Math.min(100, bom));
-      if (ruim >= bom) return toast('O limite "ruim" deve ser menor que o "bom".', "erro");
-      store.setConfig({ perfRuim: ruim, perfBom: bom });
-      toast("Limites do semáforo salvos.");
-      app.refresh();
-    },
-    "salvar-conc": () => {
-      const cargo = root.querySelector("#cfg-cargo").value.trim();
-      const banca = root.querySelector("#cfg-banca").value.trim();
-      if (!cargo) return toast("Informe o cargo.", "erro");
-      const conc = store.get().concurso;
-      conc.cargo = cargo;
-      conc.banca = banca;
-      store.setConfig({}); // força persistência + re-render
-      toast("Concurso atualizado.");
     },
     "add-atalho": () => {
       const nome = root.querySelector("#atl-nome").value.trim();
@@ -707,6 +664,142 @@ export default function renderConfig(root, app) {
   };
   ligarNaoDef("#cfg-prova-pre", ["#cfg-prova"], "");
   ligarNaoDef("#cfg-meta-pre", ["#cfg-meta-dia-h", "#cfg-meta-dia-m", "#cfg-meta-sem-h", "#cfg-meta-sem-m", "#cfg-meta-mes-h", "#cfg-meta-mes-m"], "0");
+
+  // ---------- Autosave (metas/prova, alarme, semáforo e concurso salvam on-change) ----------
+  // setConfig() re-renderiza o app; quando o save dispara com o usuário ainda digitando,
+  // preserva o foco, o valor bruto e o cursor do campo ativo através do re-render.
+  const salvarPreservandoFoco = (fn) => {
+    const ativo = document.activeElement;
+    let guarda = null;
+    if (ativo && root.contains(ativo) && ativo.id) {
+      let caret = null;
+      try { caret = typeof ativo.selectionStart === "number" ? ativo.selectionStart : null; } catch { /* type=number/date não expõe seleção */ }
+      guarda = {
+        id: ativo.id,
+        // Só campos de texto recuperam o valor bruto digitado (preserva espaço no fim, etc.).
+        // Nos numéricos o re-render já mostra o valor normalizado salvo (ex.: 90min -> 1h30).
+        valor: ativo.tagName === "INPUT" && ativo.type === "text" ? ativo.value : null,
+        caret,
+      };
+    }
+    fn();
+    if (!guarda) return;
+    // O re-render acontece num microtask (agendarEmit do store); o timeout roda depois dele.
+    setTimeout(() => {
+      const el = document.getElementById(guarda.id);
+      if (!el) return;
+      el.focus();
+      if (guarda.valor != null) el.value = guarda.valor;
+      try { if (guarda.caret != null && typeof el.setSelectionRange === "function") el.setSelectionRange(guarda.caret, guarda.caret); } catch { /* idem */ }
+    }, 0);
+  };
+  const debounce = (fn, ms) => {
+    let t = null;
+    return () => { clearTimeout(t); t = setTimeout(fn, ms); };
+  };
+
+  // Metas e prova: mesma lógica de parse (h/min -> minutos; NaN vira 0) do antigo "Salvar metas/prova".
+  const salvarMetas = () => {
+    if (!root.querySelector("#cfg-meta-pre")) return; // a tela mudou antes do debounce disparar
+    const hm = (base) => {
+      const h = Math.max(0, parseInt(root.querySelector(`#${base}-h`)?.value, 10) || 0);
+      const m = Math.max(0, parseInt(root.querySelector(`#${base}-m`)?.value, 10) || 0);
+      return h * 60 + m;
+    };
+    const metaPre = root.querySelector("#cfg-meta-pre").checked;
+    const patch = {
+      dataProva: root.querySelector("#cfg-prova-pre").checked ? null : (root.querySelector("#cfg-prova").value || null),
+      metaDiariaMin: metaPre ? 0 : hm("cfg-meta-dia"),
+      metaSemanalMin: metaPre ? 0 : hm("cfg-meta-sem"),
+      metaMensalMin: metaPre ? 0 : hm("cfg-meta-mes"),
+    };
+    // Disponibilidade diária = meta diária (mesmo conceito); alimenta o Mentor.
+    patch.dispDiariaMin = patch.metaDiariaMin;
+    const atual = store.get().config;
+    if (
+      patch.dataProva === (atual.dataProva || null) &&
+      patch.metaDiariaMin === (atual.metaDiariaMin || 0) &&
+      patch.metaSemanalMin === (atual.metaSemanalMin || 0) &&
+      patch.metaMensalMin === (atual.metaMensalMin || 0)
+    ) return; // nada mudou (evita re-render e toast à toa)
+    salvarPreservandoFoco(() => {
+      store.setConfig(patch);
+      toast("Salvo.");
+    });
+  };
+  const salvarMetasDeb = debounce(salvarMetas, 500);
+  ["cfg-meta-dia", "cfg-meta-sem", "cfg-meta-mes"].forEach((base) =>
+    ["-h", "-m"].forEach((suf) => root.querySelector(`#${base}${suf}`)?.addEventListener("input", salvarMetasDeb))
+  );
+  root.querySelector("#cfg-prova")?.addEventListener("change", salvarMetas);
+  // Checkboxes "sem data/meta": MARCAR limpa e salva na hora (o ligarNaoDef acima já zerou os
+  // campos). DESMARCAR não salva nada (os dados continuam vazios): só libera os campos, e o
+  // save acontece quando o usuário preencher a data/meta.
+  const aoMudarPre = (e) => { if (e.target.checked) salvarMetas(); };
+  root.querySelector("#cfg-prova-pre")?.addEventListener("change", aoMudarPre);
+  root.querySelector("#cfg-meta-pre")?.addEventListener("change", aoMudarPre);
+
+  // Som do alarme: select salva na hora (o "Testar" continua como botão).
+  root.querySelector("#cfg-alarme")?.addEventListener("change", (e) => {
+    const v = e.target.value;
+    store.setConfig({ somAlarme: v });
+    setEstiloAlarme(v);
+    toast("Salvo.");
+  });
+
+  // Semáforo: mesma validação do antigo "Salvar limites" (NaN -> padrão, clamp 0-100,
+  // "ruim" < "bom"). No meio da digitação (debounce), campo vazio só espera; no blur
+  // (change), aplica o padrão como o handler antigo fazia.
+  const salvarPerf = (aoSair) => {
+    const inpRuim = root.querySelector("#cfg-perf-ruim");
+    const inpBom = root.querySelector("#cfg-perf-bom");
+    if (!inpRuim || !inpBom) return;
+    let ruim = parseInt(inpRuim.value, 10);
+    let bom = parseInt(inpBom.value, 10);
+    if ((isNaN(ruim) || isNaN(bom)) && !aoSair) return;
+    if (isNaN(ruim)) ruim = 60;
+    if (isNaN(bom)) bom = 80;
+    ruim = Math.max(0, Math.min(100, ruim));
+    bom = Math.max(0, Math.min(100, bom));
+    if (ruim >= bom) return toast('O limite "ruim" deve ser menor que o "bom".', "erro");
+    const atual = store.get().config;
+    if (ruim === Number(atual.perfRuim ?? 60) && bom === Number(atual.perfBom ?? 80)) return; // nada mudou
+    salvarPreservandoFoco(() => {
+      store.setConfig({ perfRuim: ruim, perfBom: bom });
+      toast("Salvo.");
+    });
+  };
+  const salvarPerfDeb = debounce(() => salvarPerf(false), 500);
+  ["#cfg-perf-ruim", "#cfg-perf-bom"].forEach((sel) => {
+    const el = root.querySelector(sel);
+    el?.addEventListener("input", salvarPerfDeb);
+    el?.addEventListener("change", () => salvarPerf(true));
+  });
+
+  // Concurso: cargo obrigatório (como no antigo "Salvar concurso") — sem cargo, o
+  // debounce só espera; no blur, avisa.
+  const salvarConc = (aoSair) => {
+    const inpCargo = root.querySelector("#cfg-cargo");
+    if (!inpCargo) return;
+    const cargo = inpCargo.value.trim();
+    const banca = root.querySelector("#cfg-banca")?.value.trim() || "";
+    if (!cargo) { if (aoSair) toast("Informe o cargo.", "erro"); return; }
+    const conc = store.get().concurso;
+    if (!conc) return;
+    if (conc.cargo === cargo && conc.banca === banca) return; // nada mudou
+    salvarPreservandoFoco(() => {
+      conc.cargo = cargo;
+      conc.banca = banca;
+      store.setConfig({}); // força persistência + re-render
+      toast("Salvo.");
+    });
+  };
+  const salvarConcDeb = debounce(() => salvarConc(false), 500);
+  ["#cfg-cargo", "#cfg-banca"].forEach((sel) => {
+    const el = root.querySelector(sel);
+    el?.addEventListener("input", salvarConcDeb);
+    el?.addEventListener("change", () => salvarConc(true));
+  });
 
   root.querySelector("#atl-tipo")?.addEventListener("change", (e) => {
     root.querySelector("#atl-alvo").innerHTML = alvoOptions(e.target.value, store.get());

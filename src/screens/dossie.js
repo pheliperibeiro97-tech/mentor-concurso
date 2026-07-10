@@ -6,7 +6,7 @@ import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, 
 import { esc, fmtTempo, pct, fmtData, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { progressRing } from "../viz.js";
-import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, relNamedValor, relNamedNome } from "./edital.js";
+import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, relNamedValor, relNamedNome, abrirAnexarLink } from "./edital.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { gerarEAbrirMapa, abrirMapaCompleto } from "../mapa-mental.js";
 
@@ -60,9 +60,9 @@ export function dossieResumoHTML(store) {
                     <div class="dossie-card-stats">
                       ${relV !== "nd" ? `<span class="rel-pill relp-${relV} ddx-relpill">${relNamedNome(t)}</span>` : ""}
                       ${aprov !== null ? `<span class="ddx-ap ds-${apCls}" data-tip="Aproveitamento nas questões">${aprov}%</span>` : ""}
-                      <span data-tip="Materiais"><span class="ddx-stat-lbl">Mat.</span> ${dos.documentos.length}</span>
-                      <span data-tip="Questões"><span class="ddx-stat-lbl">Quest.</span> ${dos.questoes.length}</span>
-                      <span data-tip="Flashcards"><span class="ddx-stat-lbl">Flash.</span> ${dos.flashcards.length}</span>
+                      <span data-tip="Materiais">${icone("file-text")} ${dos.documentos.length}</span>
+                      <span data-tip="Questões">${icone("pencil-line")} ${dos.questoes.length}</span>
+                      <span data-tip="Flashcards">${icone("layers")} ${dos.flashcards.length}</span>
                       <span data-tip="Tempo estudado">${icone("clock-3")} ${fmtTempo(dos.tempoSeg)}</span>
                     </div>
                   </button>`;
@@ -111,7 +111,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     .cadernoErros()
     .filter((e) => (e.manual ? e.topicoId : e.questao && e.questao.topicoId) === topicoId);
   // As METAS de leitura (a cumprir) já aparecem em Tarefas; aqui ficam só os trechos
-  // gravados para MEMORIZAR (revisão espaçada fica na tela de Lei Seca/Jurisprudência).
+  // marcados para DECORAR (revisão espaçada fica na tela de Lei Seca/Jurisprudência).
   const memLei = dos.indicacoes.filter((i) => i.tipo === "lei" && i.modo === "memoria");
   const memJuris = dos.indicacoes.filter((i) => i.tipo === "juris" && i.modo === "memoria");
   // Dossiê de marcações: grifos (por cor) + comentários de todas as fontes do tópico.
@@ -158,9 +158,9 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
         : vazioMini("Nenhum registro nesta seção. Crie em Resumos.") },
     marcacoes: { titulo: "Marcações", kpi: { val: marc.total, label: "marcações", tip: "Ver as marcações (grifos e comentários)" }, print: marc.total ? "print-marcacoes" : "",
       corpo: marcacoesDossieHTML(marc) },
-    lei: { titulo: "Lei Seca (memória)", kpi: { val: memLei.length, label: "lei seca", tip: "Ver a lei seca (memória)" }, print: "print-lei",
+    lei: { titulo: "Lei Seca (decorar)", kpi: { val: memLei.length, label: "lei seca", tip: "Ver a lei seca para decorar" }, print: "print-lei",
       corpo: corpoIndicacoes(memLei, "lei") },
-    juris: { titulo: "Jurisprudência (memória)", kpi: { val: memJuris.length, label: "jurisprud.", tip: "Ver a jurisprudência (memória)" }, print: "print-juris",
+    juris: { titulo: "Jurisprudência (decorar)", kpi: { val: memJuris.length, label: "jurisprud.", tip: "Ver a jurisprudência para decorar" }, print: "print-juris",
       corpo: corpoIndicacoes(memJuris, "juris") },
     questoes: { titulo: "Questões e desempenho", kpi: { val: dos.questoes.length, label: "questões", tip: "Ver as questões" }, print: "print-questoes",
       corpo: dos.questoes.length
@@ -211,7 +211,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   const mostraSessoes = mostra("sessoes");
   const escondidas = TODAS_KEYS.filter((k) => !mostra(k));
   const secoesHTML = cheias
-    .map((k, idx) => secaoWrap(CARDS[k], k, idx > 0, idx < cheias.length - 1, retraida(k)))
+    .map((k) => secaoWrap(CARDS[k], k, retraida(k)))
     .join("");
   const addStripHTML = escondidas.length
     ? `<div class="dossie-add"><span class="dossie-add-lbl">Adicionar ao dossiê</span>${escondidas.map((k) => `<button class="dossie-add-chip" data-action="dossie-revelar" data-key="${k}">${icone("plus")} ${tituloDe(k)}</button>`).join("")}</div>`
@@ -255,6 +255,16 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
       const maps = st.mapasMentais.filter((m) => m.topicoId === topicoId);
       if (!maps.length) return "";
       return `<div class="card dossie-mapas"><div class="muted small u-mb-8"><b>Mapas mentais</b></div><div class="aula-tops">${maps.map((m) => `<button class="mini-item mini-link" data-action="abrir-mapa" data-id="${m.id}" data-tip="Abrir mapa mental"><span class="mini-txt">${esc(m.titulo)}</span></button>`).join("")}</div></div>`;
+    })()}
+
+    ${(() => {
+      // Links anexados ao tópico (videoaulas, PDFs…): moram AQUI (a tabela do Edital só
+      // mostra um indicador). Abrir em nova aba; remover e anexar ficam neste card.
+      const links = Array.isArray(t.links) ? t.links : [];
+      if (!links.length) return "";
+      return `<div class="card dossie-mapas"><div class="muted small u-mb-8"><b>Links anexados</b></div><div class="aula-tops">${links
+        .map((l, i) => `<span class="mini-item ind-item"><a class="lnk mini-link-inline" href="${esc(l.url)}" target="_blank" rel="noopener" data-tip="${esc(l.url)}">${icone("link")} ${esc(l.titulo || l.url)}</a><button class="lnk lnk-danger" data-action="del-link-top" data-idx="${i}" data-tip-pos="cima-dir" data-tip="Remover link">${icone("x")}</button></span>`)
+        .join("")}<button class="lnk" data-action="add-link-top">${icone("plus")} Anexar link</button></div></div>`;
     })()}
 
     ${painelHTML}
@@ -309,11 +319,15 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
         setTimeout(() => alvo.classList.remove("item-foco"), 2200);
       }
     },
-    "dossie-subir": (el) => store.moverDossieSecao(el.getAttribute("data-key"), "cima", ORDER_KEYS),
-    "dossie-descer": (el) => store.moverDossieSecao(el.getAttribute("data-key"), "baixo", ORDER_KEYS),
-    "dossie-ocultar": (el) => store.toggleDossieOculta(el.getAttribute("data-key")),
+    // Retrair = recolhe a seção no lugar (só o título fica); reordenar é só pelo drag.
+    "dossie-retrair": (el) => store.toggleDossieOculta(el.getAttribute("data-key")),
     "dossie-revelar": (el) => { const k = el.getAttribute("data-key"); dossieRevelar.add(k); dossieEscondido.delete(k); app.refresh(); },
-    "dossie-remover": (el) => { const k = el.getAttribute("data-key"); dossieEscondido.add(k); dossieRevelar.delete(k); app.refresh(); },
+    // Tirar do dossiê = a seção sai da tela e volta para a faixa "Adicionar ao dossiê".
+    "remover-do-dossie": (el) => { const k = el.getAttribute("data-key"); dossieEscondido.add(k); dossieRevelar.delete(k); app.refresh(); },
+    "add-link-top": () => abrirAnexarLink(app, topicoId),
+    "del-link-top": async (el) => {
+      if (await confirmar("Remover este link?")) store.removerLinkTopico(topicoId, parseInt(el.getAttribute("data-idx"), 10));
+    },
     "abrir-sessao": (el) => app.navigate("diagnostico", { focoSessaoId: el.getAttribute("data-id") }),
     "abrir-doc": (el) => app.navigate("documentos", { focoDocId: el.getAttribute("data-id") }),
     "abrir-questao": (el) => {
@@ -347,8 +361,8 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
       const txt = e.manual ? e.descricao : e.questao ? e.questao.enunciado : "";
       return `${esc(txt)}${e.motivoErro ? ` <i>(${esc(e.motivoErro)})</i>` : ""}`;
     })),
-    "print-lei": () => imprimir(`Lei Seca (memória) — ${t.nome}`, printSecLista(memLei, (i) => esc(i.referencia))),
-    "print-juris": () => imprimir(`Jurisprudência (memória) — ${t.nome}`, printSecLista(memJuris, (i) => esc(i.referencia))),
+    "print-lei": () => imprimir(`Lei Seca (decorar) — ${t.nome}`, printSecLista(memLei, (i) => esc(i.referencia))),
+    "print-juris": () => imprimir(`Jurisprudência (decorar) — ${t.nome}`, printSecLista(memJuris, (i) => esc(i.referencia))),
     "print-tarefas": () => imprimir(`Tarefas pendentes — ${t.nome}`, printSecLista(dos.missoes.filter((m) => !m.concluida), (m) => esc(m.titulo))),
     "print-sessoes": () => imprimir(`Sessões — ${t.nome}`, printSecSessoes(st, dos.sessoes)),
     "print-questoes": async () => {
@@ -449,16 +463,17 @@ function ativarRecolhiveis(root) {
   });
 }
 
-// Corpo da seção de MEMÓRIA (lei OU jurisprudência): trechos gravados para relembrar.
+// Corpo da seção DECORAR (lei OU jurisprudência): trechos marcados para decorar.
 function corpoIndicacoes(itens, tipo) {
   const acao = tipo === "juris" ? "abrir-ind-juris" : "abrir-ind-lei";
   const addAcao = tipo === "juris" ? "add-ind-juris" : "add-ind-lei";
   const telaNome = tipo === "juris" ? "Jurisprudência" : "Lei Seca";
   const ph = tipo === "juris" ? "Ex.: Súmula 473 STF" : "Ex.: art. 37, caput, CF";
+  const rotuloAdd = tipo === "juris" ? "Decorar este julgado" : "Decorar este artigo";
   return `
     <div class="form-inline-mini">
       <input id="ind-${tipo}-ref" type="text" placeholder="${ph}" />
-      <button class="btn btn-ghost btn-sm" data-action="${addAcao}">Gravar na memória</button>
+      <button class="btn btn-ghost btn-sm" data-action="${addAcao}">${rotuloAdd}</button>
     </div>
     ${
       itens.length
@@ -468,33 +483,31 @@ function corpoIndicacoes(itens, tipo) {
               const status = `<span class="mini-tag">${icone("brain")}</span>${i.pq ? `<span class="mini-tag pq-tag">${icone("star")} PQ</span>` : ""}${venc ? `<span class="muted mini-data">${icone("bell")} ${fmtData(i.revisao.proxima)}</span>` : ""}`;
               return `
             <div class="mini-item ind-item">
-              <label>${status} <button class="lnk mini-link-inline" data-action="${acao}" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir em ${telaNome} (memória) para revisar/agendar">${esc(i.referencia)}</button></label>
-              <button class="lnk lnk-danger" data-action="del-ind" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Remover da memória.">${icone("x")}</button>
+              <label>${status} <button class="lnk mini-link-inline" data-action="${acao}" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir em ${telaNome} (decorar) para revisar/agendar">${esc(i.referencia)}</button></label>
+              <button class="lnk lnk-danger" data-action="del-ind" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Remover dos itens a decorar.">${icone("x")}</button>
             </div>`;
             })
             .join("")
-        : vazioMini(`Nenhum registro nesta seção. Grave em ${telaNome}.`)
+        : vazioMini(`Nada para decorar ainda. Marque em ${telaNome}.`)
     }`;
 }
 
 // Envolve um card como uma SEÇÃO: cabeçalho (título + controles) e o corpo. Quando RETRAÍDA,
-// só o cabeçalho fica (o título e as funções permanecem no lugar); o retrai/expande.
-function secaoWrap(card, key, podeSubir, podeDescer, retraida) {
-  const printItem = card.print ? `<button class="menu-item" data-action="${card.print}"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button>` : "";
+// só o cabeçalho fica (o título e as funções permanecem no lugar); o chevron retrai/expande.
+// Reordenar é SÓ pelo drag (grip); o menu tem Imprimir + Tirar do dossiê.
+function secaoWrap(card, key, retraida) {
+  const printItem = card.print ? `<button class="menu-item" data-action="${card.print}"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button><div class="menu-sep"></div>` : "";
   return `<section class="dossie-secao ${retraida ? "dossie-retraida" : ""}" data-sec="${key}" data-drag-id="${key}">
     <div class="dossie-secao-head">
       <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
-      <button class="dossie-sec-chev" data-action="dossie-ocultar" data-key="${key}" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título"}">${icone("chevron-down")}</button>
+      <button class="dossie-sec-chev" data-action="dossie-retrair" data-key="${key}" aria-label="${retraida ? "Expandir seção" : "Retrair seção"}">${icone("chevron-down")}</button>
       <h4>${card.titulo}</h4>
       <span class="spacer"></span>
       <details class="doc-mais dossie-sec-mais">
         <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações desta seção.">${icone("ellipsis")}</summary>
         <div class="doc-mais-pop" role="menu">
-          <button class="menu-item" data-action="dossie-subir" data-key="${key}" ${podeSubir ? "" : "disabled"}><span class="menu-ico">${icone("arrow-up")}</span> Subir</button>
-          <button class="menu-item" data-action="dossie-descer" data-key="${key}" ${podeDescer ? "" : "disabled"}><span class="menu-ico">${icone("arrow-down")}</span> Descer</button>
           ${printItem}
-          <div class="menu-sep"></div>
-          <button class="menu-item" data-action="dossie-remover" data-key="${key}"><span class="menu-ico">${icone("minus")}</span> Ocultar seção</button>
+          <button class="menu-item" data-action="remover-do-dossie" data-key="${key}"><span class="menu-ico">${icone("minus")}</span> Tirar do dossiê</button>
         </div>
       </details>
     </div>
@@ -507,7 +520,7 @@ function addIndicacaoDossie(root, store, topicoId, tipo) {
   const ref = input ? input.value.trim() : "";
   if (!ref) return toast("Informe a referência (artigo/súmula).", "erro");
   store.addIndicacao({ topicoId, tipo, modo: "memoria", referencia: ref });
-  toast("Gravado na memória.");
+  toast("Marcado para decorar.");
 }
 
 // ---- Construtores de impressão POR SEÇÃO ----
@@ -567,8 +580,8 @@ function secoesDossieImprimir(st, dos, meusErros, marc) {
     { key: "resumos", titulo: "Resumos", vazia: !dos.resumos.length, html: lista(dos.resumos, (r) => `<li>${esc(r.titulo)}</li>`) },
     { key: "marcacoes", titulo: "Marcações", vazia: !marc.total, html: marcacoesDossieHTML(marc, true) },
     { key: "pq", titulo: "Pontos prováveis (PQ)", vazia: !pq.length, html: lista(pq, (i) => `<li>${esc(i.referencia)}${i.pqIncidencia ? ` (${i.pqIncidencia})` : ""}</li>`) },
-    { key: "lei", titulo: "Lei Seca (memória)", vazia: !memLei.length, html: lista(memLei, (i) => `<li>${esc(i.referencia)}</li>`) },
-    { key: "juris", titulo: "Jurisprudência (memória)", vazia: !memJuris.length, html: lista(memJuris, (i) => `<li>${esc(i.referencia)}</li>`) },
+    { key: "lei", titulo: "Lei Seca (decorar)", vazia: !memLei.length, html: lista(memLei, (i) => `<li>${esc(i.referencia)}</li>`) },
+    { key: "juris", titulo: "Jurisprudência (decorar)", vazia: !memJuris.length, html: lista(memJuris, (i) => `<li>${esc(i.referencia)}</li>`) },
     { key: "questoes", titulo: "Questões", vazia: !dos.questoes.length, html: lista(dos.questoes, (q) => `<li>${esc(q.enunciado)}</li>`) },
     {
       key: "erros",
@@ -674,9 +687,7 @@ function sessoesSecaoHTML(st, dos, retraida) {
           ${thSess("data", "Data")}
           ${thSess("fase", "Fase")}
           ${thSess("tempo", "Tempo", " num")}
-          <th class="num">Páginas</th>
           ${thSess("questoes", "Questões", " num")}
-          <th>Observação</th>
           <th class="th-acoes"></th>
         </tr></thead>
         <tbody>${sessoes.map((s) => linhaSessaoDossie(st, s)).join("")}</tbody>
@@ -693,7 +704,7 @@ function sessoesSecaoHTML(st, dos, retraida) {
   const printBtn = `<button class="lnk dossie-print" data-action="print-sessoes" data-tip-pos="cima-dir" data-tip="Imprimir esta seção">${iconImprimir}</button>`;
   return `<section class="dossie-secao dossie-sessoes ${retraida ? "dossie-retraida" : ""}" data-sec="sessoes">
     <div class="dossie-secao-head">
-      <button class="dossie-sec-chev" data-action="dossie-ocultar" data-key="sessoes" data-tip-pos="cima-dir" data-tip="${retraida ? "Mostrar o conteúdo desta seção" : "Retrair: deixa só o título"}">${icone("chevron-down")}</button>
+      <button class="dossie-sec-chev" data-action="dossie-retrair" data-key="sessoes" aria-label="${retraida ? "Expandir seção" : "Retrair seção"}">${icone("chevron-down")}</button>
       <h4>Histórico de sessões${contagem}</h4>
       <span class="spacer"></span>
       ${retraida ? "" : faseSel}
@@ -702,7 +713,7 @@ function sessoesSecaoHTML(st, dos, retraida) {
         <div class="doc-mais-pop" role="menu">
           <button class="menu-item" data-action="print-sessoes"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button>
           <div class="menu-sep"></div>
-          <button class="menu-item" data-action="dossie-remover" data-key="sessoes"><span class="menu-ico">${icone("minus")}</span> Ocultar seção</button>
+          <button class="menu-item" data-action="remover-do-dossie" data-key="sessoes"><span class="menu-ico">${icone("minus")}</span> Tirar do dossiê</button>
         </div>
       </details>
     </div>
@@ -729,17 +740,13 @@ function linhaSessaoDossie(st, s) {
   const q = tq ? `${s.qAcertos}/${tq} (${Math.round((s.qAcertos / tq) * 100)}%)` : traco;
   const fi = FASES[s.fase];
   const cor = fi ? fi.cor : "var(--muted)";
-  const pagTd = s.paginaInicial && s.paginaFinal ? `${s.paginaInicial}–${s.paginaFinal} (${s.paginas})` : s.paginas ? `${s.paginas}` : traco;
-  const obsTd = s.comentario
-    ? `<span class="sess-obs" data-tip="${esc(s.comentario)}">${icone("message-square")} ${esc(s.comentario.length > 40 ? s.comentario.slice(0, 40) + "…" : s.comentario)}</span>`
-    : traco;
+  // Tabela enxuta (Data · Fase · Tempo · Questões): páginas e observação ficam na edição.
+  const obsInd = s.comentario ? ` <span class="sess-obs" data-tip="${esc(s.comentario)}">${icone("message-square")}</span>` : "";
   const linha = `<tr class="sess-row" style="--cor:${cor}">
-    <td><button class="lnk" data-action="abrir-sessao" data-id="${s.id}" data-tip="Abrir no Acompanhamento">${fmtData(s.data)}</button></td>
+    <td><button class="lnk" data-action="abrir-sessao" data-id="${s.id}" data-tip="Abrir no Acompanhamento">${fmtData(s.data)}</button>${obsInd}</td>
     <td>${fi ? esc(fi.nome) : esc(s.fase)}</td>
     <td class="num">${fmtTempo(s.tempoSeg)}</td>
-    <td class="num">${pagTd}</td>
     <td class="num">${q}</td>
-    <td>${obsTd}</td>
     <td class="sess-acoes">
       <button class="mover-btn" data-action="edit-sess" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="Editar sessão">${icone("square-pen")}</button>
       <button class="mover-btn mover-del" data-action="del-sess" data-id="${s.id}" data-tip-pos="cima-dir" data-tip="Remover sessão">${icone("x")}</button>
@@ -747,13 +754,15 @@ function linhaSessaoDossie(st, s) {
   </tr>`;
   if (sessEditId !== s.id) return linha;
   const faseOpts = ORDEM_FASES.map((f) => `<option value="${f}" ${f === s.fase ? "selected" : ""}>${FASES[f].nome}</option>`).join("");
-  const form = `<tr class="sess-edit-row"><td colspan="7">
+  const paginas = s.paginaInicial && s.paginaFinal ? `${s.paginaInicial}–${s.paginaFinal}${s.paginas ? ` (${s.paginas})` : ""}` : s.paginas ? `${s.paginas}` : "";
+  const form = `<tr class="sess-edit-row"><td colspan="5">
     <div class="sess-edit">
       <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${s.data.slice(0, 10)}" /></label>
       <label class="inline">Fase <select class="se-fase" data-id="${s.id}">${faseOpts}</select></label>
       <label class="inline">Minutos <input type="number" min="0" max="1440" class="se-min" data-id="${s.id}" value="${Math.round((s.tempoSeg || 0) / 60)}" /></label>
       <label class="inline">Certas <input type="number" min="0" max="9999" class="se-ac" data-id="${s.id}" value="${s.qAcertos || 0}" /></label>
       <label class="inline">Total <input type="number" min="0" max="9999" class="se-tot" data-id="${s.id}" value="${tq}" /></label>
+      ${paginas ? `<span class="inline muted small">Páginas ${esc(paginas)}</span>` : ""}
       <label class="inline">Observação <input type="text" class="se-obs" data-id="${s.id}" value="${esc(s.comentario || "")}" /></label>
       <label class="inline">Tarefa <select class="se-missao" data-id="${s.id}">${opcoesMissaoSessao(st, s.missaoId)}</select></label>
       <button class="btn btn-ghost btn-sm" data-action="cancelar-sess" data-id="${s.id}">Cancelar</button>
@@ -872,6 +881,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
   const linhaTopico = (i) => {
     const p = ddxPerf(store, i.aprov, i.nTent);
     const rel = relLabel(i.t);
+    const relTip = (i.t.peso || 0) > 0 ? ` data-tip="Incidência: ${i.t.peso}%"` : "";
     const corAnel = { ruim: "var(--danger)", regular: "var(--warn)", bom: "var(--success)" }[store.corDesempenho(i.aprov)] || "var(--muted)";
     const meio =
       i.aprov === null || i.nTent < 3
@@ -879,7 +889,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
         : progressRing(i.aprov, { size: 42, stroke: 5, cor: corAnel });
     return `
       <button class="ddx-linha ${p.banda}" data-action="ddx-topico" data-id="${i.t.id}">
-        <div class="ddx-linha-nome">${i.t.concluido ? `${icone("check")} ` : ""}${esc(i.t.nome)}${rel ? ` <span class="dossie-card-rel">${esc(rel)}</span>` : ""}</div>
+        <div class="ddx-linha-nome">${i.t.concluido ? `${icone("check")} ` : ""}${esc(i.t.nome)}${rel ? ` <span class="dossie-card-rel"${relTip}>${esc(rel)}</span>` : ""}</div>
         <div class="ddx-linha-meio">${meio}</div>
         <div class="ddx-linha-stats muted small">
           <span data-tip="tempo estudado">${icone("clock-3")} ${fmtTempo(i.tempoSeg)}</span>
