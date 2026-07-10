@@ -243,10 +243,10 @@
       header da Central reescrito.
 - [x] Onboarding alinhado ao Config; confirmações do Edital sem CAPS; aviso de
       direitos autorais curto; sidebar sem assinatura do dev/backend-tag (P-41).
-- [ ] Restos de "ofensiva" fora do escopo desta leva: store.js:6196 (nudge), config.js
-      (texto da folga), prompt em ia-provider — trocar na próxima passada.
-- [ ] Assinatura do dev renasce em Config → Sobre (era do rodapé da sidebar).
-- [ ] flashcards.js:278 "Apagar TODOS os N flashcards?" — tirar o CAPS.
+- [x] Restos de "ofensiva" trocados: store (nudge), config (folga), prompt do Mentor
+      (instrui dizer "sequência").
+- [x] Assinatura do dev renasceu em Config → Suporte, ao lado da versão.
+- [x] flashcards "Apagar todos os N flashcards?" sem CAPS.
 
 ### Faxina de CSS órfão (pendente, styles.css)
 .periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir outros usos), .sess-mais/
@@ -254,12 +254,42 @@
 .ed-link-x, .edc-vez/.edc-ult, .sem-ajuda*, .estudar-card-rec, .sidebar-rodape/
 .backend-tag/.assinatura-dev, blocos do pincel exclusivos da Lei Seca — grep de uso.
 
-## PRÓXIMAS FASES (6–8)
+## FASE 7 — Bugs restantes (CONCLUÍDA)
 
-Fase 7 (bugs restantes da lista de 27 — muitos já caíram nas fases 0-6; conferir a
-lista do relatório §Fase 7 item a item), Fase 8 (responsivo/a11y: focus-traps nos
-overlays, aria-live no placar do quiz, role=tab nos segmented, re-teste nos 3
-breakpoints).
+Da lista de 27 do relatório, 9 já haviam caído nas fases 0-6. Fechados nesta leva:
+- [x] correcao.js: RASCUNHO persistente (tema/resposta sobrevivem a refresh/sync; limpo
+      após corrigir) — testado ao vivo (refresh e ida-e-volta de tela).
+- [x] simulado.js: tempo por RELÓGIO DE PAREDE (iniciadoEm/pausadoMs/pausadoDesde; aba
+      throttled não subconta; pausa desconta) + tempoSeg REAL por questão (marco por
+      navegação/resposta; pausa não conta).
+- [x] XSS: sanitize() aplicada também na LEITURA de conteudoHTML (resumos + Central;
+      sync/import antigo pode não ter passado pelo save) E textoPuro/sanitize parseiam
+      em <template> INERTE (div solto executava onerror de <img> hostil mesmo
+      desanexado — reproduzido e validado ao vivo com payload).
+- [x] ui: celebrarMeta única; tooltip some no render global (não fica preso ao navegar);
+      chat fechado inert+tabIndex -1; saudação vira com o dia (check 60s cirúrgico).
+- [x] erro-log: APP_VERSION via define do Vite; EMAIL_SUPORTE fonte única (licenca
+      importa); ciclo.js com comentário forte na chave legada "A".
+- [x] flashcards trunca em palavra; mapas com plural() + handlers mortos removidos.
+- Fora por decisão: PORTEIRO_SEGREDO da licença no cliente (exigiria servidor — decisão
+  de negócio do usuário); dossie.js:358 injeta conteudoHTML cru mas só no HTML de
+  IMPRESSÃO (janela isolada; risco baixo — sanitizar se sobrar tempo).
+
+## FASE 8 — Responsivo + a11y (CONCLUÍDA)
+
+- [x] RESPONSIVO: varridas as 19 rotas nos 3 breakpoints (560/900/1200) — ZERO overflow
+      horizontal em todas; tab bar mobile e rail colapsado ok; 0 erros de console.
+- [x] FOCUS-TRAP: prenderFoco()/cicloTab() em ui.js (pilha de traps, recálculo por Tab,
+      restauração de foco) em confirmar/escolher/abrirJanela/pedirNumero/pedirTexto/
+      avisoIA/abrirMapaMental; trap central do shell .fc-foco (Modo Foco, 6 consumidores);
+      Esc corrigido em pedirNumero/pedirTexto/avisoIA. Testado ao vivo: 25 Tabs presos,
+      Esc fecha, foco volta ao gatilho.
+- [x] ARIA: role=tab + aria-selected nos .seg via pós-processo central em main.js
+      (MutationObserver, pula role=group); #toasts e placar do foco com aria-live=polite.
+- [x] :focus-visible: 3 furos de especificidade fechados (.btn/.lnk, .seg > button,
+      itens dos popovers); padrão global via --ring mantido; anel visível nos 2 temas.
+- Fora por escopo: setas ←/→ nos tablists, aria-controls/tabpanel, paleta/chat (fluxo
+  de foco próprio).
 
 ## Armadilhas conhecidas (não tropece)
 
