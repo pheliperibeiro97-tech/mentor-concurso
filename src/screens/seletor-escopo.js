@@ -6,7 +6,7 @@
 // Janela via abrirJanelaFluxo + shim { store, refresh: rerender } (o app.refresh real não
 // alcança a janela, que vive fora do root) — mesmo padrão dos outros modais.
 import { abrirJanelaFluxo, toast, avisoIA , plural } from "../ui.js";
-import { esc } from "../util.js";
+import { esc, humanizarErroIA } from "../util.js";
 import { icone } from "../icones.js";
 
 // Cada tipo sabe seu rótulo, padrão de quantidade e como gerar/extrair pelo store.
@@ -88,7 +88,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       toast(qtd ? `Gerei ${qtd} ${cfg.rotulo} (IA).` : "A IA não retornou nada.", qtd ? "ok" : "erro");
       app.refresh();
     } catch (e) {
-      toast("Não consegui gerar agora. Tente de novo em instantes.", "erro");
+      toast(humanizarErroIA(e), "erro");
     } finally {
       ocupado = false;
       rerender();

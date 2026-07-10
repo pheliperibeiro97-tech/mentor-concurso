@@ -4,7 +4,7 @@
 // É o ponto onde o sistema conversa consigo mesmo: lê sessões, erros, observações,
 // cobertura, prova e metas, e devolve ações que voltam para as outras telas.
 import { bindActions, toast, header, avisoIA, seloBadge, imprimir, botaoImprimir, vazio, skeletonDoc, plural, revelarTexto, md } from "../ui.js";
-import { esc, fmtMin } from "../util.js";
+import { esc, fmtMin, humanizarErroIA } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES } from "../ciclo.js";
 
@@ -108,10 +108,12 @@ export default function renderMentor(root, app) {
         plano = await store.analisarComMentor();
         app.refresh();
       } catch (e) {
-        toast("Não consegui concluir a análise agora. Verifique a conexão e tente de novo em instantes.", "erro");
+        toast(humanizarErroIA(e), "erro");
         el.disabled = false;
         el.classList.remove("is-generating");
-        el.textContent = "Analisar meu progresso";
+        // Restaura com o ícone (textContent apagava o sparkles e o botão "degradava").
+        el.innerHTML = `${icone("sparkles")} Analisar meu progresso`;
+        if (slot) slot.innerHTML = "";
       }
     },
     "descartar-plano": () => {

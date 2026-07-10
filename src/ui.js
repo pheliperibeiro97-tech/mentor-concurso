@@ -1,6 +1,6 @@
 // Helpers de UI (vanilla JS): seleção, eventos, toast, modal de confirmação, selos.
 import { SELO } from "./ia.js";
-import { esc } from "./util.js";
+import { esc , humanizarErroIA } from "./util.js";
 import { icone } from "./icones.js";
 
 // Ícone de impressora — Lucide único (Fase 0: fim do SVG desenhado à mão em paralelo).
@@ -91,7 +91,10 @@ export async function comOcupado(fn, { botao = null, msg = "Processando…", err
     return await fn();
   } catch (e) {
     console.error(e);
-    toast(erro, "erro");
+    // Fase 2: erro de IA vira frase humana com a acao que resolve; o texto custom de
+    // rro (quando o chamador passou um) continua tendo prioridade.
+    const padrao = "Não deu certo agora. Tente de novo em instantes.";
+    toast(erro !== padrao ? erro : humanizarErroIA(e), "erro");
     return null;
   } finally {
     fim();

@@ -1,5 +1,27 @@
 // Utilitários puros (datas, ids, formatação).
 
+// Fase 2 — traduz QUALQUER erro de IA para uma frase humana, em 1ª pessoa (voz do
+// Mentor), com a ação que resolve. Fim dos dois extremos: "Não deu certo agora"
+// (genérico inútil) e "Gemini 429: You exceeded..." (jargão cru na cara do usuário).
+export function humanizarErroIA(e) {
+  const status = e && e.status;
+  const code = e && e.code;
+  const msg = (e && e.message) || "";
+  if (status === 429 || /quota|resource.?exhausted/i.test(msg))
+    return "Minha cota grátis deste modelo esgotou por agora. Já tentei os modelos reserva — aguarde ~1 minuto ou troque o modelo em Configurações → IA.";
+  if (status === 401 || status === 403)
+    return "A chave de IA foi recusada. Confira a chave em Configurações → IA (use o botão Testar conexão).";
+  if (status === 404)
+    return "O modelo configurado não existe para a sua chave. Troque o modelo em Configurações → IA.";
+  if (code === "TIMEOUT" || /demorou demais|timeout|abort/i.test(msg))
+    return "O servidor da IA demorou demais desta vez. Tente de novo — costuma resolver em instantes.";
+  if (code === "NETWORK" || /falha de conexão|failed to fetch|network/i.test(msg))
+    return "Não consegui falar com a IA — parece problema de conexão. Confira a internet e tente de novo.";
+  if (code === "IA_OFFLINE" || /nenhuma ia|ia não configurada/i.test(msg))
+    return "Nenhuma IA conectada ainda. Conecte uma chave grátis do Gemini em Configurações → IA (leva ~2 minutos).";
+  return "Não consegui concluir agora" + (msg ? ` (${String(msg).slice(0, 140)})` : "") + ". Tente de novo em instantes.";
+}
+
 let _idCounter = 0;
 export function uid(prefix = "id") {
   _idCounter += 1;
