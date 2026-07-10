@@ -1083,8 +1083,8 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   const menu = [
     i.texto && tipo !== "juris" ? `<button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste item.">${icone("book-open")} Ler em foco</button>` : "",
     i.fonteUrl ? `<button class="lnk" data-action="abrir-fonte" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir na fonte oficial (Planalto).">${icone("external-link")} Abrir no site oficial</button>` : "",
-    i.texto && !i.promovido && tipo !== "juris" ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Entra na revisão espaçada (aba Estudar → Revisar). Continua aqui no Ler.">${icone("brain")} Marcar para revisar</button>` : "",
-    i.promovido && tipo !== "juris" ? `<button class="lnk" data-action="despromover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Tirar da revisão espaçada. Continua no Ler.">${icone("brain")} Tirar da revisão</button>` : "",
+    i.texto && !i.promovido ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Entra na revisão espaçada (curva do esquecimento) — aparece na hora certa no Revisar. Não estuda agora; só agenda.">${icone("brain")} Marcar para revisar</button>` : "",
+    i.promovido ? `<button class="lnk" data-action="despromover-mem" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Tirar da revisão espaçada. Continua no Ler.">${icone("brain")} Tirar da revisão</button>` : "",
     tipo === "juris" && (i.texto || "").length > 300 ? `<button class="lnk" data-action="quebrar-teses" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="A IA separa este informativo em teses individuais.">${icone("list-checks")} Quebrar em teses</button>` : "",
     tipo === "lei" ? `<button class="lnk" data-action="conferir-vigencia" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Marca que você conferiu a vigência hoje (o Mentor lembra quando faz muito tempo).">${icone("calendar-check")} Conferi a vigência</button>` : "",
     i.novidadeEm ? `<button class="lnk" data-action="limpar-novidade" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Já revisei esta novidade: remover o selo.">${icone("check")} Já vi a novidade</button>` : "",
@@ -1105,12 +1105,12 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   const estudarAcoes = (tipo === "juris" && (i.texto || "").trim() && !i.revogado)
     ? `<div class="ls-estudar-acoes">
         <details class="ls-mais ls-estudar-menu">
-          <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese: Certo/Errado, flashcard, completar, revisar ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
+          <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese agora: Certo/Errado, flashcards, questões, completar a letra ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
           <div class="ls-mais-pop">
             <button class="lnk" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese (você escolhe quantidade e nível) e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
             <button class="lnk" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese (você escolhe quantidade e nível)." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
+            <button class="lnk" data-action="card-questoes" data-id="${i.id}" data-tip="${iaOn ? "Gerar questões de múltipla escolha desta tese (você escolhe quantidade e nível)." : "Conecte a IA para gerar."}">${icone("list-checks")} Questões</button>
             <button class="lnk" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
-            <button class="lnk" data-action="${i.promovido ? "despromover-mem" : "promover-mem"}" data-id="${i.id}" data-tip="${i.promovido ? "Já está na revisão espaçada — clique para tirar." : "Colocar na revisão espaçada (curva do esquecimento)."}">${icone("repeat")} ${i.promovido ? "Tirar da revisão" : "Revisar"}</button>
             <button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>
           </div>
         </details>

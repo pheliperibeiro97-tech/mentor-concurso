@@ -1646,18 +1646,16 @@ body.onboarding #crono-fab { display: none !important; }
 .mini-tag.cat-tag { background: transparent; color: var(--muted); border-color: var(--border); font-weight: var(--fw-regular); }
 /* Filtros da barra (Tribunal/Tipo em juris) como pills premium, no lugar de <select> cru */
 .ls-fpill { display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface); font-size: var(--fs-xs); transition: border-color var(--dur-1) ease; position: relative; }
-.ls-fpill::after { content: ""; width: 0; height: 0; margin-left: 3px; pointer-events: none;
-  border-top: 4px solid var(--muted); border-left: 4px solid transparent; border-right: 4px solid transparent; }
 .ls-fpill:hover { border-color: color-mix(in srgb, var(--primary) 40%, var(--border)); }
 .ls-fpill.on { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, transparent); }
 .ls-fpill-lbl { color: var(--muted); font-weight: var(--fw-medium); }
 .ls-fpill.on .ls-fpill-lbl { color: var(--primary); }
-.ls-fpill-sel { border: 0; background-color: transparent; background-image: none; color: var(--fg); font-size: var(--fs-xs); font-weight: var(--fw-medium); padding: 0 2px; cursor: pointer; max-width: 150px; appearance: none; -webkit-appearance: none; -moz-appearance: none; color-scheme: light dark; }
+/* A seta é o CHEVRON NATIVO do select (herda a regra global) — fica DENTRO do select, então é
+   clicável e abre o menu. Antes havia um ::after decorativo (pointer-events:none) que parecia
+   seta mas não fazia nada. Compactamos o chevron para caber na pill. */
+.ls-fpill-sel { border: 0; background-color: transparent; color: var(--fg); font-size: var(--fs-xs); font-weight: var(--fw-medium); padding: 0 17px 0 2px; cursor: pointer; max-width: 150px; appearance: none; -webkit-appearance: none; -moz-appearance: none; color-scheme: light dark; background-position: right 1px center; background-size: 13px; }
 .ls-fpill-sel::-ms-expand { display: none; }
-/* No escuro, a regra global [data-tema="escuro"] select reinjeta o chevron e apareciam DUAS
-   setas (o chevron do select + o triângulo ::after da pílula). A pílula usa o ::after, então
-   zeramos o chevron aqui também (no claro o .ls-fpill-sel já o removia). */
-[data-tema="escuro"] .ls-fpill-sel { color-scheme: dark; background-image: none; }
+[data-tema="escuro"] .ls-fpill-sel { color-scheme: dark; }
 /* O <select> é transparente; sem cor/fundo explícitos as opções somem no tema escuro. */
 .ls-fpill-sel option { background: var(--surface); color: var(--text); }
 .ls-fpill-sel:focus { outline: none; }

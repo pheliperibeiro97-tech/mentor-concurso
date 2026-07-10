@@ -729,6 +729,16 @@ function renderIndicacoes(root, app, tipo) {
       if (!g) return;
       iniciarCE([it], { n: g.n, dificuldade: g.dificuldade, regenerate: true });
     },
+    "card-questoes": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
+      const id = el.getAttribute("data-id");
+      const g = await pedirNumero("Quantas questões de múltipla escolha desta tese?", { padrao: 2, min: 1, max: 5, nivel: true });
+      if (!g) return;
+      const qs = await comOcupado(() => store.gerarQuestoesDeIndicacao(id, g.n, g.dificuldade, "mc"), { botao: el, msg: "Gerando questões…" });
+      if (qs == null) return;
+      toast(qs.length ? `${plural(qs.length, "questão gerada", "questões geradas")}.` : "A IA não retornou questões.", qs.length ? "ok" : "erro");
+      if (qs.length) app.navigate("pratica");
+    },
     "card-cloze": (el) => abrirCompletarArtigo(app, store, [el.getAttribute("data-id")]),
     "card-flash": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
