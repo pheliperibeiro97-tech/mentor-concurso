@@ -1107,8 +1107,8 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
         <details class="ls-mais ls-estudar-menu">
           <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese: Certo/Errado, flashcard, completar, revisar ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
           <div class="ls-mais-pop">
-            <button class="lnk" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
-            <button class="lnk" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
+            <button class="lnk" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese (você escolhe quantidade e nível) e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
+            <button class="lnk" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese (você escolhe quantidade e nível)." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
             <button class="lnk" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
             <button class="lnk" data-action="${i.promovido ? "despromover-mem" : "promover-mem"}" data-id="${i.id}" data-tip="${i.promovido ? "Já está na revisão espaçada — clique para tirar." : "Colocar na revisão espaçada (curva do esquecimento)."}">${icone("repeat")} ${i.promovido ? "Tirar da revisão" : "Revisar"}</button>
             <button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>

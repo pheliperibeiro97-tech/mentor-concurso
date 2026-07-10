@@ -722,12 +722,20 @@ function renderIndicacoes(root, app, tipo) {
     "juris-idx-assunto": (el) => { const rm = el.getAttribute("data-ramo"), as = el.getAttribute("data-assunto"); const igual = S.filtroRamo === rm && S.filtroAssunto === as; S.filtroRamo = igual ? "todos" : rm; S.filtroAssunto = igual ? "todos" : as; app.refresh(); },
     "juris-idx-limpar": () => { S.filtroRamo = "todos"; S.filtroAssunto = "todos"; app.refresh(); },
     // F2 (#4) — estudo ativo por card.
-    "card-ce": (el) => { const it = st.indicacoes.find((x) => x.id === el.getAttribute("data-id")); if (it) iniciarCE([it], { n: 4, dificuldade: "medio", regenerate: true }); },
+    "card-ce": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Gerar Certo/Errado");
+      const it = st.indicacoes.find((x) => x.id === el.getAttribute("data-id")); if (!it) return;
+      const g = await pedirNumero("Quantos itens Certo/Errado desta tese?", { padrao: 4, min: 1, max: 8, nivel: true });
+      if (!g) return;
+      iniciarCE([it], { n: g.n, dificuldade: g.dificuldade, regenerate: true });
+    },
     "card-cloze": (el) => abrirCompletarArtigo(app, store, [el.getAttribute("data-id")]),
     "card-flash": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const id = el.getAttribute("data-id");
-      const cs = await comOcupado(() => store.gerarFlashcardsIADeIndicacao(id, 4, "medio"), { botao: el, msg: "Gerando flashcards…" });
+      const g = await pedirNumero("Quantos flashcards desta tese?", { padrao: 4, min: 1, max: 6, nivel: true });
+      if (!g) return;
+      const cs = await comOcupado(() => store.gerarFlashcardsIADeIndicacao(id, g.n, g.dificuldade), { botao: el, msg: "Gerando flashcards…" });
       if (cs == null) return;
       toast(cs.length ? `${plural(cs.length, "flashcard gerado", "flashcards gerados")}.` : "A IA não retornou flashcards.", cs.length ? "ok" : "erro");
       if (cs.length) app.navigate("flashcards");
