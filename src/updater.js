@@ -5,7 +5,7 @@
 // Em dev/navegador, ou enquanto o updater não estiver configurado/assinado, as chamadas
 // falham de forma silenciosa — nada quebra. Veja empacotamento/updater/GUIA_UPDATER.md.
 
-import { toast, confirmar } from "./ui.js";
+import { toast, toastCarregando, confirmar } from "./ui.js";
 
 function ehDesktop() {
   // Tauri v2: __TAURI__ só existe com withGlobalTauri; __TAURI_INTERNALS__ sempre existe no webview.
@@ -35,11 +35,25 @@ export async function verificarAtualizacao({ silencioso = true } = {}) {
       return;
     }
     const ok = await confirmar(
-      `Nova versão ${update.version} disponível. Baixar e instalar agora? O aplicativo será reiniciado.`
+      `Nova versão ${update.version} disponível. Instalar e reiniciar agora?`
     );
     if (!ok) return;
-    toast("Baixando atualização… não feche o aplicativo.");
-    await update.downloadAndInstall();
+    // Fase 3: o download pode levar minutos — toast PERSISTENTE com progresso real
+    // (o antigo toast de 2,6s sumia e o app parecia ter travado).
+    const fim = toastCarregando(`Baixando a versão ${update.version}… não feche o aplicativo.`);
+    try {
+      let baixado = 0;
+      let total = 0;
+      await update.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data.contentLength || 0;
+        else if (ev.event === "Progress") {
+          baixado += ev.data.chunkLength || 0;
+          if (total) fim(`Baixando a versão ${update.version}… ${Math.min(99, Math.round((baixado / total) * 100))}%`);
+        } else if (ev.event === "Finished") fim("Instalando… o app reinicia sozinho.");
+      });
+    } finally {
+      fim();
+    }
     await relaunch();
   } catch (e) {
     try { console.error("[Updater]", e); } catch (_) {}

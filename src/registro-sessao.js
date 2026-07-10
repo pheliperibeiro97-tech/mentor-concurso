@@ -141,7 +141,7 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
             <label class="rsx-lbl">Tempo estudado</label>
             <div class="rsx-hms">
               <label class="rsx-hms-f"><input id="rs-h" type="number" min="0" max="23" value="0" /><span>h</span></label>
-              <label class="rsx-hms-f"><input id="rs-m" type="number" min="0" max="59" value="30" /><span>min</span></label>
+              <label class="rsx-hms-f"><input id="rs-m" type="number" min="0" max="59" value="0" placeholder="30" /><span>min</span></label>
               <label class="rsx-hms-f"><input id="rs-s" type="number" min="0" max="59" value="0" /><span>s</span></label>
               <span id="rs-tempo-hint" class="rsx-tempo-hint"></span>
             </div>
@@ -149,10 +149,21 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
         </section>`;
 
   // ── ETAPA 3 — Materiais ─────────────────────────────────────────────────
+  // Fase 3: detecção do dia — o app já sabe o que você fez nele hoje; 1 toque preenche.
+  const ativ = store.atividadeDoDia ? store.atividadeDoDia() : { questoes: 0, flashcards: 0, acertos: 0 };
+  const ativPartes = [
+    ativ.flashcards ? `<b>${ativ.flashcards}</b> ${ativ.flashcards === 1 ? "flashcard" : "flashcards"}` : "",
+    ativ.questoes ? `<b>${ativ.questoes}</b> ${ativ.questoes === 1 ? "questão" : "questões"} (${Math.round((ativ.acertos / ativ.questoes) * 100)}%)` : "",
+  ].filter(Boolean).join(" · ");
+  const detecHTML = ativPartes
+    ? `<div class="rsx-revsug rsx-detec"><span class="muted small">${icone("sparkles")} Detectei hoje no app: ${ativPartes}</span> <button type="button" class="lnk" id="rs-usar-ativ" data-tip="Preenche Questões e Flashcards com o que você já fez no app hoje.">usar no registro →</button></div>`
+    : "";
+
   const step3 = `
     <section class="rsx-step">
       <div class="rsx-h"><span class="rsx-num">3</span> Materiais de estudo
         <span class="muted small rsx-h-hint">clique para detalhar o que usou</span></div>
+      ${detecHTML}
       <div class="rsx-matchips">
         <button type="button" class="rsx-chip" data-mat="leitura">${icone("book-open")} Apostila / Livro</button>
         <button type="button" class="rsx-chip" data-mat="questoes">${icone("clipboard-list")} Questões</button>
@@ -269,8 +280,11 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
       const sync = () => {
         const temTempo = modo === "crono" ? elapsed > 0 : totalSegManual() > 0;
         const temFase = !!q(".rsx-fase.on");
+        // Fase 3 (auditoria): a barra passa a contar QUALQUER dos 8 tipos de material —
+        // antes só leitura/vídeo/questões contavam e preencher Lei Seca/Flashcards/etc.
+        // não movia a barra (feedback que mentia).
         const temMat =
-          !q("#rs-card-leitura").hidden || !q("#rs-card-video").hidden ||
+          !!scope.querySelector(".rsx-matchips .rsx-chip.on") ||
           (parseInt(q("#rs-ac")?.value, 10) || 0) + (parseInt(q("#rs-er")?.value, 10) || 0) > 0;
         const temFim = (q("#rs-top")?.value ? q("#rs-rev-on")?.checked : false) || !!(q("#rs-obs")?.value || "").trim() || !!q("#rs-concluir-topico")?.checked;
         const n = [temTempo, temFase, temMat, temFim].filter(Boolean).length;
@@ -372,6 +386,29 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
           sync();
         })
       );
+
+      // Fase 3: "usar no registro" — 1 toque preenche Questões/Flashcards com a atividade do dia.
+      q("#rs-usar-ativ")?.addEventListener("click", () => {
+        const abrirChip = (mat) => {
+          const ch = scope.querySelector(`.rsx-matchips .rsx-chip[data-mat="${mat}"]`);
+          const card = q("#rs-card-" + mat);
+          if (ch && card && card.hidden) ch.click();
+        };
+        if (ativ.questoes) {
+          abrirChip("questoes");
+          const ac = q("#rs-ac"), er = q("#rs-er");
+          if (ac) { ac.value = ativ.acertos; ac.dispatchEvent(new Event("input", { bubbles: true })); }
+          if (er) { er.value = ativ.erros; er.dispatchEvent(new Event("input", { bubbles: true })); }
+        }
+        if (ativ.flashcards) {
+          abrirChip("flashcards");
+          const fq = q("#rs-flashqtd");
+          if (fq) fq.value = ativ.flashcards;
+        }
+        sync();
+        const strip = scope.querySelector(".rsx-detec");
+        if (strip) strip.innerHTML = `<span class="muted small">${icone("check")} Preenchido com a atividade de hoje — ajuste se precisar.</span>`;
+      });
 
       // Linhas repetíveis (múltiplas leituras / vídeos), com "+" e remover.
       function addLeitura() {

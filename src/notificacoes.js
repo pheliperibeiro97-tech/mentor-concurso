@@ -28,9 +28,10 @@ function checarDiario(store) {
   const hoje = hojeLocalISO();
   if (!deveDispararDiario(notif, agoraHHMM(), hoje)) return;
   store.setConfig({ notificacoes: { ...notif, ultimoDiario: hoje } });
+  // Fase 3: lembrete com DADO REAL — só o item mais urgente, 1 frase específica
+  // (notificação genérica "Hora de estudar!" é a primeira que o usuário desliga).
   const dev = store.notificacoesDevidas();
-  const corpo = dev.length ? dev.map((d) => d.corpo).slice(0, 3).join(" ") : "Hora de estudar! ";
-  toast("Lembrete diário: " + corpo);
+  toast(dev.length ? dev[0].corpo : "Bom dia! Seu plano de hoje está pronto no app.");
   dispararNotificacoesDevidas(store); // SO (só Tauri)
 }
 

@@ -6300,6 +6300,16 @@ export const store = {
     state.config.mentorNudgeData = todayISO();
     commit({ semCarimbo: true });
   },
+  // Fase 3 — o que o aluno JÁ FEZ HOJE dentro do app (questões respondidas, flashcards
+  // revisados). O registro de sessão usa isto para PRÉ-PREENCHER com 1 toque: formulário
+  // que pede o que o sistema já sabe é o anti-padrão nº 1 de produto IA-first.
+  atividadeDoDia() {
+    const hoje = todayISO();
+    const tents = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje);
+    const acertos = tents.filter((t) => t.acertou).length;
+    const flashcards = state.flashcards.filter((f) => f.sm2 && f.sm2.lastReview === hoje).length;
+    return { questoes: tents.length, acertos, erros: tents.length - acertos, flashcards };
+  },
   // Tópicos REVISADOS HOJE na Central de Revisões (para sugerir no Registrar sessão — antes
   // não havia ponte: revisar dava baixa mas não virava/sugeria sessão).
   revisadosHoje() {
