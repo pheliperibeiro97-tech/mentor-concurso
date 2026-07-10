@@ -136,9 +136,38 @@
 - [ ] PERSONA_MENTOR nos demais prompts (professor de cursinho, examinador da
       discursiva…) — o examinador RIGOROSO é proposital; decidir caso a caso.
 
-## PRÓXIMAS FASES (3–8)
+## FASE 3 — IA proativa (CONCLUÍDA no essencial)
 
-Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 3 (IA proativa),
+### Feito (verificado ao vivo; 0 erros de console)
+- **Auto-análise VISÍVEL**: `mentorPlanoNaoVisto()/marcarPlanoVisto()` no store; card
+  do Mentor no Hoje prioriza o plano novo (1ª frase + "Ver o plano completo (N)");
+  selo "plano novo" na barra; toast pós-boot com ação "Ver plano" quando a
+  auto-análise roda; abrir a tela Mentor marca como visto.
+- **Pós-simulado**: `comentarSimulado` (provider) + card auto-carregado "O que este
+  simulado diz sobre você" (skeleton → md; cache `ss.sim.comentIA`; falha = some em
+  silêncio) + CTA primário "Refazer as N erradas" → Modo Foco (`focoErrosIds`).
+- **Registro pré-preenchido**: `store.atividadeDoDia()` (questões+acertos de hoje via
+  tentativas; flashcards via sm2.lastReview) + faixa "Detectei hoje no app: …" com
+  "usar no registro" de 1 toque (testado: abre cards e preenche). Barra de progresso
+  conta os 8 tipos de material; modo manual default 0 min.
+- **Pós-sessão**: <60% com 5+ questões → toast "Reforçar agora" (pede 5 questões
+  fáceis do tópico via chat); senão vale o nudge de replano existente.
+- **"Explicar minha semana"** no Acompanhamento (números da semana → chat do Mentor).
+- Lembrete diário com DADO REAL (só o item mais urgente); updater com toast
+  persistente e % de download.
+
+### Adiado da Fase 3 (retomar depois)
+- [ ] Replano PREPARADO (nudge chega com a redistribuição pronta via refinarPlano) —
+      hoje o nudge leva 1 clique ao autoAnalisar; a versão "pronta" exige integrar a
+      UI de aplicar-refino do Planejamento.
+- [ ] Checklist de 1ª semana no Hoje (substituir a tela "Por onde começar") — é
+      design de onboarding contínuo; especificar antes (plano §Fase 3 item 8).
+- [ ] Briefing pré-foco e demais oportunidades do relatório (§5.6).
+
+## PRÓXIMAS FASES (4–8)
+
+Seguir o plano-mestre (§9 do relatório da auditoria), na ordem: Fase 4 (teatro de
+progresso no import de PDF),
 Fase 4 (teatro de progresso no import de PDF), Fase 5 (dieta de densidade tela a tela),
 Fase 6 (microcopy/glossário §8 do relatório), Fase 7 (27 bugs com arquivo:linha),
 Fase 8 (responsivo/a11y). Cada fase tem instruções por arquivo no relatório.
