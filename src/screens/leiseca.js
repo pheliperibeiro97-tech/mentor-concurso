@@ -472,6 +472,14 @@ function renderIndicacoes(root, app, tipo) {
       const n = store.marcarLidosIds(ids, !concl);
       toast(concl ? "Capítulo desmarcado." : `${plural(n || ids.length, "artigo marcado", "artigos marcados")} como lido.`, "ok");
     },
+    "ler-desmarcar-lidos": async () => { // desmarca TODOS os lidos da lei ativa (com confirmação)
+      const alvos = st.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && !i.revogado && i.lido && (normaDeRef(i.referencia) || "Outros") === S.leiAtiva.lei);
+      if (!alvos.length) return toast("Nenhum artigo lido nesta lei.", "erro");
+      if (!(await confirmar(`Desmarcar os ${alvos.length} artigos lidos de ${nomeAmigavelLei(S.leiAtiva.lei)}? O progresso de leitura volta a 0.`))) return;
+      const n = store.marcarLidosIds(alvos.map((i) => i.id), false);
+      toast(`${plural(n || alvos.length, "artigo desmarcado", "artigos desmarcados")}. Progresso zerado.`, "ok");
+      app.refresh();
+    },
     "ler-aleatorio": () => { // #15: sorteia um artigo da lei atual e abre no leitor
       const arts = st.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && !i.revogado && (i.texto || "").trim() && (normaDeRef(i.referencia) || "Outros") === S.leiAtiva.lei);
       if (!arts.length) return toast("Sem artigos nesta lei para sortear.", "erro");
@@ -615,12 +623,9 @@ function renderIndicacoes(root, app, tipo) {
     // Continuar de onde parou: rola até o artigo salvo (última posição de leitura) e some a pílula.
     "ler-continuar": () => {
       const ult = (store.get().config.ultimaLeitura || {})[S.leiAtiva.lei];
-      const el = ult && ult.indicacaoId ? root.querySelector(`.ler-art[data-id="${ult.indicacaoId}"]`) : null;
-      if (el) {
-        const c = document.querySelector(".content") || document.scrollingElement;
-        const barBottom = root.querySelector(".ler-topo") ? root.querySelector(".ler-topo").getBoundingClientRect().bottom : 120;
-        if (c) c.scrollTop += el.getBoundingClientRect().top - barBottom - 14;
-      }
+      // focarItem abre <details> recolhidos do alvo e rola até ele (antes o cálculo manual falhava
+      // quando o artigo estava dentro de um Título/Capítulo fechado).
+      if (ult && ult.indicacaoId) focarItem(root, ult.indicacaoId);
       root.querySelector(".ler-continuar-pill")?.setAttribute("hidden", "");
     },
     // Estatística clicável = filtro do leitor (clicar de novo no mesmo limpa).

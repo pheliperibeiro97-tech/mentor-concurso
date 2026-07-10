@@ -1132,6 +1132,11 @@ export function focarItem(root, id) {
     requestAnimationFrame(() => {
       const alvo = root.querySelector(`[data-foco-id="${CSS.escape(id)}"]`);
       if (!alvo) return;
+      // Se o alvo está dentro de <details> recolhidos (ex.: Título/Capítulo da lei no leitor),
+      // abre-os primeiro — senão ele fica display:none e o scrollIntoView não sai do lugar.
+      for (let anc = alvo.parentElement; anc; anc = anc.parentElement) {
+        if (anc.tagName === "DETAILS" && !anc.open) anc.open = true;
+      }
       alvo.scrollIntoView({ behavior: "smooth", block: "center" });
       alvo.classList.add("item-foco");
       setTimeout(() => alvo.classList.remove("item-foco"), 2200);

@@ -575,6 +575,7 @@ const LER_ACOES_DEF = [
   { k: "temas", ic: "tags", lbl: "Classificar por tema", act: "ler-temas", grupo: "prep", tip: "Detecta temas por artigo (prazo, competência, quórum…) — habilita o memorizar por tema." },
   { k: "temasIA", ic: "sparkles", lbl: "Refinar temas (IA)", act: "ler-temas-ia", grupo: "prep", ia: true, tip: "A IA refina e adiciona temas mais finos por artigo (mescla com os detectados offline)." },
   { k: "lidoBloco", ic: "check-check", lbl: "Marcar lido em bloco", act: "ler-lido-bloco", grupo: "bloco", tip: "Marca um intervalo de artigos (de/até) como lidos." },
+  { k: "desmarcarLidos", ic: "rotate-ccw", lbl: "Desmarcar todos lidos", act: "ler-desmarcar-lidos", grupo: "bloco", danger: true, tip: "Marca todos os artigos desta lei como NÃO lidos (zera o progresso de leitura). Pede confirmação." },
   { k: "imprimir", ic: "printer", lbl: "Imprimir grifos", act: "ler-imprimir-grifos", grupo: "bloco", tip: "Imprime os grifos e comentários desta lei." },
   { k: "limpar", ic: "eraser", lbl: "Limpar grifos", act: "ler-limpar-grifos", grupo: "bloco", danger: true, tip: "Remove todos os grifos e comentários desta lei." },
   { k: "site", ic: "external-link", lbl: "Abrir no site oficial", act: "ler-site", grupo: "bloco", fonte: true, tip: "Abre a fonte oficial da lei." },
@@ -613,8 +614,10 @@ export function leitorBarraHTML(st, store, norma, normas, lista, opts = {}) {
     { ic: "star", n: pqs, lbl: "que mais caem", key: "pq" },
     { ic: "highlighter", n: grifos, lbl: "grifos", key: "grifo" },
     { ic: "sticky-note", n: notas, lbl: "anotações", key: "anotacao" },
-  ].filter((d) => fAtivo === d.key || (!ocultos.has(d.key) && d.n));
-  const filtroIt = (d) => `<button class="ler-menu-it ler-filtro-it ${fAtivo === d.key ? "on" : ""}" data-action="ler-stat-filtro" data-f="${d.key}" data-tip="${fAtivo === d.key ? "Clique para limpar o filtro" : `Mostrar só os ${d.lbl}`}">${icone(d.ic)} ${d.lbl[0].toUpperCase() + d.lbl.slice(1)}<span class="ler-filtro-n">${d.n}</span></button>`;
+  ].filter((d) => fAtivo === d.key || !ocultos.has(d.key));
+  // Os filtros escolhidos em "Personalizar" aparecem sempre; os que ainda estão zerados vêm
+  // desabilitados (com o "0"), para o usuário ver que existem sem cair num leitor vazio ao clicar.
+  const filtroIt = (d) => { const vazio = d.n === 0 && fAtivo !== d.key; return `<button class="ler-menu-it ler-filtro-it ${fAtivo === d.key ? "on" : ""}" ${vazio ? "disabled" : ""} data-action="ler-stat-filtro" data-f="${d.key}" data-tip="${vazio ? `Nenhum artigo ${d.lbl} ainda` : (fAtivo === d.key ? "Clique para limpar o filtro" : `Mostrar só os ${d.lbl}`)}">${icone(d.ic)} ${d.lbl[0].toUpperCase() + d.lbl.slice(1)}<span class="ler-filtro-n">${d.n}</span></button>`; };
   const menuFiltro = (filtrosDef.length || fAtivo)
     ? `<details class="ls-mais ler-filtro-tool"><summary class="ler-tool ${fAtivo ? "on" : ""}" data-tip="Filtrar os artigos (lidos, favoritos, grifos…)">${icone("list-filter")}${fAtivo ? `<span class="ler-filtro-badge">1</span>` : ""}</summary><div class="ls-mais-pop ler-mais-menu">
         <div class="ler-menu-lbl">Filtrar artigos</div>
