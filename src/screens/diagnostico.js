@@ -1187,7 +1187,7 @@ function blocoFlashcards(store) {
       ${tile("alarm-clock", rel.vencidos, `vencidos hoje${rel.atrasados ? ` · ${rel.atrasados} atrasado${rel.atrasados > 1 ? "s" : ""}` : ""}`, rel.vencidos ? "ir-flashcards-venc" : "")}
       ${tile("target", rel.precisao != null ? rel.precisao + "%" : "—", `precisão (${rel.dias}d) · ${rel.revisados} ${rel.revisados === 1 ? "revisão" : "revisões"}`)}
     </div>
-    <div class="fc-comp" style="margin-top:14px">
+    <div class="fc-comp u-mt-16">
       <div class="fc-comp-barra" role="img" aria-label="Composição: ${rel.novos} novos, ${rel.aprendizado} em aprendizado, ${rel.maduros} maduros">
         <span class="fc-comp-seg fc-comp-novo" style="width:${pct(rel.novos)}%"></span>
         <span class="fc-comp-seg fc-comp-apr" style="width:${pct(rel.aprendizado)}%"></span>

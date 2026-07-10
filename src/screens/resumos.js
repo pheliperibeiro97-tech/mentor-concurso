@@ -266,7 +266,7 @@ function abrirGerarResumo(app) {
           el.classList.add("lnk-disabled");
           el.setAttribute("disabled", "");
           const skel = document.createElement("div");
-          skel.innerHTML = `<div class="ai-frame" style="margin-top:12px">${skeletonDoc(4)}</div>`;
+          skel.innerHTML = `<div class="ai-frame u-mt-12">${skeletonDoc(4)}</div>`;
           corpo.appendChild(skel);
           const fim = toastCarregando("Sintetizando com a IA…");
           try {
@@ -387,7 +387,7 @@ function formHTML(st, e) {
     <div class="card form-resumo">
       <h3>${e && e.id ? "Editar resumo" : "Novo resumo"}</h3>
       <div class="form-row">
-        <label style="flex:2">Título <input id="res-titulo" type="text" value="${esc(sel.titulo || "")}" placeholder="Ex.: Atributos do ato administrativo" /></label>
+        <label class="u-grow-2">Título <input id="res-titulo" type="text" value="${esc(sel.titulo || "")}" placeholder="Ex.: Atributos do ato administrativo" /></label>
         <label>Disciplina <select id="res-disc">${opcoesDisc}</select></label>
         <label>Tópico (opcional) <select id="res-top">${topicoOptions(st, discId, sel.topicoId)}</select></label>
       </div>

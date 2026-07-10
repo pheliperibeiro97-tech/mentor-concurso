@@ -1522,7 +1522,7 @@ function formHTML(st, tipo, modo, e) {
     <div class="card form-leiseca">
       <h3>${icone("square-pen")} Editar ${tipo === "juris" ? "jurisprudência" : "dispositivo"}</h3>
       <div class="form-row">
-        <label style="flex:2">Referência <input id="ind-ref" type="text" value="${esc(sel.referencia || "")}" placeholder="${r.ph}" /></label>
+        <label class="u-grow-2">Referência <input id="ind-ref" type="text" value="${esc(sel.referencia || "")}" placeholder="${r.ph}" /></label>
         <label>Disciplina <select id="ind-disc">${opcoesDisc}</select></label>
         <label>Tópico (opcional) <select id="ind-top">${topicoOptions(st, discId, sel.topicoId)}</select></label>
       </div>
@@ -1530,9 +1530,9 @@ function formHTML(st, tipo, modo, e) {
         tipo === "juris"
           ? `<div class="form-row">
               <label>Tribunal ${tribunalPickerHTML(sel.tribunal || "", "ind-trib")}</label>
-              <label>Ano <input id="ind-ano" type="number" min="1988" max="2100" placeholder="Ex.: 2018" value="${sel.ano || ""}" style="width:90px" data-tip="Ano do entendimento — ajuda a ver se é antigo." /></label>
+              <label>Ano <input id="ind-ano" type="number" min="1988" max="2100" placeholder="Ex.: 2018" value="${sel.ano || ""}" class="u-w-90" data-tip="Ano do entendimento — ajuda a ver se é antigo." /></label>
             </div>
-            <label style="display:block; margin-bottom:8px">Categoria ${categoriaPickerHTML(sel.categoria || "", "ind-cat")}</label>`
+            <label class="u-block u-mb-8">Categoria ${categoriaPickerHTML(sel.categoria || "", "ind-cat")}</label>`
           : ""
       }
       <label>Trecho / conteúdo ${modo === "memoria" ? "(o que gravar para relembrar)" : "(opcional)"}
@@ -1573,8 +1573,8 @@ art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
             : ""
         }
       </div>
-      ${tipo === "juris" ? `<label style="display:block; margin-bottom:8px">Categoria ${categoriaPickerHTML("", "add-cat")}</label>` : ""}
-      <label class="btn btn-ghost btn-file" style="margin-bottom:8px" data-tip-pos="cima-esq" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      ${tipo === "juris" ? `<label class="u-block u-mb-8">Categoria ${categoriaPickerHTML("", "add-cat")}</label>` : ""}
+      <label class="btn btn-ghost btn-file u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="add-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
       <p class="muted small" style="margin:0 0 6px">${instrHTML}</p>
@@ -1686,14 +1686,14 @@ function abrirImportarLei(app) {
         <label style="flex:1 1 160px">Artigos (opcional)
           <input id="imp-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-5, 37, 121-127" data-tip="Deixe vazio para trazer a lei inteira. Ou informe artigos/intervalos: 1-5, 37, 213-217." /></label>
       </div>
-      <label style="display:block; margin:2px 0 8px">Ou link direto da página oficial
+      <label class="u-block u-mt-4 u-mb-8">Ou link direto da página oficial
         <input id="imp-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>
-      <label style="display:block; margin:2px 0 8px">Ou cole aqui o texto/HTML da lei (fallback do navegador)
+      <label class="u-block u-mt-4 u-mb-8">Ou cole aqui o texto/HTML da lei (fallback do navegador)
         <textarea id="imp-html" rows="5" placeholder="Cole o conteúdo da página oficial da lei (Ctrl+A, Ctrl+C na página do Planalto e cole aqui).">${esc(estado.form.html)}</textarea></label>
-      <div class="form-row" style="align-items:center; gap:14px; flex-wrap:wrap">
+      <div class="form-row u-flex-12 u-wrap">
         <label class="inline">Vincular à disciplina <select id="imp-disc">${opcDisc}</select></label>
       </div>
-      ${estado.processando ? `<div class="prova-status lendo" style="display:flex; align-items:center; gap:8px; margin-top:8px"><span class="mini-spin"></span> Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)</div>` : ""}
+      ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)</div>` : ""}
       ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small" style="margin:8px 0 0">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="imp-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
@@ -1842,12 +1842,12 @@ function abrirConferirAtualizacao(app) {
         <label style="flex:0 1 160px">Artigos (opcional)
           <input id="ca-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-30" /></label>
       </div>
-      <label style="display:block; margin:2px 0 8px">Link da fonte (edite se mudou)
+      <label class="u-block u-mt-4 u-mb-8">Link da fonte (edite se mudou)
         <input id="ca-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>` : `<p class="muted small">Nenhuma lei foi importada com <b>origem oficial</b> ainda. Cole abaixo o texto atualizado e informe a norma no campo.</p>
-      <label style="display:block; margin:2px 0 8px">Norma <input id="ca-norma-txt" placeholder="Ex.: Lei 8.112/1990" value="${esc(estado.form.norma)}" /></label>`}
-      <label style="display:block; margin:2px 0 8px">Ou cole o texto/HTML atualizado (fallback do navegador)
+      <label class="u-block u-mt-4 u-mb-8">Norma <input id="ca-norma-txt" placeholder="Ex.: Lei 8.112/1990" value="${esc(estado.form.norma)}" /></label>`}
+      <label class="u-block u-mt-4 u-mb-8">Ou cole o texto/HTML atualizado (fallback do navegador)
         <textarea id="ca-html" rows="5" placeholder="Cole o conteúdo atualizado da página oficial.">${esc(estado.form.html)}</textarea></label>
-      ${estado.processando ? `<div class="prova-status lendo" style="display:flex; align-items:center; gap:8px; margin-top:8px"><span class="mini-spin"></span> Consultando a fonte oficial e comparando com o texto guardado…</div>` : ""}
+      ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Consultando a fonte oficial e comparando com o texto guardado…</div>` : ""}
       ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small" style="margin:8px 0 0">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="ca-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
@@ -1980,33 +1980,33 @@ function abrirNovaMeta(app, tipo) {
   const { fechar } = abrirJanela({
     titulo: tipo === "juris" ? "Nova meta de leitura (jurisprudência)" : "Nova meta de leitura (lei seca)",
     corpoHTML: `<div class="card form-leiseca">
-      ${temEstrutura ? `<div class="seg seg-sm meta-modos" role="tablist" style="margin-bottom:12px">
+      ${temEstrutura ? `<div class="seg seg-sm meta-modos u-mb-12" role="tablist">
         <button class="on" data-meta-modo="estrutura">Por estrutura</button>
         <button data-meta-modo="intervalo">Por intervalo</button>
         <button data-meta-modo="livre">Livre</button>
       </div>` : ""}
       ${temEstrutura ? `<div class="meta-sec" data-sec="estrutura">
         <p class="muted small" style="margin:0 0 10px">Escolha uma <b>Parte / Título / Capítulo</b> — a meta cobre exatamente esses artigos e mostra o progresso.</p>
-        <div class="form-row"><label style="flex:1">Lei <select id="meta-lei">${opcLei}</select></label></div>
-        <label style="display:block; margin-top:8px">Seção <select id="meta-secao">${secoesHTML(normas[0])}</select></label>
-        <div class="meta-preview muted small" id="meta-prev" style="margin-top:8px"></div>
+        <div class="form-row"><label class="u-grow">Lei <select id="meta-lei">${opcLei}</select></label></div>
+        <label class="u-block u-mt-8">Seção <select id="meta-secao">${secoesHTML(normas[0])}</select></label>
+        <div class="meta-preview muted small u-mt-8" id="meta-prev"></div>
       </div>
       <div class="meta-sec" data-sec="intervalo" hidden>
         <p class="muted small" style="margin:0 0 10px">Um intervalo de artigos de uma lei (ex.: <i>art. 1º a 20</i>).</p>
         <div class="form-row" style="align-items:flex-end">
-          <label style="flex:1">Lei <select id="meta-lei2">${opcLei}</select></label>
+          <label class="u-grow">Lei <select id="meta-lei2">${opcLei}</select></label>
           <label>De <input id="meta-de" type="number" min="1" placeholder="1" style="width:84px" /></label>
           <label>Até <input id="meta-ate" type="number" min="1" placeholder="20" style="width:84px" /></label>
         </div>
       </div>` : ""}
       <div class="meta-sec" data-sec="livre" ${modo === "livre" ? "" : "hidden"}>
         <p class="muted small" style="margin:0 0 10px">Meta <b>crua</b>, do seu jeito (ex.: <i>${tipo === "juris" ? "Ler os informativos 810 a 815 do STJ" : "Ler art. 1º a 20 da CF"}</i>). Vira <b>tarefa no Planejamento</b>.</p>
-        <label style="display:block; margin-bottom:8px">O que ler
+        <label class="u-block u-mb-8">O que ler
           <input id="meta-ref" placeholder="${tipo === "juris" ? "Ex.: Ler informativos 810–815 do STJ" : "Ex.: Ler art. 1º a 20 da CF"}" /></label>
-        <label class="inline" style="margin-bottom:8px" data-tip="Uma etapa por linha vira uma tarefa separada."><input type="checkbox" id="meta-dividir" /> Dividir em etapas (uma tarefa por linha)</label>
+        <label class="inline u-mb-8" data-tip="Uma etapa por linha vira uma tarefa separada."><input type="checkbox" id="meta-dividir" /> Dividir em etapas (uma tarefa por linha)</label>
         <textarea id="meta-etapas" rows="4" placeholder="${esc("Ex.:\nLer art. 1º a 5º\nLer art. 6º a 11\nLer art. 12 a 20")}" style="display:none; margin-bottom:8px"></textarea>
       </div>
-      <div class="form-row" style="margin-top:6px">
+      <div class="form-row u-mt-8">
         <label>Disciplina <select id="meta-disc">${opcDisc}</select></label>
         <label>Tópico (opcional) <select id="meta-top"><option value="">— sem tópico —</option></select></label>
       </div>
@@ -2136,8 +2136,8 @@ function abrirImportarMetas(app, tipo) {
       }
       corpo.innerHTML = `<div class="card form-leiseca">
         <p class="muted small" style="margin:0 0 10px">Cole seu <b>cronograma/tabela</b> de leitura (uma meta por linha) ou importe um arquivo. O app limpa números de coluna e separadores; você confere antes de lançar.</p>
-        <label class="inline" style="margin-bottom:8px">Disciplina <select id="im-disc">${opcDisc}</select></label>
-        <label class="btn btn-ghost btn-file" style="margin:0 0 8px" data-tip="Importar de um PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="im-file" type="file" accept=".pdf,.txt,.md,.csv" hidden /></label>
+        <label class="inline u-mb-8">Disciplina <select id="im-disc">${opcDisc}</select></label>
+        <label class="btn btn-ghost btn-file u-mb-8" data-tip="Importar de um PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="im-file" type="file" accept=".pdf,.txt,.md,.csv" hidden /></label>
         <textarea id="im-texto" rows="7" placeholder="${esc("Ex.:\nLer art. 1º a 20 da CF\nLer Lei 8.112 arts. 116 a 132\nLer Título III do CP")}">${esc(estado.texto)}</textarea>
         <div class="form-acoes"><button class="btn btn-ghost" data-action="im-cancelar">Cancelar</button><span class="spacer"></span><button class="btn btn-primary" data-action="im-revisar">Revisar</button></div>
       </div>`;
@@ -2425,7 +2425,7 @@ function pqImportHTML(tipo, corte = 30, sugerindo = false, analise = null) {
     <div class="pq-colar">
       <p class="muted small pq-colar-dica">Uma por linha: <b>referência ; número</b> — importe um arquivo (cai aqui embaixo) ou digite/cole. Ex.: <code>art. 37, CF ; 45</code></p>
       <textarea id="pq-texto" rows="4" placeholder="art. 37, CF ; 45&#10;Súmula 473 STF ; 30"></textarea>
-      <div style="margin-top:6px"><button class="btn btn-ghost btn-sm" data-action="pq-analisar">Analisar</button></div>
+      <div class="u-mt-8"><button class="btn btn-ghost btn-sm" data-action="pq-analisar">Analisar</button></div>
     </div>
 
     ${analise ? `<div class="pq-corte-linha"><label class="inline small">Já marcar quando a incidência ≥ <input id="pq-corte" type="number" min="0" max="100" value="${corte}" style="width:64px; margin:0 6px" /></label> <span class="muted small">(opcional · abaixo vêm desmarcadas)</span></div>` : ""}
@@ -2436,11 +2436,11 @@ function pqImportHTML(tipo, corte = 30, sugerindo = false, analise = null) {
 // Lista de sugestões de PQ (vinda da IA ou da estatística), para o usuário confirmar.
 function pqResultadoHTML(corte, analise) {
   if (!analise.length) {
-    return `<p class="muted small" style="margin-top:10px">Nenhuma referência foi reconhecida ou casada com seus itens. Na importação, use o formato "referência ; número"; na IA, cadastre algumas referências antes.</p>`;
+    return `<p class="muted small u-mt-12">Nenhuma referência foi reconhecida ou casada com seus itens. Na importação, use o formato "referência ; número"; na IA, cadastre algumas referências antes.</p>`;
   }
   const casadas = analise.filter((r) => r.ids.length).length;
   return `<div class="pq-resultado">
-      <div class="muted small" style="margin:10px 0 6px">${plural(casadas, "referência casada", "referências casadas")} com seus itens. Confira e ajuste o que será marcado como PQ:</div>
+      <div class="muted small u-mt-12 u-mb-8">${plural(casadas, "referência casada", "referências casadas")} com seus itens. Confira e ajuste o que será marcado como PQ:</div>
       <ul class="pq-lista">
         ${analise
           .map((r, i) => {
@@ -2826,7 +2826,7 @@ function abrirEditarTemas(app, id) {
   abrirJanela({
     titulo: "Temas do artigo",
     corpoHTML: `<div class="card form-leiseca">
-      <div class="muted small" style="margin:0 0 10px">${esc(String(ind.referencia || "").split(",")[0])} — clique num tema para <b>remover</b>; escolha abaixo para <b>adicionar</b>.</div>
+      <div class="muted small u-mb-12">${esc(String(ind.referencia || "").split(",")[0])} — clique num tema para <b>remover</b>; escolha abaixo para <b>adicionar</b>.</div>
       <div id="temas-atuais" class="temas-edit-atuais"></div>
       <div class="temas-edit-add-lbl">Adicionar</div>
       <div id="temas-sugestoes" class="temas-edit-sug"></div>

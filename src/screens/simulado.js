@@ -657,7 +657,7 @@ function renderResultado(root, app, st, formato) {
       <div class="sim-placar">${placar}</div>
       <div class="muted small sim-resultado-meta"><span class="num">${r.respondidas}</span>/<span class="num">${r.total}</span> respondidas · <span class="num">${fmtTempo(r.tempoSeg)}</span> <span data-tip="Os erros foram salvos no Caderno de Erros e o tempo no Acompanhamento.">${icone("info")}</span></div>
       ${toggleCebraspeHTML}
-      <div class="form-acoes" style="justify-content:center;margin-top:16px">
+      <div class="form-acoes u-center u-mt-16">
         <button class="btn btn-add btn-lg" data-action="novo">Novo simulado</button>
         <button class="btn btn-ghost" data-action="ir-erros">Ver Caderno de Erros</button>
       </div>

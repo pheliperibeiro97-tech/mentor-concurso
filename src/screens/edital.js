@@ -108,7 +108,7 @@ function sugIAHTML(store, carregando = "", rel = null) {
   return `<div class="card sug-rel">
     <div class="plano-h"><span class="orb orb-sm" aria-hidden="true"></span><h2>Sugerir relevância</h2><span class="muted small">pesquisa</span></div>
     <p class="muted small">Aqui a IA <b>sugere</b> quais temas mais caem. São <b>estimativas conforme a pesquisa — confira antes de aplicar</b> (o Mentor sugere, você decide). Para o <b>melhor resultado</b>, importe suas <b>provas anteriores</b> em Questões ▸ "De uma prova anterior".</p>
-    <div class="barra-acoes" style="margin-bottom:6px">
+    <div class="barra-acoes u-mb-8">
       <button class="btn ${nProvas ? "btn-primary" : "btn-ghost"} btn-sm" data-action="sug-provas" ${carregando || !nProvas ? "disabled" : ""} data-tip="${nProvas ? `Analisa as ${nProvas} questões das suas provas importadas (incidência real).` : "Importe provas anteriores para usar esta opção."}">${carregando === "provas" ? "Analisando…" : `Pelas minhas provas (${nProvas})`}</button>
       <button class="btn btn-ghost btn-sm" data-action="sug-web" ${carregando ? "disabled" : ""} data-tip="Pesquisa na web o 'raio-x' da banca/cargo${alvo ? ` (${esc(alvo)})` : ""} e estima a relevância, com fontes.">${carregando === "web" ? "Pesquisando…" : "Pesquisar na web"}</button>
     </div>
@@ -118,7 +118,7 @@ function sugIAHTML(store, carregando = "", rel = null) {
 }
 function sugResultadoHTML(temOficial, r) {
   if (!r.itens.length) {
-    return `<div class="muted small" style="margin-top:10px">A pesquisa não retornou sugestões aplicáveis aos seus tópicos.${r.fonte === "web" ? " Defina a banca e o cargo do concurso para melhorar a busca." : ""}</div>`;
+    return `<div class="muted small u-mt-12">A pesquisa não retornou sugestões aplicáveis aos seus tópicos.${r.fonte === "web" ? " Defina a banca e o cargo do concurso para melhorar a busca." : ""}</div>`;
   }
   const cabec =
     r.fonte === "provas"
@@ -141,10 +141,10 @@ function sugResultadoHTML(temOficial, r) {
       ? `<div class="sug-fontes muted small">${icone("globe")} Fontes: ${r.fontesWeb.map((f) => `<a href="${esc(f.uri)}" target="_blank" rel="noopener">${esc(f.titulo)} ↗</a>`).join(" · ")}</div>`
       : "";
   return `<div class="sug-resultado">
-    <div class="muted small" style="margin:10px 0 6px">${cabec} Marcadas as que aumentam a relevância:</div>
+    <div class="muted small u-mt-12 u-mb-8">${cabec} Marcadas as que aumentam a relevância:</div>
     <ul class="sug-lista">${linhas}</ul>
     ${fontes}
-    ${temOficial ? `<label class="inline small" style="margin:6px 0"><input type="checkbox" id="sug-dividir" /> ${icone("scale")} Dividir a relevância entre tópicos do <b>mesmo item do edital</b> (quando um item virou vários tópicos — evita inflar a soma)</label>` : ""}
+    ${temOficial ? `<label class="inline small u-mt-8 u-mb-8"><input type="checkbox" id="sug-dividir" /> ${icone("scale")} Dividir a relevância entre tópicos do <b>mesmo item do edital</b> (quando um item virou vários tópicos — evita inflar a soma)</label>` : ""}
     <div class="form-acoes" style="justify-content:flex-start">
       <button class="btn btn-primary btn-sm" data-action="sug-aplicar">Aplicar relevância aos selecionados</button>
       ${r.fonte === "web" ? `<button class="btn btn-ghost btn-sm" data-action="sug-imprimir" data-tip="Gera um documento com a tabela, o detalhamento e as fontes — imprima ou salve em PDF.">${icone("printer")} Imprimir / salvar PDF da pesquisa</button>` : ""}
@@ -187,7 +187,7 @@ function oficialHTML(store, recolar = false, diff = null) {
     return `<div class="card oficial-card">
       <h3>${icone("clipboard-list")} Revalidar o checklist da banca (ver o que mudou)</h3>
       <p class="muted small">Cole o <b>novo edital</b> (ex.: uma retificação da banca). O app vai te mostrar o <b>que mudou</b> em relação ao atual — <b>itens novos</b>, <b>removidos</b> e possíveis <b>renomeações</b> — e você confirma. As renomeações viram <b>sinônimos</b>, então a cobertura que você já tem é preservada.</p>
-      <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+      <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
       <textarea id="oficial-texto" rows="6" placeholder="Cole o novo edital da banca…"></textarea>
       <div class="form-acoes"><button class="btn btn-ghost" data-action="oficial-recolar-cancelar">Cancelar</button><button class="btn btn-primary" data-action="oficial-conferir-mudancas">Conferir o que mudou</button></div>
     </div>`;
@@ -196,7 +196,7 @@ function oficialHTML(store, recolar = false, diff = null) {
     return `<div class="card oficial-card oficial-card-mini">
       <div class="plano-h"><h2>Checklist da banca</h2><span class="muted small">opcional</span></div>
       <p class="muted small">Tem o <b>edital da banca</b>? Cole abaixo para <b>validar a sua cobertura</b> (o que o seu edital já cobre e o que ficou de fora). <b>Não muda a sua estrutura</b>; é só uma conferência. O casamento é pelo nome + sinônimos () de cada tópico.</p>
-      <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="Importar de PDF ou .txt. Pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+      <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de PDF ou .txt. Pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
       <textarea id="oficial-texto" rows="5" placeholder="Cole o edital da banca (uma disciplina em MAIÚSCULAS ou terminada em ':', e os itens nas linhas/';' seguintes)…"></textarea>
       <div class="form-acoes"><button class="btn btn-ghost" data-action="toggle-oficial">Cancelar</button><button class="btn btn-primary" data-action="conferir-oficial">Validar cobertura</button></div>
     </div>`;
@@ -211,7 +211,7 @@ function oficialHTML(store, recolar = false, diff = null) {
       </li>`)
     .join("");
   const extras = r.extras.length
-    ? `<div class="muted small" style="margin-top:10px">${icone("plus")} <b>Extras</b> — seus tópicos que não casam com nenhum item oficial (aprofundamento, ou nome diferente; se for o caso, adicione um sinônimo): ${r.extras.map((t) => esc(t.nome)).join(" · ")}</div>`
+    ? `<div class="muted small u-mt-12">${icone("plus")} <b>Extras</b> — seus tópicos que não casam com nenhum item oficial (aprofundamento, ou nome diferente; se for o caso, adicione um sinônimo): ${r.extras.map((t) => esc(t.nome)).join(" · ")}</div>`
     : "";
   return `<div class="card oficial-card">
     <div class="plano-h"><h2>Checklist da banca</h2></div>
@@ -230,23 +230,23 @@ function oficialHTML(store, recolar = false, diff = null) {
         : `<p class="muted small" style="margin:8px 0 0">${icone("check")} Nenhuma lacuna — todos os itens oficiais têm um tópico seu.</p>`
     }
     ${extras}
-    ${r.ignorados ? `<p class="muted small" style="margin-top:6px">${plural(r.ignorados, "item dispensado", "itens dispensados")}.</p>` : ""}
+    ${r.ignorados ? `<p class="muted small u-mt-8">${plural(r.ignorados, "item dispensado", "itens dispensados")}.</p>` : ""}
     <div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="oficial-recolar" data-tip="Colar um edital novo/retificado e ver o que mudou (preserva o que você já mapeou).">${icone("repeat-2")} Revalidar (edital novo)</button><button class="btn btn-ghost btn-sm lnk-danger" data-action="limpar-oficial">Limpar checklist</button></div>
   </div>`;
 }
 // Relatório do DIFF (Fase 5): o que mudou entre o checklist atual e o novo edital colado.
 function oficialDiffHTML(d) {
-  const lista = (arr, ico) => arr.length ? `<ul class="oficial-lista">${arr.map((i) => `<li class="oficial-lac"><span class="oficial-ref">${ico} ${esc(i.ref)}${i.disciplina ? ` <span class="muted small">(${esc(i.disciplina)})</span>` : ""}</span></li>`).join("")}</ul>` : `<p class="muted small" style="margin:2px 0 8px">— nenhum —</p>`;
+  const lista = (arr, ico) => arr.length ? `<ul class="oficial-lista">${arr.map((i) => `<li class="oficial-lac"><span class="oficial-ref">${ico} ${esc(i.ref)}${i.disciplina ? ` <span class="muted small">(${esc(i.disciplina)})</span>` : ""}</span></li>`).join("")}</ul>` : `<p class="muted small u-mt-4 u-mb-8">— nenhum —</p>`;
   const renoms = d.renomeacoes.length
-    ? `<div class="muted small" style="margin:10px 0 4px">${icone("repeat-2")} <b>Possíveis renomeações</b> (o nome antigo vira sinônimo do tópico, preservando a cobertura):</div>
+    ? `<div class="muted small u-mt-12 u-mb-4">${icone("repeat-2")} <b>Possíveis renomeações</b> (o nome antigo vira sinônimo do tópico, preservando a cobertura):</div>
        <ul class="oficial-lista">${d.renomeacoes.map((rn, i) => `<li class="oficial-lac"><input type="checkbox" class="renom-cb" data-i="${i}" ${rn.topicoId ? "checked" : ""} /> <span class="oficial-ref"><b>${esc(rn.de)}</b> → <b>${esc(rn.para)}</b>${rn.topicoId ? "" : ` <span class="muted small">(sem tópico vinculado — não cria sinônimo)</span>`}</span></li>`).join("")}</ul>`
     : "";
   return `<div class="card oficial-card">
     <h3>${icone("repeat-2")} O que mudou no edital</h3>
     <p class="muted small">Compare com o checklist atual e confirme. <b>${d.mantidos}</b> ${d.mantidos === 1 ? "item segue igual" : "itens seguem iguais"}.</p>
-    <div class="muted small" style="margin:6px 0 2px">${icone("plus")} <b>Novos</b> (${d.novos.length}) — passam a ser conferidos (viram lacuna se não tiver tópico):</div>
+    <div class="muted small u-mt-8 u-mb-4">${icone("plus")} <b>Novos</b> (${d.novos.length}) — passam a ser conferidos (viram lacuna se não tiver tópico):</div>
     ${lista(d.novos, icone("plus"))}
-    <div class="muted small" style="margin:6px 0 2px">${icone("minus")} <b>Removidos</b> (${d.removidos.length}) — saem do checklist (seu tópico vira "extra"):</div>
+    <div class="muted small u-mt-8 u-mb-4">${icone("minus")} <b>Removidos</b> (${d.removidos.length}) — saem do checklist (seu tópico vira "extra"):</div>
     ${lista(d.removidos, icone("minus"))}
     ${renoms}
     <div class="form-acoes"><button class="btn btn-ghost" data-action="oficial-cancelar-diff">Cancelar</button><button class="btn btn-primary" data-action="oficial-aplicar-diff">Aplicar mudanças</button></div>
@@ -300,7 +300,7 @@ function aulasImportHTML(texto = "") {
   return `<div class="card cursinho-card">
     <h3>${icone("library")} Trazer a divisão do cursinho</h3>
     <p class="muted small">Cole a <b>divisão de aulas do seu cursinho</b> — uma aula por bloco, com os assuntos que ela cobre. O app liga cada assunto aos <b>seus tópicos</b> (pelo nome + sinônimos) e monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão por aula.</p>
-    <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
     <textarea id="aulas-texto" rows="6" placeholder="${esc("Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias fundamentais\nAula 2: Atos administrativos\nAula 3: Atos administrativos; Poderes administrativos")}">${esc(texto)}</textarea>
     <p class="muted small" style="margin:6px 0 0">Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.) Você revisa e edita antes de montar.</p>
     <div class="form-acoes"><button class="btn btn-ghost" data-action="importar-aulas-fechar">Cancelar</button><button class="btn btn-primary" data-action="importar-aulas">Revisar</button></div>
@@ -315,7 +315,7 @@ function addDiscPanelHTML(texto = "") {
   return `<div class="card">
     <h3>Adicionar ao edital</h3>
     <p class="muted small" style="margin:0 0 8px">Digite <b>ou</b> cole aqui — funciona dos dois jeitos. Para criar só <b>uma disciplina</b>, escreva o nome dela (uma linha). Para vários itens, <b>cole o edital</b>: uma <b>disciplina</b> é uma linha em MAIÚSCULAS ou terminada em "<b>:</b>", e as linhas seguintes (ou itens separados por "<b>;</b>") viram os <b>tópicos</b> dela. Você revisa e edita tudo antes de aplicar. Você também pode importar um arquivo.</p>
-    <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
     <textarea id="ed-texto" rows="7" placeholder="Ex.: uma disciplina (uma linha):&#10;Direito Previdenciário&#10;&#10;Ou o edital completo:&#10;DIREITO CONSTITUCIONAL&#10;Princípios fundamentais; Direitos e garantias fundamentais&#10;Organização do Estado&#10;&#10;DIREITO ADMINISTRATIVO:&#10;Atos administrativos; Licitações; Servidores públicos">${esc(texto)}</textarea>
@@ -331,7 +331,7 @@ function editalPreviewHTML(discs) {
   return `<div class="card">
     <div class="plano-h"><h2>Revisar ${plural(discs.length, "disciplina", "disciplinas")} e ${plural(totTop, "tópico", "tópicos")} antes de aplicar</h2></div>
     <p class="muted small" style="margin:0 0 8px">Edite os nomes, remova (✕) o que não quiser e acrescente tópicos. Só o que estiver aqui será criado.</p>
-    <div style="margin:0 0 10px"><button class="btn btn-ghost btn-sm" data-action="estruturar-edital-ia" data-tip="Reorganiza o edital com a IA — útil quando o texto veio bagunçado (OCR, 2 colunas, numeração). Não inventa tópicos.">${icone("sparkles")} Estruturar com IA</button> <span class="muted small">use se a separação automática não ficou boa</span></div>
+    <div class="u-mb-12"><button class="btn btn-ghost btn-sm" data-action="estruturar-edital-ia" data-tip="Reorganiza o edital com a IA — útil quando o texto veio bagunçado (OCR, 2 colunas, numeração). Não inventa tópicos.">${icone("sparkles")} Estruturar com IA</button> <span class="muted small">use se a separação automática não ficou boa</span></div>
     <div class="ed-prev-lista">
       ${discs
         .map((d, di) => {
@@ -353,7 +353,7 @@ function editalPreviewHTML(discs) {
         })
         .join("")}
     </div>
-    <button class="lnk" data-action="add-ed-disc" style="margin-top:8px">${icone("plus")} disciplina</button>
+    <button class="lnk u-mt-8" data-action="add-ed-disc">${icone("plus")} disciplina</button>
     <div class="form-acoes">
       <button class="btn btn-ghost" data-action="voltar-ed" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">${icone("arrow-left")} Voltar para editar</button>
       <span class="spacer"></span>
@@ -644,7 +644,7 @@ function destaquesPanelHTML() {
   return `
     <h3>${icone("star")} Temas que mais caem</h3>
     <p class="muted small">Um tema <b>por linha</b>. Para preencher a <b>relevância sozinho</b>, inclua o percentual (ou número) após "<b>:</b>", "<b>–</b>" ou "<b>-</b>" — ex.: "Atos administrativos: 30%". Sem percentual, o tema fica marcado como <b>"mais cai" (relevante, sem %)</b>. Os temas que casarem com tópicos do edital ficam em destaque, ordenados por incidência.</p>
-    <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Selecionar arquivo
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Selecionar arquivo
       <input id="dest-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
     <textarea id="dest-texto" rows="6" placeholder="Ex.:&#10;Atos administrativos: 30%&#10;Tutela provisória – 25%&#10;Direitos e garantias fundamentais"></textarea>
@@ -861,7 +861,7 @@ function aulasRecolarHTML() {
   return `<div class="card cursinho-card">
     <h3>${icone("repeat-2")} Atualizar a grade do cursinho (ver o que mudou)</h3>
     <p class="muted small">Cole a <b>nova grade</b>. O app compara com as aulas atuais e mostra o que <b>entrou</b>, <b>saiu</b> e possíveis <b>renomeações</b> — as aulas que você já ajustou são <b>preservadas</b>.</p>
-    <label class="btn btn-ghost btn-sm btn-file" style="margin-bottom:8px" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
     <textarea id="aulas-texto" rows="6" placeholder="Cole a nova grade do cursinho…"></textarea>
     <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-recolar-cancelar">Cancelar</button><button class="btn btn-primary" data-action="aulas-conferir-mudancas">Conferir o que mudou</button></div>
   </div>`;
@@ -869,18 +869,18 @@ function aulasRecolarHTML() {
 function aulasDiffHTML(d) {
   const novas = d.novas.length
     ? `<ul class="oficial-lista">${d.novas.map((e) => `<li class="oficial-lac"><span class="oficial-ref">${icone("plus")} ${esc(e.nome)} <span class="muted small">(${plural((e.topicos || []).length, "assunto", "assuntos")})</span></span></li>`).join("")}</ul>`
-    : `<p class="muted small" style="margin:2px 0 8px">— nenhuma —</p>`;
+    : `<p class="muted small u-mt-4 u-mb-8">— nenhuma —</p>`;
   const removidas = d.removidas.length
     ? `<ul class="oficial-lista">${d.removidas.map((a) => `<li class="oficial-lac"><input type="checkbox" class="aula-rem-cb" data-id="${a.id}" checked /> <span class="oficial-ref">${icone("minus")} ${esc(a.nome)}</span></li>`).join("")}</ul>`
-    : `<p class="muted small" style="margin:2px 0 8px">— nenhuma —</p>`;
+    : `<p class="muted small u-mt-4 u-mb-8">— nenhuma —</p>`;
   const renoms = d.renomeacoes.length
-    ? `<div class="muted small" style="margin:10px 0 4px">${icone("repeat-2")} <b>Possíveis renomeações</b> (mantém os tópicos da aula):</div>
+    ? `<div class="muted small u-mt-12 u-mb-4">${icone("repeat-2")} <b>Possíveis renomeações</b> (mantém os tópicos da aula):</div>
        <ul class="oficial-lista">${d.renomeacoes.map((rn) => `<li class="oficial-lac"><input type="checkbox" class="aula-ren-cb" data-id="${rn.aulaId}" checked /> <span class="oficial-ref"><b>${esc(rn.de)}</b> → <b>${esc(rn.para)}</b></span></li>`).join("")}</ul>`
     : "";
   return `<div class="card cursinho-card">
     <h3>${icone("repeat-2")} O que mudou na grade</h3>
-    <div class="muted small" style="margin:6px 0 2px">${icone("plus")} <b>Novas aulas</b> (${d.novas.length}):</div>${novas}
-    <div class="muted small" style="margin:6px 0 2px">${icone("minus")} <b>Removidas</b> (${d.removidas.length}) — marque as que quer remover:</div>${removidas}
+    <div class="muted small u-mt-8 u-mb-4">${icone("plus")} <b>Novas aulas</b> (${d.novas.length}):</div>${novas}
+    <div class="muted small u-mt-8 u-mb-4">${icone("minus")} <b>Removidas</b> (${d.removidas.length}) — marque as que quer remover:</div>${removidas}
     ${renoms}
     <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-cancelar-diff">Cancelar</button><button class="btn btn-primary" data-action="aulas-aplicar-diff">Aplicar mudanças</button></div>
   </div>`;
@@ -894,7 +894,7 @@ function aulaTopEditorHTML(st, a) {
       return `<div class="ft-grupo"><div class="ft-disc"><b>${esc(disc.nome)}</b></div>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</div>`;
     })
     .join("");
-  return `<div class="aula-top-editor"><div class="muted small" style="margin:6px 0">${icone("files")} Tópicos que esta aula cobre — marque todos (uma aula pode cobrir vários). Salva na hora.</div>${grupos || `<p class="muted small">Sem tópicos cadastrados.</p>`}<div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="aula-topicos" data-id="${a.id}">Fechar</button></div></div>`;
+  return `<div class="aula-top-editor"><div class="muted small u-mt-8 u-mb-8">${icone("files")} Tópicos que esta aula cobre — marque todos (uma aula pode cobrir vários). Salva na hora.</div>${grupos || `<p class="muted small">Sem tópicos cadastrados.</p>`}<div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="aula-topicos" data-id="${a.id}">Fechar</button></div></div>`;
 }
 function aulasListaHTML(store, st) {
   const aulas = st.aulas;
@@ -1147,7 +1147,7 @@ export default function renderEdital(root, app) {
     </div>`;
 
   const resumoBody = `
-    <p class="muted small" style="margin:4px 0 10px">Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Clique num tópico</b> para abrir o <b>dossiê</b> dele.</p>
+    <p class="muted small u-mt-4 u-mb-12">Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Clique num tópico</b> para abrir o <b>dossiê</b> dele.</p>
     <div class="dossie-lista">${dossieResumoHTML(store)}</div>`;
 
   let cursinhoBody;

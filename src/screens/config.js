@@ -117,7 +117,7 @@ export default function renderConfig(root, app) {
           <option value="contraste" ${cfg.paletaMarcacao === "contraste" ? "selected" : ""}>Alto contraste</option>
         </select>
       </label>
-      <div class="mk-legenda" style="margin-top:10px">
+      <div class="mk-legenda u-mt-12">
         <span class="mk-leg"><i class="mk-dot mk-amarelo"></i>palavras-chave</span>
         <span class="mk-leg"><i class="mk-dot mk-azul"></i>prazos/valores</span>
         <span class="mk-leg"><i class="mk-dot mk-vermelho"></i>restritivas</span>
@@ -136,7 +136,7 @@ export default function renderConfig(root, app) {
       <h3>${icone("target")} Metas e prova</h3>
       <p class="muted small">Tudo opcional. As metas são comparadas com o tempo realizado no Acompanhamento.</p>
       <div style="max-width:240px; margin-bottom:16px">
-        <label style="margin-bottom:6px">Data da prova
+        <label class="u-mb-8">Data da prova
           <input id="cfg-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
         </label>
         <label class="inline small" style="font-weight:400"><input id="cfg-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
@@ -292,7 +292,7 @@ export default function renderConfig(root, app) {
       <summary>${icone("star")} Atalhos rápidos</summary>
       <p class="muted small">Crie botões de acesso rápido para o que você mais usa: uma <b>tela</b> (inclusive Acompanhamento e Central de Revisões), uma <b>disciplina</b> do edital, o <b>dossiê de um tópico</b> ou <b>Questões filtradas por tópico</b> (treinar um tema num clique). Defina o <b>nome</b>, o <b>ícone</b> e o <b>destino</b>. O atalho aparece na <b>barra lateral</b>.</p>
       <div class="form-row">
-        <label style="flex:1">Nome <input id="atl-nome" type="text" placeholder="Ex.: Português" /></label>
+        <label class="u-grow">Nome <input id="atl-nome" type="text" placeholder="Ex.: Português" /></label>
         <label>Tipo
           <select id="atl-tipo">
             <option value="tela">Tela</option>
@@ -301,7 +301,7 @@ export default function renderConfig(root, app) {
             <option value="questoes">Questões (por tópico)</option>
           </select>
         </label>
-        <label style="flex:1">Destino <select id="atl-alvo">${alvoOptions("tela", st)}</select></label>
+        <label class="u-grow">Destino <select id="atl-alvo">${alvoOptions("tela", st)}</select></label>
       </div>
       <input id="atl-icone" type="hidden" value="star" />
       <div class="atl-ico-lbl muted small">Ícone</div>
@@ -339,8 +339,8 @@ export default function renderConfig(root, app) {
     <section class="card">
       <h3>${icone("graduation-cap")} Concurso</h3>
       <div class="form-row">
-        <label style="flex:2">Cargo <input id="cfg-cargo" type="text" value="${esc(c ? c.cargo : "")}" /></label>
-        <label style="flex:1">Banca <input id="cfg-banca" type="text" value="${esc(c ? c.banca : "")}" /></label>
+        <label class="u-grow-2">Cargo <input id="cfg-cargo" type="text" value="${esc(c ? c.cargo : "")}" /></label>
+        <label class="u-grow">Banca <input id="cfg-banca" type="text" value="${esc(c ? c.banca : "")}" /></label>
       </div>
       <button class="btn btn-primary btn-sm" data-action="salvar-conc">Salvar concurso</button>
       <p class="muted small">Multi-concurso e modo fusão chegam na v3.</p>

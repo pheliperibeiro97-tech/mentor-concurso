@@ -139,7 +139,7 @@ export default function renderFlashcards(root, app) {
             <h3>${icone("download")} Exportar para o Anki</h3>
             <p class="muted small">Escolha quais flashcards exportar. Gera um <b>.txt</b> que o Anki importa (Arquivo → Importar).</p>
             <div class="form-row" style="align-items:flex-end">
-              <label style="flex:1">Baralho <select id="export-escopo">${opcoesBaralho(st, "todos")}</select></label>
+              <label class="u-grow">Baralho <select id="export-escopo">${opcoesBaralho(st, "todos")}</select></label>
               <label class="inline"><input type="checkbox" id="export-venc" /> Só os vencidos (revisar hoje)</label>
               <button class="btn btn-primary" data-action="baixar-anki">Baixar .txt</button>
             </div>
@@ -194,7 +194,7 @@ export default function renderFlashcards(root, app) {
                 <div class="rev-emoji">${icone("layers")}</div>
                 <h3>Nenhum flashcard ainda</h3>
                 <p class="muted">Crie cartões para revisar com recordação ativa e repetição espaçada.</p>
-                <button class="btn btn-add" data-action="toggle-criar" style="margin-top:12px">Criar flashcards</button>
+                <button class="btn btn-add u-mt-12" data-action="toggle-criar">Criar flashcards</button>
               </div>`
       }
     </div>`

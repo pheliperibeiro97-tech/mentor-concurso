@@ -22,7 +22,7 @@ export default function renderCorrecao(root, app) {
     ${header("Discursiva e redação", "Pratique com correção no nível de um examinador de banca.", botaoImprimir())}
 
     <div class="card correcao-form is-protagonista">
-      <div class="form-row" style="align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:6px">
+      <div class="form-row u-flex-12 u-wrap u-mb-8">
         <label class="inline">Tipo:
           <select id="gen-tipo">
             <option value="discursiva" ${tipo === "discursiva" ? "selected" : ""}>Discursiva</option>
@@ -33,10 +33,10 @@ export default function renderCorrecao(root, app) {
       </div>
 
       <div class="cor-tema-head">
-        <label for="cor-enun" style="margin:0">Pergunta / tema</label>
+        <label for="cor-enun" class="u-m-0">Pergunta / tema</label>
         <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="A IA cria um tema a partir de um tópico, de um material ou de um tema livre.">${icone("sparkles")} Criar tema com IA</button>
       </div>
-      <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" style="margin-bottom:14px"></textarea>
+      <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" class="u-mb-16"></textarea>
       <div id="ia-gen-box" class="ia-gen-box" hidden>
         <div class="form-row" style="align-items:flex-end">
           <label>De onde
@@ -46,8 +46,8 @@ export default function renderCorrecao(root, app) {
               <option value="livre" ${genFonte === "livre" ? "selected" : ""}>Tema livre</option>
             </select>
           </label>
-          <label style="flex:1">Assunto <span id="gen-alvo-wrap">${alvoControl(genFonte, st)}</span></label>
-          <button class="btn btn-ia" data-action="gerar-pergunta" style="margin-bottom:12px">Gerar tema</button>
+          <label class="u-grow">Assunto <span id="gen-alvo-wrap">${alvoControl(genFonte, st)}</span></label>
+          <button class="btn btn-ia u-mb-12" data-action="gerar-pergunta">Gerar tema</button>
         </div>
       </div>
 
@@ -61,7 +61,7 @@ export default function renderCorrecao(root, app) {
       </label>`
           : ""
       }
-      <div class="form-acoes" style="flex-wrap:wrap">
+      <div class="form-acoes u-wrap">
         <span class="muted" id="cor-contador">0 palavras</span>
         ${iaOn ? `<label class="inline small" title="A IA pesquisa na web para conferir fatos e atualidade"><input type="checkbox" id="cor-web" /> pesquisar na web</label>` : ""}
         <span class="spacer"></span>

@@ -148,7 +148,7 @@ export function escolher(msg, opcoes, opts = {}) {
       ? `<div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin-top:8px">
           ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`).join("")}
         </div>`
-      : `<div class="modal-acoes" style="flex-wrap:wrap">
+      : `<div class="modal-acoes u-wrap">
           ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"}" data-v="${esc(o.value)}">${esc(o.label)}</button>`).join("")}
         </div>`;
     ov.innerHTML = `
@@ -730,7 +730,7 @@ export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, 
         <label class="muted small">Tema central</label>
         <input class="mm-edit-root" value="${esc(work.titulo || "")}" placeholder="Tema central do mapa" />
         ${treeEditHTML(work.ramos, "")}
-        <div class="barra-acoes" style="margin-top:8px">
+        <div class="barra-acoes u-mt-8">
           <button class="btn btn-soft btn-sm mm-edit-addraiz">${icone("plus")} Ramo principal</button>
           <span class="spacer"></span>
           <button class="btn btn-sm mm-edit-cancelar">Cancelar</button>

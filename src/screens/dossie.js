@@ -239,9 +239,9 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     ${
       aliasAberto
         ? `<div class="card alias-editor">
-            <div class="muted small" style="margin:0 0 6px">${icone("tag")} <b>Também conhecido como</b> — nomes alternativos deste tópico (separados por vírgula). Servem para <b>casar</b> com o edital, as provas e a relevância quando o nome usado lá é diferente do seu.</div>
+            <div class="muted small u-mb-8">${icone("tag")} <b>Também conhecido como</b> — nomes alternativos deste tópico (separados por vírgula). Servem para <b>casar</b> com o edital, as provas e a relevância quando o nome usado lá é diferente do seu.</div>
             <div class="form-row" style="gap:8px">
-              <input id="alias-input" type="text" value="${esc((t.aliases || []).join(", "))}" placeholder="Ex.: Atos da administração, Ato administrativo" style="flex:1" />
+              <input id="alias-input" type="text" value="${esc((t.aliases || []).join(", "))}" placeholder="Ex.: Atos da administração, Ato administrativo" class="u-grow" />
               <button class="btn btn-primary btn-sm" data-action="alias-salvar">Salvar</button>
               <button class="btn btn-ghost btn-sm" data-action="alias-toggle">Fechar</button>
             </div>
@@ -254,7 +254,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     ${(() => {
       const maps = st.mapasMentais.filter((m) => m.topicoId === topicoId);
       if (!maps.length) return "";
-      return `<div class="card dossie-mapas"><div class="muted small" style="margin-bottom:6px"><b>Mapas mentais</b></div><div class="aula-tops">${maps.map((m) => `<button class="mini-item mini-link" data-action="abrir-mapa" data-id="${m.id}" data-tip="Abrir mapa mental"><span class="mini-txt">${esc(m.titulo)}</span></button>`).join("")}</div></div>`;
+      return `<div class="card dossie-mapas"><div class="muted small u-mb-8"><b>Mapas mentais</b></div><div class="aula-tops">${maps.map((m) => `<button class="mini-item mini-link" data-action="abrir-mapa" data-id="${m.id}" data-tip="Abrir mapa mental"><span class="mini-txt">${esc(m.titulo)}</span></button>`).join("")}</div></div>`;
     })()}
 
     ${painelHTML}
@@ -832,7 +832,7 @@ function ddxPerf(store, aprov, nTent) {
 // Cabeçalho do frame de análise do Mentor: orb (voz da IA) + rótulo. Inline flex para
 // alinhar o orb sem depender de CSS novo.
 function ddxAnaliseHeadHTML() {
-  return `<div class="ddx-analise-head" style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><span class="orb orb-sm" aria-hidden="true"></span><b class="txt-ia">Análise do Mentor</b></div>`;
+  return `<div class="ddx-analise-head u-flex u-mb-8"><span class="orb orb-sm" aria-hidden="true"></span><b class="txt-ia">Análise do Mentor</b></div>`;
 }
 
 export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTopico } = {}) {
@@ -967,7 +967,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
                 return `<div class="ddx-hist-linha"><span class="ddx-hist-data muted small">${fmtData(s.data)}</span><span class="ddx-hist-fase" style="--cor:${f ? f.cor : "var(--muted)"}">${f ? f.nome : "—"}</span><span class="ddx-hist-top">${esc(t ? t.nome : s.material || "—")}</span><span class="muted small">${fmtTempo(s.tempoSeg || 0)}</span></div>`;
               })
               .join("")}</div>`
-          : `<p class="muted small" style="margin:0">Nenhuma sessão registrada nesta disciplina ainda.</p>`
+          : `<p class="muted small u-m-0">Nenhuma sessão registrada nesta disciplina ainda.</p>`
       }
     </section>`;
 

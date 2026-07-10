@@ -103,7 +103,7 @@ export default function renderOnboarding(root, app) {
                <li style="--i:1">${icone("check")}<span>Adicionando os tópicos base</span></li>
                <li style="--i:2">${icone("check")}<span>Preparando seu ponto de partida</span></li>`}
         </ul>
-        ${edital ? `<p class="muted small" style="margin-top:14px">Isso pode levar alguns segundos.</p>` : ""}
+        ${edital ? `<p class="muted small u-mt-16">Isso pode levar alguns segundos.</p>` : ""}
       </div>`;
     return;
   }
@@ -249,7 +249,7 @@ export default function renderOnboarding(root, app) {
           <div class="ob-grupo">
             <h3>${icone("calendar")} Prova</h3>
             <div style="max-width:240px">
-              <label style="margin-bottom:6px">Data da prova
+              <label class="u-mb-8">Data da prova
                 <input id="ob-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
               </label>
               <label class="inline small" style="font-weight:400"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>

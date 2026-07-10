@@ -4775,9 +4775,10 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 
 /* ===== Fase 0 — utilitários de layout (substituem os style= inline dos templates).
    Regra: código novo NÃO escreve style= de layout; usa estas classes. ===== */
+.u-m-0{margin:0} /* antes dos u-mt/u-mb para poder compor: class="u-m-0 u-mb-8" */
 .u-mt-4{margin-top:4px}.u-mt-8{margin-top:8px}.u-mt-12{margin-top:12px}.u-mt-16{margin-top:16px}
 .u-mb-4{margin-bottom:4px}.u-mb-8{margin-bottom:8px}.u-mb-12{margin-bottom:12px}.u-mb-16{margin-bottom:16px}
-.u-m-0{margin:0}.u-ml-auto{margin-left:auto}
+.u-ml-auto{margin-left:auto}
 .u-flex{display:flex;align-items:center;gap:8px}
 .u-flex-6{display:flex;align-items:center;gap:6px}
 .u-flex-12{display:flex;align-items:center;gap:12px}

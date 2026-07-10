@@ -876,7 +876,7 @@ function cronogramaCardHTML(st, store, opcoesTopico) {
       <span class="muted small" data-tip="Escolha o destino (Semana = com dia · Tarefas avulsas = sem dia) e adicione como preferir. Nada é criado sem a sua aprovação." data-tip-pos="cima-dir">${icone("info")}</span>
     </div>
 
-    <div class="subtabs" style="margin:0 0 14px">
+    <div class="subtabs u-mb-16">
       <button class="subtab ${tarefasView === "semana" ? "on" : ""}" data-action="ver-semana" data-tip="Tarefas organizadas por dia da semana + sua rotina recorrente.">${icone("calendar-days")} Semana</button>
       <button class="subtab ${tarefasView === "soltas" ? "on" : ""}" data-action="ver-soltas" data-tip="Tarefas sem dia marcado (lista livre).">${icone("clipboard-list")} Tarefas avulsas</button>
     </div>
@@ -1005,16 +1005,16 @@ function extrairBoxHTML(opcoesTopico, store, texto = "", top = "", estim = "", e
     `value="${esc(top)}" selected`
   );
   return `<div class="extrair-box">
-    <div class="muted small" style="margin-bottom:8px">Tarefas <b>avulsas</b> (sem dia): uma por linha. <b>Tempo</b> opcional no fim, ex.: <code>(45 min)</code>, <code>(1h)</code>. <b>Observação</b> opcional após <code>//</code> (ex.: <code>Ler Lei 8.112 // focar arts. 116/117</code>). <span class="muted" data-tip="Com IA conectada, além do “//”, a observação também é separada automaticamente da frase. Sem IA, use o “//” para separar a observação.">${icone("info")}</span>${iaOn ? "" : ' <i>(sem IA: cada linha vira uma tarefa; use “//” para a observação)</i>'}</div>
+    <div class="muted small u-mb-8">Tarefas <b>avulsas</b> (sem dia): uma por linha. <b>Tempo</b> opcional no fim, ex.: <code>(45 min)</code>, <code>(1h)</code>. <b>Observação</b> opcional após <code>//</code> (ex.: <code>Ler Lei 8.112 // focar arts. 116/117</code>). <span class="muted" data-tip="Com IA conectada, além do “//”, a observação também é separada automaticamente da frase. Sem IA, use o “//” para separar a observação.">${icone("info")}</span>${iaOn ? "" : ' <i>(sem IA: cada linha vira uma tarefa; use “//” para a observação)</i>'}</div>
     <label>Tarefas
       <textarea id="extrair-texto" rows="4" placeholder="Ex.: Ler a Lei 8.112 // atenção aos arts. 116 e 117 (45 min)&#10;Resolver 20 questões de licitações // focar na Lei 14.133 (30 min)">${esc(texto)}</textarea>
     </label>
     <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:10px">
-      <label class="btn btn-ghost btn-sm btn-file" style="margin:0" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="extrair-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
-      <label class="inline" style="margin:0">Vincular ao tópico: <select id="extrair-top">${opTop}</select></label>
-      <label class="inline" style="margin:0" data-tip="Aplica este tempo a cada tarefa, A MENOS que a linha já traga um tempo, ex.: (50 min). Opcional; nunca interrompe nada.">Tempo p/ cada (min): <input id="extrair-estim" type="number" min="0" max="1440" placeholder="opcional" style="width:84px" value="${esc(estim)}" /></label>
+      <label class="inline u-m-0">Vincular ao tópico: <select id="extrair-top">${opTop}</select></label>
+      <label class="inline u-m-0" data-tip="Aplica este tempo a cada tarefa, A MENOS que a linha já traga um tempo, ex.: (50 min). Opcional; nunca interrompe nada.">Tempo p/ cada (min): <input id="extrair-estim" type="number" min="0" max="1440" placeholder="opcional" style="width:84px" value="${esc(estim)}" /></label>
     </div>
     <div class="form-acoes">
       <button class="btn btn-ghost" data-action="cancelar-extrair">Cancelar</button>
@@ -1067,13 +1067,13 @@ function importPanelHTML(st, store) {
       <textarea id="import-texto" rows="7" placeholder="Ex.:&#10;Segunda&#10;Direito Constitucional — princípios (50 min)&#10;20 questões de Administrativo (40 min)&#10;Revisar Lei 8.112 // atenção aos arts. 116/117&#10;Terça&#10;Resolver 15 questões de Português (30 min)&#10;Ler súmulas do STJ (1h)">${esc(importTextoSalvo)}</textarea>
     </label>
     <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:10px; margin-bottom:8px">
-      <label class="btn btn-ghost btn-sm btn-file" style="margin:0" data-tip="Carregar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="Carregar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="import-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
     </div>
     <div class="import-modos muted small">
       <p style="margin:0 0 4px"><b>Estruturar (fiel):</b> transforma o que você colou em tarefas exatamente como está, detectando os dias da semana. Não muda a carga nem a ordem.${iaOn ? "" : " Sem IA, cada linha vira uma tarefa solta."}</p>
-      <p style="margin:0"><b>${icone("sparkles")} Adaptar à minha realidade:</b> a IA usa o cronograma como base, mas redistribui a carga ao seu tempo por dia, às suas folgas e aos dias até a prova, priorizando suas lacunas de desempenho.${iaOn ? "" : " <i>(Requer IA conectada.)</i>"}</p>
+      <p class="u-m-0"><b>${icone("sparkles")} Adaptar à minha realidade:</b> a IA usa o cronograma como base, mas redistribui a carga ao seu tempo por dia, às suas folgas e aos dias até a prova, priorizando suas lacunas de desempenho.${iaOn ? "" : " <i>(Requer IA conectada.)</i>"}</p>
     </div>
     <div class="form-acoes">
       <button class="btn btn-ghost" data-action="cancelar-import">Cancelar</button>
@@ -1180,13 +1180,13 @@ function refinoHTML(refino) {
     ${
       ajustes.length
         ? `<div class="rf-ajustes">
-            <div class="muted small" style="margin:8px 0 4px">Ajustes sugeridos (marque os que quiser aplicar — você pode aceitar só alguns):</div>
+            <div class="muted small u-mt-8 u-mb-4">Ajustes sugeridos (marque os que quiser aplicar — você pode aceitar só alguns):</div>
             <ul class="rf-lista">
               ${ajustes.map((a, i) => `<li class="rf-item"><input type="checkbox" class="rf-cb" data-i="${i}" /><span class="rf-txt">${descr(a)}</span>${a.motivo ? `<span class="rf-motivo muted small">${esc(a.motivo)}</span>` : ""}</li>`).join("")}
             </ul>
             <button class="btn btn-primary btn-sm" data-action="aplicar-refino" data-tip-pos="cima-esq" data-tip="Aplica só os ajustes marcados ao plano (recusar = não marcar nada).">Aplicar ajustes selecionados</button>
           </div>`
-        : `<p class="muted small" style="margin-top:6px">A IA não sugeriu mudanças — o plano já está equilibrado.</p>`
+        : `<p class="muted small u-mt-8">A IA não sugeriu mudanças — o plano já está equilibrado.</p>`
     }
   </div>`;
 }
@@ -1356,7 +1356,7 @@ function semanaViewHTML(st, store) {
             addDiaForm === d
               ? `<div class="add-dia-box">
                   <input class="add-dia-input" data-data="${d}" placeholder="Tarefa neste dia" />
-                  <input type="number" min="0" max="1440" class="add-dia-estim" data-data="${d}" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." style="width:64px" />
+                  <input type="number" min="0" max="1440" class="add-dia-estim u-w-64" data-data="${d}" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." />
                   <select class="add-dia-top" data-data="${d}" title="Vincular a um tópico (opcional)"><option value="">— sem tópico —</option>${st.topicos.map((t) => { const dd = st.disciplinas.find((x) => x.id === t.disciplinaId); return `<option value="${t.id}">${esc((dd ? dd.nome + " · " : "") + t.nome)}</option>`; }).join("")}</select>
                   <button class="lnk" data-action="add-dia" data-data="${d}">adicionar</button>
                   <button class="lnk" data-action="cancelar-add-dia">cancelar</button>
@@ -1468,7 +1468,7 @@ function rotinaPainelHTML(st) {
             <select id="rot-dia" title="Dia da semana em que se repete">${diaOpts}</select>
             <select id="rot-cat" title="Categoria (cor)">${catOpts}</select>
             <select id="rot-top" title="Tópico (opcional)"><option value="">— sem tópico —</option>${opcoesTopico}</select>
-            <input id="rot-estim" type="number" min="0" max="1440" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." style="width:64px" />
+            <input id="rot-estim" type="number" min="0" max="1440" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." class="u-w-64" />
             <button class="btn btn-add btn-sm" data-action="add-rotina">Adicionar à rotina</button>
           </div>`
     }

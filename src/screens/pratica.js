@@ -354,7 +354,7 @@ function editFormHTML(st, q, opcoesVincular, formato) {
     <div class="card form-questao">
       <h3>${icone("square-pen")} Editar item Certo/Errado</h3>
       <div class="form-row">
-        <label style="flex:2">Tópico (opcional) <select id="qe-top">${opTop}</select></label>
+        <label class="u-grow-2">Tópico (opcional) <select id="qe-top">${opTop}</select></label>
         <label>Gabarito <select id="qe-ce"><option value="certo" ${q.gabarito === 0 ? "selected" : ""}>Certo</option><option value="errado" ${q.gabarito === 1 ? "selected" : ""}>Errado</option></select></label>
       </div>
       <label>Afirmação <textarea id="qe-enun" rows="2">${esc(q.enunciado)}</textarea></label>
@@ -379,7 +379,7 @@ function editFormHTML(st, q, opcoesVincular, formato) {
       </label>
       <div class="form-row">
         <label>Nº da alternativa correta <input id="qe-gab" type="number" min="1" value="${q.gabarito + 1}" /></label>
-        <label style="flex:2">Referência (opcional) <input id="qe-ref" type="text" value="${esc(q.referencia || "")}" placeholder="Ex.: Q12345 · Prova VUNESP 2023 · art. 1.003 CPC" /></label>
+        <label class="u-grow-2">Referência (opcional) <input id="qe-ref" type="text" value="${esc(q.referencia || "")}" placeholder="Ex.: Q12345 · Prova VUNESP 2023 · art. 1.003 CPC" /></label>
       </div>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="cancelar-edicao">Cancelar</button>

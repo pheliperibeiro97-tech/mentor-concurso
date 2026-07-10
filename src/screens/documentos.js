@@ -233,20 +233,20 @@ function estruturaResumoHTML(est, store, docId) {
       <ul class="estr-preview">${listaLimpa}</ul>
       <details class="estr-avancado">
         <summary>${icone("sliders-horizontal")} Ajustar tópicos (avançado)</summary>
-        <p class="muted small" style="margin:6px 0">Ajuste título, tópico do edital e faixa de páginas; remova o que não quiser. ${icone("eye")} confere a página.</p>
+        <p class="muted small u-mt-8 u-mb-8">Ajuste título, tópico do edital e faixa de páginas; remova o que não quiser. ${icone("eye")} confere a página.</p>
         <ul class="estr-lista">${linhas}</ul>
-        ${refino ? `<div class="estr-acoes" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">${refino}</div>` : ""}
+        ${refino ? `<div class="estr-acoes u-mt-8 u-flex u-wrap">${refino}</div>` : ""}
       </details>
-      <p class="muted small" style="margin-top:6px">Os tópicos são aplicados ao salvar o material.</p>
+      <p class="muted small u-mt-8">Os tópicos são aplicados ao salvar o material.</p>
     </div>`;
   }
 
   // MODO COMPLETO (card do material salvo): editor técnico direto, com aplicar/caprichar.
   return `<details class="estr-card" open>
     <summary>${icone("files")} Estrutura — <b>${nB}</b> ${nB === 1 ? "bloco" : "blocos"} · ${comTopico}/${nB} com tópico${aula}${avisoConf} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span></summary>
-    <p class="muted small" style="margin:6px 0">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique ${icone("eye")} para conferir a página.</p>
+    <p class="muted small u-mt-8 u-mb-8">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique ${icone("eye")} para conferir a página.</p>
     <ul class="estr-lista">${linhas}</ul>
-    <div class="estr-acoes" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">${caprichar}${refino}${aplicar}</div>
+    <div class="estr-acoes u-mt-8 u-flex u-wrap">${caprichar}${refino}${aplicar}</div>
   </details>`;
 }
 
@@ -415,7 +415,7 @@ export default function renderDocumentos(root, app) {
       <summary class="buscas-summary">${icone("search")} Buscar nos materiais</summary>
       <div class="buscas-corpo">
         <div class="field"><span class="field-ico">${icone("search")}</span><input id="busca" type="search" placeholder="Busque por palavra exata, ou por significado (IA) no botão abaixo…" value="${esc(busca)}" class="busca-input has-ico" /></div>
-        <p class="muted small" style="margin:6px 0 8px">Filtra os materiais conforme você digita (palavra em destaque). Para buscar por <b>significado</b>, use o botão abaixo.</p>
+        <p class="muted small u-mt-8 u-mb-8">Filtra os materiais conforme você digita (palavra em destaque). Para buscar por <b>significado</b>, use o botão abaixo.</p>
         ${buscaSemanticaHTML(store)}
       </div>
     </details>
@@ -424,7 +424,7 @@ export default function renderDocumentos(root, app) {
       <button class="btn btn-add btn-sm" data-action="toggle-form" data-tip-pos="cima-esq" data-tip="Adicionar uma aula ou conteúdo à sua base de estudo.">${icone("plus")} Adicionar material</button>
       <span class="spacer"></span>
       ${filtroTopicosBotaoHTML(st, filtroTop.sel, filtroTop.aberto)}
-      <label class="inline small" style="white-space:nowrap">Agrupar por
+      <label class="inline small u-nowrap">Agrupar por
         <select id="doc-group">
           <option value="disciplina" ${agrup === "disciplina" ? "selected" : ""}>Disciplina</option>
           <option value="topico" ${agrup === "topico" ? "selected" : ""}>Tópico</option>
@@ -1104,7 +1104,7 @@ function selecaoFontesHTML(store) {
   // próprio "Buscar por significado" dentro de cada módulo (não poluem este seletor).
   const fontes = store.fontesIndice(SEM_ESCOPO_MAT);
   if (!fontes.length) {
-    return `<div class="muted small" style="margin-top:10px">Nenhum material ou resumo para indexar ainda.</div>`;
+    return `<div class="muted small u-mt-12">Nenhum material ou resumo para indexar ainda.</div>`;
   }
   const sel = semSel || new Set();
   const statusFonte = (f) =>
@@ -1186,7 +1186,7 @@ function agruparDocs(st, docs, modo) {
 
 function resultadosSemHTML(res) {
   if (!res.length) {
-    return `<div class="muted small" style="margin-top:10px">Nada relevante encontrado. Tente outras palavras, ou indexe mais material.</div>`;
+    return `<div class="muted small u-mt-12">Nada relevante encontrado. Tente outras palavras, ou indexe mais material.</div>`;
   }
   return `
     <div class="sem-res">
@@ -1213,8 +1213,8 @@ function formHTML(opcoesTopico) {
     <div class="card form-doc">
       <h3>Adicionar material</h3>
       <div class="form-row">
-        <label style="flex:2">Título <input id="doc-titulo" type="text" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
-        <label style="flex:1">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
+        <label class="u-grow-2">Título <input id="doc-titulo" type="text" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
+        <label class="u-grow">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       </div>
       <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Você também pode arrastar o arquivo para este cartão.">${icone("paperclip")} Selecionar arquivo
         <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/*" hidden />
@@ -1483,7 +1483,7 @@ function docHTML(store, st, d, busca) {
               const pgs = (d.paginas || []).filter((p) => (p.texto || "").trim());
               const porPagina = pgs.length > 1;
               const pageSel = porPagina
-                ? `<label class="inline small" style="margin-bottom:6px">${icone("file-text")} Página:
+                ? `<label class="inline small u-mb-8">${icone("file-text")} Página:
                     <select class="mk-pagina-sel" data-id="${d.id}" style="width:auto; margin-left:6px">
                       ${pgs.map((p) => `<option value="${p.n}" ${String(marcarPagina[d.id] || pgs[0].n) === String(p.n) ? "selected" : ""}>${p.n}${p.temImagem ? " (fig.)" : ""}</option>`).join("")}
                     </select>
@@ -1491,7 +1491,7 @@ function docHTML(store, st, d, busca) {
                    </label>`
                 : "";
               return `<div class="doc-marcar">
-                <div class="muted small" style="margin-bottom:6px">${icone("square-pen")} Marcação sobre o <b>texto extraído</b>. Use “Auto” (prazos/restritivas), “IA sugere” e o pincel.</div>
+                <div class="muted small u-mb-8">${icone("square-pen")} Marcação sobre o <b>texto extraído</b>. Use “Auto” (prazos/restritivas), “IA sugere” e o pincel.</div>
                 ${pageSel}
                 <div class="mk-host" data-mk-host="${d.id}"></div>
               </div>`;
@@ -1503,12 +1503,12 @@ function docHTML(store, st, d, busca) {
                  d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
                    ? estruturaEditando.has(d.id)
                      ? `${estruturaResumoHTML(d.estrutura, store, d.id)}
-                        <button class="btn btn-ghost btn-sm" data-action="estr-edit-toggle" data-id="${d.id}" style="margin-top:6px">${icone("check")} concluir revisão da estrutura</button>`
+                        <button class="btn btn-ghost btn-sm u-mt-8" data-action="estr-edit-toggle" data-id="${d.id}">${icone("check")} concluir revisão da estrutura</button>`
                      : textoBrutoAberto.has(d.id)
-                       ? `<div class="doc-corpo"><div class="muted small" style="margin-bottom:6px">${icone("file-text")} Texto corrido completo (alimenta busca e IA). <button class="lnk" data-action="menu-texto-corrido" data-id="${d.id}">voltar ao sumário</button></div>${esc(d.texto) || "<i>vazio</i>"}</div>`
+                       ? `<div class="doc-corpo"><div class="muted small u-mb-8">${icone("file-text")} Texto corrido completo (alimenta busca e IA). <button class="lnk" data-action="menu-texto-corrido" data-id="${d.id}">voltar ao sumário</button></div>${esc(d.texto) || "<i>vazio</i>"}</div>`
                        : sumarioNavegavelHTML(d, store)
                    : `<div class="doc-corpo">
-                        <div class="muted small" style="margin-bottom:6px">${icone("file-text")} Texto extraído do material — é o que alimenta a <b>busca</b> e a <b>IA</b> (não precisa estar bonito).</div>
+                        <div class="muted small u-mb-8">${icone("file-text")} Texto extraído do material — é o que alimenta a <b>busca</b> e a <b>IA</b> (não precisa estar bonito).</div>
                         ${esc(d.texto) || "<i>vazio</i>"}
                       </div>`
                }
@@ -1543,18 +1543,18 @@ function topicosEditorHTML(st, d) {
     })
     .join("");
   return `<div class="card doc-top-editor">
-    <div class="muted small" style="margin:0 0 8px">${icone("files")} <b>Tópicos que este material cobre</b> — marque todos (uma aula pode cobrir vários). Em cada um, opcionalmente diga <b>quais páginas</b> o cobrem (deixe vazio = a aula inteira). Salva automaticamente.</div>
-    ${grupos || `<p class="muted small" style="margin:0">Nenhum tópico cadastrado. Adicione no Edital.</p>`}
+    <div class="muted small u-mb-8">${icone("files")} <b>Tópicos que este material cobre</b> — marque todos (uma aula pode cobrir vários). Em cada um, opcionalmente diga <b>quais páginas</b> o cobrem (deixe vazio = a aula inteira). Salva automaticamente.</div>
+    ${grupos || `<p class="muted small u-m-0">Nenhum tópico cadastrado. Adicione no Edital.</p>`}
     <div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="editar-topicos" data-id="${d.id}">Fechar</button></div>
   </div>`;
 }
 
 // Painel "detectar tópicos" (precisão por página, dir.2): tópicos do edital abordados → revisão.
 function detectPainelHTML() {
-  if (detectando) return `<div class="card detect-painel"><p class="muted small" style="margin:0">${icone("search")} A IA está lendo o material e detectando os tópicos…</p></div>`;
+  if (detectando) return `<div class="card detect-painel"><p class="muted small u-m-0">${icone("search")} A IA está lendo o material e detectando os tópicos…</p></div>`;
   const res = detectResultado || [];
   return `<div class="card detect-painel">
-    <h3 style="margin:0 0 4px">${icone("search")} Tópicos detectados no material</h3>
+    <h3 class="u-mb-4">${icone("search")} Tópicos detectados no material</h3>
     ${
       res.length
         ? `<p class="muted small" style="margin:0 0 8px">A IA identificou estes tópicos do edital. Marque os que quer colocar na <b>curva de revisão</b> (você confirma):</p>
@@ -1574,7 +1574,7 @@ function detectPainelHTML() {
              <button class="btn btn-ghost btn-sm" data-action="detect-vincular" data-tip="Vincula os tópicos marcados a este material (ele passa a cobrir todos).">${icone("link")} Vincular ao material</button>
              <button class="btn btn-primary btn-sm" data-action="detect-agendar">Agendar revisão dos selecionados</button>
            </div>`
-        : `<p class="muted small" style="margin:0">Nenhum tópico do edital foi detectado neste material. <button class="lnk" data-action="detect-fechar">Fechar</button></p>`
+        : `<p class="muted small u-m-0">Nenhum tópico do edital foi detectado neste material. <button class="lnk" data-action="detect-fechar">Fechar</button></p>`
     }
   </div>`;
 }
@@ -1602,7 +1602,7 @@ function ocrAlertaHTML(store, d) {
 function ocrManualHTML(store, d) {
   const iaOn = store.iaDisponivel();
   if (d.binarioDescartado) {
-    return `<div class="ocr-painel"><p class="muted small" style="margin:0">${icone("search")} Visualizador e Visão por página indisponíveis: o PDF original foi descartado. O texto extraído foi mantido.</p></div>`;
+    return `<div class="ocr-painel"><p class="muted small u-m-0">${icone("search")} Visualizador e Visão por página indisponíveis: o PDF original foi descartado. O texto extraído foi mantido.</p></div>`;
   }
   if (!Array.isArray(d.paginas)) {
     if (!d.pdfData) return "";

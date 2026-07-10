@@ -143,7 +143,7 @@ function qPreviewHTML(itens, ce, st) {
         <p class="muted small" style="margin:0 0 4px">Marque a alternativa correta no botão à esquerda.</p>
         <ul class="q-alts" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px">
           ${alts
-            .map((a, ai) => `<li class="q-alt-linha" style="display:flex;align-items:center;gap:6px">
+            .map((a, ai) => `<li class="q-alt-linha u-flex-6">
               <input type="radio" name="gab-${i}" class="q-gab" data-i="${i}" data-a="${ai}" ${ai === q.gabarito ? "checked" : ""} style="width:auto;margin:0;flex-shrink:0" />
               <input class="prev-inp q-alt" data-i="${i}" data-a="${ai}" value="${esc(a || "")}" placeholder="Alternativa ${ai + 1}" />
             </li>`)
@@ -221,14 +221,14 @@ function provaImportHTML(st, estado) {
         <p class="muted small">Provas anteriores de concurso público costumam ser de acesso livre no site da banca. Baixe a prova e o gabarito e cole/importe aqui.</p>
       </details>
       <div class="form-row">
-        <label style="flex:1">Banca <input id="prova-banca" list="prova-bancas-list" value="${esc(pf.banca || "")}" placeholder="Ex.: VUNESP" /></label>
+        <label class="u-grow">Banca <input id="prova-banca" list="prova-bancas-list" value="${esc(pf.banca || "")}" placeholder="Ex.: VUNESP" /></label>
         <label style="width:96px">Ano <input id="prova-ano" value="${esc(pf.ano || "")}" placeholder="2024" /></label>
-        <label style="flex:1">Órgão <input id="prova-orgao" value="${esc(pf.orgao || "")}" placeholder="Ex.: TJSP" /></label>
+        <label class="u-grow">Órgão <input id="prova-orgao" value="${esc(pf.orgao || "")}" placeholder="Ex.: TJSP" /></label>
       </div>
       <datalist id="prova-bancas-list">${dataOpts}</datalist>
       <div class="form-row">
-        <label style="flex:1">Cargo <input id="prova-cargo" value="${esc(pf.cargo || "")}" placeholder="Ex.: Escrevente" /></label>
-        <label style="flex:2">URL da fonte (opcional) <input id="prova-url" value="${esc(pf.url || "")}" placeholder="https://..." /></label>
+        <label class="u-grow">Cargo <input id="prova-cargo" value="${esc(pf.cargo || "")}" placeholder="Ex.: Escrevente" /></label>
+        <label class="u-grow-2">URL da fonte (opcional) <input id="prova-url" value="${esc(pf.url || "")}" placeholder="https://..." /></label>
         <label>Formato
           <select id="prova-formato">
             <option value="mc" ${pf.formato !== "ce" ? "selected" : ""}>Múltipla escolha (A, B, C…)</option>

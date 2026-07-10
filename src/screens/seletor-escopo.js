@@ -134,7 +134,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     if (estado.aulaId && !aulas.some((a) => a.id === estado.aulaId)) estado.aulaId = "";
     if (estado.sub && !subs.some((s) => `${s.docId}|${s.bi}` === estado.sub)) estado.sub = "";
     return `
-      <label class="inline" style="margin-bottom:8px">Disciplina
+      <label class="inline u-mb-8">Disciplina
         <select data-se="disc" style="margin-left:6px">
           <option value="">Todas</option>
           ${st.disciplinas.map((d) => `<option value="${d.id}" ${estado.disc === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
@@ -143,7 +143,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       <div class="card ft-painel">${grupos || `<p class="muted small">Nenhum tópico cadastrado ainda.</p>`}</div>
       ${
         aulas.length
-          ? `<label class="inline" style="margin-top:8px">Aula
+          ? `<label class="inline u-mt-8">Aula
               <select data-se="aula" style="margin-left:6px">
                 <option value="">Todas as aulas</option>
                 ${aulas.map((a) => `<option value="${a.id}" ${estado.aulaId === a.id ? "selected" : ""}>${esc(a.nome)}</option>`).join("")}
@@ -153,7 +153,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       }
       ${
         subs.length
-          ? `<label class="inline" style="margin-top:8px">Subtópico (índice)
+          ? `<label class="inline u-mt-8">Subtópico (índice)
               <select data-se="sub" style="margin-left:6px; max-width:340px">
                 <option value="">Material inteiro</option>
                 ${subs.map((s) => `<option value="${s.docId}|${s.bi}" ${estado.sub === `${s.docId}|${s.bi}` ? "selected" : ""}>${esc(s.rotulo)}</option>`).join("")}
@@ -170,7 +170,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     const blocos = (doc && doc.estrutura && doc.estrutura.blocos) || [];
     if (estado.matBloco !== "" && !blocos[parseInt(estado.matBloco, 10)]) estado.matBloco = "";
     return `
-      <label class="inline" style="margin-bottom:8px">Material (aula)
+      <label class="inline u-mb-8">Material (aula)
         <select data-se="mat" style="margin-left:6px; max-width:340px">
           <option value="">— escolha —</option>
           ${docs.map((d) => `<option value="${d.id}" ${estado.docId === d.id ? "selected" : ""}>${esc(d.titulo)}</option>`).join("")}
@@ -178,14 +178,14 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       </label>
       ${
         blocos.length
-          ? `<label class="inline" style="margin-top:8px; display:block">Subtópico (índice)
+          ? `<label class="inline u-mt-8 u-block">Subtópico (índice)
               <select data-se="matbloco" style="margin-left:6px; max-width:340px">
                 <option value="">Material inteiro</option>
                 ${blocos.map((b, bi) => `<option value="${bi}" ${estado.matBloco === String(bi) ? "selected" : ""}>${esc(`${b.numero || ""} ${b.titulo}`.trim())}</option>`).join("")}
               </select>
             </label>`
           : doc
-            ? `<p class="muted small" style="margin-top:6px">Este material não tem índice aplicado — será usado inteiro.</p>`
+            ? `<p class="muted small u-mt-8">Este material não tem índice aplicado — será usado inteiro.</p>`
             : ""
       }`;
   }
@@ -228,7 +228,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
               </div>`
             : ""
         }
-        <p class="muted small" style="margin-top:10px">${
+        <p class="muted small u-mt-12">${
           temConteudo
             ? "Escopo: " + esc(escopo.contexto || "")
             : podeConhecimento
