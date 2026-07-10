@@ -222,11 +222,13 @@ export default function renderHoje(root, app) {
     ativarCountUp(root);
     anelAnimou = true;
   }
-  // Streaming do texto do Mentor (efeito "digitando", 1x por sessão; respeita reduced-motion).
+  // Fase 2: o insight do card do Mentor é DETERMINÍSTICO (heurística local, instantâneo) —
+  // efeito de "digitação" aqui era teatro de IA e desgastava a credibilidade do streaming
+  // verdadeiro (chat). Entra com um fade sutil, 1x por sessão.
   if (!mentorFalou) {
     const mv = root.querySelector(".hmv-txt[data-stream]");
     if (mv) {
-      revelarTexto(mv, mv.textContent, { cps: 35 });
+      mv.classList.add("hmv-fade-in");
       mentorFalou = true;
     }
   }

@@ -21,7 +21,7 @@ import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
 import { montarLembretesFab } from "./lembretes.js";
 import { initTooltips } from "./tooltip.js";
-import { montarOrbs } from "./orb.js";
+import { montarOrbs, setOrbsOffline } from "./orb.js";
 
 iniciarCapturaErros(); // captura erros não tratados desde o início (para o relatório de diagnóstico)
 
@@ -504,6 +504,7 @@ function render(preservarScroll = true) {
   ligarFaixasIA(content, app); // camada de IA contextual: ativa faixas de insight da tela
   ativarReveal(content); // FASE 0: revela seções [data-reveal] ao entrarem na viewport
   ativarCountUp(content); // FASE 0: anima números [data-count] (KPIs)
+  setOrbsOffline(!store.iaDisponivel()); // Fase 2: orb informa o estado (apagado sem IA)
   montarOrbs(document); // orb "vivo" (plasma canvas) em todo .orb novo; ignora os já montados
   if (scrollAnterior) {
     // Reforça a restauração em vários momentos: imediato, próximos frames e um tick.

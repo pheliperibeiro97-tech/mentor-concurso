@@ -6244,7 +6244,13 @@ export const store = {
   // Roda a análise do mentor (online, requer iaDisponivel()). Devolve o PLANO
   // proposto — nada é aplicado aqui; a aprovação acontece na tela do Mentor.
   async analisarComMentor() {
-    const r = await iaProv.analisarProgresso(state.config, this.snapshotMentor());
+    // Fase 2: dá CONTINUIDADE ao acompanhamento — o Mentor recebe o plano anterior e
+    // comenta o que evoluiu desde então (senão cada análise recomeça do zero).
+    const ant = state.config.mentorPlano;
+    const planoAnterior = ant && ant.analise
+      ? { analise: String(ant.analise).slice(0, 600), quando: state.config.mentorUltimaAnalise || null }
+      : null;
+    const r = await iaProv.analisarProgresso(state.config, { ...this.snapshotMentor(), planoAnterior });
     // Registra quando analisou + PERSISTE o plano (para a auto-análise semanal sobreviver e
     // aparecer na aba Mentor mesmo sem o usuário ter clicado).
     state.config.mentorUltimaAnalise = nowISO();

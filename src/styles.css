@@ -4742,6 +4742,15 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 /* selects dentro de label.inline respiram sem precisar de style= */
 label.inline > select{margin-left:6px}
 
+/* Fase 2 — estado OFFLINE do orb: apagado/cinza (a IA não está conectada; o orb
+   não deve fingir vida). O canvas continua, quase parado (velocidade via orb.js). */
+.orb--off { filter: grayscale(0.9) opacity(0.55); }
+
+/* Fase 2 — insight local do Hoje entra com fade (fim do falso efeito de digitação). */
+.hmv-fade-in { animation: hmvFade var(--dur-4) var(--ease-decel) both; }
+@keyframes hmvFade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .hmv-fade-in { animation: none; } }
+
 /* Fase 0 — saída ANIMADA de overlays/modais (par do modal-pop de entrada).
    fecharAnimado() em ui.js adiciona .closing e remove o nó após ~160ms. */
 .modal-overlay.closing, .mm-overlay.closing, .paleta-overlay.closing, .lem-pop-overlay.closing {

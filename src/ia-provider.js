@@ -1437,8 +1437,11 @@ export async function sugerirPalavrasChave(cfg, { texto, contexto }) {
 // erro). Tudo 🤖 e sujeito à aprovação do aluno antes de aplicar.
 export async function analisarProgresso(cfg, snapshot) {
   const system =
-    "Você é um mentor de estudos para concursos públicos brasileiros. Recebe um PANORAMA " +
+    PERSONA_MENTOR + " Recebe um PANORAMA " +
     "do progresso do aluno em JSON e devolve uma análise objetiva e um PLANO de ações concretas " +
+    "CONTINUIDADE: se houver um plano anterior (campo planoAnterior: análise passada + quando), " +
+    "comente em 1 frase o que EVOLUIU ou continua pendente desde então — o aluno deve sentir " +
+    "que é o MESMO mentor acompanhando, não uma análise do zero. " +
     "para a próxima etapa. Seja honesto, específico e prático: priorize o que mais impacta a " +
     "aprovação considerando o tempo restante até a prova, as disciplinas fracas, a cobertura, os " +
     "erros e as observações do aluno. RESPEITE a BASE DE ESTUDO (campo baseEstudo): se for " +

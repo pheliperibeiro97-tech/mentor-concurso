@@ -116,6 +116,19 @@ export default function renderMentor(root, app) {
         if (slot) slot.innerHTML = "";
       }
     },
+    // Fase 2: fio de conversa — abre o chat do Mentor com o plano no contexto da pergunta.
+    "perguntar-plano": () => {
+      if (!plano) return;
+      const missoes = ((plano.acoes && plano.acoes.missoes) || [])
+        .slice(0, 5)
+        .map((m) => (m && m.titulo) || m)
+        .filter(Boolean)
+        .join("; ");
+      const resumo = [plano.analise ? `Análise: ${String(plano.analise).slice(0, 400)}` : "", missoes]
+        .filter(Boolean)
+        .join(" · ");
+      if (app.perguntarNoChat) app.perguntarNoChat(`Sobre o plano que você me sugeriu (${resumo.slice(0, 500)}): por que essas prioridades? O que devo fazer primeiro amanhã?`);
+    },
     "descartar-plano": () => {
       plano = null;
       store.setMentorPlano(null);
@@ -317,6 +330,7 @@ function planoHTML(p, stream = false) {
         ? `<div class="form-acoes u-mt-12">
             <span class="muted small">Marque o que aprovar (tudo já vem marcado). Ao aplicar, os itens são criados nas abas correspondentes, com o selo de origem.</span>
             <span class="spacer"></span>
+            <button class="btn btn-ghost" data-action="perguntar-plano" data-tip="Abre a conversa com o Mentor já com este plano no contexto — pergunte o porquê, peça ajustes.">Perguntar sobre o plano</button>
             <button class="btn btn-ghost" data-action="descartar-plano">Descartar</button>
             <button class="btn btn-primary" data-action="aplicar-plano" data-tip="Cria os itens marcados nas abas (Planejamento, Flashcards, Questões, Caderno de Erros).">${icone("check")} Aplicar selecionados</button>
           </div>`
