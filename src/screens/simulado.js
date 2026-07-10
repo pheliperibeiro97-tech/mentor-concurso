@@ -108,6 +108,15 @@ function montarPorCotas(st, formato, ss) {
 function totalCotas(ss) {
   return Object.values(ss.cfg.cotas || {}).reduce((a, n) => a + (Math.max(0, n) || 0), 0);
 }
+
+// Tempo decorrido da prova por RELÓGIO DE PAREDE (segundos). Antes o timer somava ticks
+// de setInterval (1s): aba em segundo plano é "throttled" pelo navegador e subcontava,
+// e sair da tela "pausava" a prova sem querer. Agora: agora − iniciadoEm − pausas.
+// Com a prova pausada (pausadoDesde ativo), o valor fica congelado no instante da pausa.
+function tempoDecorrido(sim) {
+  const agora = sim.pausadoDesde || Date.now();
+  return Math.max(0, Math.floor((agora - sim.iniciadoEm - (sim.pausadoMs || 0)) / 1000));
+}
 // Tempo sugerido: ~3 min por questão de múltipla escolha, ~2 min por item Certo/Errado.
 function tempoSugerido(total, formato) {
   return total * (formato === "ce" ? 2 : 3);
@@ -386,7 +395,10 @@ function renderSetup(root, app, st, formato) {
     if (cfg.embaralhar && formato !== "ce") {
       for (const q of escolhidas) ordens[q.id] = embaralhar(q.alternativas.map((_, i) => i));
     }
-    ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: (tempoMin || 0) * 60, intervalId: null, resultado: null, focoIdx: 0 };
+    // Tempo por relógio de parede: iniciadoEm + pausadoMs acumulado (ver tempoDecorrido).
+    // _ultimoMarco = timestamp da última navegação/resposta (tempoSeg por questão);
+    // tempos = segundos gastos em cada questão respondida (vai para registrarTentativa).
+    ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, iniciadoEm: Date.now(), pausadoMs: 0, pausadoDesde: null, _ultimoMarco: Date.now(), tempos: {}, target: (tempoMin || 0) * 60, intervalId: null, resultado: null, focoIdx: 0 };
     notaAnimou = false; // novo simulado → a nota do resultado volta a animar (o guard é por prova, não por sessão do app)
     app.refresh();
   }
@@ -431,14 +443,16 @@ function renderEmAndamento(root, app, st, formato) {
 
   root.innerHTML = simOverlayHTML(sim, questoes, formato, temLimite);
 
+  // O setInterval agora só RE-PINTA o display: o tempo real vem de tempoDecorrido()
+  // (relógio de parede), então aba throttled ou re-render não atrasam o cronômetro.
   function pintaTimer() {
     const el = root.querySelector(".sim-timer");
-    if (el) el.textContent = temLimite ? fmtMMSS(Math.max(0, sim.target - sim.elapsed)) : fmtMMSS(sim.elapsed);
+    const decorrido = tempoDecorrido(sim);
+    if (el) el.textContent = temLimite ? fmtMMSS(Math.max(0, sim.target - decorrido)) : fmtMMSS(decorrido);
   }
   function tick() {
-    sim.elapsed += 1;
     pintaTimer();
-    if (temLimite && sim.target - sim.elapsed <= 0) {
+    if (temLimite && sim.target - tempoDecorrido(sim) <= 0) {
       toast("Tempo esgotado! Corrigindo…");
       finalizar();
     }
@@ -452,6 +466,7 @@ function renderEmAndamento(root, app, st, formato) {
 
   // Troca a questão exibida SEM re-render da tela (só o overlay, fade) — não "mexe a tela".
   function trocar(idx) {
+    sim._ultimoMarco = Date.now(); // navegou → zera o marco do tempoSeg por questão
     sim.focoIdx = Math.max(0, Math.min(idx, total - 1));
     const foco = root.querySelector(".fc-foco");
     const novoHTML = simOverlayHTML(sim, questoes, formato, temLimite, "fade");
@@ -468,6 +483,7 @@ function renderEmAndamento(root, app, st, formato) {
   function finalizar() {
     pararTimer();
     const { store } = app;
+    const decorrido = tempoDecorrido(sim); // tempo final por relógio de parede
     let acertos = 0;
     const itens = sim.questaoIds.map((qId) => {
       const q = st.questoes.find((x) => x.id === qId);
@@ -475,11 +491,11 @@ function renderEmAndamento(root, app, st, formato) {
       const respondida = escolha !== undefined;
       const acertou = respondida && escolha === q.gabarito;
       if (acertou) acertos += 1;
-      if (respondida) store.registrarTentativa({ questaoId: qId, escolha, tempoSeg: 0 });
+      if (respondida) store.registrarTentativa({ questaoId: qId, escolha, tempoSeg: (sim.tempos && sim.tempos[qId]) || 0 });
       return { q, escolha, respondida, acertou };
     });
-    sim.resultado = { itens, acertos, total: sim.questaoIds.length, respondidas: Object.keys(sim.respostas).length, tempoSeg: sim.elapsed };
-    if (sim.elapsed > 0) store.registrarSessao({ fase: "A", topicoId: null, tempoSeg: sim.elapsed });
+    sim.resultado = { itens, acertos, total: sim.questaoIds.length, respondidas: Object.keys(sim.respostas).length, tempoSeg: decorrido };
+    if (decorrido > 0) store.registrarSessao({ fase: "A", topicoId: null, tempoSeg: decorrido });
     // Auto-registra no histórico de Simulados (uma vez). Erros = respondidas − acertos;
     // brancos = total − respondidas. Guarda também o desempenho por disciplina.
     if (!sim.registrado) {
@@ -501,7 +517,7 @@ function renderEmAndamento(root, app, st, formato) {
         acertos,
         erros: respondidas - acertos,
         brancos: sim.questaoIds.length - respondidas,
-        tempoSeg: sim.elapsed,
+        tempoSeg: decorrido,
         porDisciplina: Object.values(porDisc),
         questaoIds: sim.questaoIds,
         respostas: { ...sim.respostas },
@@ -516,6 +532,14 @@ function renderEmAndamento(root, app, st, formato) {
     responder: (el) => {
       const qId = el.getAttribute("data-q");
       const i = parseInt(el.getAttribute("data-i"), 10);
+      // tempoSeg por questão: segundos desde a última navegação/resposta (marco).
+      // Não conta tempo pausado (o retomar desloca o marco pela duração da pausa).
+      if (!sim.pausadoDesde) {
+        const agora = Date.now();
+        sim.tempos = sim.tempos || {};
+        sim.tempos[qId] = (sim.tempos[qId] || 0) + Math.round((agora - sim._ultimoMarco) / 1000);
+        sim._ultimoMarco = agora;
+      }
       sim.respostas[qId] = i;
       root.querySelectorAll(`.sim-alt[data-q="${qId}"]`).forEach((b) => {
         b.classList.toggle("selected", parseInt(b.getAttribute("data-i"), 10) === i);
@@ -543,7 +567,8 @@ function renderEmAndamento(root, app, st, formato) {
         { label: "Voltar à prova", value: "voltar" },
       ]);
       if (op === "pausar") {
-        pararTimer(); // o relógio congela junto: retomar religa o setInterval
+        pararTimer();
+        sim.pausadoDesde = Date.now(); // congela o relógio de parede; retomar soma em pausadoMs
         sim.pausado = true;
         app.refresh();
       } else if (op === "descartar") {
@@ -585,7 +610,7 @@ function renderPausado(root, app, formato) {
   root.innerHTML = `
     <section class="card foco-hero sim-pausado">
       <div class="foco-eyebrow">Prova pausada</div>
-      <p class="foco-desc">Você respondeu <b>${respondidas}</b> de <b>${total}</b> ${total === 1 ? "questão" : "questões"} · <b>${fmtMMSS(sim.elapsed)}</b> decorridos${sim.target > 0 ? ` (limite ${fmtMMSS(sim.target)})` : ""}. O relógio está congelado — volta a correr quando você retomar.</p>
+      <p class="foco-desc">Você respondeu <b>${respondidas}</b> de <b>${total}</b> ${total === 1 ? "questão" : "questões"} · <b>${fmtMMSS(tempoDecorrido(sim))}</b> decorridos${sim.target > 0 ? ` (limite ${fmtMMSS(sim.target)})` : ""}. O relógio está congelado — volta a correr quando você retomar.</p>
       <div class="foco-acoes">
         <button class="btn btn-primary btn-lg" data-action="retomar">${icone("play")} Retomar a prova</button>
         <button class="btn btn-ghost lnk-danger" data-action="descartar-pausado" data-tip="Apaga as respostas desta prova pausada.">${icone("trash-2")} Descartar</button>
@@ -593,6 +618,14 @@ function renderPausado(root, app, formato) {
     </section>`;
   bindActions(root, {
     retomar: () => {
+      // Soma a pausa ao acumulado (o relógio de parede "pula" esse trecho) e desloca o
+      // marco por questão pela mesma duração, para o tempoSeg não contar a pausa.
+      if (sim.pausadoDesde) {
+        const pausa = Date.now() - sim.pausadoDesde;
+        sim.pausadoMs = (sim.pausadoMs || 0) + pausa;
+        sim._ultimoMarco += pausa;
+        sim.pausadoDesde = null;
+      }
       sim.pausado = false;
       app.refresh();
     },
@@ -611,7 +644,8 @@ function simOverlayHTML(sim, questoes, formato, temLimite, anim = "in") {
   const idx = Math.max(0, Math.min(sim.focoIdx || 0, total - 1));
   const q = questoes[idx];
   const respondidas = Object.keys(sim.respostas).length;
-  const timerTxt = temLimite ? fmtMMSS(Math.max(0, sim.target - sim.elapsed)) : fmtMMSS(sim.elapsed);
+  const decorrido = tempoDecorrido(sim);
+  const timerTxt = temLimite ? fmtMMSS(Math.max(0, sim.target - decorrido)) : fmtMMSS(decorrido);
   const placarExtra = `
     <div class="fq-chip fq-simtimer ${temLimite ? "lim" : ""}" data-tip="${temLimite ? "Tempo restante da prova" : "Tempo decorrido"}">${icone("clock-3")} <span class="sim-timer">${timerTxt}</span></div>
     <div class="fq-chip fq-simresp" data-tip="Respondidas">${icone("check-check")} <span class="sim-prog-n">${respondidas}</span>/${total}</div>`;

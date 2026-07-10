@@ -8,6 +8,10 @@ import { icone } from "../icones.js";
 
 let tipo = "discursiva";
 let genFonte = "topico";
+// Rascunho persistente: tema e resposta sobrevivem a qualquer app.refresh() (sync,
+// ação em outra tela) — antes as textareas voltavam VAZIAS e apagavam a dissertação
+// em progresso. Limpo após correção bem-sucedida.
+let rascunho = { enun: "", texto: "" };
 // Stream ("digitando") do feedback do Mentor só na 1ª pintura por sessão (não re-anima a cada refresh).
 let feedbackRevelou = false;
 
@@ -17,6 +21,7 @@ export default function renderCorrecao(root, app) {
   const { store } = app;
   const st = store.get();
   const iaOn = store.iaDisponivel();
+  const contaPalavras = (s) => (s.trim() ? s.trim().split(/\s+/).length : 0);
 
   root.innerHTML = `
     ${header("Discursiva e redação", "Pratique com correção no nível de um examinador de banca.", botaoImprimir())}
@@ -36,7 +41,7 @@ export default function renderCorrecao(root, app) {
         <label for="cor-enun" class="u-m-0">Pergunta / tema</label>
         <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="A IA cria um tema a partir de um tópico, de um material ou de um tema livre.">${icone("sparkles")} Criar tema com IA</button>
       </div>
-      <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" class="u-mb-16"></textarea>
+      <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" class="u-mb-16">${esc(rascunho.enun)}</textarea>
       <div id="ia-gen-box" class="ia-gen-box" hidden>
         <div class="form-row u-items-end">
           <label>De onde
@@ -52,7 +57,7 @@ export default function renderCorrecao(root, app) {
       </div>
 
       <label>Sua resposta
-        <textarea id="cor-texto" rows="10" placeholder="Escreva aqui a sua resposta..."></textarea>
+        <textarea id="cor-texto" rows="10" placeholder="Escreva aqui a sua resposta...">${esc(rascunho.texto)}</textarea>
       </label>
       ${
         iaOn
@@ -62,7 +67,7 @@ export default function renderCorrecao(root, app) {
           : ""
       }
       <div class="form-acoes u-wrap">
-        <span class="muted" id="cor-contador">0 palavras</span>
+        <span class="muted" id="cor-contador">${contaPalavras(rascunho.texto)} palavras</span>
         ${iaOn ? `<label class="inline small" title="A IA pesquisa na web para conferir fatos e atualidade"><input type="checkbox" id="cor-web" /> pesquisar na web</label>` : ""}
         <span class="spacer"></span>
         <button class="btn btn-ia" data-action="corrigir">${icone("sparkles")} Corrigir resposta</button>
@@ -90,10 +95,15 @@ export default function renderCorrecao(root, app) {
     </div>`;
 
   const textoEl = root.querySelector("#cor-texto");
+  const enunEl = root.querySelector("#cor-enun");
   const contador = root.querySelector("#cor-contador");
+  // Atribuição direta (sem debounce): cada tecla atualiza o rascunho de módulo.
   textoEl.addEventListener("input", () => {
-    const n = textoEl.value.trim() ? textoEl.value.trim().split(/\s+/).length : 0;
-    contador.textContent = `${n} palavras`;
+    rascunho.texto = textoEl.value;
+    contador.textContent = `${contaPalavras(textoEl.value)} palavras`;
+  });
+  enunEl.addEventListener("input", () => {
+    rascunho.enun = enunEl.value;
   });
   const fotoEl = root.querySelector("#cor-foto");
   if (fotoEl) {
@@ -173,6 +183,7 @@ export default function renderCorrecao(root, app) {
       const enun = await comOcupado(() => store.gerarPerguntaDiscursiva({ fonte, alvo, tipo }), { botao: el, msg: "Gerando pergunta com a IA…" });
       if (enun == null) return;
       root.querySelector("#cor-enun").value = enun;
+      rascunho.enun = enun;
       textoEl.focus();
       toast("Pergunta gerada. Agora escreva sua resposta.");
     },
@@ -186,6 +197,9 @@ export default function renderCorrecao(root, app) {
       const web = root.querySelector("#cor-web")?.checked || false;
       const r = await comOcupado(() => store.corrigirRedacao({ tipo, enunciado: enun, texto, web }), { botao: el, msg: store.iaDisponivel() ? (web ? "Corrigindo com IA + busca web…" : "Corrigindo com a IA…") : "Analisando estrutura (offline)…" });
       if (r === null) return;
+      // Correção bem-sucedida → o rascunho cumpriu o papel; limpa e re-pinta os campos vazios.
+      rascunho = { enun: "", texto: "" };
+      app.refresh();
       toast("Resposta corrigida. Veja a análise abaixo.");
     },
     "cor-flashcard": (el) => {

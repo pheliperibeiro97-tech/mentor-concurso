@@ -1,6 +1,6 @@
 // Tela "Mapas mentais": cria (Gerar / import), lista (com filtro por tópico), abre,
 // imprime (individual ou seleção), revisa (escada da memória) e gera flashcards/questões.
-import { bindActions, toast, header, vazio, confirmar, pedirNumero, escolher, pedirTexto, avisoIA, imprimir, iconMapa } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, escolher, pedirTexto, avisoIA, imprimir, iconMapa, plural } from "../ui.js";
 import { esc, fmtData, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { abrirMapaCompleto, gerarEAbrirMapa } from "../mapa-mental.js";
@@ -273,17 +273,11 @@ export default function renderMapas(root, app) {
         : () => store.gerarMapaMentalDeResumo(id);
       return gerarEAbrirMapa(store, app, ger);
     },
-    "rev-agendar": async (el) => {
-      const r = await pedirNumero("Revisar daqui a quantos dias?", { padrao: 1, min: 1, max: 365, presets: [1, 7, 15], rotuloOk: "Agendar" });
-      if (!r) return;
-      store.agendarRevisaoMapa(el.getAttribute("data-id"), r.n);
-      toast("Mapa adicionado à revisão espaçada.");
-      app.refresh();
-    },
-    "rev-cancelar": (el) => { store.cancelarRevisaoMapa(el.getAttribute("data-id")); toast("Mapa fora da revisão."); app.refresh(); },
-    "rev-ok": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "ok"); toast(`Boa! Próxima revisão em ${d} dia(s).`); app.refresh(); },
-    "rev-facil": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "facil"); toast(`Fácil! Próxima em ${d} dia(s).`); app.refresh(); },
-    "rev-esqueci": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "esqueci"); toast(`Sem problema. Revisar de novo em ${d} dia(s).`); app.refresh(); },
+    // (Agendar/cancelar a revisão espaçada vivem no modal do mapa, em mapa-mental.js —
+    // nenhum elemento desta lista emite "rev-agendar"/"rev-cancelar".)
+    "rev-ok": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "ok"); toast(`Boa! Próxima revisão em ${plural(d, "dia", "dias")}.`); app.refresh(); },
+    "rev-facil": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "facil"); toast(`Fácil! Próxima em ${plural(d, "dia", "dias")}.`); app.refresh(); },
+    "rev-esqueci": (el) => { const d = store.revisarMapa(el.getAttribute("data-id"), "esqueci"); toast(`Sem problema. Revisar de novo em ${plural(d, "dia", "dias")}.`); app.refresh(); },
     remover: async (el) => { if (await confirmar("Remover este mapa mental?")) { store.removerMapaMental(el.getAttribute("data-id")); toast("Mapa removido."); app.refresh(); } },
   });
 }

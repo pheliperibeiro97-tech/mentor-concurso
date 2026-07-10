@@ -951,13 +951,23 @@ function vencimentoFc(dueDate, hojeISO) {
   return { txt: dias <= 30 ? `vence em ${dias}d` : `vence ${fmtData(dueDate)}`, cls: "venc-ok" };
 }
 
+// Trunca sem cortar palavra no meio: corta no último espaço antes do limite e sinaliza
+// com reticências. Sem espaço útil (palavra gigante), corta seco no limite mesmo.
+function truncarPalavra(s, max = 120) {
+  const t = String(s || "");
+  if (t.length <= max) return t;
+  const corte = t.slice(0, max);
+  const i = corte.lastIndexOf(" ");
+  return (i > 0 ? corte.slice(0, i) : corte).replace(/[\s.,;:]+$/, "") + "…";
+}
+
 // Card premium de flashcard (substitui a linha de tabela). O card inteiro = "estudar";
 // os botões do rodapé (editar/remover) resolvem antes via closest de bindActions.
 function fcTileHTML(st, c, hojeISO) {
   const vinc = vinculoFlashcard(st, c);
   const v = vencimentoFc(c.sm2.dueDate, hojeISO);
   return `<div class="card card-click fc-tile" data-foco-id="${c.id}" data-action="revisar-este" data-id="${c.id}" data-tip-pos="cima" data-tip="Estudar este cartão agora (abre na área de revisão, no topo).">
-    <div class="fc-tile-frente">${esc(c.frente.slice(0, 120))}</div>
+    <div class="fc-tile-frente">${esc(truncarPalavra(c.frente, 120))}</div>
     <div class="fc-tile-chips">
       ${vinc ? `<span class="chip chip-sm">${esc(vinc)}</span>` : ""}
       <span class="chip chip-sm ${v.cls}">${v.txt}</span>
