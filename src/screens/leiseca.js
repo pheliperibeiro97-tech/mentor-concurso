@@ -64,7 +64,7 @@ function renderIndicacoes(root, app, tipo) {
       S.modoAtivo[tipo] = ehMeta(alvo) ? "metas" : "ler"; // a letra e os promovidos vivem no Ler
       S.filtroTop[tipo].sel = [];
       S.leiFiltro.lei = null; // não deixar um filtro de marcação esconder o artigo alvo (só a lei tem leitor)
-      if (tipo === "lei" && !ehMeta(alvo)) { const nn = normaDeRef(alvo.referencia); if (nn) S.leiAtiva.lei = nn; } // abre a lei certa
+      if (tipo === "lei" && !ehMeta(alvo)) S.leiAtiva.lei = normaDeRef(alvo.referencia) || "Outros"; // abre a lei certa (grupo "Outros" quando a ref não traz a norma)
       if (tipo === "juris") { S.filtroTribunal = "todos"; S.filtroCategoria = "todas"; S.filtroRamo = "todos"; S.filtroAssunto = "todos"; S.filtroStatus = "todos"; }
     }
   }

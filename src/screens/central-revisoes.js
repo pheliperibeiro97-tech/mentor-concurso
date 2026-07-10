@@ -231,7 +231,13 @@ export default function renderCentralRevisoes(root, app) {
     "rev-iniciar": (el) => {
       const it = store.revisoesConsolidadas().find((x) => x.id === el.getAttribute("data-id"));
       if (!it) return;
-      // Roteia para o fluxo do tipo, apontando ao tópico quando faz sentido.
+      // Lei/Juris: abre DIRETO no dispositivo (deep-link → rola até o artigo/súmula), não na aba
+      // genérica — antes caía no Estudar por não ter topicoId.
+      if ((it.tipo === "lei" || it.tipo === "juris") && it.refId) {
+        app.navigate(it.rota, { focoIndicacaoId: it.refId });
+        return;
+      }
+      // Demais tipos: roteia para o fluxo do tipo, apontando ao tópico quando faz sentido.
       const params = it.topicoId ? { topicoId: it.topicoId } : {};
       app.navigate(it.rota, params);
     },
@@ -375,7 +381,7 @@ function revCardHTML(st, it, revelado, feita) {
   }
   return `<div class="fq-revcard is-revelada" data-id="${it.id}">
     ${tags}
-    <div class="fq-rev-titulo-sm">${esc(it.titulo)}</div>
+    ${it.tipo === "lei" || it.tipo === "juris" ? "" : `<div class="fq-rev-titulo-sm">${esc(it.titulo)}</div>`}
     ${conteudoRevelado(st, it)}
     <div class="fq-rev-acoes">
       <button class="btn btn-ghost" data-action="rev-foco-pular" data-tip="Não dar baixa agora (Espaço)">Pular</button>
