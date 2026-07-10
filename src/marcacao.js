@@ -7,17 +7,18 @@ import { icone } from "./icones.js";
 import { toast, imprimir, iconImprimir, plural, pontoCor } from "./ui.js";
 
 // 3 cores de SIGNIFICADO FIXO + cores de USO LIVRE (o usuário marca o que quiser).
-const CORES_FIXAS = [
-  { id: "amarelo", emoji: "🟡", nome: "palavras-chave" },
-  { id: "azul", emoji: "🔵", nome: "prazos e valores" },
-  { id: "vermelho", emoji: "🔴", nome: "restritivas" },
+// FONTE ÚNICA das cores de grifo do app (Fase 5): o menu flutuante da Lei Seca importa estas
+// listas (leiseca.js → CORES_GRIFO) — nunca duplicar ids/nomes em outra tela.
+export const CORES_FIXAS = [
+  { id: "amarelo", nome: "palavras-chave" },
+  { id: "azul", nome: "prazos e valores" },
+  { id: "vermelho", nome: "restritivas" },
 ];
-const CORES_LIVRES = [
-  { id: "verde", emoji: "🟢", nome: "livre" },
-  { id: "roxo", emoji: "🟣", nome: "livre" },
-  { id: "laranja", emoji: "🟠", nome: "livre" },
+export const CORES_LIVRES = [
+  { id: "verde", nome: "livre" },
+  { id: "roxo", nome: "livre" },
+  { id: "laranja", nome: "livre" },
 ];
-const CORES = [...CORES_FIXAS, ...CORES_LIVRES];
 
 // Estado transitório da UI por alvo (pincel, modo de leitura, editor de nota aberto).
 // Hoisted para o módulo porque o re-render global (commit→subscribe) re-monta o
@@ -28,8 +29,13 @@ function estadoDe(chave) {
   return ESTADO.get(chave);
 }
 
-export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onChange, topicoId, tituloFonte }) {
+// semPinceis (opt-in da Lei Seca/Jurisprudência, Fase 5 — grifo único): painel só de REVISÃO
+// (modos Texto/Só marcas/Recordar + ⋯ Auto/IA/limpar/imprimir), sem a fileira de pincéis —
+// grifar/comentar passa a ser pelo gesto de seleção (menu flutuante). Demais telas
+// (documentos/resumos) seguem com o painel completo (default).
+export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onChange, topicoId, tituloFonte, semPinceis }) {
   const estado = estadoDe(alvoTipo + ":" + alvoId);
+  if (semPinceis) estado.brush = null; // sem pincéis nunca há pincel armado (estado persiste entre montagens)
 
   function marcas() {
     return store.marcasDe(alvoTipo, alvoId);
@@ -57,7 +63,7 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
     const ms = grifos();
     if (estado.modo === "marcas") {
       // Só as marcas, na ordem, separadas por · (esconde o resto = releitura rápida).
-      if (!ms.length) return `<span class="muted">Nada marcado ainda. Use o pincel ou “Auto”.</span>`;
+      if (!ms.length) return `<span class="muted">Nada marcado ainda. ${semPinceis ? "Grife selecionando o texto, ou use “Auto”." : "Use o pincel ou “Auto”."}</span>`;
       return ms.map((m) => `<mark class="mk mk-${m.cor}">${esc(m.texto)}</mark>`).join(`<span class="mk-sep"> · </span>`);
     }
     // normal | recordar
@@ -69,7 +75,8 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
       if (estado.modo === "recordar" && !estado.revelados.has(m.id)) {
         html += `<span class="mk mk-cloze mk-${m.cor}" data-cloze="${m.id}" title="Clique para revelar">${"_".repeat(Math.max(3, Math.min(14, m.texto.length)))}</span>`;
       } else {
-        html += `<mark class="mk mk-${m.cor}" data-mid="${m.id}" title="${estado.modo === "normal" ? "Clique para remover esta marca" : ""}">${conteudo}</mark>`;
+        // semPinceis: o clique na marca é do POPOVER da tela (editar/remover) — sem título próprio.
+        html += `<mark class="mk mk-${m.cor}" data-mid="${m.id}" title="${estado.modo === "normal" && !semPinceis ? "Clique para remover esta marca" : ""}">${conteudo}</mark>`;
       }
       pos = m.fim;
     }
@@ -83,12 +90,17 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
       `<button type="button" class="mk-swatch mk-${c.id} ${estado.brush === c.id ? "on" : ""}" data-brush="${c.id}" data-tip-pos="cima" data-tip="Grifar: ${c.nome}${c.nome === "livre" ? " (uso livre)" : ""}"></button>`;
     const modoBtn = (id, label, tip) =>
       `<button type="button" class="mk-modo ${estado.modo === id ? "on" : ""}" data-modo="${id}" data-tip-pos="cima" data-tip="${tip}">${label}</button>`;
+    // semPinceis: some a fileira de pincéis/Comentar — sobrevivem os modos e o menu ⋯ (Auto/IA/
+    // limpar/imprimir). Grifar/comentar é pelo gesto de seleção (menu flutuante da tela).
+    const pinceisHTML = semPinceis
+      ? `<span class="mk-rotulo">Marcas</span><span class="muted small">grife selecionando o texto</span>`
+      : `<span class="mk-rotulo">Grifar</span>
+          <div class="mk-swatches">${CORES_FIXAS.map(corBtn).join("")}<span class="mk-sw-sep"></span>${CORES_LIVRES.map(corBtn).join("")}</div>
+          <button type="button" class="mk-comentar ${estado.brush === "comentario" ? "on" : ""}" data-brush="comentario" data-tip-pos="cima" data-tip="Selecione um trecho para anexar um comentário (pode virar resumo).">${icone("message-square")} Comentar</button>`;
     return `
       <div class="mk-toolbar mk-tb2">
         <div class="mk-tb-linha">
-          <span class="mk-rotulo">Grifar</span>
-          <div class="mk-swatches">${CORES_FIXAS.map(corBtn).join("")}<span class="mk-sw-sep"></span>${CORES_LIVRES.map(corBtn).join("")}</div>
-          <button type="button" class="mk-comentar ${estado.brush === "comentario" ? "on" : ""}" data-brush="comentario" data-tip-pos="cima" data-tip="Selecione um trecho para anexar um comentário (pode virar resumo).">${icone("message-square")} Comentar</button>
+          ${pinceisHTML}
           <span class="mk-flex"></span>
           <div class="mk-modos">${modoBtn("normal", "Texto", "Texto completo com as marcas.")}${modoBtn("marcas", "Só marcas", "Mostra apenas os trechos marcados (releitura rápida).")}${modoBtn("recordar", "Recordar", "As marcas viram lacunas: tente lembrar e clique para revelar.")}</div>
           <details class="mk-mais">
@@ -158,9 +170,14 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
   }
 
   function pintar() {
+    // semPinceis (modo normal): o texto do painel também responde ao GESTO de seleção da tela
+    // (menu flutuante) — data-art-corpo liga o gesto e data-raw="0" ancora os offsets no cru
+    // (o modo normal é contíguo ao texto). Nos modos marcas/recordar o texto não é contíguo.
+    const gesto = semPinceis && estado.modo === "normal";
+    const miolo = gesto ? `<div data-raw="0">${textoMarcadoHTML()}</div>` : textoMarcadoHTML();
     container.innerHTML = `
       ${toolbarHTML()}
-      <div class="mk-texto ${estado.brush ? "mk-pintando" : ""} mk-modo-${estado.modo}" data-mk-texto>${textoMarcadoHTML()}</div>
+      <div class="mk-texto ${estado.brush ? "mk-pintando" : ""} mk-modo-${estado.modo}" data-mk-texto${gesto ? ` data-art-corpo="${alvoId}"` : ""}>${miolo}</div>
       ${comentariosHTML()}`;
     ligar();
   }
@@ -274,7 +291,8 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
         return;
       }
       const mk = e.target.closest("[data-mid]");
-      if (mk && estado.modo === "normal" && !estado.brush) {
+      // semPinceis: quem gerencia a marca é o popover da tela (editar/remover) — evita ação dupla.
+      if (mk && estado.modo === "normal" && !estado.brush && !semPinceis) {
         store.removerMarca(mk.getAttribute("data-mid"));
         onChange && onChange();
         pintar();

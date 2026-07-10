@@ -5949,3 +5949,10 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 @media (prefers-reduced-motion: reduce) {
   .ler-topo, .ler-prog-fina { transition: none; }
 }
+
+/* ===== Fase 5 — Grifo único =====
+   O painel-pincel foi aposentado na Lei Seca/Jurisprudência: grifar/comentar é pelo gesto de
+   seleção (menu flutuante). Os cards de texto (.ls-texto) passam a mostrar as marcas inline,
+   como o leitor: clique numa marca abre o popover (editar/remover). */
+.ls-texto mark.mk { cursor: pointer; }
+.ls-texto mark.mk-comentario { background: transparent; box-shadow: none; border-bottom: 2px dotted var(--primary); }

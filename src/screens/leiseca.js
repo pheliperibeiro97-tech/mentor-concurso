@@ -9,7 +9,7 @@ import { esc, fmtData, todayISO, daysBetween, addDays } from "../util.js";
 import { progressRing } from "../viz.js";
 import { icone } from "../icones.js";
 import { lerArquivoTexto, ligarImportArquivo } from "../pdf.js";
-import { montarMarcacao } from "../marcacao.js";
+import { montarMarcacao, CORES_FIXAS, CORES_LIVRES } from "../marcacao.js";
 import { responderChat as _responderChat } from "../ia-provider.js";
 import { md as _md } from "../ui.js";
 import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono, atualizarChipCrono } from "./foco-quiz.js";
@@ -45,16 +45,15 @@ function parseIntervaloArt(s) {
 let leiAtiva = { lei: null }; // F1a: lei ativa no leitor (uma lei por vez)
 let leiFiltro = { lei: null }; // filtro do leitor: null|"lido"|"favorito"|"dificil"|"grifo"|"anotacao"
 let _leitorCtx = null; // {store, app, norma} — usado pelo menu flutuante de grifo (F2) e pela posição de leitura
+let _gfAbrirNota = null; // Fase 5: botão "Anotar" do Foco aciona o modo NOTA do menu flutuante (exige seleção)
+let _dicaAnotarFoco = false; // dica do Anotar sem seleção — mostrada UMA vez por sessão
 let _indiceColapsado = false; // botão "Índice": recolhe toda a estrutura (Livro/Título/Capítulo…) → vira índice
 
 // GRIFAR INDIVIDUAL (tipo Kindle): ao selecionar um trecho no leitor, um menu FLUTUANTE aparece.
 // "Grifar" abre as CORES ali mesmo e pinta o trecho DIRETO sobre o texto (sem painel); "Comentar"
 // abre o campo de anotação na hora. O offset é mapeado da seleção (bloco data-raw) para o texto CRU,
 // e a marca guarda o trecho+contexto (âncora resiliente). Copiar e Perguntar à IA seguem no menu.
-const CORES_GRIFO = [
-  { id: "amarelo", nome: "palavras-chave" }, { id: "azul", nome: "prazos e valores" }, { id: "vermelho", nome: "restritivas" },
-  { id: "verde", nome: "livre" }, { id: "roxo", nome: "livre" }, { id: "laranja", nome: "livre" },
-];
+const CORES_GRIFO = [...CORES_FIXAS, ...CORES_LIVRES]; // fonte única: marcacao.js (nunca duplicar)
 // SCROLL-SPY (V2): "cabeçalho corrente" do livro — mostra a trilha estrutural (Parte › Título ·
 // Capítulo) do trecho que você está lendo, atualizando conforme rola. Usa IntersectionObserver
 // (leve, dispara só quando um cabeçalho cruza o topo) — não é handler de scroll (evita o bug antigo).
@@ -182,7 +181,9 @@ function garantirGrifoFlutuante() {
     const range = sel.getRangeAt(0);
     const anc = range.commonAncestorContainer;
     const el = anc.nodeType === 1 ? anc : anc.parentElement;
-    const corpo = el && el.closest ? el.closest(".ler-art-corpo") : null;
+    // Fase 5 (grifo único): vale em QUALQUER corpo com data-art-corpo — leitor, Foco e os cards
+    // de texto (juris/metas), que perderam o painel-pincel e grifam só pelo gesto de seleção.
+    const corpo = el && el.closest ? el.closest("[data-art-corpo]") : null;
     return corpo ? { range, corpo, texto: sel.toString().trim() } : null;
   };
   const capturar = (s) => {
@@ -245,7 +246,21 @@ function garantirGrifoFlutuante() {
 
   document.addEventListener("mouseup", () => setTimeout(abrir, 0));
   document.addEventListener("selectionchange", () => { if (modo === "menu" && window.getSelection().isCollapsed) esconder(); });
-  window.addEventListener("scroll", () => { if (modo === "menu") esconder(); }, true);
+  // Fase 5: rolar NÃO fecha mais o menu (fechava e o usuário "perdia" a seleção) — REPOSICIONA
+  // junto da seleção (throttle por rAF); só fecha se a seleção se perdeu/colapsou.
+  let _reposPend = false;
+  window.addEventListener("scroll", () => {
+    if (modo !== "menu" || bar.style.display === "none" || _reposPend) return;
+    _reposPend = true;
+    requestAnimationFrame(() => {
+      _reposPend = false;
+      if (modo !== "menu" || bar.style.display === "none") return;
+      const s = selDentro();
+      if (!s) { esconder(); return; }
+      lastRect = s.range.getBoundingClientRect();
+      posicionarAtual();
+    });
+  }, true);
   window.addEventListener("resize", esconder);
   bar.addEventListener("mousedown", (e) => { if (!e.target.closest(".gf-nota")) e.preventDefault(); }); // não perde a seleção (menos no input)
   bar.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.closest(".gf-nota")) { e.preventDefault(); salvarNota(); } if (e.key === "Escape") esconder(); });
@@ -263,6 +278,19 @@ function garantirGrifoFlutuante() {
     const nova = ctx.store.addMarca({ alvoTipo: "indicacao", alvoId: cap.id, cor: "comentario", inicio: cap.ini, fim: cap.fim, texto: cap.exact, prefix: cap.prefix, suffix: cap.suffix });
     if (nova && val) ctx.store.setMarcaNota(nova.id, val);
     finalizar();
+  };
+
+  // Fase 5: entrada externa (botão "Anotar" do Foco) — abre o modo NOTA direto sobre a seleção
+  // atual. Devolve false se não há seleção grifável (o chamador mostra a dica).
+  _gfAbrirNota = () => {
+    const s = selDentro();
+    if (!s) return false;
+    cap = capturar(s);
+    if (!cap || cap.ini == null) { cap = null; return false; }
+    lastRect = s.range.getBoundingClientRect();
+    modo = "nota"; render(); posicionar(lastRect);
+    bar.querySelector(".gf-nota")?.focus();
+    return true;
   };
 
   bar.addEventListener("click", async (e) => {
@@ -320,7 +348,7 @@ function garantirPopoverMarca() {
   };
   document.addEventListener("click", (e) => {
     if (e.target.closest(".marca-pop")) return;
-    const mk = e.target.closest(".ler-art-corpo mark.mk[data-mid]");
+    const mk = e.target.closest("[data-art-corpo] mark.mk[data-mid]"); // leitor, Foco e cards (Fase 5)
     if (!mk || !window.getSelection().isCollapsed) return fechar();
     const ctx = _leitorCtx; if (!ctx) return fechar();
     const marca = ctx.store.get().marcacoes.find((x) => x.id === mk.getAttribute("data-mid"));
@@ -453,7 +481,6 @@ function abrirBuscaLei(app, store, norma, artigos) {
 function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   if (!ids.length) return;
   let idx = Math.max(0, Math.min(startIdx || 0, ids.length - 1));
-  let grifarAberto = false;
   let modoLeitura = opts.modo || "normal"; // "normal" | "marcas" | "recordar" (revisão de grifos)
   const mostrarModos = !!opts.mostrarModos;
   const revelados = new Set();
@@ -470,9 +497,8 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   const artHTML = (ind) => {
     const refCurta = String(ind.referencia || "").split(",")[0].trim();
     const trilha = (ind.estrutura || []).map((n) => n.rotulo + (n.titulo ? " · " + n.titulo : "")).join("  ›  ");
-    const corpo = grifarAberto && ind.texto && modoLeitura === "normal"
-      ? `<div class="mk-host lf-mk" data-mk-host="${ind.id}"></div>`
-      : `<div class="ler-art-corpo lf-corpo mk-modo-${modoLeitura}" data-art-corpo="${ind.id}">${renderLeiComMarcas(ind.texto, store.marcasAncoradas("indicacao", ind.id, ind.texto), { modo: modoLeitura, revelados })}</div>`;
+    // Fase 5 (grifo único): sem painel-pincel no Foco — grifar/comentar é pelo gesto de seleção.
+    const corpo = `<div class="ler-art-corpo lf-corpo mk-modo-${modoLeitura}" data-art-corpo="${ind.id}">${renderLeiComMarcas(ind.texto, store.marcasAncoradas("indicacao", ind.id, ind.texto), { modo: modoLeitura, revelados })}</div>`;
     return `<div class="lf-artigo ${ind.lido ? "lida" : ""}">
       ${trilha ? `<div class="lf-trilha">${esc(trilha)}</div>` : ""}
       <div class="lf-ref">${esc(refCurta)}${ind.nomeJuridico ? `<span class="lf-nome">${esc(ind.nomeJuridico)}</span>` : ""}</div>
@@ -485,8 +511,7 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
       <button class="lfoco-btn ${ind.dificil ? "on-dif" : ""}" data-action="lf-dif" data-tip-pos="cima" data-tip="${ind.dificil ? "Difícil — tirar" : "Marcar difícil"}">${icone("flame")}</button>
       <button class="lfoco-btn ${ind.pq ? "on-pq" : ""}" data-action="lf-pq" data-tip-pos="cima" data-tip="O que mais cai">${icone("star")}</button>
       <span class="lf-sep"></span>
-      ${mostrarModos ? "" : `<button class="lfoco-btn ${grifarAberto ? "on" : ""}" data-action="lf-grifar" data-tip-pos="cima" data-tip="Grifar">${icone("highlighter")}</button>
-      <button class="lfoco-btn" data-action="lf-anotar" data-tip-pos="cima" data-tip="Anotar">${icone("notebook-pen")}</button>`}
+      ${mostrarModos ? "" : `<button class="lfoco-btn" data-action="lf-anotar" data-tip-pos="cima" data-tip="Anotar o trecho selecionado">${icone("notebook-pen")}</button>`}
       <button class="lfoco-btn lfoco-ia" data-action="lf-ia" data-tip-pos="cima" data-tip="Perguntar à IA sobre o artigo">${icone("sparkles")}</button>
       <span class="lf-sep"></span>
       <details class="ler-config lf-cfg"><summary class="lfoco-btn" data-tip-pos="cima" data-tip="Aparência da leitura (fonte, tamanho, tema)"><span class="lcfg-aa">Aa</span></summary><div class="lcfg-pop lf-cfg-pop">${configLeituraRowsHTML(store.get().config.leitura, store.get().config.tema)}</div></details>
@@ -496,12 +521,6 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     </div>` : ""}
     <div class="lf-legenda">${icone("arrow-left")}${icone("arrow-right")} navegar · <b>Esc</b> sair · ${mostrarModos ? "no Recordar, clique nas lacunas para revelar" : "selecione o texto para grifar / copiar / IA"}</div>
   </div>`;
-
-  const montarMk = (ind) => {
-    if (!grifarAberto) return;
-    const mk = host.querySelector("[data-mk-host]");
-    if (mk && ind.texto) montarMarcacao(mk, { store, alvoTipo: "indicacao", alvoId: ind.id, texto: ind.texto, topicoId: ind.topicoId, tituloFonte: ind.referencia });
-  };
 
   // Atualiza SÓ o miolo + rodapé + progresso (mantém o overlay → NÃO pisca ao trocar de artigo).
   const atualizar = (anim = "fade") => {
@@ -517,7 +536,6 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     if (pos) pos.textContent = String(idx + 1);
     const prev = host.querySelector('[data-action="foco-anterior"]'); if (prev) prev.disabled = idx <= 0;
     const next = host.querySelector('[data-action="foco-proximo"]'); if (next) next.disabled = idx >= ids.length - 1;
-    montarMk(ind);
     // Fase 5 (fix P-04 da auditoria): EXIBIR não marca como lido — abrir o Foco e sair
     // inflava o progresso da lei e o "lidos hoje". Lido = AVANÇAR (irProximo) ou botão.
     if (normaFoco) store.setUltimaLeitura(normaFoco, { indicacaoId: ind.id, pct: Math.round((100 * (idx + 1)) / ids.length) }); // continuar leitura
@@ -526,7 +544,7 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   const irProximo = () => {
     const ind = cur();
     if (ind && !ind.lido) store.toggleIndicacaoLida(ind.id); // avançar marca o artigo como lido
-    if (idx < ids.length - 1) { idx++; grifarAberto = false; atualizar("fade"); } else atualizar("none");
+    if (idx < ids.length - 1) { idx++; atualizar("fade"); } else atualizar("none");
   };
 
   // Aplica ao Foco as MESMAS preferências de leitura do leitor (fonte/tamanho/espaçamento/
@@ -558,15 +576,19 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     if (pop) pop.innerHTML = configLeituraRowsHTML(store.get().config.leitura, store.get().config.tema);
   });
   bindActions(host, bindFocoCrono({
-    "foco-anterior": () => { if (idx > 0) { idx--; grifarAberto = false; atualizar("fade"); } },
+    "foco-anterior": () => { if (idx > 0) { idx--; atualizar("fade"); } },
     "foco-proximo": irProximo,
     "sair-foco": () => cleanup(),
     "lf-fav": () => { const i = cur(); if (i) { store.toggleFavorito(i.id); atualizar("none"); } },
     "lf-dif": () => { const i = cur(); if (i) { store.toggleDificil(i.id); atualizar("none"); } },
     "lf-pq": () => { const i = cur(); if (i) { store.setIndicacaoPQ(i.id, !i.pq); atualizar("none"); } },
-    "lf-grifar": () => { grifarAberto = !grifarAberto; atualizar("none"); },
-    "lf-anotar": () => { grifarAberto = true; atualizar("none"); toast("Escolha a cor Comentário para anotar."); },
-    "lf-modo": (el) => { modoLeitura = el.getAttribute("data-modo"); revelados.clear(); grifarAberto = false; atualizar("none"); },
+    // Fase 5 (grifo único): "Anotar" aciona o modo NOTA do menu flutuante sobre a seleção atual;
+    // sem seleção, ensina o gesto UMA vez (o painel-pincel foi aposentado na Lei Seca).
+    "lf-anotar": () => {
+      if (_gfAbrirNota && _gfAbrirNota()) return;
+      if (!_dicaAnotarFoco) { _dicaAnotarFoco = true; toast("Selecione o trecho do artigo — o menu que aparece tem o Comentar."); }
+    },
+    "lf-modo": (el) => { modoLeitura = el.getAttribute("data-modo"); revelados.clear(); atualizar("none"); },
     "lf-copiar": async () => { const i = cur(); if (!i) return; try { await navigator.clipboard.writeText(`${i.referencia}\n${corpoArtigoLimpo(i.texto)}`); toast("Artigo copiado."); } catch { toast("Não consegui copiar.", "erro"); } },
     "lf-ia": () => { const i = cur(); if (i) perguntarIASobreTrecho({ store, app }, i.id, corpoArtigoLimpo(i.texto)); },
   }));
@@ -575,7 +597,9 @@ function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     const cz = e.target.closest("[data-cloze]");
     if (cz) { revelados.add(cz.getAttribute("data-cloze")); atualizar("none"); }
   });
-  montarMk(ind0);
+  // "Anotar" age sobre a seleção viva: o mousedown no botão não pode colapsá-la (mesmo
+  // truque do menu flutuante).
+  host.addEventListener("mousedown", (e) => { if (e.target.closest('[data-action="lf-anotar"]')) e.preventDefault(); });
   offTick = ligarTickCrono(host);
   const chip = host.querySelector(".fq-crono"); if (chip) atualizarChipCrono(chip);
   const onKey = (e) => { focoChromeKey(e, { root: host }); };
@@ -1004,9 +1028,13 @@ function renderIndicacoes(root, app, tipo) {
     if (alvo) app.navigate("leiseca", { focoIndicacaoId: alvo.id });
     else toast(`Art. ${n} não encontrado em ${leiAtiva.lei}.`, "erro");
   });
-  // F2/detalhes: menu flutuante de grifo/IA + rastreio de posição de leitura.
+  // F2/detalhes: menu flutuante de grifo/IA + popover de marca — na tela toda (Fase 5, grifo
+  // único): vale no leitor E nos cards com texto (juris/metas), que grifam pelo gesto de seleção.
+  _leitorCtx = { store, app, norma: modoLeitor ? leiAtiva.lei : null };
+  garantirGrifoFlutuante(); garantirPopoverMarca();
+  // Rastreio de posição de leitura / barra auto-oculta: só no leitor.
   if (modoLeitor) {
-    _leitorCtx = { store, app, norma: leiAtiva.lei }; garantirGrifoFlutuante(); garantirPopoverMarca(); garantirScrollSpy(root); garantirBarraAutoOculta(root);
+    garantirScrollSpy(root); garantirBarraAutoOculta(root);
     // #5 V2: persistir o recolhimento das seções do índice. O evento "toggle" NÃO borbulha → captura.
     // IMPORTANTE: o Chrome DISPARA "toggle" ao inserir cada <details open> no render; se gravássemos
     // sempre, viraria commit→render→toggle→commit… (loop). Então só grava se o estado MUDOU de fato.
@@ -1124,12 +1152,13 @@ function renderIndicacoes(root, app, tipo) {
     if (total) app.navigate("pratica", { lote, loteRotulo: rot }); // abre mostrando só as recém-geradas
   };
 
-  // Monta a marcação tricromática nos itens com o painel aberto.
+  // Painel de REVISÃO de marcas nos itens abertos (Fase 5: semPinceis — só os modos Texto/
+  // Só marcas/Recordar + ⋯ Auto/IA/limpar/imprimir; grifar é pelo gesto de seleção).
   root.querySelectorAll("[data-mk-host]").forEach((host) => {
     const id = host.getAttribute("data-mk-host");
     const item = st.indicacoes.find((x) => x.id === id);
     if (item && item.texto) {
-      montarMarcacao(host, { store, alvoTipo: "indicacao", alvoId: id, texto: item.texto, topicoId: item.topicoId, tituloFonte: item.referencia });
+      montarMarcacao(host, { store, alvoTipo: "indicacao", alvoId: id, texto: item.texto, topicoId: item.topicoId, tituloFonte: item.referencia, semPinceis: true });
     }
   });
 
@@ -3856,10 +3885,12 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   const incHTML = i.pqIncidencia != null
     ? `<span class="ls-inc ${i.pqIncidencia >= 70 ? "alta" : i.pqIncidencia >= 40 ? "media" : "baixa"}" data-tip="Incidência ${i.pqIncidencia} — o quanto cai. Prioriza no Estudar."><span class="ls-inc-bar"><span style="width:${Math.max(8, Math.min(100, i.pqIncidencia))}%"></span></span>${i.pqIncidencia}</span>`
     : "";
-  // Ação principal visível: ★ (marcar como o que mais cai) + grifar (se houver texto).
+  // Ação principal visível: ★ (marcar como o que mais cai) + revisar marcas (se houver texto).
+  // Fase 5 (grifo único): o botão NÃO arma mais pincéis — abre o painel de revisão (modos +
+  // imprimir); grifar/comentar é selecionando o texto do card (menu flutuante).
   const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")}</button>`;
   const acaoMarcar = i.texto
-    ? `<button class="lnk-ic ${marcarAberto.has(i.id) ? "on" : ""}" data-action="toggle-marcar" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Grifar palavras-chave, prazos e termos restritivos.">${icone("square-pen")}</button>`
+    ? `<button class="lnk-ic ${marcarAberto.has(i.id) ? "on" : ""}" data-action="toggle-marcar" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Revisar as marcas (Texto · Só marcas · Recordar) e imprimir. Para grifar, selecione o texto.">${icone("square-pen")}</button>`
     : "";
   // Menu "⋯" LEAN: só organizar/gerenciar (nada de treino/geração — isso é da aba Estudar).
   const menu = [
@@ -3916,7 +3947,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
         </div>
       </div>
       ${tipo === "juris" ? jurisMetaHTML(i) : ""}
-      ${i.texto && !marcarAberto.has(i.id) ? `<div class="ls-texto">${esc(i.texto)}</div>` : ""}
+      ${i.texto && !marcarAberto.has(i.id) ? `<div class="ls-texto" data-art-corpo="${i.id}"><div data-raw="0">${trechoComMarcas(i.texto, 0, store ? store.marcasAncoradas("indicacao", i.id, i.texto) : [])}</div></div>` : ""}
       ${i.texto && marcarAberto.has(i.id) ? `<div class="mk-host" data-mk-host="${i.id}"></div>` : ""}
       ${i.observacao ? `<div class="ls-obs muted small">${icone("notebook-pen")} ${esc(i.observacao)}</div>` : ""}
       ${vincHTML}
