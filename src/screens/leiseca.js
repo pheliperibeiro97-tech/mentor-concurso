@@ -82,6 +82,18 @@ function renderIndicacoes(root, app, tipo) {
     else if (a === "acervo" || a === "meta") S.modoAtivo[tipo] = "ler";
     else if (["memorizar", "treinar", "raiox", "memoria"].includes(a)) S.modoAtivo[tipo] = "estudar";
   }
+  // "Iniciar" da Central: abre o Estudar TRAVADO num único dispositivo (revisão ativa daquele item).
+  if (app.params && app.params.escopoIndId) {
+    const alvo = st.indicacoes.find((x) => x.id === app.params.escopoIndId && x.tipo === tipo && !x.metaLeitura);
+    app.params.escopoIndId = null;
+    if (alvo) {
+      S.estudarSoItem[tipo] = alvo.id;
+      S.modoAtivo[tipo] = "estudar";
+      S.filtroTop[tipo].sel = [];
+      S.estudarArtFiltro = ""; S.estudarSecaoSel = null; S.estudarTemaSel = null; S.estudarEscopo[tipo] = "tudo";
+      S.estudarJurisTrib = null; S.estudarJurisRamo = null; S.estudarJurisAssunto = null; S.estudarJurisCat = null;
+    }
+  }
   if (!["ler", "estudar", "metas"].includes(S.modoAtivo[tipo])) S.modoAtivo[tipo] = "ler";
   const modo = S.modoAtivo[tipo];
 
@@ -272,6 +284,8 @@ function renderIndicacoes(root, app, tipo) {
   // Escopo do Estudar: itens com texto (tudo, ou só o top 20% de incidência).
   // Escopo/objeto do estudo: lei escolhida (ou a ativa) + seção estrutural opcional + intensidade.
   const noEscopoEstudo = (i) => {
+    // Trava de item único (vinda do "Iniciar" da Central): só aquele dispositivo entra no estudo.
+    if (S.estudarSoItem[tipo]) return i.id === S.estudarSoItem[tipo];
     if (tipo !== "lei") { // C.2.4: juris filtra por tribunal/ramo/assunto/categoria/tema
       if (S.estudarJurisTrib && String(i.tribunal || "") !== S.estudarJurisTrib) return false;
       if (S.estudarJurisRamo && String(i.ramo || "") !== S.estudarJurisRamo) return false;
@@ -489,7 +503,8 @@ function renderIndicacoes(root, app, tipo) {
     // ---- Estudar (lançador) ----
     "estudar-escopo": (el) => { S.estudarEscopo[tipo] = el.getAttribute("data-e"); app.refresh(); },
     "estudar-escopo-toggle": () => { S._escopoAberto = !S._escopoAberto; app.refresh(); },
-    "estudar-escopo-limpar": () => { S.estudarSecaoSel = null; S.estudarArtFiltro = ""; S.estudarTemaSel = null; S.estudarJurisTrib = null; S.estudarJurisRamo = null; S.estudarJurisAssunto = null; S.estudarJurisCat = null; S.estudarEscopo[tipo] = "tudo"; app.refresh(); },
+    "estudar-escopo-limpar": () => { S.estudarSecaoSel = null; S.estudarArtFiltro = ""; S.estudarTemaSel = null; S.estudarJurisTrib = null; S.estudarJurisRamo = null; S.estudarJurisAssunto = null; S.estudarJurisCat = null; S.estudarEscopo[tipo] = "tudo"; S.estudarSoItem[tipo] = null; app.refresh(); },
+    "estudar-soitem-limpar": () => { S.estudarSoItem[tipo] = null; app.refresh(); }, // sai da revisão travada num item → estuda o resto
     "estudar-tema-chip": (el) => { const t = el.getAttribute("data-tema"); S.estudarTemaSel = S.estudarTemaSel === t ? null : t; S.estudarSecaoSel = null; S.estudarArtFiltro = ""; app.refresh(); }, // F2: atalho memorizar por tema
     "estudar-tema-limpar": () => { S.estudarTemaSel = null; app.refresh(); },
     "estudar-cross-lei": () => { S.estudarLeiSel = S.estudarLeiSel === "todas" ? null : "todas"; S.estudarSecaoSel = null; app.refresh(); }, // F2: tema em todas as leis

@@ -231,10 +231,10 @@ export default function renderCentralRevisoes(root, app) {
     "rev-iniciar": (el) => {
       const it = store.revisoesConsolidadas().find((x) => x.id === el.getAttribute("data-id"));
       if (!it) return;
-      // Lei/Juris: abre DIRETO no dispositivo (deep-link → rola até o artigo/súmula), não na aba
-      // genérica — antes caía no Estudar por não ter topicoId.
+      // Lei/Juris: abre o ESTUDAR travado só naquele dispositivo (revisão ATIVA — Certo/Errado,
+      // Completar, etc.), não a releitura passiva do texto nem a aba genérica.
       if ((it.tipo === "lei" || it.tipo === "juris") && it.refId) {
-        app.navigate(it.rota, { focoIndicacaoId: it.refId });
+        app.navigate(it.rota, { escopoIndId: it.refId });
         return;
       }
       // Demais tipos: roteia para o fluxo do tipo, apontando ao tópico quando faz sentido.

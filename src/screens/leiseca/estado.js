@@ -11,6 +11,7 @@ export const S = {
   estudarLeiSel: null, // OBJETO do estudo: norma escolhida (null = a lei ativa do leitor)
   estudarSecaoSel: null, // seção estrutural "rotulo|titulo" (null = a lei inteira) — delimita p/ a IA
   estudarArtFiltro: "", // artigo(s) do escopo: "" | "5" (um) | "1-10"/"1 a 10" (intervalo)
+  estudarSoItem: { lei: null, juris: null }, // trava o Estudar num ÚNICO dispositivo (id) — usado pelo "Iniciar" da Central
   estudarTemaSel: null, // tema do escopo (Memorizar temático): null = todos
   // C.2.4 — escopo de estudo da JURISPRUDÊNCIA (análogo à lei, mas por tribunal/ramo/assunto/categoria).
   estudarJurisTrib: null, // tribunal (null = todos)

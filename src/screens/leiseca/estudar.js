@@ -77,14 +77,14 @@ export function estudarCorpoHTML(store, st, tipo, r) {
   const noEscopoSemTema = (i) => (!leiSel || leiSel === "todas" || normaDeRef(i.referencia) === leiSel)
     && (!S.estudarSecaoSel || (Array.isArray(i.estrutura) && i.estrutura.some((n) => n.rotulo + "|" + (n.titulo || "") === S.estudarSecaoSel)))
     && (!artRange || (() => { const nn = numArtigo(i.referencia); return nn >= artRange.de && nn <= artRange.ate; })());
-  const noEscopo = (i) => noEscopoSemTema(i) && (!S.estudarTemaSel || (Array.isArray(i.temas) && i.temas.includes(S.estudarTemaSel)));
+  const noEscopo = (i) => S.estudarSoItem[tipo] ? i.id === S.estudarSoItem[tipo] : (noEscopoSemTema(i) && (!S.estudarTemaSel || (Array.isArray(i.temas) && i.temas.includes(S.estudarTemaSel))));
   // C.2.4 — recorte de estudo da JURISPRUDÊNCIA por tribunal/ramo/assunto/categoria (sem o tema).
   const noEscopoJurisSemTema = (i) =>
     (!S.estudarJurisTrib || String(i.tribunal || "") === S.estudarJurisTrib)
     && (!S.estudarJurisRamo || String(i.ramo || "") === S.estudarJurisRamo)
     && (!S.estudarJurisAssunto || String(i.assunto || "") === S.estudarJurisAssunto)
     && (!S.estudarJurisCat || String(i.categoria || "") === S.estudarJurisCat);
-  const noEscopoJuris = (i) => noEscopoJurisSemTema(i) && (!S.estudarTemaSel || (Array.isArray(i.temas) && i.temas.includes(S.estudarTemaSel)));
+  const noEscopoJuris = (i) => S.estudarSoItem[tipo] ? i.id === S.estudarSoItem[tipo] : (noEscopoJurisSemTema(i) && (!S.estudarTemaSel || (Array.isArray(i.temas) && i.temas.includes(S.estudarTemaSel))));
   // Temas disponíveis no recorte (habilita "Memorizar por tema"): lei = lei/seção/artigo; juris = trib/ramo/assunto/cat.
   const temasDisp = tipo === "lei" ? store.temasDisponiveis(comTexto.filter(noEscopoSemTema).map((i) => i.id)) : store.temasDisponiveis(comTexto.filter(noEscopoJurisSemTema).map((i) => i.id));
   const comTextoEsc = tipo === "lei" ? comTexto.filter(noEscopo) : comTexto.filter(noEscopoJuris);
@@ -156,7 +156,12 @@ export function estudarCorpoHTML(store, st, tipo, r) {
         <div class="ee-foot">${jFiltrado ? `<button class="lnk" data-action="estudar-escopo-limpar">${icone("x")} Limpar recorte</button>` : "<span></span>"}<button class="btn btn-sm btn-primary" data-action="estudar-escopo-toggle">Pronto</button></div>
       </div>` : ""}
     </div>`;
-  const escopoSel = tipo === "lei" ? escopoLeiHTML : escopoJurisHTML;
+  // Trava de item (Central → "Iniciar"): no lugar do seletor de escopo, uma faixa fixa com o
+  // dispositivo em revisão + "sair". Certo/Errado, Completar e Gerar passam a usar só ele.
+  const soItemInd = S.estudarSoItem[tipo] ? st.indicacoes.find((i) => i.id === S.estudarSoItem[tipo]) : null;
+  const escopoSel = soItemInd
+    ? `<div class="estudar-escopo est-soitem"><span class="est-escopo-btn on" data-tip="Revisão travada neste dispositivo — Certo/Errado, Completar e Gerar usam só ele.">${icone("target")} <span class="ee-resumo"><b>Revisão: ${esc(String(soItemInd.referencia || "").split(",")[0].trim())}</b>${soItemInd.tribunal ? ` <span class="muted small">(${esc(soItemInd.tribunal)})</span>` : ""}</span></span><button class="lnk small" data-action="estudar-soitem-limpar" data-tip="Sair da revisão e estudar o resto normalmente.">${icone("x")} sair</button></div>`
+    : (tipo === "lei" ? escopoLeiHTML : escopoJurisHTML);
 
   // F5 (2ª leva) — ESTATÍSTICAS específicas da lei/escopo: progresso, dominados/a-revisar,
   // desempenho por tema (acerto) e evolução da leitura (14 dias). Recolhível (não polui).
