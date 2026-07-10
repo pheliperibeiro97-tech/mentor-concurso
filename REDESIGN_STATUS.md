@@ -229,21 +229,37 @@
       Planejamento (dashboard "Hoje" removido). IMPRESSÃO no modelo atual (fim do
       modo meta/memoria da v3).
 
-### Falta da Fase 5 (baixa prioridade / faxina)
-- [ ] Split do leiseca.js (280KB) em ~6 módulos (leitor/biblioteca/estudar/metas/import/
-      juris) — refactor mecânico grande; fazer numa sessão dedicada COM o app estável
-      (roteiro: mover blocos por aba, manter leiseca.js como roteador; conferir imports
-      circulares com marcacao/foco-quiz).
-- [ ] CSS órfão das dietas: .periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir
-      outros usos), .sess-mais/.sess-obs, .disc-row/.disc-toggle/.topico-row, .qb-card,
-      .ed-top-links/.ed-link-chip/.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda*,
-      .estudar-card-rec, blocos do pincel na Lei Seca — faxina com grep de uso.
+- [x] **SPLIT do leiseca.js FEITO**: 4043 linhas → orquestrador de 933 + 9 módulos em
+      src/screens/leiseca/ (estado.js com objeto S das 36 variáveis, grifo, foco,
+      leitor, estudar, metas, importar, impressao, pickers). Movimentação mecânica
+      byte-verificada; grafo de imports acíclico; smoke-test das 18 rotas OK.
+
+## FASE 6 — Microcopy e Guia (CONCLUÍDA)
+- [x] Guia reescrito: 25 seções curtas (intro + 3-6 bullets), 93 emojis→0, BUSCA por
+      texto, mentiras corrigidas contra o código real (check-in, sync, autosave,
+      barra pós-F1, Lei Seca pós-F5, Central graduada, persona única Mentor).
+- [x] Glossário aplicado: "sequência" (fim de Ofensiva na UI), cartão/flashcard (fim
+      de "card"), "itens C/E", "ponto ideal: hoje", "Em dia (últimos 30 dias)",
+      header da Central reescrito.
+- [x] Onboarding alinhado ao Config; confirmações do Edital sem CAPS; aviso de
+      direitos autorais curto; sidebar sem assinatura do dev/backend-tag (P-41).
+- [ ] Restos de "ofensiva" fora do escopo desta leva: store.js:6196 (nudge), config.js
+      (texto da folga), prompt em ia-provider — trocar na próxima passada.
+- [ ] Assinatura do dev renasce em Config → Sobre (era do rodapé da sidebar).
+- [ ] flashcards.js:278 "Apagar TODOS os N flashcards?" — tirar o CAPS.
+
+### Faxina de CSS órfão (pendente, styles.css)
+.periodos-grid/.periodo-card*, .meta-linha/.barra*(conferir outros usos), .sess-mais/
+.sess-obs, .disc-row/.disc-toggle/.topico-row, .qb-card, .ed-top-links/.ed-link-chip/
+.ed-link-x, .edc-vez/.edc-ult, .sem-ajuda*, .estudar-card-rec, .sidebar-rodape/
+.backend-tag/.assinatura-dev, blocos do pincel exclusivos da Lei Seca — grep de uso.
 
 ## PRÓXIMAS FASES (6–8)
 
-Fase 6 (microcopy/glossário §8 do relatório — atenção: guia.js:156 ainda cita "Conta &
-dados" e onboarding.js usa os microcopys antigos de metas), Fase 7 (bugs restantes da
-lista de 27 — muitos já caíram nas fases 0-5; conferir), Fase 8 (responsivo/a11y).
+Fase 7 (bugs restantes da lista de 27 — muitos já caíram nas fases 0-6; conferir a
+lista do relatório §Fase 7 item a item), Fase 8 (responsivo/a11y: focus-traps nos
+overlays, aria-live no placar do quiz, role=tab nos segmented, re-teste nos 3
+breakpoints).
 
 ## Armadilhas conhecidas (não tropece)
 
