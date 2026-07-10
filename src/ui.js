@@ -63,13 +63,16 @@ export function toast(msg, tipo = "ok", opts) {
 // Toast PERSISTENTE de "carregando" (spinner) — NÃO some sozinho; fica até a ação terminar.
 // Devolve uma função que o fecha. Dá ao usuário a certeza de que algo está sendo processado,
 // independentemente de onde o botão está (útil quando o clique fecha um menu/modal).
-export function toastCarregando(msg = "Processando…") {
+// opts.aoCancelar (Fase 4): botão "Cancelar" no próprio toast — para operações em lote
+// (ex.: OCR página a página) que o usuário deve poder interromper sem perder o já feito.
+export function toastCarregando(msg = "Processando…", opts = {}) {
   let cont = qs("#toasts");
   if (!cont) { cont = document.createElement("div"); cont.id = "toasts"; document.body.appendChild(cont); }
   const t = document.createElement("div");
   t.className = "toast toast-load";
-  t.innerHTML = `<span class="mini-spin"></span><span class="toast-msg"></span>`;
+  t.innerHTML = `<span class="mini-spin"></span><span class="toast-msg"></span>${opts.aoCancelar ? `<button class="toast-acao" type="button">Cancelar</button>` : ""}`;
   t.querySelector(".toast-msg").textContent = msg;
+  if (opts.aoCancelar) t.querySelector(".toast-acao").addEventListener("click", () => opts.aoCancelar());
   cont.appendChild(t);
   setTimeout(() => t.classList.add("show"), 10);
   let feito = false;

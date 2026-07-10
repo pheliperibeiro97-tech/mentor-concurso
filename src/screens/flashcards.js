@@ -2,7 +2,7 @@
 // Criar cards num painel único (digitar/colar/importar, gerar do material com IA,
 // ou gerar das questões offline). Revisão filtrável por disciplina/tópicos.
 import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado } from "../ui.js";
-import { esc, fmtData, todayISO, MOTIVOS_ERRO, textoComentario } from "../util.js";
+import { esc, fmtData, todayISO, addDays, MOTIVOS_ERRO, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import * as sm2 from "../sm2.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, questaoNoFiltro } from "./questoes-filtro.js";
@@ -125,6 +125,18 @@ export default function renderFlashcards(root, app) {
   const hoje = todayISO();
   const pendentesHoje = store.flashcardsVencidos().length;
   const revisadosHoje = st.flashcards.filter((f) => f.sm2.lastReview === hoje).length;
+  // PROVA do plano no fim da fila: quantos cartões voltam amanhã e nos próximos 7 dias
+  // (via sm2.dueDate, mesmos filtros do flashcardsVencidos: só os não suspensos).
+  const amanhaISO = addDays(hoje, 1);
+  const seteISO = addDays(hoje, 7);
+  const fcAtivos = st.flashcards.filter((f) => !f.suspenso && f.sm2 && f.sm2.dueDate);
+  const voltamAmanha = fcAtivos.filter((f) => f.sm2.dueDate === amanhaISO).length;
+  const voltam7d = fcAtivos.filter((f) => f.sm2.dueDate > amanhaISO && f.sm2.dueDate <= seteISO).length;
+  const provaPlano = voltamAmanha
+    ? `Amanhã ${voltamAmanha === 1 ? "volta" : "voltam"} ${plural(voltamAmanha, "cartão", "cartões")}${voltam7d ? `; nos próximos 7 dias, mais ${voltam7d}` : ""}.`
+    : voltam7d
+      ? `Nos próximos 7 dias ${voltam7d === 1 ? "volta" : "voltam"} ${plural(voltam7d, "cartão", "cartões")}.`
+      : "";
 
   root.innerHTML = `
     ${header("Flashcards", `Recordação ativa e repetição espaçada · ${st.flashcards.length} ${st.flashcards.length === 1 ? "cartão" : "cartões"}`, botaoImprimir())}
@@ -203,6 +215,7 @@ export default function renderFlashcards(root, app) {
                 <div class="rev-emoji">${icone("check")}</div>
                 <h3>Tudo revisado por hoje!</h3>
                 <p class="muted">Volte amanhã ou adiante a revisão criando novos cards.</p>
+                ${provaPlano ? `<p class="muted small">${provaPlano}</p>` : ""}
               </div>`
             : `<div class="card revisao-vazia">
                 <div class="rev-emoji">${icone("layers")}</div>

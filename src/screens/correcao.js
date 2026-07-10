@@ -79,7 +79,13 @@ export default function renderCorrecao(root, app) {
       ${
         st.redacoes.length
           ? [...st.redacoes].reverse().map((r) => correcaoHTML(r)).join("")
-          : vazio("Sua primeira redação\nEscreva e peça a correção no nível de um examinador.", "", icone("square-pen"))
+          : vazio(
+              "Sua primeira redação\nEscreva e peça a correção no nível de um examinador.",
+              // CTA: dispara a MESMA ação do gerador ("gerar-pergunta" lê #gen-fonte/#gen-alvo,
+              // que existem no formulário acima mesmo com o box fechado) e preenche o tema.
+              `<button class="btn btn-ia" data-action="gerar-pergunta">${icone("sparkles")} Criar tema com IA</button>`,
+              icone("square-pen")
+            )
       }
     </div>`;
 
@@ -173,6 +179,9 @@ export default function renderCorrecao(root, app) {
       const texto = textoEl.value.trim();
       const enun = root.querySelector("#cor-enun").value;
       if (texto.split(/\s+/).filter(Boolean).length < 10) return toast("Escreva uma resposta com ao menos 10 palavras.", "erro");
+      // Nova correção disparada → o "digitando" do feedback volta a rodar na próxima pintura
+      // (o guard é por correção, não por sessão do app).
+      feedbackRevelou = false;
       const web = root.querySelector("#cor-web")?.checked || false;
       const r = await comOcupado(() => store.corrigirRedacao({ tipo, enunciado: enun, texto, web }), { botao: el, msg: store.iaDisponivel() ? (web ? "Corrigindo com IA + busca web…" : "Corrigindo com a IA…") : "Analisando estrutura (offline)…" });
       if (r === null) return;

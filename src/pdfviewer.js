@@ -33,7 +33,7 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
         <button class="pdf-btn" data-p="download" title="Baixar PDF">${icone("download")}</button>
         <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
       </div>
-      <div class="pdf-scroll" id="pdf-scroll"><div class="pdf-load">Carregando PDF…</div></div>
+      <div class="pdf-scroll" id="pdf-scroll"><div class="pdf-load"><div class="pdf-skel-pag skel"></div><div class="muted small">Carregando o PDF…</div></div></div>
     </div>`;
   document.body.appendChild(overlay);
   const scroll = overlay.querySelector("#pdf-scroll");

@@ -177,7 +177,11 @@ function renderTreino(root, app, formato) {
         questoes.length
           ? questoes.map((q) => questaoHTML(st, q, formato, s)).join("")
           : totalFormato
-            ? vazio(`Nada nesse filtro\nNenhuma ${formato === "ce" ? "afirmação" : "questão"} corresponde à situação ou aos tópicos selecionados. Ajuste os filtros acima.`, "", icone("dices"))
+            ? vazio(
+                `Nada nesse filtro\nNenhuma ${formato === "ce" ? "afirmação" : "questão"} corresponde à situação ou aos tópicos selecionados. Ajuste os filtros acima.`,
+                `<button class="btn btn-ghost" data-action="limpar-filtros">Limpar filtros</button>`,
+                icone("dices")
+              )
             : vazioPratica(formato)
       }
     </div>
@@ -220,6 +224,8 @@ function renderTreino(root, app, formato) {
       abrirRegistroSessao(store, app, { modo: temTempo ? "crono" : "manual", fasePadrao: "A" });
     },
     "lote-ver-todos": () => { s.filtroLote = null; s.filtroLoteRotulo = ""; app.refresh(); },
+    // Vazio-de-filtro: zera os filtros da tela (tópicos selecionados + situação) num clique.
+    "limpar-filtros": () => { s.filtroTop.sel = []; s.filtroTop.aberto = false; s.filtroStatus = "todas"; app.refresh(); },
     "abrir-artigo-lei": (el) => { app.navigate("leiseca", { focoIndicacaoId: el.getAttribute("data-id") }); }, // #11: abre o artigo na Lei Seca
     "treinar-erradas": () => {
       // Filtra as erradas e as apresenta EM BRANCO (sem gabarito) para refazer.

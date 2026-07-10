@@ -1002,35 +1002,76 @@ export default function renderDocumentos(root, app) {
   });
 }
 
+// Fase 4 — Painel de ETAPAS do import (a narrativa do processamento, no lugar de toasts
+// que se atropelavam). Cada etapa: pendente (dim) → ativa (spinner) → ok (check c/ nota)
+// | pulada | erro. O painel entra logo abaixo da linha de status do arquivo.
+function criarPainelEtapas(depoisDe, etapas) {
+  const ant = depoisDe.parentElement.querySelector(".import-etapas");
+  if (ant) ant.remove(); // trocou de arquivo: recomeça a narrativa
+  const el = document.createElement("div");
+  el.className = "import-etapas";
+  el.innerHTML = etapas
+    .map((e2) => `<div class="imp-et" data-et="${e2.id}"><span class="imp-et-ico"></span><span class="imp-et-txt">${esc(e2.rotulo)}</span><span class="imp-et-nota muted small"></span></div>`)
+    .join("");
+  depoisDe.insertAdjacentElement("afterend", el);
+  const ICO = {
+    ativa: `<span class="import-spin">${icone("refresh-cw")}</span>`,
+    ok: icone("check"),
+    pulada: icone("minus"),
+    erro: icone("x"),
+  };
+  const set = (id, estado, nota) => {
+    const li = el.querySelector(`[data-et="${id}"]`);
+    if (!li) return;
+    li.className = `imp-et is-${estado}`;
+    li.querySelector(".imp-et-ico").innerHTML = ICO[estado] || "";
+    if (nota != null) li.querySelector(".imp-et-nota").textContent = nota;
+  };
+  const erroAtiva = (nota) => {
+    const li = el.querySelector(".imp-et.is-ativa");
+    if (li) set(li.getAttribute("data-et"), "erro", nota || "falhou aqui");
+  };
+  return { el, set, erroAtiva };
+}
+
 // Rasteriza e transcreve uma lista de páginas, uma a uma (1 página = 1 requisição).
 // Mostra progresso e PARA sem perder o já feito se a cota/IA falhar.
 async function processarOcr(app, store, doc, listaN) {
-  if (ocrEmCurso) return toast("Já há um OCR em andamento.", "erro");
+  if (ocrEmCurso) return toast("Já há uma leitura em andamento.", "erro");
   if (!listaN || !listaN.length) return toast("Nenhuma página pendente.", "erro");
   ocrEmCurso = true;
+  // Fase 4: UM toast persistente com progresso real + Cancelar (antes: um toast POR página,
+  // que se atropelavam; e não dava para interromper um lote grande).
+  let cancelado = false;
+  const fim = toastCarregando("Preparando as páginas…", { aoCancelar: () => { cancelado = true; } });
   try {
     let imagens;
     if (doc.imgData && (!doc.pdfData)) {
       imagens = listaN.includes(1) ? [{ n: 1, dataUrl: doc.imgData }] : [];
     } else if (doc.pdfData) {
-      toast(`Preparando ${plural(listaN.length, "página", "páginas")}…`);
       imagens = await rasterizarPaginas(doc.pdfData, listaN);
     } else {
+      fim();
       return toast("Sem PDF/imagem salvos para processar (arquivo grande não foi guardado).", "erro");
     }
     let ok = 0;
     for (const img of imagens) {
-      toast(`Visão: transcrevendo página ${img.n} (${ok + 1}/${imagens.length})…`);
+      if (cancelado) break;
+      fim(`Lendo páginas escaneadas… ${ok + 1}/${imagens.length} (pág. ${img.n})`);
       try {
         await store.ocrPagina(doc.id, img.n, img.dataUrl);
         ok++;
       } catch (e) {
         console.error(e);
-        toast(`A Visão parou na página ${img.n}. O que já foi transcrito está salvo; tente as restantes em instantes.`, "erro");
-        break;
+        fim();
+        toast(`A leitura parou na página ${img.n}. O que já foi transcrito está salvo; tente as restantes em instantes.`, "erro");
+        app.refresh();
+        return;
       }
     }
-    if (ok) toast(`${plural(ok, "página transcrita", "páginas transcritas")} por Visão (confira o texto).`, "ok");
+    fim();
+    if (cancelado) toast(`Leitura interrompida — ${plural(ok, "página transcrita ficou salva", "páginas transcritas ficaram salvas")}.`, "ok");
+    else if (ok) toast(`${plural(ok, "página transcrita", "páginas transcritas")} — confira o texto.`, "ok");
     app.refresh();
   } finally {
     ocrEmCurso = false;
@@ -1266,35 +1307,54 @@ function abrirImportarMaterial(app) {
           docStatus.innerHTML = `<span class="import-spin">${icone("refresh-cw")}</span> <span class="import-nome"></span>`;
           const ehImgDoc = (f.type || "").startsWith("image/");
           docStatus.querySelector(".import-nome").textContent = `${f.name} — lendo${ehImgDoc && iaOn ? " com a IA" : ""}…`;
+          let painel = null;
           try {
             let texto = "";
             pend.pdf = null; pend.img = null; pend.paginas = null; pend.estrutura = null;
             if (f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf")) {
-              toast("Lendo PDF…");
+              // Fase 4 — PAINEL DE ETAPAS no lugar da metralhadora de toasts: o momento mais
+              // "mágico" do app (PDF → sumário navegável) agora é uma cena com narrativa,
+              // dentro do próprio modal. Toast só para avisos excepcionais.
+              painel = criarPainelEtapas(docStatus, [
+                { id: "ler", rotulo: "Lendo o PDF" },
+                { id: "sumario", rotulo: iaOn ? "Montando o sumário com IA" : "Montando o sumário" },
+                { id: "texto", rotulo: "Preparando o texto" },
+              ]);
+              painel.set("ler", "ativa");
               const ab = await f.arrayBuffer();
               if (ab.byteLength <= 50 * 1024 * 1024) pend.pdf = abToDataUrl(ab);
               else toast("PDF muito grande (>50MB): não será guardado para visualização; só o texto será mantido.", "erro");
               const { paginas: paginasBrutas, numPaginas, outline, linhasPorPagina } = await extrairPdfPaginas(new File([ab], f.name, { type: "application/pdf" }));
               const paginas = limparRuidoDePaginas(paginasBrutas);
               texto = paginas.map((p) => p.texto || "").join("\n\n").trim();
-              if ((numPaginas || 0) > 400) toast(`Material grande (${numPaginas} páginas): extraí tudo e mantive o material; a geração/descrição pode levar um tempo.`, "ok");
+              painel.set("ler", "ok", `${plural(numPaginas || paginas.length, "página", "páginas")}${(numPaginas || 0) > 400 ? " — material grande, gerações podem demorar" : ""}`);
+              painel.set("sumario", "ativa");
               try {
                 let est = detectarEstrutura({ paginas: paginasBrutas, outline, numPaginas: numPaginas || paginasBrutas.length, linhasPorPagina });
                 // F2: com IA + PDF, estrutura pelo SUMÁRIO (imagem) — muito mais fiel que a heurística
                 // (que embaralha com marca d'água/numeração). Manda só 1-2 imagens; o determinístico é fallback.
+                let viaIA = false;
                 if (iaOn && pend.pdf) {
-                  const fimE = toastCarregando("Estruturando os tópicos pelo sumário (IA)…");
                   try {
                     const estIA = await store.estruturarPorSumarioIA({ paginas: paginasBrutas, pdfData: pend.pdf, numPaginas: numPaginas || paginasBrutas.length });
-                    if (estIA && estIA.blocos.length) { est = estIA; toast(`Sumário estruturado pela IA: ${plural(estIA.blocos.length, "tópico", "tópicos")}.`, "ok"); }
-                  } catch (_) {} finally { fimE(); }
+                    if (estIA && estIA.blocos.length) { est = estIA; viaIA = true; }
+                  } catch (_) {}
                 }
                 pend.estrutura = est && est.blocos.length ? est : null;
                 if (pend.estrutura) store.casarEstruturaComEdital(pend.estrutura);
-              } catch (_) { pend.estrutura = null; }
+                const casados = pend.estrutura ? pend.estrutura.blocos.filter((b) => b.topicoId).length : 0;
+                painel.set(
+                  "sumario",
+                  pend.estrutura ? "ok" : "pulada",
+                  pend.estrutura
+                    ? `${plural(pend.estrutura.blocos.length, "tópico", "tópicos")}${viaIA ? " pela IA" : ""}${casados ? ` · ${casados} vinculados ao edital` : ""}`
+                    : "sem sumário detectável — o texto corrido segue valendo"
+                );
+              } catch (_) { pend.estrutura = null; painel.set("sumario", "pulada", "não deu desta vez"); }
               reEstrutura();
+              painel.set("texto", "ativa");
               if ((!texto || texto.length < 40) && iaOn && f.size <= 14 * 1024 * 1024) {
-                toast("PDF sem texto selecionável: lendo com a IA…");
+                painel.set("texto", "ativa", "PDF escaneado — lendo com a IA…");
                 try {
                   const t = await extrairTextoArquivo(store.get().config, { dataB64: await arquivoParaBase64(f), mimeType: "application/pdf", nomeArquivo: f.name, contexto: "o conteúdo de um material de estudo (apostila, aula, artigo ou anotações): extraia o conteúdo de estudo na íntegra, na ordem de leitura" });
                   if (t && t.trim()) texto = t.trim();
@@ -1303,8 +1363,7 @@ function abrirImportarMaterial(app) {
               const pendN = paginas.filter((p) => p.vazia).length;
               pend.paginas = pend.pdf ? paginas : null;
               corpo.querySelector("#doc-texto").value = texto;
-              if (pendN) toast(`Texto extraído. ${plural(pendN, "página", "páginas")} sem texto: ficam pendentes de OCR (rode a Visão depois${iaOn ? "" : ", quando a IA estiver conectada"}).`, "ok");
-              else toast("Texto extraído. Confira e salve.", "ok");
+              painel.set("texto", "ok", pendN ? `${plural(pendN, "página escaneada fica", "páginas escaneadas ficam")} para ler com IA depois` : "pronto para conferir e salvar");
             } else if (ehImagem(f)) {
               pend.img = await fileToDataUrl(f);
               pend.paginas = [{ n: 1, texto: "", vazia: true, temImagem: true, ocr: false }];
@@ -1319,6 +1378,7 @@ function abrirImportarMaterial(app) {
             docStatus.innerHTML = `${icone("check")} ${esc(f.name)} — pronto`;
           } catch (err) {
             console.error(err);
+            if (painel) painel.erroAtiva(err.code === "PDF_PROTEGIDO" ? "PDF protegido por senha" : "não consegui ler");
             docStatus.className = "import-status erro";
             docStatus.innerHTML = err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `${icone("x")} ${esc(f.name)} — não consegui ler.`;
             toast(err.code === "PDF_PROTEGIDO" ? err.message : "Não consegui ler este arquivo. Confira se ele não está protegido por senha e tente de novo, ou cole o texto manualmente.", "erro");

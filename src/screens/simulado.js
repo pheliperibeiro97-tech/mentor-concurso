@@ -353,6 +353,7 @@ function renderSetup(root, app, st, formato) {
         for (const q of escolhidas) ordens[q.id] = embaralhar(q.alternativas.map((_, i) => i));
       }
       ss.sim = { questaoIds: escolhidas.map((q) => q.id), respostas: {}, ordens, elapsed: 0, target: cfg.tempoMin * 60, intervalId: null, resultado: null, focoIdx: 0 };
+      notaAnimou = false; // novo simulado → a nota do resultado volta a animar (o guard é por prova, não por sessão do app)
       app.refresh();
     },
   });
@@ -730,6 +731,7 @@ function renderResultado(root, app, st, formato) {
   bindActions(root, {
     novo: () => {
       ss.sim = null;
+      notaAnimou = false; // próxima prova volta a animar a nota (sem afetar o toggle Cebraspe desta)
       app.refresh();
     },
     "ir-erros": () => {

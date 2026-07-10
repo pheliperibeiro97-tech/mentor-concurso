@@ -2,7 +2,7 @@
 // lei/juris) + flashcards (item-lote) num lugar só. É uma VISÃO sobre o estado real
 // (store.revisoesConsolidadas()) — sincroniza sozinha: fez a revisão em qualquer tela,
 // some daqui; registrou sessão, aparece. Fase 1: ver/filtrar + Iniciar (roteia).
-import { bindActions, header, vazio, defMetrica, toast, abrirJanela, confirmar } from "../ui.js";
+import { bindActions, header, vazio, defMetrica, toast, abrirJanela, confirmar, confetti } from "../ui.js";
 import { esc, fmtData, todayISO, addDays } from "../util.js";
 import { icone } from "../icones.js";
 import { focoShellHTML, bindFocoCrono, focoChromeKey, ligarTickCrono } from "./foco-quiz.js";
@@ -17,7 +17,17 @@ let filtroTipo = "";
 
 // Sessão única "Revisar tudo em foco": percorre as revisões vencidas (exceto o lote de
 // flashcards, que tem foco próprio) uma a uma — recorde → revele → "Revisei" (concluirRevisao).
-let focoRev = { ativo: false, fila: [], idx: 0, revelado: false, feitas: {}, anim: true, fcVenc: 0 };
+let focoRev = { ativo: false, fila: [], idx: 0, revelado: false, feitas: {}, anim: true, fcVenc: 0, celebrou: false };
+
+// Celebra a CONCLUSÃO da fila (confetti) uma única vez por sessão de foco — só quando o
+// usuário de fato deu baixa em algo (feitas > 0); re-renders não re-disparam (focoRev.celebrou).
+function celebrarConclusaoRev() {
+  if (!focoRev.ativo || focoRev.celebrou) return;
+  if (focoRev.idx < focoRev.fila.length) return; // ainda há itens na fila
+  if (!Object.keys(focoRev.feitas).length) return; // saiu pulando tudo: nada a celebrar
+  focoRev.celebrou = true;
+  confetti();
+}
 
 const TIPO_INFO = {
   topico: { ico: "repeat-2", nome: "Tópico", cor: "#f59e0b" },
@@ -161,6 +171,7 @@ export default function renderCentralRevisoes(root, app) {
     }
     ${focoRev.ativo ? focoRevOverlayHTML(st, focoRev.anim ? "in" : "fade") : ""}`;
   focoRev.anim = false; // só a 1ª aparição anima; re-renders seguintes usam fade
+  celebrarConclusaoRev(); // re-render caiu direto na conclusão (guarda interna evita repetir)
 
   bindActions(root, {
     ...bindFocoCrono({}), // cronômetro do foco (compartilhado)
@@ -180,6 +191,7 @@ export default function renderCentralRevisoes(root, app) {
       focoRev.feitas = {};
       focoRev.ativo = focoRev.fila.length > 0;
       focoRev.anim = true;
+      focoRev.celebrou = false; // nova sessão → pode celebrar de novo ao concluir
       app.refresh();
     },
     "revelar-rev": () => {
@@ -306,6 +318,7 @@ function atualizarFocoRev(root, store) {
   const novoFoco = tmp.querySelector(".fc-foco");
   if (novoFoco) foco.replaceChildren(...Array.from(novoFoco.childNodes));
   else foco.outerHTML = novoHTML;
+  celebrarConclusaoRev(); // acabou de dar baixa no último item → confetti (1x por sessão)
 }
 
 // Conteúdo revelado por tipo (o que se tenta recordar). Resumo/lei/juris têm texto;

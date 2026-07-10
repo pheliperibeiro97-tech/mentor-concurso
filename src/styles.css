@@ -4742,6 +4742,24 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 /* selects dentro de label.inline respiram sem precisar de style= */
 label.inline > select{margin-left:6px}
 
+/* Fase 4 — skeleton de página no visualizador de PDF (primeira abertura). */
+.pdf-load { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 28px 0; color: #cbd5e1; }
+.pdf-skel-pag { width: min(420px, 70vw); aspect-ratio: 210 / 297; border-radius: 6px; }
+
+/* ===== Fase 4 — Painel de ETAPAS do import (narrativa do processamento) ===== */
+.import-etapas { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.imp-et { display: flex; align-items: baseline; gap: 8px; font-size: var(--fs-sm); color: var(--muted); }
+.imp-et-ico { width: 18px; display: inline-flex; justify-content: center; flex: none; align-self: center; }
+.imp-et-ico .ico { width: 14px; height: 14px; }
+.imp-et.is-ativa { color: var(--text); }
+.imp-et.is-ativa .imp-et-txt { font-weight: var(--fw-medium); }
+.imp-et.is-ok { color: var(--text-2); }
+.imp-et.is-ok .imp-et-ico { color: var(--success); }
+.imp-et.is-pulada { opacity: 0.7; }
+.imp-et.is-erro { color: var(--danger); }
+.imp-et-nota { margin-left: 2px; }
+
 /* Fase 2 — estado OFFLINE do orb: apagado/cinza (a IA não está conectada; o orb
    não deve fingir vida). O canvas continua, quase parado (velocidade via orb.js). */
 .orb--off { filter: grayscale(0.9) opacity(0.55); }

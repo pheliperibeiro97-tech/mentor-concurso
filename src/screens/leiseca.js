@@ -1023,18 +1023,25 @@ function renderIndicacoes(root, app, tipo) {
   const iniciarCE = async (itens, opts = {}) => {
     if (!itens.length) return toast("Nada no escopo. Adicione o texto dos dispositivos na aba Ler.", "erro");
     const alvo = opts.regenerate ? itens.slice(0, 12) : itens;
+    // Progresso narrado: a geração itera artigo a artigo (lenta); o rótulo do toast é
+    // atualizado a cada item — e o corte de 12 é avisado ANTES, não depois.
+    const fim = toastCarregando(opts.regenerate && itens.length > 12 ? "Gerando Certo/Errado… (limite de 12 por vez)" : "Preparando o treino…");
     let fila = [];
-    for (const it of alvo) {
-      let q = store.itensTreinoDeIndicacao(it.id);
-      if (opts.regenerate || !q.length) {
-        if (!store.iaDisponivel()) return avisoIA(app, "Gerar treino");
-        if (opts.regenerate) store.limparTreinoDeIndicacao(it.id);
-        try { q = await store.gerarTreinoDeIndicacao(it.id, opts.n || 4, opts.dificuldade || "medio"); } catch (e) { console.error(e); }
+    try {
+      let i = 0;
+      for (const it of alvo) {
+        i++;
+        let q = store.itensTreinoDeIndicacao(it.id);
+        if (opts.regenerate || !q.length) {
+          if (!store.iaDisponivel()) return avisoIA(app, "Gerar treino");
+          if (opts.regenerate) store.limparTreinoDeIndicacao(it.id);
+          fim(`Gerando Certo/Errado… ${i}/${alvo.length}`);
+          try { q = await store.gerarTreinoDeIndicacao(it.id, opts.n || 4, opts.dificuldade || "medio"); } catch (e) { console.error(e); }
+        }
+        fila = fila.concat(q.map((x) => x.id));
       }
-      fila = fila.concat(q.map((x) => x.id));
-    }
+    } finally { fim(); }
     if (!fila.length) return toast("Não consegui montar o treino agora.", "erro");
-    if (opts.regenerate && itens.length > 12) toast("Preparando os 12 primeiros do escopo…");
     app.navigate("pratica-ce", { focoErrosIds: fila });
   };
 
@@ -1189,13 +1196,19 @@ function renderIndicacoes(root, app, tipo) {
       const alvo = itens.slice(0, 12);
       const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
       const lote = store.iniciarLoteGeracao(rot);
-      const total = await comOcupado(async () => {
-        let t = 0;
-        for (const it of alvo) { try { const cs = await store.gerarFlashcardsIADeIndicacao(it.id, g.n, g.dificuldade); t += cs.length; } catch (e) { console.error(e); } }
-        return t;
-      }, { botao: el, msg: "Gerando flashcards com IA…" });
-      store.encerrarLoteGeracao();
-      if (total == null) return;
+      // Progresso narrado por artigo (o comOcupado tinha mensagem fixa e parecia travado);
+      // corte de 12 avisado ANTES, no rótulo inicial. Botão ocupado mantido como antes.
+      const fim = toastCarregando(itens.length > 12 ? "Gerando flashcards com IA… (limite de 12 por vez)" : "Gerando flashcards com IA…");
+      if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
+      let total = 0;
+      try {
+        let i = 0;
+        for (const it of alvo) { fim(`Gerando flashcards com IA… ${++i}/${alvo.length}`); try { const cs = await store.gerarFlashcardsIADeIndicacao(it.id, g.n, g.dificuldade); total += cs.length; } catch (e) { console.error(e); } }
+      } finally {
+        fim();
+        if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
+        store.encerrarLoteGeracao();
+      }
       toast(total ? `${plural(total, "flashcard gerado", "flashcards gerados")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou flashcards.", total ? "ok" : "erro");
       if (total) app.navigate("flashcards", { lote, loteRotulo: rot }); // abre mostrando só os recém-gerados
     },
@@ -1208,13 +1221,18 @@ function renderIndicacoes(root, app, tipo) {
       const alvo = itens.slice(0, 12); // limita p/ não estourar a cota de IA
       const rot = `da ${nomeAmigavelLei(estudarLeiSel || leiAtiva.lei)}`;
       const lote = store.iniciarLoteGeracao(rot);
-      const total = await comOcupado(async () => {
-        let t = 0;
-        for (const it of alvo) { try { const qs = await store.gerarQuestoesDeIndicacao(it.id, r.n, r.dificuldade, "mc"); t += qs.length; } catch (e) { console.error(e); } }
-        return t;
-      }, { botao: el, msg: "Gerando questões de múltipla escolha com IA…" });
-      store.encerrarLoteGeracao();
-      if (total == null) return;
+      // Progresso narrado por artigo + aviso do corte de 12 ANTES (mesmo padrão dos flashcards).
+      const fim = toastCarregando(itens.length > 12 ? "Gerando questões com IA… (limite de 12 por vez)" : "Gerando questões de múltipla escolha com IA…");
+      if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
+      let total = 0;
+      try {
+        let i = 0;
+        for (const it of alvo) { fim(`Gerando questões com IA… ${++i}/${alvo.length}`); try { const qs = await store.gerarQuestoesDeIndicacao(it.id, r.n, r.dificuldade, "mc"); total += qs.length; } catch (e) { console.error(e); } }
+      } finally {
+        fim();
+        if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
+        store.encerrarLoteGeracao();
+      }
       toast(total ? `${plural(total, "questão gerada", "questões geradas")}${itens.length > 12 ? " (12 primeiros do escopo)" : ""}.` : "A IA não retornou questões. Confira se os artigos têm texto.", total ? "ok" : "erro");
       if (total) app.navigate("pratica", { lote, loteRotulo: rot }); // abre mostrando só as recém-geradas
     },
@@ -2794,11 +2812,17 @@ async function acaoGrifarIA(app, store, lista, el) {
   const comTexto = _comTextoLei(lista);
   const alvo = comTexto.slice(0, 25);
   if (comTexto.length > 25) toast("Muitos artigos: grifando os 25 primeiros (filtre para focar).");
-  const n = await comOcupado(async () => {
-    let c = 0; for (const i of alvo) { try { c += (await store.sugerirMarcacoesIA("indicacao", i.id, i.texto, i.referencia)) || 0; } catch {} }
-    return c;
-  }, { botao: el, msg: "Grifando com a IA…" });
-  if (n === null) return;
+  // Progresso narrado por artigo (o comOcupado tinha mensagem fixa e parecia travado).
+  const fim = toastCarregando("Grifando com a IA…");
+  if (el) { el.classList.add("carregando"); el.disabled = true; el.setAttribute("aria-busy", "true"); }
+  let n = 0;
+  try {
+    let i = 0;
+    for (const it of alvo) { fim(`Grifando com a IA… ${++i}/${alvo.length}`); try { n += (await store.sugerirMarcacoesIA("indicacao", it.id, it.texto, it.referencia)) || 0; } catch {} }
+  } finally {
+    fim();
+    if (el) { el.classList.remove("carregando"); el.disabled = false; el.removeAttribute("aria-busy"); }
+  }
   toast(n ? `${plural(n, "palavra-chave grifada", "palavras-chave grifadas")} pela IA.` : "A IA não achou novas palavras-chave."); app.refresh();
 }
 function acaoClassificarTemas(app, store, lista) {
