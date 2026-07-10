@@ -162,7 +162,7 @@ export default function renderOnboarding(root, app) {
         </div>
         <div class="ob-final">
           <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <div class="u-row u-wrap">
             ${editalBtn}
             <button class="btn btn-ghost" data-action="zero">Começar do zero</button>
           </div>
@@ -252,7 +252,7 @@ export default function renderOnboarding(root, app) {
               <label class="u-mb-8">Data da prova
                 <input id="ob-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
               </label>
-              <label class="inline small" style="font-weight:400"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
+              <label class="inline small u-fw-regular"><input id="ob-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
             </div>
           </div>
           <div class="ob-grupo">
@@ -267,7 +267,7 @@ export default function renderOnboarding(root, app) {
         </div>
         <div class="ob-final">
           <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
-          <div style="display:flex; gap:8px; flex-wrap:wrap">
+          <div class="u-row u-wrap">
             <button class="btn btn-ghost" data-action="pular">Pular</button>
             <button class="btn btn-primary" data-action="salvar">Continuar →</button>
           </div>
@@ -337,7 +337,7 @@ export default function renderOnboarding(root, app) {
       </div>
       <div class="ob-final">
         <button class="btn btn-ghost" data-action="voltar">← Voltar</button>
-        <div style="display:flex; gap:8px; flex-wrap:wrap">
+        <div class="u-row u-wrap">
           <button class="btn btn-ghost" data-action="offline" data-tip="Segue sem IA. Você pode conectar a qualquer momento em Configurações.">Seguir offline</button>
           <button class="btn btn-primary btn-lg" data-action="concluir">Continuar →</button>
         </div>

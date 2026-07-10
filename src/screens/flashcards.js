@@ -138,7 +138,7 @@ export default function renderFlashcards(root, app) {
         ? `<div class="card export-panel">
             <h3>${icone("download")} Exportar para o Anki</h3>
             <p class="muted small">Escolha quais flashcards exportar. Gera um <b>.txt</b> que o Anki importa (Arquivo → Importar).</p>
-            <div class="form-row" style="align-items:flex-end">
+            <div class="form-row u-items-end">
               <label class="u-grow">Baralho <select id="export-escopo">${opcoesBaralho(st, "todos")}</select></label>
               <label class="inline"><input type="checkbox" id="export-venc" /> Só os vencidos (revisar hoje)</label>
               <button class="btn btn-primary" data-action="baixar-anki">Baixar .txt</button>
@@ -493,9 +493,9 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
   return `
     <div class="card form-flashcard">
       <h3>Criar flashcards</h3>
-      <p class="muted small" style="margin:0 0 8px">Um card por linha: a <b>frente (pergunta)</b> e o <b>verso (resposta)</b>, separados por <b>Tab</b>, <b>;</b>, <b>|</b> ou vírgula. Compatível com o Anki.</p>
+      <p class="muted small u-m-0 u-mb-8">Um card por linha: a <b>frente (pergunta)</b> e o <b>verso (resposta)</b>, separados por <b>Tab</b>, <b>;</b>, <b>|</b> ou vírgula. Compatível com o Anki.</p>
       <label class="inline">Vincular ao tópico: <select id="fc-add-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
-      <label class="btn btn-ghost btn-file" style="margin:8px 0" data-tip-pos="cima-esq" data-tip="Importar de um arquivo .txt/.csv (formato Anki). Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-file u-m-0 u-mt-8 u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um arquivo .txt/.csv (formato Anki). Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="fc-add-file" type="file" accept=".txt,.csv,.tsv,text/plain" hidden />
       </label>
       <textarea id="fc-add-texto" rows="4" placeholder="${esc('Ex.:\nCapital do Brasil ; Brasília\nPrazo da apelação | 15 dias úteis (art. 1.003, CPC)')}">${esc(texto)}</textarea>
@@ -572,7 +572,7 @@ function parseFlashcards(texto) {
 function fcPreviewHTML(itens) {
   return `<div class="card form-flashcard">
     <h3>${icone("download")} Revisar ${plural(itens.length, "flashcard", "flashcards")} antes de adicionar</h3>
-    <p class="muted small" style="margin:0 0 10px">A <b>frente</b> fica visível; o <b>verso</b> (resposta) fica oculto para não estragar a prática — clique "ver verso" só se quiser conferir. Edite e remova (✕) à vontade.</p>
+    <p class="muted small u-m-0 u-mb-12">A <b>frente</b> fica visível; o <b>verso</b> (resposta) fica oculto para não estragar a prática — clique "ver verso" só se quiser conferir. Edite e remova (✕) à vontade.</p>
     <ul class="prev-editavel">
       ${itens
         .map((c, i) => {
@@ -909,7 +909,7 @@ function listaHTML(st) {
           ? `<div class="fc-grid stagger">
           ${cards.map((c) => fcTileHTML(st, c, hojeISO)).join("")}
         </div>`
-          : `<p class="muted small" style="margin:8px 0 0">Nenhum flashcard corresponde ao filtro de tópico/tipo atual. Ajuste a barra acima.</p>`
+          : `<p class="muted small u-m-0 u-mt-8">Nenhum flashcard corresponde ao filtro de tópico/tipo atual. Ajuste a barra acima.</p>`
       }
     </div>`;
 }

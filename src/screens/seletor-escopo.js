@@ -135,7 +135,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     if (estado.sub && !subs.some((s) => `${s.docId}|${s.bi}` === estado.sub)) estado.sub = "";
     return `
       <label class="inline u-mb-8">Disciplina
-        <select data-se="disc" style="margin-left:6px">
+        <select data-se="disc">
           <option value="">Todas</option>
           ${st.disciplinas.map((d) => `<option value="${d.id}" ${estado.disc === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
         </select>
@@ -144,7 +144,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       ${
         aulas.length
           ? `<label class="inline u-mt-8">Aula
-              <select data-se="aula" style="margin-left:6px">
+              <select data-se="aula">
                 <option value="">Todas as aulas</option>
                 ${aulas.map((a) => `<option value="${a.id}" ${estado.aulaId === a.id ? "selected" : ""}>${esc(a.nome)}</option>`).join("")}
               </select>
@@ -154,7 +154,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       ${
         subs.length
           ? `<label class="inline u-mt-8">Subtópico (índice)
-              <select data-se="sub" style="margin-left:6px; max-width:340px">
+              <select data-se="sub" style="max-width:340px">
                 <option value="">Material inteiro</option>
                 ${subs.map((s) => `<option value="${s.docId}|${s.bi}" ${estado.sub === `${s.docId}|${s.bi}` ? "selected" : ""}>${esc(s.rotulo)}</option>`).join("")}
               </select>
@@ -171,7 +171,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     if (estado.matBloco !== "" && !blocos[parseInt(estado.matBloco, 10)]) estado.matBloco = "";
     return `
       <label class="inline u-mb-8">Material (aula)
-        <select data-se="mat" style="margin-left:6px; max-width:340px">
+        <select data-se="mat" style="max-width:340px">
           <option value="">— escolha —</option>
           ${docs.map((d) => `<option value="${d.id}" ${estado.docId === d.id ? "selected" : ""}>${esc(d.titulo)}</option>`).join("")}
         </select>
@@ -179,7 +179,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       ${
         blocos.length
           ? `<label class="inline u-mt-8 u-block">Subtópico (índice)
-              <select data-se="matbloco" style="margin-left:6px; max-width:340px">
+              <select data-se="matbloco" style="max-width:340px">
                 <option value="">Material inteiro</option>
                 ${blocos.map((b, bi) => `<option value="${bi}" ${estado.matBloco === String(bi) ? "selected" : ""}>${esc(`${b.numero || ""} ${b.titulo}`.trim())}</option>`).join("")}
               </select>
@@ -219,7 +219,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
             ? `<div class="form-row" style="gap:14px; margin-top:10px; align-items:flex-end">
                 <label class="inline">Quantidade <input type="number" data-se="n" min="1" max="30" value="${estado.n}" style="width:64px; margin-left:6px" /></label>
                 <label class="inline">Nível
-                  <select data-se="dif" style="margin-left:6px">
+                  <select data-se="dif">
                     <option value="facil" ${estado.dificuldade === "facil" ? "selected" : ""}>Fácil</option>
                     <option value="medio" ${estado.dificuldade === "medio" ? "selected" : ""}>Médio</option>
                     <option value="dificil" ${estado.dificuldade === "dificil" ? "selected" : ""}>Difícil</option>

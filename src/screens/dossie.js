@@ -897,7 +897,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
   const cacheA = ddxAnaliseCache[discId];
   const analiseHTML =
     cacheA && cacheA.dia === todayISO()
-      ? `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt">${esc(cacheA.texto)}</p><p class="muted small" style="margin:6px 0 0">Gerada hoje — confira sempre.</p></div>`
+      ? `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt">${esc(cacheA.texto)}</p><p class="muted small u-m-0 u-mt-8">Gerada hoje — confira sempre.</p></div>`
       : "";
 
   root.innerHTML = `
@@ -950,7 +950,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
           <button class="${ddxOrd === "tempo" ? "on" : ""}" data-action="ddx-ord" data-ord="tempo" data-tip="Menos estudados primeiro.">Tempo</button>
         </div>
       </div>
-      <p class="muted small" style="margin:0 0 10px">Sem questões suficientes o tópico fica <b>neutro</b> (a régua só vale com prática). Clique para abrir a pasta viva.</p>
+      <p class="muted small u-m-0 u-mb-12">Sem questões suficientes o tópico fica <b>neutro</b> (a régua só vale com prática). Clique para abrir a pasta viva.</p>
       <div class="ddx-lista stagger">
         ${ordenado.length ? ordenado.map(linhaTopico).join("") : `<p class="muted">Sem tópicos nesta disciplina.</p>`}
       </div>
@@ -995,7 +995,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
         const r = await _responderChat(st.config, { pergunta, fontes: [], web: false, perfil: store.contextoAlunoCurto() });
         ddxAnaliseCache[discId] = { dia: todayISO(), texto: (r.texto || "").trim() };
         const slot = root.querySelector("#ddx-analise-slot");
-        slot.innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt"></p><p class="muted small" style="margin:6px 0 0">Gerada hoje — confira sempre.</p></div>`;
+        slot.innerHTML = `<div class="ai-frame ddx-analise">${ddxAnaliseHeadHTML()}<p class="ddx-analise-txt"></p><p class="muted small u-m-0 u-mt-8">Gerada hoje — confira sempre.</p></div>`;
         revelarTexto(slot.querySelector(".ddx-analise-txt"), ddxAnaliseCache[discId].texto);
         el.disabled = false;
         el.classList.remove("is-generating");

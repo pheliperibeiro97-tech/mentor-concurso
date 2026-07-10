@@ -63,7 +63,7 @@ export default function renderConfig(root, app) {
 
     <section class="card guia-card">
       <button class="btn btn-primary" data-action="abrir-guia">${icone("book-open")} Guia do sistema</button>
-      <p class="muted small" style="margin:8px 0 0">Manual completo: o que cada tela faz, como o Mentor IA funciona e como tudo se conecta.</p>
+      <p class="muted small u-m-0 u-mt-8">Manual completo: o que cada tela faz, como o Mentor IA funciona e como tudo se conecta.</p>
     </section>
 
     <div class="subtabs" role="tablist">
@@ -96,7 +96,7 @@ export default function renderConfig(root, app) {
       <label class="inline" style="font-weight:600; display:flex; width:fit-content; gap:8px; margin-bottom:6px">
         <input id="cfg-not-ativar" type="checkbox" ${nt.ativar ? "checked" : ""} /> Ativar lembretes
       </label>
-      <p class="muted small" style="margin:0 0 12px">As notificações são <b>facultativas</b> e só disparam no <b>aplicativo desktop</b> (na web o navegador não notifica). Escolha quais quer receber:</p>
+      <p class="muted small u-m-0 u-mb-12">As notificações são <b>facultativas</b> e só disparam no <b>aplicativo desktop</b> (na web o navegador não notifica). Escolha quais quer receber:</p>
       <div class="not-opcoes" ${nt.ativar ? "" : "data-desativado"}>
         <label class="inline small not-linha"><input id="cfg-not-diario" type="checkbox" ${nt.diario ? "checked" : ""} /> Lembrete diário no horário:
           <input id="cfg-not-horario" type="time" value="${nt.horario || "08:00"}" style="width:auto; margin:0 0 0 6px" /></label>
@@ -123,7 +123,7 @@ export default function renderConfig(root, app) {
         <span class="mk-leg"><i class="mk-dot mk-vermelho"></i>restritivas</span>
         <span class="mk-leg"><i class="mk-dot mk-verde"></i><i class="mk-dot mk-roxo"></i><i class="mk-dot mk-laranja"></i>livres</span>
       </div>
-      <p class="muted small" style="margin:8px 0 0">Ajusta as cores dos grifos em Lei Seca, Jurisprudência, Resumos e Material.</p>
+      <p class="muted small u-m-0 u-mt-8">Ajusta as cores dos grifos em Lei Seca, Jurisprudência, Resumos e Material.</p>
     </section>
 
     </div>
@@ -139,7 +139,7 @@ export default function renderConfig(root, app) {
         <label class="u-mb-8">Data da prova
           <input id="cfg-prova" type="date" value="${esc(cfg.dataProva || "")}" ${cfg.dataProva ? "" : "disabled"} />
         </label>
-        <label class="inline small" style="font-weight:400"><input id="cfg-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
+        <label class="inline small u-fw-regular"><input id="cfg-prova-pre" type="checkbox" ${cfg.dataProva ? "" : "checked"} /> Sem data definida</label>
       </div>
       <div class="form-row">
         <label>Meta diária ${campoHM("cfg-meta-dia", cfg.metaDiariaMin, semMetas)}</label>
@@ -160,7 +160,7 @@ export default function renderConfig(root, app) {
           <option value="insistente" ${cfg.somAlarme === "insistente" ? "selected" : ""}>Insistente (6 toques)</option>
         </select>
       </label>
-      <div class="form-acoes" style="margin-top:10px">
+      <div class="form-acoes u-mt-12">
         <button class="btn btn-primary btn-sm" data-action="salvar-alarme">Salvar</button>
         <button class="btn btn-ghost btn-sm" data-action="testar-alarme">${icone("bell")} Testar</button>
       </div>
@@ -177,7 +177,7 @@ export default function renderConfig(root, app) {
           </label>`;
         }).join("")}
       </div>
-      <p class="muted small" style="margin:10px 0 0"><b class="num">${7 - (cfg.diasFolga || []).length}</b> ${7 - (cfg.diasFolga || []).length === 1 ? "dia" : "dias"} de estudo por semana.</p>
+      <p class="muted small u-m-0 u-mt-12"><b class="num">${7 - (cfg.diasFolga || []).length}</b> ${7 - (cfg.diasFolga || []).length === 1 ? "dia" : "dias"} de estudo por semana.</p>
     </section>
 
     <section class="card">
@@ -186,7 +186,7 @@ export default function renderConfig(root, app) {
         <input id="cfg-revtop" type="checkbox" ${cfg.revisaoTopicoAuto ? "checked" : ""} />
         <span>Agendar revisão dos tópicos que eu estudar (curva 24h · 7d · 30d...)</span>
       </label>
-      <p class="muted small" style="margin:8px 0 0">Cada sessão de <b>Estudo</b> de um tópico entra na curva do esquecimento. No registro da sessão você pode desmarcar caso não queira agendar. As revisões aparecem na tela <b>Revisão de Tópicos</b> e no Hoje.</p>
+      <p class="muted small u-m-0 u-mt-8">Cada sessão de <b>Estudo</b> de um tópico entra na curva do esquecimento. No registro da sessão você pode desmarcar caso não queira agendar. As revisões aparecem na tela <b>Revisão de Tópicos</b> e no Hoje.</p>
     </section>
 
     <section class="card">
@@ -259,7 +259,7 @@ export default function renderConfig(root, app) {
         <button class="btn btn-primary btn-sm" data-action="salvar-ia">Salvar IA</button>
         ${cfg.iaProvider === "gemini" ? `<button class="btn btn-ghost btn-sm" data-action="testar-ia">${icone("plug-zap")} Testar conexão</button>` : ""}
       </div>
-      <p class="small" id="ia-msg" style="margin:10px 0 0"></p>
+      <p class="small u-m-0 u-mt-12" id="ia-msg"></p>
     </section>
 
     </div>
@@ -348,12 +348,12 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("life-buoy")} Suporte e atualizações</h3>
-      <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <div class="u-row u-wrap">
         <button class="btn btn-soft btn-sm" data-action="enviar-sugestao" data-tip="Abre seu e-mail com uma mensagem pronta para enviar.">${icone("lightbulb")} Enviar sugestão</button>
         <button class="btn btn-ghost btn-sm" data-action="gerar-diagnostico" data-tip="Gera um arquivo com informações técnicas (versão, sistema, erros recentes) para você anexar num e-mail de suporte. Não inclui o conteúdo dos seus estudos.">${icone("life-buoy")} Relatar um problema (gerar diagnóstico)</button>
         <button class="btn btn-ghost btn-sm" data-action="buscar-update" data-tip="Verifica se há uma versão mais nova (só no aplicativo instalado).">${icone("refresh-cw")} Procurar atualizações</button>
       </div>
-      <p class="muted small" style="margin:8px 0 0">Versão ${esc(APP_VERSION)}</p>
+      <p class="muted small u-m-0 u-mt-8">Versão ${esc(APP_VERSION)}</p>
     </section>
 
     <section class="card">
@@ -372,7 +372,7 @@ export default function renderConfig(root, app) {
                     <button class="btn btn-primary btn-sm" data-action="sync-agora" ${sy.sincronizando ? "disabled" : ""} data-tip="Envia ou baixa as alterações agora (o mais recente vence).">${icone("refresh-cw")} Sincronizar agora</button>
                     <button class="btn btn-ghost btn-sm" data-action="sync-desconectar">Desconectar</button>
                   </div>`
-                : `<p class="muted small" style="margin:6px 0"><b>1º computador</b>: cria o arquivo numa pasta do seu Drive/OneDrive e <b>envia</b> os seus dados.<br><b>2º computador</b>: espere o Drive baixar o arquivo e selecione-o — esse modo só <b>lê e baixa</b>, <b>nunca sobrescreve</b> a nuvem.</p>
+                : `<p class="muted small u-m-0 u-mt-8 u-mb-8"><b>1º computador</b>: cria o arquivo numa pasta do seu Drive/OneDrive e <b>envia</b> os seus dados.<br><b>2º computador</b>: espere o Drive baixar o arquivo e selecione-o — esse modo só <b>lê e baixa</b>, <b>nunca sobrescreve</b> a nuvem.</p>
                    <div class="form-acoes">
                      <button class="btn btn-primary btn-sm" data-action="sync-conectar">${icone("refresh-cw")} 1º computador — criar e enviar</button>
                      <button class="btn btn-soft btn-sm" data-action="sync-conectar-baixar">${icone("download")} 2º computador — baixar</button>
@@ -381,7 +381,7 @@ export default function renderConfig(root, app) {
             ${
               sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small" style="margin:0 0 6px"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> — aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>. Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> — aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>. Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
                     <div class="form-acoes">
                       <button class="btn btn-primary btn-sm" data-action="sync-manter-local">Manter os daqui (enviar p/ a nuvem)</button>
                       <button class="btn btn-soft btn-sm" data-action="sync-usar-nuvem">Usar os da nuvem (substitui os daqui)</button>
@@ -392,7 +392,7 @@ export default function renderConfig(root, app) {
             ${
               sy.ultimoConflitoEm && !sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small" style="margin:0 0 6px"><b>${icone("triangle-alert")} Conflito na última sincronização</b> — houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} Conflito na última sincronização</b> — houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
                     <div class="form-acoes">
                       <button class="btn btn-soft btn-sm" data-action="sync-baixar-backup">${icone("download")} Baixar cópia de segurança</button>
                       <button class="btn btn-ghost btn-sm" data-action="sync-dispensar-conflito">Dispensar aviso</button>
@@ -400,7 +400,7 @@ export default function renderConfig(root, app) {
                   </div>`
                 : ""
             }
-            <p class="muted small" style="margin:10px 0 0">${icone("triangle-alert")} Use <b>um computador de cada vez</b> com o app aberto (deixe o Drive terminar de sincronizar antes de abrir na outra máquina). <b>Ao fechar o app, ele sincroniza sozinho.</b></p>`
+            <p class="muted small u-m-0 u-mt-12">${icone("triangle-alert")} Use <b>um computador de cada vez</b> com o app aberto (deixe o Drive terminar de sincronizar antes de abrir na outra máquina). <b>Ao fechar o app, ele sincroniza sozinho.</b></p>`
           : `<p class="muted small">Este ambiente não suporta a sincronização por arquivo. No <b>aplicativo instalado</b> (desktop) ela funciona.</p>`
       }
     </section>
@@ -430,7 +430,7 @@ export default function renderConfig(root, app) {
 
       <div class="cfg-zona-risco">
         <span class="cfg-zona-risco-tag">${icone("triangle-alert")} Zona de risco</span>
-        <p class="muted small" style="margin:6px 0 10px">Esta ação é <b>irreversível</b> e apaga concurso, tópicos, questões, flashcards e materiais. Faça um backup antes.</p>
+        <p class="muted small u-m-0 u-mt-8 u-mb-12">Esta ação é <b>irreversível</b> e apaga concurso, tópicos, questões, flashcards e materiais. Faça um backup antes.</p>
         <button class="btn btn-danger btn-sm" data-action="reset" data-tip="Apaga TODOS os dados e reinicia o onboarding. Não há como desfazer.">${icone("trash-2")} Apagar tudo e recomeçar</button>
       </div>
     </section>

@@ -44,11 +44,11 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
   return `
     <div class="card form-questao">
       <h3>${ce ? "Adicionar itens Certo/Errado" : "Adicionar questões"}</h3>
-      <p class="muted small" style="margin:0 0 12px">Três jeitos de adicionar — escolha um abaixo.</p>
+      <p class="muted small u-m-0 u-mb-12">Três jeitos de adicionar — escolha um abaixo.</p>
 
       <div class="add-via">
         <h4>${icone("square-pen")} Digitar, colar ou importar arquivo</h4>
-        <p class="muted small" style="margin:0 0 10px">${instr}</p>
+        <p class="muted small u-m-0 u-mb-12">${instr}</p>
         <div class="add-via-linha">
           <label class="inline" style="flex:1; min-width:220px">Vincular todas ao tópico <select id="q-add-top">${opcoesVincular}</select></label>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo para cá.">${icone("paperclip")} Importar de arquivo
@@ -66,7 +66,7 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
         temDocs
           ? `<div class="add-via">
               <h4>${icone("library")} A partir de um material já cadastrado</h4>
-              <p class="muted small" style="margin:0 0 10px">Use uma aula ou conteúdo que você importou em Materiais: o app extrai ${ce ? "os itens C/E" : "as questões"} que já existem nele, ou a IA gera ${ce ? "itens novos" : "questões novas"}.</p>
+              <p class="muted small u-m-0 u-mb-12">Use uma aula ou conteúdo que você importou em Materiais: o app extrai ${ce ? "os itens C/E" : "as questões"} que já existem nele, ou a IA gera ${ce ? "itens novos" : "questões novas"}.</p>
               <div class="add-via-linha">
                 <label class="inline" style="flex:1; min-width:200px">Material <select id="q-add-doc">${opcoesDocs}</select></label>
                 <button class="btn btn-ghost btn-sm" data-action="extrair-doc" data-tip="Puxa ${ce ? "os itens C/E" : "as questões"} que JÁ existem no material (não inventa).">${icone("clipboard-list")} Extrair do material</button>
@@ -140,7 +140,7 @@ function qPreviewHTML(itens, ce, st) {
       ${metaRow(q, i)}
       <details class="prev-spoiler">
         <summary>${icone("eye")} ver/editar alternativas e gabarito</summary>
-        <p class="muted small" style="margin:0 0 4px">Marque a alternativa correta no botão à esquerda.</p>
+        <p class="muted small u-m-0 u-mb-4">Marque a alternativa correta no botão à esquerda.</p>
         <ul class="q-alts" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px">
           ${alts
             .map((a, ai) => `<li class="q-alt-linha u-flex-6">
@@ -154,7 +154,7 @@ function qPreviewHTML(itens, ce, st) {
   };
   return `<div class="card form-questao">
     <h3>${icone("download")} Revisar ${plural(itens.length, ce ? "item" : "questão", ce ? "itens" : "questões")} antes de adicionar</h3>
-    <p class="muted small" style="margin:0 0 10px">O enunciado e a origem (referência/assunto/banca…) ficam visíveis; ${ce ? "o gabarito e a justificativa" : "as alternativas e a correta"} ficam ocultos para não estragar a prática — revele só se quiser conferir. Edite e remova (✕) à vontade.</p>
+    <p class="muted small u-m-0 u-mb-12">O enunciado e a origem (referência/assunto/banca…) ficam visíveis; ${ce ? "o gabarito e a justificativa" : "as alternativas e a correta"} ficam ocultos para não estragar a prática — revele só se quiser conferir. Edite e remova (✕) à vontade.</p>
     <ul class="prev-editavel">${itens.map(card).join("")}</ul>
     <div class="form-acoes">
       <button class="btn btn-ghost" data-action="voltar-q" data-tip-pos="cima-esq" data-tip="Volta ao texto colado para corrigir e revisar de novo.">${icone("arrow-left")} Voltar para editar</button>

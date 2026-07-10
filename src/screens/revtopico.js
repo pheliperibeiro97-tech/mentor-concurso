@@ -58,8 +58,8 @@ export default function renderRevTopico(root, app) {
     ${
       !optIn
         ? `<section class="card aviso-optin">
-            <p style="margin:0 0 8px"><b>Revisão automática de tópicos está desligada.</b></p>
-            <p class="muted small" style="margin:0 0 10px">Quando ligada, cada tópico que você <b>estudar</b> entra na curva do esquecimento (revisão em 24h, depois 7, 15, 30 dias...). Você revisa relendo as palavras-chave ou escrevendo o que lembra.</p>
+            <p class="u-m-0 u-mb-8"><b>Revisão automática de tópicos está desligada.</b></p>
+            <p class="muted small u-m-0 u-mb-12">Quando ligada, cada tópico que você <b>estudar</b> entra na curva do esquecimento (revisão em 24h, depois 7, 15, 30 dias...). Você revisa relendo as palavras-chave ou escrevendo o que lembra.</p>
             <button class="btn btn-primary btn-sm" data-action="ativar-optin">Ligar revisão automática</button>
           </section>`
         : ""
@@ -146,7 +146,7 @@ function reviewHTML(store, topico) {
     ? `<div class="revtop-fonte muted small">${esc(material.fonte)} ${abrirPag}</div>
        <div class="revtop-conteudo">${esc(material.texto).replace(/\n/g, "<br>")}</div>`
     : `<div class="revtop-sem-fonte">
-        <p class="muted" style="margin:0 0 10px">Este tópico ainda não tem um resumo para reler. Você pode avaliar de memória pelos botões abaixo, ou criar um resumo agora para usar nas próximas revisões.</p>
+        <p class="muted u-m-0 u-mb-12">Este tópico ainda não tem um resumo para reler. Você pode avaliar de memória pelos botões abaixo, ou criar um resumo agora para usar nas próximas revisões.</p>
         <button class="btn btn-ghost btn-sm" data-action="criar-resumo">${icone("square-pen")} Criar resumo deste tópico</button>
       </div>`;
 
@@ -210,7 +210,7 @@ function reviewHTML(store, topico) {
       <div class="revtop-review-head">
         <div>
           <div class="muted small">Revisando o tópico</div>
-          <h3 style="margin:2px 0 0">${esc(nomeTopico(st, topico))}</h3>
+          <h3 class="u-m-0 u-mt-4">${esc(nomeTopico(st, topico))}</h3>
         </div>
         <button class="btn btn-ghost btn-sm" data-action="voltar">${icone("arrow-left")} Voltar</button>
       </div>

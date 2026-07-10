@@ -842,7 +842,7 @@ function atrasadasHTML(st, store) {
   if (!atrasadas.length) return "";
   return `<section class="card atrasadas-card">
     <div class="plano-h"><h2>Tarefas atrasadas</h2><span class="cnt">${atrasadas.length}</span></div>
-    <p class="muted small" style="margin:0 0 10px">O Mentor não remarca sozinho. Decida tarefa por tarefa:</p>
+    <p class="muted small u-m-0 u-mb-12">O Mentor não remarca sozinho. Decida tarefa por tarefa:</p>
     <ul class="atrasadas-lista">
       ${atrasadas
         .map((m) => {
@@ -1072,7 +1072,7 @@ function importPanelHTML(st, store) {
       </label>
     </div>
     <div class="import-modos muted small">
-      <p style="margin:0 0 4px"><b>Estruturar (fiel):</b> transforma o que você colou em tarefas exatamente como está, detectando os dias da semana. Não muda a carga nem a ordem.${iaOn ? "" : " Sem IA, cada linha vira uma tarefa solta."}</p>
+      <p class="u-m-0 u-mb-4"><b>Estruturar (fiel):</b> transforma o que você colou em tarefas exatamente como está, detectando os dias da semana. Não muda a carga nem a ordem.${iaOn ? "" : " Sem IA, cada linha vira uma tarefa solta."}</p>
       <p class="u-m-0"><b>${icone("sparkles")} Adaptar à minha realidade:</b> a IA usa o cronograma como base, mas redistribui a carga ao seu tempo por dia, às suas folgas e aos dias até a prova, priorizando suas lacunas de desempenho.${iaOn ? "" : " <i>(Requer IA conectada.)</i>"}</p>
     </div>
     <div class="form-acoes">

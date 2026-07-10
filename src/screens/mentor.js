@@ -312,7 +312,7 @@ function planoHTML(p, stream = false) {
     ${blocos.join("")}
     ${
       temAcoes
-        ? `<div class="form-acoes" style="margin-top:12px">
+        ? `<div class="form-acoes u-mt-12">
             <span class="muted small">Marque o que aprovar (tudo já vem marcado). Ao aplicar, os itens são criados nas abas correspondentes, com o selo de origem.</span>
             <span class="spacer"></span>
             <button class="btn btn-ghost" data-action="descartar-plano">Descartar</button>

@@ -270,7 +270,7 @@ function addErroPanelHTML(st, texto = "") {
         <label>Disciplina <select id="err-disc">${opcoesDisc}</select></label>
         <label>Tópico (opcional) <select id="err-top"><option value="">— sem tópico específico —</option></select></label>
       </div>
-      <p class="muted small" style="margin:0 0 6px">Digite um erro ou cole vários (um por linha), campos separados por <b>|</b>: a <b>descrição</b>, a <b>resposta correta</b> e, opcional, o <b>motivo</b>. Usa a disciplina/tópico acima. Você revisa e edita cada erro antes de salvar.</p>
+      <p class="muted small u-m-0 u-mb-8">Digite um erro ou cole vários (um por linha), campos separados por <b>|</b>: a <b>descrição</b>, a <b>resposta correta</b> e, opcional, o <b>motivo</b>. Usa a disciplina/tópico acima. Você revisa e edita cada erro antes de salvar.</p>
       <textarea id="imp-texto" rows="4" placeholder="${esc("Ex.:\nPrazo de apelação | 15 dias úteis | Esqueci\nDiferença entre dolo e culpa | dolo = vontade; culpa = imprudência")}">${esc(texto)}</textarea>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="cancelar-add">Cancelar</button>
@@ -285,7 +285,7 @@ function errPreviewHTML(st, itens) {
   const motivoOpcoes = (sel) => `<option value="">— motivo (opcional) —</option>` + MOTIVOS.map((m) => `<option ${sel === m ? "selected" : ""}>${esc(m)}</option>`).join("");
   return `<div class="card form-erro">
     <h3>${icone("download")} Revisar ${itens.length} ${itens.length === 1 ? "erro" : "erros"} antes de adicionar</h3>
-    <p class="muted small" style="margin:0 0 8px">Edite a descrição, a resposta correta e o motivo de cada erro; remova (✕) o que não quiser. A disciplina/tópico escolhidos acima valem para todos.</p>
+    <p class="muted small u-m-0 u-mb-8">Edite a descrição, a resposta correta e o motivo de cada erro; remova (✕) o que não quiser. A disciplina/tópico escolhidos acima valem para todos.</p>
     <ul class="prev-editavel">
       ${itens
         .map((it, i) => {

@@ -290,7 +290,7 @@ export default function renderDiagnostico(root, app) {
         <span class="sp"></span>
         <span class="chip chip-count" style="cursor:default">${ofensivaTexto(ofens)}</span>
       </div>
-      <p class="muted small" style="margin:2px 0 10px">Cada quadrado é um dia deste mês. Dia sem registro fica neutro — clique num dia para ver as sessões.</p>
+      <p class="muted small u-m-0 u-mt-4 u-mb-12">Cada quadrado é um dia deste mês. Dia sem registro fica neutro — clique num dia para ver as sessões.</p>
       ${linhaConstanciaMes(store.get().sessoes, { folgaDias: store.get().config.diasFolga || [] })}
     </section>
 
@@ -384,7 +384,7 @@ export default function renderDiagnostico(root, app) {
 
         <div class="stat-sub"><span class="stat-sub-tit">${icone("clock-3")} Comportamento</span> <span class="muted small">quando você rende mais + análise do Mentor</span></div>
         <div data-print="comport" data-print-label="Comportamental">
-          <p class="muted small" style="margin:0 0 6px">Seus hábitos → onde ajustar a rotina. A análise completa (horários, constância, edital e revisões) fica no <b>Mentor IA</b>, no card Sugestões abaixo.</p>
+          <p class="muted small u-m-0 u-mb-8">Seus hábitos → onde ajustar a rotina. A análise completa (horários, constância, edital e revisões) fica no <b>Mentor IA</b>, no card Sugestões abaixo.</p>
           <div class="comport-heat">${heatmapHorario(store.comportamentoHorario())}</div>
         </div>
       </div>
@@ -1215,10 +1215,10 @@ function blocoPorBanca(store, rel) {
         <span class="qb-pct ${perfClasse(store, b.percent)}">${b.percent}%</span>
         <span class="qb-tot muted small">${b.total}q</span>
       </div>`).join("")}</div>`
-    : `<p class="muted small" style="margin:6px 0 0">Importe questões de provas com banca (em Prática/Questões) para ver o desempenho por banca.</p>`;
+    : `<p class="muted small u-m-0 u-mt-8">Importe questões de provas com banca (em Prática/Questões) para ver o desempenho por banca.</p>`;
   return `<section class="card qb-card" data-print="banca" data-print-label="Desempenho por banca / tipo">
     <div class="plano-h" style="margin-bottom:2px"><h2>${icone("clipboard-list")} Desempenho por banca</h2></div>
-    <p class="muted small" style="margin:0 0 10px">${rel.total} praticadas no treino · ${tipo("Múltipla escolha", mc)}${mc.total && ce.total ? " · " : ""}${tipo("Certo/Errado", ce)}</p>
+    <p class="muted small u-m-0 u-mb-12">${rel.total} praticadas no treino · ${tipo("Múltipla escolha", mc)}${mc.total && ce.total ? " · " : ""}${tipo("Certo/Errado", ce)}</p>
     ${lista}
   </section>`;
 }

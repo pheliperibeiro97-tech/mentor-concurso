@@ -38,7 +38,7 @@ export default function renderCorrecao(root, app) {
       </div>
       <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" class="u-mb-16"></textarea>
       <div id="ia-gen-box" class="ia-gen-box" hidden>
-        <div class="form-row" style="align-items:flex-end">
+        <div class="form-row u-items-end">
           <label>De onde
             <select id="gen-fonte">
               <option value="topico" ${genFonte === "topico" ? "selected" : ""}>Tópico do edital</option>

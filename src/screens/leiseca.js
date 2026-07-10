@@ -1577,7 +1577,7 @@ art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
       <label class="btn btn-ghost btn-file u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="add-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
-      <p class="muted small" style="margin:0 0 6px">${instrHTML}</p>
+      <p class="muted small u-m-0 u-mb-8">${instrHTML}</p>
       <textarea id="add-texto" rows="4" placeholder="${esc("Ex.:\n" + exemplo)}">${esc(texto)}</textarea>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="cancelar-add">Cancelar</button>
@@ -1627,7 +1627,7 @@ function indPreviewHTML(st, tipo, modo, r, itens, store) {
   const nDup = ehJuris && store ? itens.filter((it) => store.dupIndicacao(it)).length : 0;
   return `<div class="card form-leiseca">
     <h3>${icone("download")} Revisar ${itens.length} ${itens.length === 1 ? "item" : "itens"} antes de adicionar</h3>
-    <p class="muted small" style="margin:0 0 8px">Edite a referência, o trecho e a observação de cada item; remova (✕) o que não quiser. O vínculo (disciplina/tópico${ehJuris ? "/tribunal" : ""}) escolhido acima vale para todos.${nDup ? ` <b>${nDup} já ${nDup === 1 ? "está" : "estão"} no sistema</b> — escolha enriquecer, pular ou substituir.` : ""}</p>
+    <p class="muted small u-m-0 u-mb-8">Edite a referência, o trecho e a observação de cada item; remova (✕) o que não quiser. O vínculo (disciplina/tópico${ehJuris ? "/tribunal" : ""}) escolhido acima vale para todos.${nDup ? ` <b>${nDup} já ${nDup === 1 ? "está" : "estão"} no sistema</b> — escolha enriquecer, pular ou substituir.` : ""}</p>
     <ul class="prev-editavel">
       ${itens
         .map((it, i) => {
@@ -1679,7 +1679,7 @@ function abrirImportarLei(app) {
     const opcDisc = `<option value="">— Geral (sem vínculo) —</option>` +
       st.disciplinas.map((d) => `<option value="${d.id}" ${estado.form.disciplinaId === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
     return `<div class="card form-leiseca">
-      <p class="muted small" style="margin:0 0 10px">Traz a <b>letra exata</b> do texto oficial. No app <b>desktop</b> a busca é automática pelo site do Planalto; no navegador (por segurança do site), <b>cole o texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
+      <p class="muted small u-m-0 u-mb-12">Traz a <b>letra exata</b> do texto oficial. No app <b>desktop</b> a busca é automática pelo site do Planalto; no navegador (por segurança do site), <b>cole o texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
       <div class="form-row">
         <label style="flex:1 1 260px">Lei mais cobrada (catálogo)
           <select id="imp-cat">${opcCat}</select></label>
@@ -1694,7 +1694,7 @@ function abrirImportarLei(app) {
         <label class="inline">Vincular à disciplina <select id="imp-disc">${opcDisc}</select></label>
       </div>
       ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)</div>` : ""}
-      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small" style="margin:8px 0 0">${esc(estado.msg)}</p>` : ""}
+      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="imp-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
         <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="imp-preparar" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Buscando…" : "Buscar / Preparar"}</button>
@@ -1708,7 +1708,7 @@ function abrirImportarLei(app) {
     const rev = estado.artigos.map((a, i) => ({ a, i })).filter((x) => x.a.revogado);
     return `<div class="card form-leiseca">
       <h3>${icone("scroll-text")} ${esc(estado.norma || "Lei")} — ${estado.artigos.length} ${estado.artigos.length === 1 ? "artigo" : "artigos"}</h3>
-      <p class="muted small" style="margin:0 0 8px">Confira antes de gravar. ${rev.length ? `Há <b>${rev.length}</b> ${rev.length === 1 ? "artigo revogado" : "artigos revogados"} (o Planalto marca tachado); por padrão ficam de fora.` : "Nenhum artigo revogado detectado."}</p>
+      <p class="muted small u-m-0 u-mb-8">Confira antes de gravar. ${rev.length ? `Há <b>${rev.length}</b> ${rev.length === 1 ? "artigo revogado" : "artigos revogados"} (o Planalto marca tachado); por padrão ficam de fora.` : "Nenhum artigo revogado detectado."}</p>
       ${rev.length ? `<div class="imp-rev-bloco">
         <div class="imp-rev-tit">${icone("eye")} Revogados — decida o que fazer:</div>
         ${rev.length > 1 ? `<div class="imp-rev-todos">
@@ -1835,7 +1835,7 @@ function abrirConferirAtualizacao(app) {
       ? normas.map((x) => `<option value="${esc(x.norma)}" data-url="${esc(x.url || "")}" ${estado.form.norma === x.norma ? "selected" : ""}>${esc(x.norma)} (${x.n})</option>`).join("")
       : "";
     return `<div class="card form-leiseca">
-      <p class="muted small" style="margin:0 0 10px">Reconsulta a <b>fonte oficial</b> e compara com o texto guardado: mostra o que <b>mudou</b>, foi <b>adicionado</b> ou <b>revogado</b> (diff mecânico, sem IA). No desktop a busca é automática; no navegador, <b>cole o texto atualizado</b> da lei.</p>
+      <p class="muted small u-m-0 u-mb-12">Reconsulta a <b>fonte oficial</b> e compara com o texto guardado: mostra o que <b>mudou</b>, foi <b>adicionado</b> ou <b>revogado</b> (diff mecânico, sem IA). No desktop a busca é automática; no navegador, <b>cole o texto atualizado</b> da lei.</p>
       ${normas.length ? `<div class="form-row">
         <label style="flex:1 1 260px">Norma (importada com origem oficial)
           <select id="ca-norma">${opc}</select></label>
@@ -1848,7 +1848,7 @@ function abrirConferirAtualizacao(app) {
       <label class="u-block u-mt-4 u-mb-8">Ou cole o texto/HTML atualizado (fallback do navegador)
         <textarea id="ca-html" rows="5" placeholder="Cole o conteúdo atualizado da página oficial.">${esc(estado.form.html)}</textarea></label>
       ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Consultando a fonte oficial e comparando com o texto guardado…</div>` : ""}
-      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small" style="margin:8px 0 0">${esc(estado.msg)}</p>` : ""}
+      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="ca-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
         <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="ca-conferir" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Conferindo…" : "Conferir agora"}</button>
@@ -1867,7 +1867,7 @@ function abrirConferirAtualizacao(app) {
     const sec = (titulo, ico, itens, render) => itens.length ? `<div class="ca-sec"><div class="ca-sec-tit">${icone(ico)} ${titulo} (${itens.length})</div>${itens.map(render).join("")}</div>` : "";
     return `<div class="card form-leiseca">
       <h3>${icone("sparkles")} ${esc(d.norma || "Lei")} — ${nMud} ${nMud === 1 ? "novidade" : "novidades"}</h3>
-      <p class="muted small" style="margin:0 0 8px">Marque o que aplicar. Alterados atualizam o texto (a redação anterior fica guardada); novos entram no acervo; revogados saem do estudo. Tudo recebe o selo <span class="mini-tag nov-tag">novidade</span> para você treinar.</p>
+      <p class="muted small u-m-0 u-mb-8">Marque o que aplicar. Alterados atualizam o texto (a redação anterior fica guardada); novos entram no acervo; revogados saem do estudo. Tudo recebe o selo <span class="mini-tag nov-tag">novidade</span> para você treinar.</p>
       ${sec("Alterados", "square-pen", d.alterados, (a, i) => `<label class="ca-item"><input type="checkbox" class="ca-chk" data-grp="alterados" data-i="${i}" checked />
         <span><b>${esc(a.referencia)}</b><div class="ca-diff"><span class="ls-diff-red">${esc(trunc(a.textoAntigo))}</span> <span class="muted">→</span> <span class="ls-diff-green">${esc(trunc(a.textoNovo))}</span></div></span></label>`)}
       ${sec("Novos", "download", d.novos, (a, i) => `<label class="ca-item"><input type="checkbox" class="ca-chk" data-grp="novos" data-i="${i}" checked />
@@ -1986,21 +1986,21 @@ function abrirNovaMeta(app, tipo) {
         <button data-meta-modo="livre">Livre</button>
       </div>` : ""}
       ${temEstrutura ? `<div class="meta-sec" data-sec="estrutura">
-        <p class="muted small" style="margin:0 0 10px">Escolha uma <b>Parte / Título / Capítulo</b> — a meta cobre exatamente esses artigos e mostra o progresso.</p>
+        <p class="muted small u-m-0 u-mb-12">Escolha uma <b>Parte / Título / Capítulo</b> — a meta cobre exatamente esses artigos e mostra o progresso.</p>
         <div class="form-row"><label class="u-grow">Lei <select id="meta-lei">${opcLei}</select></label></div>
         <label class="u-block u-mt-8">Seção <select id="meta-secao">${secoesHTML(normas[0])}</select></label>
         <div class="meta-preview muted small u-mt-8" id="meta-prev"></div>
       </div>
       <div class="meta-sec" data-sec="intervalo" hidden>
-        <p class="muted small" style="margin:0 0 10px">Um intervalo de artigos de uma lei (ex.: <i>art. 1º a 20</i>).</p>
-        <div class="form-row" style="align-items:flex-end">
+        <p class="muted small u-m-0 u-mb-12">Um intervalo de artigos de uma lei (ex.: <i>art. 1º a 20</i>).</p>
+        <div class="form-row u-items-end">
           <label class="u-grow">Lei <select id="meta-lei2">${opcLei}</select></label>
           <label>De <input id="meta-de" type="number" min="1" placeholder="1" style="width:84px" /></label>
           <label>Até <input id="meta-ate" type="number" min="1" placeholder="20" style="width:84px" /></label>
         </div>
       </div>` : ""}
       <div class="meta-sec" data-sec="livre" ${modo === "livre" ? "" : "hidden"}>
-        <p class="muted small" style="margin:0 0 10px">Meta <b>crua</b>, do seu jeito (ex.: <i>${tipo === "juris" ? "Ler os informativos 810 a 815 do STJ" : "Ler art. 1º a 20 da CF"}</i>). Vira <b>tarefa no Planejamento</b>.</p>
+        <p class="muted small u-m-0 u-mb-12">Meta <b>crua</b>, do seu jeito (ex.: <i>${tipo === "juris" ? "Ler os informativos 810 a 815 do STJ" : "Ler art. 1º a 20 da CF"}</i>). Vira <b>tarefa no Planejamento</b>.</p>
         <label class="u-block u-mb-8">O que ler
           <input id="meta-ref" placeholder="${tipo === "juris" ? "Ex.: Ler informativos 810–815 do STJ" : "Ex.: Ler art. 1º a 20 da CF"}" /></label>
         <label class="inline u-mb-8" data-tip="Uma etapa por linha vira uma tarefa separada."><input type="checkbox" id="meta-dividir" /> Dividir em etapas (uma tarefa por linha)</label>
@@ -2010,7 +2010,7 @@ function abrirNovaMeta(app, tipo) {
         <label>Disciplina <select id="meta-disc">${opcDisc}</select></label>
         <label>Tópico (opcional) <select id="meta-top"><option value="">— sem tópico —</option></select></label>
       </div>
-      <label style="display:block; margin:8px 0 0">Observação (opcional)
+      <label class="u-block u-m-0 u-mt-8">Observação (opcional)
         <input id="meta-obs" placeholder="lembrete, prazo, prioridade…" /></label>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="meta-cancelar">Cancelar</button>
@@ -2087,7 +2087,7 @@ function abrirQuebrarMeta(app, tipo, id) {
   abrirJanela({
     titulo: "Dividir meta em etapas",
     corpoHTML: `<div class="card form-leiseca">
-      <p class="muted small" style="margin:0 0 8px">Meta: <b>${esc(mae.referencia)}</b>. Escreva <b>uma etapa por linha</b> — cada uma vira uma tarefa. A meta original é substituída pelas etapas.</p>
+      <p class="muted small u-m-0 u-mb-8">Meta: <b>${esc(mae.referencia)}</b>. Escreva <b>uma etapa por linha</b> — cada uma vira uma tarefa. A meta original é substituída pelas etapas.</p>
       <textarea id="qm-partes" rows="6" placeholder="${esc("Ex.:\nLer art. 1º a 5º da CF\nLer art. 6º a 10 da CF\nLer art. 11 a 20 da CF")}"></textarea>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="qm-cancelar">Cancelar</button>
@@ -2127,7 +2127,7 @@ function abrirImportarMetas(app, tipo) {
       if (estado.linhas) {
         corpo.innerHTML = `<div class="card form-leiseca">
           <h3>${icone("calendar-check")} Revisar ${estado.linhas.length} ${estado.linhas.length === 1 ? "meta" : "metas"} antes de lançar</h3>
-          <p class="muted small" style="margin:0 0 8px">Edite ou remova (✕). Cada linha vira uma tarefa no Planejamento, vinculada à disciplina escolhida.</p>
+          <p class="muted small u-m-0 u-mb-8">Edite ou remova (✕). Cada linha vira uma tarefa no Planejamento, vinculada à disciplina escolhida.</p>
           <ul class="prev-editavel">${estado.linhas.map((t, i) => `<li class="prev-card"><div class="prev-card-l1"><input class="prev-inp im-meta" data-i="${i}" value="${esc(t)}" /><button class="prev-remover" data-action="im-rm" data-i="${i}">${icone("x")}</button></div></li>`).join("")}</ul>
           <div class="form-acoes"><button class="btn btn-ghost" data-action="im-voltar">${icone("arrow-left")} Voltar</button><span class="spacer"></span><button class="btn btn-primary" data-action="im-lancar" ${estado.linhas.length ? "" : "disabled"}>Lançar ${estado.linhas.length} ${estado.linhas.length === 1 ? "meta" : "metas"}</button></div>
         </div>`;
@@ -2135,7 +2135,7 @@ function abrirImportarMetas(app, tipo) {
         return;
       }
       corpo.innerHTML = `<div class="card form-leiseca">
-        <p class="muted small" style="margin:0 0 10px">Cole seu <b>cronograma/tabela</b> de leitura (uma meta por linha) ou importe um arquivo. O app limpa números de coluna e separadores; você confere antes de lançar.</p>
+        <p class="muted small u-m-0 u-mb-12">Cole seu <b>cronograma/tabela</b> de leitura (uma meta por linha) ou importe um arquivo. O app limpa números de coluna e separadores; você confere antes de lançar.</p>
         <label class="inline u-mb-8">Disciplina <select id="im-disc">${opcDisc}</select></label>
         <label class="btn btn-ghost btn-file u-mb-8" data-tip="Importar de um PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="im-file" type="file" accept=".pdf,.txt,.md,.csv" hidden /></label>
         <textarea id="im-texto" rows="7" placeholder="${esc("Ex.:\nLer art. 1º a 20 da CF\nLer Lei 8.112 arts. 116 a 132\nLer Título III do CP")}">${esc(estado.texto)}</textarea>
@@ -2312,7 +2312,7 @@ function abrirIndiceModulo(app, tipo) {
         </label>`;
       corpo.innerHTML = `
         <div class="sem-sel">
-          <p class="muted small" style="margin:0 0 8px">Separe ${nomeItem} deste módulo para a <b>busca por significado</b> do chat (encontra pelo sentido, não só pela palavra exata). Separar 1 trecho = 1 requisição à IA. ${s.temIndice ? `Separados: <b>${s.indexadas}</b> de ${s.fontes} (${plural(s.chunks, "trecho", "trechos")}).` : "Nada separado ainda."}</p>
+          <p class="muted small u-m-0 u-mb-8">Separe ${nomeItem} deste módulo para a <b>busca por significado</b> do chat (encontra pelo sentido, não só pela palavra exata). Separar 1 trecho = 1 requisição à IA. ${s.temIndice ? `Separados: <b>${s.indexadas}</b> de ${s.fontes} (${plural(s.chunks, "trecho", "trechos")}).` : "Nada separado ainda."}</p>
           <div class="sem-sel-top">
             <span class="muted small">${fontes.length} ${fontes.length === 1 ? "item disponível" : "itens disponíveis"}</span>
             <span class="spacer"></span>
@@ -2748,7 +2748,7 @@ function abrirPersonalizarBarra(app, store) {
     corpoHTML: `<div class="card ferr-lei">
       <section class="ferr-sec">
         <h4>${icone("layout-panel-top")} Botões na barra</h4>
-        <p class="muted small" style="margin:0 0 9px">Buscar e o menu ⋯ (Opções) ficam sempre. Fixe aqui os atalhos que quiser ver direto na barra — os demais continuam dentro de Opções.</p>
+        <p class="muted small u-m-0 u-mb-8">Buscar e o menu ⋯ (Opções) ficam sempre. Fixe aqui os atalhos que quiser ver direto na barra — os demais continuam dentro de Opções.</p>
         <div class="ferr-grupo-lbl">Leitura</div>
         <div class="ferr-linha ferr-filtros">${LER_NAV_DEF.map(pill).join("")}</div>
         <div class="ferr-grupo-lbl">Ações da lei</div>

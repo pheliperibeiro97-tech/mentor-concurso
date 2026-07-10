@@ -8,7 +8,7 @@ import { GUIA } from "../guia.js";
 // normal (janela); o botão "⛶ Tela cheia" no cabeçalho expande quando o usuário quiser.
 export function abrirGuia() {
   const corpo = `
-    <div class="barra-acoes" style="margin-bottom:8px">
+    <div class="barra-acoes u-mb-8">
       <button class="btn btn-ghost btn-sm" data-action="expandir-tudo">Expandir tudo</button>
       <button class="btn btn-ghost btn-sm" data-action="recolher-tudo">Recolher tudo</button>
     </div>

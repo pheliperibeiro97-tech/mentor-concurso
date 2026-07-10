@@ -112,7 +112,7 @@ function sugIAHTML(store, carregando = "", rel = null) {
       <button class="btn ${nProvas ? "btn-primary" : "btn-ghost"} btn-sm" data-action="sug-provas" ${carregando || !nProvas ? "disabled" : ""} data-tip="${nProvas ? `Analisa as ${nProvas} questões das suas provas importadas (incidência real).` : "Importe provas anteriores para usar esta opção."}">${carregando === "provas" ? "Analisando…" : `Pelas minhas provas (${nProvas})`}</button>
       <button class="btn btn-ghost btn-sm" data-action="sug-web" ${carregando ? "disabled" : ""} data-tip="Pesquisa na web o 'raio-x' da banca/cargo${alvo ? ` (${esc(alvo)})` : ""} e estima a relevância, com fontes.">${carregando === "web" ? "Pesquisando…" : "Pesquisar na web"}</button>
     </div>
-    ${!nProvas ? `<p class="muted small" style="margin:0 0 4px">${icone("bar-chart-3")} Você ainda não importou provas — a opção pelas suas provas (a mais confiável) aparece depois da primeira importação.</p>` : ""}
+    ${!nProvas ? `<p class="muted small u-m-0 u-mb-4">${icone("bar-chart-3")} Você ainda não importou provas — a opção pelas suas provas (a mais confiável) aparece depois da primeira importação.</p>` : ""}
     ${rel ? sugResultadoHTML(!!store.coberturaOficial(), rel) : ""}
   </div>`;
 }
@@ -222,12 +222,12 @@ function oficialHTML(store, recolar = false, diff = null) {
       <span class="painel-num"><b class="num">${r.lacunas.length}</b><span>lacunas</span></span>
       <span class="painel-num"><b class="num">${r.extras.length}</b><span>extras</span></span>
     </div>
-    ${r.multi ? `<p class="muted small" style="margin:0 0 8px">${icone("shuffle")} <b>${r.multi} ${r.multi === 1 ? "item" : "itens"}</b> do edital ${r.multi === 1 ? "está dividido" : "estão divididos"} em <b>vários tópicos</b> seus — a relevância/incidência desse item é <b>compartilhada</b> entre eles (não some nem é contada em dobro). Ao aplicar relevância, dá para <b>dividir</b> entre os tópicos do mesmo item.</p>` : ""}
+    ${r.multi ? `<p class="muted small u-m-0 u-mb-8">${icone("shuffle")} <b>${r.multi} ${r.multi === 1 ? "item" : "itens"}</b> do edital ${r.multi === 1 ? "está dividido" : "estão divididos"} em <b>vários tópicos</b> seus — a relevância/incidência desse item é <b>compartilhada</b> entre eles (não some nem é contada em dobro). Ao aplicar relevância, dá para <b>dividir</b> entre os tópicos do mesmo item.</p>` : ""}
     ${
       r.lacunas.length
         ? `<div class="oficial-acoes"><button class="btn btn-primary btn-sm" data-action="oficial-criar-lacunas">${icone("plus")} Criar tópicos para as ${plural(r.lacunas.length, "lacuna", "lacunas")}</button></div>
            <ul class="oficial-lista">${lacunas}</ul>`
-        : `<p class="muted small" style="margin:8px 0 0">${icone("check")} Nenhuma lacuna — todos os itens oficiais têm um tópico seu.</p>`
+        : `<p class="muted small u-m-0 u-mt-8">${icone("check")} Nenhuma lacuna — todos os itens oficiais têm um tópico seu.</p>`
     }
     ${extras}
     ${r.ignorados ? `<p class="muted small u-mt-8">${plural(r.ignorados, "item dispensado", "itens dispensados")}.</p>` : ""}
@@ -302,7 +302,7 @@ function aulasImportHTML(texto = "") {
     <p class="muted small">Cole a <b>divisão de aulas do seu cursinho</b> — uma aula por bloco, com os assuntos que ela cobre. O app liga cada assunto aos <b>seus tópicos</b> (pelo nome + sinônimos) e monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão por aula.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
     <textarea id="aulas-texto" rows="6" placeholder="${esc("Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias fundamentais\nAula 2: Atos administrativos\nAula 3: Atos administrativos; Poderes administrativos")}">${esc(texto)}</textarea>
-    <p class="muted small" style="margin:6px 0 0">Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.) Você revisa e edita antes de montar.</p>
+    <p class="muted small u-m-0 u-mt-8">Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.) Você revisa e edita antes de montar.</p>
     <div class="form-acoes"><button class="btn btn-ghost" data-action="importar-aulas-fechar">Cancelar</button><button class="btn btn-primary" data-action="importar-aulas">Revisar</button></div>
   </div>`;
 }
@@ -314,7 +314,7 @@ function aulasImportHTML(texto = "") {
 function addDiscPanelHTML(texto = "") {
   return `<div class="card">
     <h3>Adicionar ao edital</h3>
-    <p class="muted small" style="margin:0 0 8px">Digite <b>ou</b> cole aqui — funciona dos dois jeitos. Para criar só <b>uma disciplina</b>, escreva o nome dela (uma linha). Para vários itens, <b>cole o edital</b>: uma <b>disciplina</b> é uma linha em MAIÚSCULAS ou terminada em "<b>:</b>", e as linhas seguintes (ou itens separados por "<b>;</b>") viram os <b>tópicos</b> dela. Você revisa e edita tudo antes de aplicar. Você também pode importar um arquivo.</p>
+    <p class="muted small u-m-0 u-mb-8">Digite <b>ou</b> cole aqui — funciona dos dois jeitos. Para criar só <b>uma disciplina</b>, escreva o nome dela (uma linha). Para vários itens, <b>cole o edital</b>: uma <b>disciplina</b> é uma linha em MAIÚSCULAS ou terminada em "<b>:</b>", e as linhas seguintes (ou itens separados por "<b>;</b>") viram os <b>tópicos</b> dela. Você revisa e edita tudo antes de aplicar. Você também pode importar um arquivo.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
@@ -330,7 +330,7 @@ function editalPreviewHTML(discs) {
   const totTop = discs.reduce((a, d) => a + (d.topicos || []).length, 0);
   return `<div class="card">
     <div class="plano-h"><h2>Revisar ${plural(discs.length, "disciplina", "disciplinas")} e ${plural(totTop, "tópico", "tópicos")} antes de aplicar</h2></div>
-    <p class="muted small" style="margin:0 0 8px">Edite os nomes, remova (✕) o que não quiser e acrescente tópicos. Só o que estiver aqui será criado.</p>
+    <p class="muted small u-m-0 u-mb-8">Edite os nomes, remova (✕) o que não quiser e acrescente tópicos. Só o que estiver aqui será criado.</p>
     <div class="u-mb-12"><button class="btn btn-ghost btn-sm" data-action="estruturar-edital-ia" data-tip="Reorganiza o edital com a IA — útil quando o texto veio bagunçado (OCR, 2 colunas, numeração). Não inventa tópicos.">${icone("sparkles")} Estruturar com IA</button> <span class="muted small">use se a separação automática não ficou boa</span></div>
     <div class="ed-prev-lista">
       ${discs
@@ -499,7 +499,7 @@ function abrirAddEdital(app) {
 function aulasPreviewHTML(aulas) {
   return `<div class="card cursinho-card">
     <div class="plano-h"><h2>Revisar ${plural(aulas.length, "aula", "aulas")} antes de montar o plano</h2></div>
-    <p class="muted small" style="margin:0 0 10px">Edite o nome da aula e os assuntos; remova (✕) o que não quiser. Os assuntos serão ligados aos seus tópicos pelo nome (＋ sinônimos).</p>
+    <p class="muted small u-m-0 u-mb-12">Edite o nome da aula e os assuntos; remova (✕) o que não quiser. Os assuntos serão ligados aos seus tópicos pelo nome (＋ sinônimos).</p>
     <div class="ed-prev-lista">
       ${aulas
         .map((a, ai) => {

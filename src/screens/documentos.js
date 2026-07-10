@@ -1557,7 +1557,7 @@ function detectPainelHTML() {
     <h3 class="u-mb-4">${icone("search")} Tópicos detectados no material</h3>
     ${
       res.length
-        ? `<p class="muted small" style="margin:0 0 8px">A IA identificou estes tópicos do edital. Marque os que quer colocar na <b>curva de revisão</b> (você confirma):</p>
+        ? `<p class="muted small u-m-0 u-mb-8">A IA identificou estes tópicos do edital. Marque os que quer colocar na <b>curva de revisão</b> (você confirma):</p>
            <ul class="detect-lista">
              ${res
                .map(
