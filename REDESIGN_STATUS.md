@@ -71,13 +71,20 @@
     btn-dossie, btn-zerar, btn-ico). Verificado nos 2 temas, 0 erros de console.
 
 ### Falta da Fase 0 (backlog fino)
-- [ ] ~137 blocos `[data-tema="escuro"]` restantes → reduzir para <30 usando os tints
-      (trabalho manual, regra a regra; começar pelo cluster ~linha 4600-4750).
-- [ ] ~540 hexes restantes → `var()`. Os seguros por troca idêntica já foram; o resto
-      exige decisão (ex.: #94a3b8 slate-400 não tem token — criar `--muted-2`?).
+- [x] Transitions → `var(--dur-*)`: 217 migradas; 0 restantes nas faixas mapeadas.
+- [x] `--muted-2` (#94a3b8) criado nos 2 temas; 16 usos migrados.
+- [x] Blocos escuros: 133 → 122; TODAS as redundâncias comprovadas removidas (11 blocos
+      + 25 declarações). Fix: heatmaps voltaram a exibir --heat-* no escuro (verificado).
+- [ ] 122 blocos escuros restantes = DECISÃO DE DESIGN (não mecânico). Mapa por tela:
+      Hoje/Mentor 40 · Global 26 · Materiais/Resumos 21 · Foco/LeiSeca 18 · Questões 16 ·
+      Acompanhamento 15 · Edital 7 · Chat 4. Padrão dominante: inks 300-shade
+      (#93c5fd ×5, #fca5a5 ×4, #86efac ×3) — criar tokens "ink-on-soft" por matiz OU
+      aceitar mudança sutil no claro. Gradientes do Modo Foco e leitor Kindle escuro
+      são intencionais (deixar).
+- [ ] ~540 hexes restantes fora dos blocos escuros → exigem decisão caso a caso
+      (valores que NÃO batem com token; trocar mudaria o visual).
 - [ ] ~55 grupos de seletores duplicados (mesmo seletor, corpos DIFERENTES — camadas
       de eras; ex.: bloco fq-* definido 2×). Consolidar manualmente um a um.
-- [ ] Migrar transitions literais (.12s-.25s) para `var(--dur-*)` (139 restantes).
 - [ ] Espaçamentos gap/padding com valores ímpares (5/7/9/11/13px) → grade de 4px.
 
 ## FASE 1 — Navegação (PARCIALMENTE FEITA)
@@ -89,12 +96,12 @@
 - Seg MC × C/E dentro de Questões (agente da sessão anterior — VERIFICAR).
 
 ### Falta da Fase 1
-- [ ] Central absorver os BOTÕES GRADUADOS (Esqueci/Lembrei/Fácil) no card e no foco —
-      hoje o "Concluir" da Central grava `revisarTopico(refId,"lembrei")` sempre
-      (`central-revisoes.js:212-224`) e corrompe o SM-2. Ver plano §Fase 1 item 2.
-- [ ] Encadeamento: fila da Central oferece os flashcards vencidos ao final.
-- [ ] Remover as listas de vencimento de `revtopico.js:68-91` e `mapas.js:135`
-      (regra: só a Central lista o que vence) — banner-link no máximo.
+- [x] Baixa GRADUADA na Central (card + foco, teclas 1/2/3; `concluirRevisao` aceita
+      grau e propaga; log grava o grau). Verificado ao vivo: escada reagiu 1/7/15.
+- [x] Encadeamento: conclusão da sessão da Central oferece "Continuar com N flashcards"
+      → abre o foco de Flashcards direto (`params.iniciarFoco`).
+- [x] Só a Central lista vencimentos: revtopico virou banner→Central + abre o fluxo
+      via `params.topicoId`; mapas trocou a lista por banner; hub do Hoje re-roteado.
 - [ ] Decidir "Por onde começar" → checklist de 1ª semana no Hoje (Fase 3 do plano).
 - [ ] Avaliar fundir Resumos/Mapas dentro de Materiais (reduziria p/ ~14 itens).
 
