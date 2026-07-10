@@ -552,22 +552,26 @@ function vinculoNome(st, r) {
   const d = r.disciplinaId ? st.disciplinas.find((x) => x.id === r.disciplinaId) : null;
   return d ? d.nome : "Tópico não definido";
 }
+// <template> parseia em documento inerte: imagens não carregam e handlers on*
+// não disparam durante a extração — um div solto executaria onerror de conteúdo hostil.
 function textoPuro(html) {
-  const div = document.createElement("div");
-  div.innerHTML = html || "";
-  return div.textContent || "";
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html || "";
+  return tpl.content.textContent || "";
 }
 // Sanitização de HTML de resumo. Exportada porque precisa rodar também na LEITURA
 // (aqui e na Central de Revisões): conteúdo vindo de sync/import antigo pode nunca
 // ter passado pelo salvar, então sanitizar só no save não protege o render.
 export function sanitize(html) {
-  const div = document.createElement("div");
-  div.innerHTML = html || "";
-  div.querySelectorAll("script,style,iframe,object,embed").forEach((n) => n.remove());
-  div.querySelectorAll("*").forEach((n) => {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html || "";
+  tpl.content.querySelectorAll("script,style,iframe,object,embed").forEach((n) => n.remove());
+  tpl.content.querySelectorAll("*").forEach((n) => {
     [...n.attributes].forEach((a) => {
       if (/^on/i.test(a.name) || (a.name === "href" && /javascript:/i.test(a.value))) n.removeAttribute(a.name);
     });
   });
+  const div = document.createElement("div");
+  div.appendChild(tpl.content.cloneNode(true));
   return div.innerHTML;
 }
