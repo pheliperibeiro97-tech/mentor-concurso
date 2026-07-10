@@ -41,7 +41,7 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
   // count=true: o número usa data-count/data-suf p/ o count-up (ui.ativarCountUp anima 0→p).
   const txt = count
     ? `<span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px" data-count="${p}" data-suf="%">${p}%</span>`
-    : `<span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px">${p}<i>%</i>${sub ? `<small>${sub}</small>` : ""}</span>`;
+    : `<span class="pring-txt" style="font-size:${Math.round(size * 0.27)}px"><b class="pring-num">${p}<i>%</i></b>${sub ? `<small>${sub}</small>` : ""}</span>`;
   return `<div class="pring" style="width:${size}px;height:${size}px">
     <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
       ${defs}
