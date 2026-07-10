@@ -1105,12 +1105,11 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   const estudarAcoes = (tipo === "juris" && (i.texto || "").trim() && !i.revogado)
     ? `<div class="ls-estudar-acoes">
         <details class="ls-mais ls-estudar-menu">
-          <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese agora: Certo/Errado, flashcards, questões, completar a letra ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
+          <summary class="btn btn-soft btn-sm" data-tip="Estudar esta tese agora: Certo/Errado, flashcards, questões ou ler em foco.">${icone("graduation-cap")} Estudar</summary>
           <div class="ls-mais-pop">
             <button class="lnk" data-action="card-ce" data-id="${i.id}" data-tip="${iaOn ? "Gerar Certo/Errado desta tese (você escolhe quantidade e nível) e treinar agora." : "Conecte a IA (Configurações) para gerar."}">${icone("check")} Certo/Errado</button>
             <button class="lnk" data-action="card-flash" data-id="${i.id}" data-tip="${iaOn ? "Gerar flashcards desta tese (você escolhe quantidade e nível)." : "Conecte a IA para gerar."}">${icone("layers")} Flashcard</button>
             <button class="lnk" data-action="card-questoes" data-id="${i.id}" data-tip="${iaOn ? "Gerar questões de múltipla escolha desta tese (você escolhe quantidade e nível)." : "Conecte a IA para gerar."}">${icone("list-checks")} Questões</button>
-            <button class="lnk" data-action="card-cloze" data-id="${i.id}" data-tip="Completar a tese (lacunas) — recordação ativa.">${icone("square-pen")} Completar</button>
             <button class="lnk" data-action="ler-foco" data-id="${i.id}" data-tip="Ler em foco (tela cheia).">${icone("book-open")} Foco</button>
           </div>
         </details>

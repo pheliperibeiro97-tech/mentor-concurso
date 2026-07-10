@@ -739,7 +739,6 @@ function renderIndicacoes(root, app, tipo) {
       toast(qs.length ? `${plural(qs.length, "questão gerada", "questões geradas")}.` : "A IA não retornou questões.", qs.length ? "ok" : "erro");
       if (qs.length) app.navigate("pratica");
     },
-    "card-cloze": (el) => abrirCompletarArtigo(app, store, [el.getAttribute("data-id")]),
     "card-flash": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const id = el.getAttribute("data-id");
