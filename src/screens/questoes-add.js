@@ -31,9 +31,21 @@ export function addQuestoesPanelHTML(st, estado, formato) {
   const opcoesDocs = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");
   const temDocs = !!st.documentos.length;
 
-  const instr = ce
-    ? `<b>Importe ou cole um PDF/texto de prova ou de banca</b> que o app extrai os itens com o gabarito (Certo/Errado) e os dados (referência, assunto, banca, ano, órgão), aplicando o gabarito do bloco de respostas no final. Ou monte à mão, <b>um item por linha</b> com <b>|</b>: <i>afirmação | C ou E | justificativa</i>. Você revisa cada item antes de adicionar.`
-    : `<b>Importe ou cole um PDF/texto de prova ou de banca</b> que o app extrai as questões com o gabarito e os dados (referência, assunto, banca, ano, órgão), aplicando o gabarito do bloco de respostas no final. Ou monte à mão, <b>uma questão por linha</b> com <b>|</b>: <i>enunciado | alternativas</i> (marque a correta com <b>*</b>). Você revisa cada questão antes de adicionar.`;
+  const ajuda = ce
+    ? `<details class="ed-ajuda"><summary>Como o app separa</summary>
+        <ul class="u-m-0">
+          <li>Importe/traga um PDF ou texto: o app extrai os itens, o gabarito (Certo/Errado) e os dados (referência, assunto, banca, ano, órgão).</li>
+          <li>À mão: <b>um item por linha</b>, campos separados por <b>|</b> — <i>afirmação | C ou E | justificativa</i>.</li>
+          <li>Você revisa cada item antes de adicionar.</li>
+        </ul>
+      </details>`
+    : `<details class="ed-ajuda"><summary>Como o app separa</summary>
+        <ul class="u-m-0">
+          <li>Importe/traga um PDF ou texto: o app extrai as questões, o gabarito e os dados (referência, assunto, banca, ano, órgão).</li>
+          <li>À mão: <b>uma questão por linha</b>, campos separados por <b>|</b> — <i>enunciado | alternativas</i>. Marque a correta com <b>*</b>; código opcional com <b>ref:</b>.</li>
+          <li>Você revisa cada questão antes de adicionar.</li>
+        </ul>
+      </details>`;
   const exemplo = ce
     ? `O ato administrativo goza de presunção de legitimidade | C | É um de seus atributos.
 Servidor em estágio probatório não pode ser exonerado | E | Pode, se reprovado na avaliação.`
@@ -44,11 +56,8 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
   return `
     <div class="card form-questao">
       <h3>${ce ? "Adicionar itens Certo/Errado" : "Adicionar questões"}</h3>
-      <p class="muted small u-m-0 u-mb-12">Três jeitos de adicionar — escolha um abaixo.</p>
 
       <div class="add-via">
-        <h4>${icone("square-pen")} Digitar, colar ou importar arquivo</h4>
-        <p class="muted small u-m-0 u-mb-12">${instr}</p>
         <div class="add-via-linha">
           <label class="inline" style="flex:1; min-width:220px">Vincular todas ao tópico <select id="q-add-top">${opcoesVincular}</select></label>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo para cá.">${icone("paperclip")} Importar de arquivo
@@ -56,6 +65,7 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
           </label>
         </div>
         <textarea id="q-add-texto" rows="4" placeholder="${esc(placeholder)}">${esc(estado.textoSalvo || "")}</textarea>
+        ${ajuda}
         <div class="form-acoes">
           <button class="btn btn-ghost" data-action="cancelar-addq">Cancelar</button>
           <button class="btn btn-primary" data-action="adicionar-questoes" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Processando…" : "Revisar"}</button>
@@ -64,15 +74,15 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
 
       ${
         temDocs
-          ? `<div class="add-via">
-              <h4>${icone("library")} A partir de um material já cadastrado</h4>
+          ? `<details class="add-via add-via-alt">
+              <summary>${icone("library")} De um material já cadastrado</summary>
               <p class="muted small u-m-0 u-mb-12">Use uma aula ou conteúdo que você importou em Materiais: o app extrai ${ce ? "os itens C/E" : "as questões"} que já existem nele, ou a IA gera ${ce ? "itens novos" : "questões novas"}.</p>
               <div class="add-via-linha">
                 <label class="inline" style="flex:1; min-width:200px">Material <select id="q-add-doc">${opcoesDocs}</select></label>
                 <button class="btn btn-ghost btn-sm" data-action="extrair-doc" data-tip="Puxa ${ce ? "os itens C/E" : "as questões"} que JÁ existem no material (não inventa).">${icone("clipboard-list")} Extrair do material</button>
                 <button class="btn btn-ia btn-sm" data-action="gerar-escopo" data-tip="A IA cria ${ce ? "itens Certo/Errado novos" : "questões novas"}: escolha tópico, aula e subtópico do índice.">${icone("sparkles")} Gerar com IA</button>
               </div>
-            </div>`
+            </details>`
           : ""
       }
 
@@ -212,7 +222,7 @@ function provaImportHTML(st, estado) {
     corpo = provaRevisaoHTML(rev);
   } else {
     corpo = `
-      <p class="muted small">Traga o <b>texto da prova</b> e o <b>gabarito definitivo</b> que você baixou do site da banca. A IA extrai as questões; o gabarito é o <b>definitivo</b> (selo oficial). O app não baixa nada: você traz o conteúdo.</p>
+      <p class="muted small">Traga o <b>texto da prova</b> e o <b>gabarito definitivo</b>; a IA extrai as questões e aplica o gabarito oficial.</p>
       <details class="prova-fontes">
         <summary>${icone("download")} Onde baixar provas anteriores (sites oficiais)</summary>
         <div class="prova-fontes-lista">
@@ -239,23 +249,25 @@ function provaImportHTML(st, estado) {
       <label class="inline">Vincular ao tópico: <select id="prova-topico">${opcoesVincular}</select></label>
 
       <div class="prova-campo">
-        <div class="prova-campo-tit"><b>1) Prova</b> <span class="muted small">— cole o texto abaixo <b>ou</b> importe o arquivo (faça só um)</span>
+        <div class="prova-campo-tit"><b>1) Prova</b> <span class="muted small">— traga o texto abaixo <b>ou</b> importe o arquivo (faça só um)</span>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="PDF ou .txt da prova. PDF escaneado é transcrito por OCR (Visão) se a IA estiver conectada.">${icone("paperclip")} Importar arquivo<input id="prova-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
         </div>
-        <textarea id="prova-texto" rows="5" placeholder="Cole aqui o texto da prova (enunciados e alternativas)…">${esc(pf.textoProva || "")}</textarea>
+        <textarea id="prova-texto" rows="5" placeholder="Enunciados e alternativas da prova…">${esc(pf.textoProva || "")}</textarea>
       </div>
 
       <div class="prova-campo">
-        <div class="prova-campo-tit"><b>2) Gabarito definitivo</b> <span class="muted small">— cole abaixo <b>ou</b> importe o arquivo (faça só um)</span>
+        <div class="prova-campo-tit"><b>2) Gabarito definitivo</b> <span class="muted small">— traga o texto abaixo <b>ou</b> importe o arquivo (faça só um)</span>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="PDF ou .txt do gabarito. PDF escaneado é transcrito por OCR (Visão) se a IA estiver conectada.">${icone("paperclip")} Importar arquivo<input id="gab-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
         </div>
-        <textarea id="gab-texto" rows="3" placeholder="Cole aqui o gabarito definitivo (ex.: 1-A  2-C  3-E …  ·  Cebraspe: 1-C  2-E …)">${esc(pf.textoGabarito || "")}</textarea>
+        <textarea id="gab-texto" rows="3" placeholder="1-A  2-C  3-E …  ·  Cebraspe: 1-C  2-E …">${esc(pf.textoGabarito || "")}</textarea>
       </div>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="prova-cancelar">Cancelar</button>
         <button class="btn btn-primary" data-action="prova-extrair">Extrair e revisar</button>
       </div>`;
   }
+  // Colapsado: só o botão discreto (o próprio rótulo já explica). Aberto/revisão: cabeçalho + form.
+  if (!aberto) return `<div class="add-via add-via-alt">${corpo}</div>`;
   return `<div class="add-via">
     <h4>${icone("file-text")} De uma prova anterior <span class="muted small" style="font-weight:400">(gabarito definitivo)</span></h4>
     ${corpo}
@@ -413,7 +425,7 @@ function abrirAddQuestoes(app, estado, formato) {
         "adicionar-questoes": async () => {
           const texto = corpo.querySelector("#q-add-texto").value;
           const top = estado.vincularTop || corpo.querySelector("#q-add-top").value || null;
-          if (!texto.trim()) return toast(ce ? "Digite ou cole ao menos um item." : "Digite ou cole ao menos uma questão.", "erro");
+          if (!texto.trim()) return toast(ce ? "Adicione ao menos um item." : "Adicione ao menos uma questão.", "erro");
           estado.processando = true;
           rerender();
           let itens = [];
@@ -497,8 +509,8 @@ function abrirAddQuestoes(app, estado, formato) {
             textoGabarito: corpo.querySelector("#gab-texto")?.value || "",
           };
           estado.provaForm = pf;
-          if (!pf.textoProva.trim()) return toast("Cole o texto da prova.", "erro");
-          if (!pf.textoGabarito.trim()) return toast("Cole o gabarito oficial.", "erro");
+          if (!pf.textoProva.trim()) return toast("Traga o texto da prova.", "erro");
+          if (!pf.textoGabarito.trim()) return toast("Traga o gabarito oficial.", "erro");
           if (!store.iaDisponivel()) return avisoIA(app, "Importar prova anterior");
           el.disabled = true;
           el.textContent = "Extraindo…";

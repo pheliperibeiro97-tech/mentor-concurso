@@ -41,44 +41,12 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     return store.resolverEscopo({ topicoIds: estado.sel, aulaId: estado.aulaId || null });
   }
 
-  // Fallback "conhecimento do Mentor": quando os tópicos escolhidos não têm material/
-  // resumo vinculado, a IA gera a partir do PRÓPRIO conhecimento sobre aqueles temas
-  // (nome do tópico + disciplina + banca/cargo). Rotulado com honestidade ("confira").
-  function escopoConhecimento() {
-    if (estado.base !== "edital" || !estado.sel.length) return null;
-    const st = store.get();
-    const nomes = estado.sel
-      .map((id) => st.topicos.find((t) => t.id === id))
-      .filter(Boolean)
-      .map((t) => {
-        const d = st.disciplinas.find((x) => x.id === t.disciplinaId);
-        return d ? `${t.nome} (${d.nome})` : t.nome;
-      });
-    if (!nomes.length) return null;
-    const conc = st.concurso || {};
-    const alvo = [conc.cargo, conc.banca].filter(Boolean).join(" · ");
-    const texto =
-      `Gere conteúdo de estudo para concurso a partir do seu conhecimento sobre os seguintes temas do edital` +
-      (alvo ? ` (${alvo})` : "") + `:\n- ` + nomes.join("\n- ") +
-      `\nBaseie-se em legislação, doutrina e jurisprudência consolidadas; seja fiel e objetivo.`;
-    const topicoId = estado.sel.length === 1 ? estado.sel[0] : null;
-    return {
-      texto,
-      topicoId,
-      contexto: nomes.join(", "),
-      fonte: { tipo: "conhecimento", titulo: "Conhecimento do Mentor: " + nomes.join(", ") },
-      conhecimento: true,
-    };
-  }
-
-  async function gerar(usarConhecimento) {
+  // A geração usa SEMPRE o conteúdo real (material/resumo vinculado ao tópico ou ao material
+  // escolhido). Não há mais "gerar do conhecimento do Mentor" (edital sem material).
+  async function gerar() {
     if (ocupado) return;
-    let escopo = escopoAtual();
-    if ((usarConhecimento || !escopo.texto)) {
-      const ec = escopoConhecimento();
-      if (ec) escopo = ec;
-    }
-    if (!escopo.texto) return toast("Escolha um tópico (ou um material/resumo vinculado).", "erro");
+    const escopo = escopoAtual();
+    if (!escopo.texto) return toast("A geração usa o material do tópico — importe ou vincule um material para gerar.", "erro");
     ocupado = true;
     rerender();
     toast(`Gerando ${cfg.rotulo} com IA…`);
@@ -197,10 +165,9 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       const st = store.get();
       const escopo = escopoAtual();
       const temConteudo = !!(escopo && escopo.texto);
-      const podeConhecimento = !temConteudo && estado.base === "edital" && estado.sel.length > 0;
 
       corpo.innerHTML = `
-        <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>Escolha a <b>base</b> e o escopo. A IA gera a partir desse conteúdo, vinculando a fonte ao tópico.</span></p>
+        <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>Escolha a <b>base</b> e o escopo. A IA gera a partir do <b>material</b>, vinculando a fonte ao tópico.</span></p>
         <div class="tile-grid se-base-grid" role="tablist">
           <button class="tile-pick ${estado.base === "edital" ? "on" : ""}" data-se-base="edital" data-tip="Pelo edital: disciplina → tópico → aula → subtópico.">
             <span class="tile-ico">${icone("list-checks")}</span>
@@ -231,19 +198,15 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
         <p class="muted small u-mt-12">${
           temConteudo
             ? "Escopo: " + esc(escopo.contexto || "")
-            : podeConhecimento
-              ? `Sem material vinculado — o Mentor gera do próprio conhecimento sobre ${estado.sel.length === 1 ? "o tópico" : "os tópicos"}. Confira sempre.`
-              : estado.base === "material"
-                ? "Escolha um material."
+            : estado.base === "material"
+              ? "Escolha um material."
+              : estado.sel.length
+                ? `${estado.sel.length === 1 ? "Este tópico ainda não tem" : "Estes tópicos ainda não têm"} material vinculado. Importe ou vincule um material (aba Materiais) para gerar.`
                 : "Escolha ao menos um tópico."
         }</p>
         <div class="form-acoes">
           ${cfg.extrair && permiteExtrair ? `<button class="btn btn-ghost" data-se="extrair" ${ocupado ? "disabled" : ""} data-tip="Puxa itens que JÁ existem no material (base Material).">${icone("clipboard-list")} Extrair do material</button>` : ""}
-          ${
-            temConteudo
-              ? `<button class="btn btn-ia ${ocupado ? "is-generating" : ""}" data-se="gerar" ${ocupado ? "disabled" : ""}>${ocupado ? "Processando…" : `${icone("sparkles")} Gerar`}</button>`
-              : `<button class="btn btn-ia ${ocupado ? "is-generating" : ""}" data-se="gerar-conhecimento" ${!podeConhecimento || ocupado ? "disabled" : ""} data-tip="A IA gera a partir do conhecimento dela sobre o tópico (sem material). Confira na fonte.">${ocupado ? "Processando…" : `${icone("sparkles")} Gerar do conhecimento do Mentor`}</button>`
-          }
+          <button class="btn btn-ia ${ocupado ? "is-generating" : ""}" data-se="gerar" ${!temConteudo || ocupado ? "disabled" : ""} data-tip="Gera a partir do material do escopo escolhido.">${ocupado ? "Processando…" : `${icone("sparkles")} Gerar`}</button>
         </div>`;
 
       // ---- listeners (reatados a cada rerender) ----
@@ -304,8 +267,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       corpo.querySelector('[data-se="dif"]')?.addEventListener("change", (e) => {
         estado.dificuldade = e.target.value;
       });
-      corpo.querySelector('[data-se="gerar"]')?.addEventListener("click", () => gerar(false));
-      corpo.querySelector('[data-se="gerar-conhecimento"]')?.addEventListener("click", () => gerar(true));
+      corpo.querySelector('[data-se="gerar"]')?.addEventListener("click", () => gerar());
       corpo.querySelector('[data-se="extrair"]')?.addEventListener("click", extrair);
     },
   });

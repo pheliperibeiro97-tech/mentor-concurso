@@ -187,18 +187,18 @@ function oficialHTML(store, recolar = false, diff = null) {
   if (r && recolar) {
     return `<div class="card oficial-card">
       <h3>${icone("clipboard-list")} Revalidar o checklist da banca (ver o que mudou)</h3>
-      <p class="muted small">Cole o <b>novo edital</b> (ex.: uma retificação da banca). O app vai te mostrar o <b>que mudou</b> em relação ao atual — <b>itens novos</b>, <b>removidos</b> e possíveis <b>renomeações</b> — e você confirma. As renomeações viram <b>sinônimos</b>, então a cobertura que você já tem é preservada.</p>
+      <p class="muted small">Traga o <b>novo edital</b> (ex.: uma retificação da banca). O app vai te mostrar o <b>que mudou</b> em relação ao atual — <b>itens novos</b>, <b>removidos</b> e possíveis <b>renomeações</b> — e você confirma. As renomeações viram <b>sinônimos</b>, então a cobertura que você já tem é preservada.</p>
       <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
-      <textarea id="oficial-texto" rows="6" placeholder="Cole o novo edital da banca…"></textarea>
+      <textarea id="oficial-texto" rows="6" placeholder="novo edital da banca…"></textarea>
       <div class="form-acoes"><button class="btn btn-ghost" data-action="oficial-recolar-cancelar">Cancelar</button><button class="btn btn-primary" data-action="oficial-conferir-mudancas">Conferir o que mudou</button></div>
     </div>`;
   }
   if (!r) {
     return `<div class="card oficial-card oficial-card-mini">
       <div class="plano-h"><h2>Checklist da banca</h2><span class="muted small">opcional</span></div>
-      <p class="muted small">Tem o <b>edital da banca</b>? Cole abaixo para <b>validar a sua cobertura</b> (o que o seu edital já cobre e o que ficou de fora). <b>Não muda a sua estrutura</b>; é só uma conferência. O casamento é pelo nome + sinônimos () de cada tópico.</p>
+      <p class="muted small">Tem o <b>edital da banca</b>? Traga abaixo para <b>validar a sua cobertura</b> (o que o seu edital já cobre e o que ficou de fora). <b>Não muda a sua estrutura</b>; é só uma conferência. O casamento é pelo nome + sinônimos () de cada tópico.</p>
       <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de PDF ou .txt. Pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
-      <textarea id="oficial-texto" rows="5" placeholder="Cole o edital da banca (uma disciplina em MAIÚSCULAS ou terminada em ':', e os itens nas linhas/';' seguintes)…"></textarea>
+      <textarea id="oficial-texto" rows="5" placeholder="${esc("Ex.:\nDIREITO CONSTITUCIONAL\nPrincípios fundamentais; Direitos e garantias fundamentais\nOrganização do Estado")}"></textarea>
       <div class="form-acoes"><button class="btn btn-ghost" data-action="toggle-oficial">Cancelar</button><button class="btn btn-primary" data-action="conferir-oficial">Validar cobertura</button></div>
     </div>`;
   }
@@ -309,17 +309,17 @@ function tituloAula(a) {
 function aulasConviteHTML() {
   return `<div class="card cursinho-card cursinho-convite">
     <div class="plano-h"><h2>Plano do cursinho</h2><span class="muted small">opcional</span></div>
-    <p class="muted small">Faz um <b>cursinho</b> e quer estudar pela <b>ordem das aulas</b>? Cole a divisão de aulas e o app monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão paralela. Sem isso, você segue normalmente pelo seu edital.</p>
+    <p class="muted small">Faz um <b>cursinho</b> e quer estudar pela <b>ordem das aulas</b>? Traga a divisão de aulas e o app monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão paralela. Sem isso, você segue normalmente pelo seu edital.</p>
     <div class="form-acoes" style="justify-content:flex-start"><button class="btn btn-primary" data-action="importar-aulas-mais">${icone("download")} Trazer a divisão do cursinho</button></div>
   </div>`;
 }
 function aulasImportHTML(texto = "") {
   return `<div class="card cursinho-card">
     <h3>${icone("library")} Trazer a divisão do cursinho</h3>
-    <p class="muted small">Cole a <b>divisão de aulas do seu cursinho</b> — uma aula por bloco, com os assuntos que ela cobre. O app liga cada assunto aos <b>seus tópicos</b> (pelo nome + sinônimos) e monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão por aula.</p>
+    <p class="muted small">Traga a divisão de aulas do seu cursinho — uma aula por bloco, com os assuntos que ela cobre.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
     <textarea id="aulas-texto" rows="6" placeholder="${esc("Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias fundamentais\nAula 2: Atos administrativos\nAula 3: Atos administrativos; Poderes administrativos")}">${esc(texto)}</textarea>
-    <p class="muted small u-m-0 u-mt-8">Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.) Você revisa e edita antes de montar.</p>
+    <details class="ed-ajuda"><summary>Como o app monta o mapa</summary><div class="ed-ajuda-corpo"><p>Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.)</p><p>O app liga cada assunto aos <b>seus tópicos</b> (pelo nome + sinônimos) e monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão por aula. Você revisa e edita antes de montar.</p></div></details>
     <div class="form-acoes"><button class="btn btn-ghost" data-action="importar-aulas-fechar">Cancelar</button><button class="btn btn-primary" data-action="importar-aulas">Revisar</button></div>
   </div>`;
 }
@@ -331,7 +331,8 @@ function aulasImportHTML(texto = "") {
 function addDiscPanelHTML(texto = "") {
   return `<div class="card">
     <h3>Adicionar ao edital</h3>
-    <p class="muted small u-m-0 u-mb-8">Cole o edital (ou digite uma disciplina) — o app separa disciplinas e tópicos para você revisar antes de aplicar.</p>
+    <p class="muted small u-m-0 u-mb-8">Traga o conteúdo programático — disciplinas e tópicos.</p>
+    <details class="ed-ajuda"><summary>Como o app separa</summary><div class="ed-ajuda-corpo"><p>Uma disciplina por linha (em MAIÚSCULAS ou terminada em ":") e os tópicos nas linhas seguintes ou separados por ";". Também vale digitar só uma disciplina. O app separa disciplinas e tópicos para você revisar antes de aplicar.</p></div></details>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
@@ -912,9 +913,9 @@ function abrirAulasRecolar(app) {
 function aulasRecolarHTML() {
   return `<div class="card cursinho-card">
     <h3>${icone("repeat-2")} Atualizar a grade do cursinho (ver o que mudou)</h3>
-    <p class="muted small">Cole a <b>nova grade</b>. O app compara com as aulas atuais e mostra o que <b>entrou</b>, <b>saiu</b> e possíveis <b>renomeações</b> — as aulas que você já ajustou são <b>preservadas</b>.</p>
+    <p class="muted small">Traga a <b>nova grade</b>. O app compara com as aulas atuais e mostra o que <b>entrou</b>, <b>saiu</b> e possíveis <b>renomeações</b> — as aulas que você já ajustou são <b>preservadas</b>.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
-    <textarea id="aulas-texto" rows="6" placeholder="Cole a nova grade do cursinho…"></textarea>
+    <textarea id="aulas-texto" rows="6" placeholder="nova grade do cursinho…"></textarea>
     <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-recolar-cancelar">Cancelar</button><button class="btn btn-primary" data-action="aulas-conferir-mudancas">Conferir o que mudou</button></div>
   </div>`;
 }
@@ -1147,7 +1148,7 @@ export default function renderEdital(root, app) {
   const algumAberto = st.disciplinas.some((d) => discAcAberta.has(d.id));
   const estruturaBody = `
     <div class="barra-acoes ed-barra">
-      <button class="btn btn-add btn-sm" data-action="toggle-add-disc" data-tip-pos="cima-esq" data-tip="Adicionar disciplinas e tópicos: digite uma disciplina ou cole/importe o edital (separado automaticamente).">${icone("plus")} Adicionar ao edital</button>
+      <button class="btn btn-add btn-sm" data-action="toggle-add-disc" data-tip-pos="cima-esq" data-tip="Adicionar disciplinas e tópicos: digite uma disciplina ou traga/importe o edital (separado automaticamente).">${icone("plus")} Adicionar ao edital</button>
       <span class="spacer"></span>
       <label class="inline ed-ord">Ordenar:
         <select id="ed-top-sort" class="ed-ord-sel">
@@ -1161,10 +1162,10 @@ export default function renderEdital(root, app) {
         <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações do edital.">${icone("ellipsis")} Mais</summary>
         <div class="doc-mais-pop" role="menu">
           <div class="menu-grupo-rotulo" aria-hidden="true">${icone("target")} Relevância</div>
-          <button class="menu-item" data-action="toggle-destaques" data-tip="Cole os temas que mais caem (com % ou sem) e preenche a relevância automaticamente."><span class="menu-ico">${icone("star")}</span> Importar temas que mais caem</button>
+          <button class="menu-item" data-action="toggle-destaques" data-tip="Traga os temas que mais caem (com % ou sem) e preenche a relevância automaticamente."><span class="menu-ico">${icone("star")}</span> Importar temas que mais caem</button>
           <button class="menu-item" data-action="toggle-sug-ia" data-tip="A IA sugere a relevância dos temas a partir das suas provas e/ou de uma pesquisa na web (você confere e aplica)."><span class="menu-ico">${icone("sparkles")}</span> Sugerir por IA (provas/web)</button>
           <div class="menu-sep"></div>
-          <button class="menu-item" data-action="toggle-oficial" data-tip="Cole o edital da banca: o app valida o que o seu edital já cobre e o que ficou de fora (lacunas), sem mexer na sua estrutura."><span class="menu-ico">${icone("clipboard-list")}</span> Comparar com o edital oficial</button>
+          <button class="menu-item" data-action="toggle-oficial" data-tip="Traga o edital da banca: o app valida o que o seu edital já cobre e o que ficou de fora (lacunas), sem mexer na sua estrutura."><span class="menu-ico">${icone("clipboard-list")}</span> Comparar com o edital oficial</button>
           ${st.disciplinas.length ? `<div class="menu-sep"></div>
           <button class="menu-item menu-item-danger" data-action="limpar-edital"><span class="menu-ico">${icone("trash-2")}</span> Limpar edital (estrutura)</button>` : ""}
         </div>

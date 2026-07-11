@@ -20,10 +20,16 @@ Tema 1234, STJ | Tese firmada em recurso repetitivo...`
     : `art. 37, caput, CF | A administração obedecerá aos princípios de legalidade, impessoalidade... | decorar os 5 princípios
 art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
   const instrHTML = tipo === "juris"
-    ? `<b>Uma por linha</b> (ex.: <i>Súmula 473 STF</i>). Para já incluir a tese e uma observação, separe com <b>|</b>: <i>referência | tese | observação</i> (opcionais). ` +
-      `Ou simplesmente <b>cole sua lista/cronograma do jeito que estiver</b> (inclusive em tabela): o app separa tudo sozinho e ainda deduz o <b>tribunal</b> e a <b>categoria</b>. Você confere e edita antes de salvar.`
-    : `<b>Uma por linha</b> (ex.: <i>art. 37, CF</i>). Para já incluir o trecho e uma observação, separe com <b>|</b>: <i>referência | trecho | observação</i> (opcionais). ` +
-      `Ou simplesmente <b>cole sua lista/cronograma do jeito que estiver</b> (inclusive em tabela): o app separa tudo sozinho. Você confere e edita antes de salvar.`;
+    ? `<details class="ed-ajuda"><summary>Como o app separa</summary>
+        <div class="ed-ajuda-corpo">
+          <p>Uma por linha (ex.: <i>Súmula 473 STF</i>). Para já incluir a tese e uma observação, separe com <b>|</b>: <i>referência | tese | observação</i> (os dois últimos são opcionais).</p>
+          <p>Também aceita uma lista ou tabela solta: o app separa tudo sozinho e ainda deduz o <b>tribunal</b> e a <b>categoria</b>. Você confere e edita antes de salvar.</p>
+        </div></details>`
+    : `<details class="ed-ajuda"><summary>Como o app separa</summary>
+        <div class="ed-ajuda-corpo">
+          <p>Uma por linha (ex.: <i>art. 37, CF</i>). Para já incluir o trecho e uma observação, separe com <b>|</b>: <i>referência | trecho | observação</i> (os dois últimos são opcionais).</p>
+          <p>Também aceita uma lista ou tabela solta: o app separa tudo sozinho. Você confere e edita antes de salvar.</p>
+        </div></details>`;
   return `
     <div class="card form-leiseca">
       <h3>${tipo === "juris" ? "Adicionar súmulas / teses" : "Adicionar artigos"}</h3>
@@ -40,7 +46,7 @@ art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
       <label class="btn btn-ghost btn-file u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
         <input id="add-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
-      <p class="muted small u-m-0 u-mb-8">${instrHTML}</p>
+      ${instrHTML}
       <textarea id="add-texto" rows="4" placeholder="${esc("Ex.:\n" + exemplo)}">${esc(texto)}</textarea>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="cancelar-add">Cancelar</button>
@@ -137,12 +143,16 @@ export function abrirImportarLei(app) {
   };
 
   const formHTML = (st) => {
-    const opcCat = `<option value="">— escolha (ou cole/URL abaixo) —</option>` +
+    const opcCat = `<option value="">— escolha (ou link/texto abaixo) —</option>` +
       CATALOGO_LEIS.map((l) => `<option value="${esc(l.url)}" data-nome="${esc(l.nome)}" ${estado.form.url === l.url ? "selected" : ""}>${esc(l.titulo)} (${esc(l.nome)})</option>`).join("");
     const opcDisc = `<option value="">— Geral (sem vínculo) —</option>` +
       st.disciplinas.map((d) => `<option value="${d.id}" ${estado.form.disciplinaId === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
     return `<div class="card form-leiseca">
-      <p class="muted small u-m-0 u-mb-12">Traz a <b>letra exata</b> do texto oficial. No app <b>desktop</b> a busca é automática pelo site do Planalto; no navegador (por segurança do site), <b>cole o texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
+      <details class="ed-ajuda"><summary>Como funciona a importação</summary>
+        <div class="ed-ajuda-corpo">
+          <p>Traz a <b>letra exata</b> do texto oficial. No app <b>desktop</b>, a busca é automática no site do Planalto.</p>
+          <p>No navegador (por segurança do site), traga o <b>texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
+        </div></details>
       <div class="form-row">
         <label style="flex:1 1 260px">Lei mais cobrada (catálogo)
           <select id="imp-cat">${opcCat}</select></label>
@@ -151,13 +161,13 @@ export function abrirImportarLei(app) {
       </div>
       <label class="u-block u-mt-4 u-mb-8">Ou link direto da página oficial
         <input id="imp-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>
-      <label class="u-block u-mt-4 u-mb-8">Ou cole aqui o texto/HTML da lei (fallback do navegador)
-        <textarea id="imp-html" rows="5" placeholder="Cole o conteúdo da página oficial da lei (Ctrl+A, Ctrl+C na página do Planalto e cole aqui).">${esc(estado.form.html)}</textarea></label>
+      <label class="u-block u-mt-4 u-mb-8">Ou traga o texto/HTML da lei (no navegador)
+        <textarea id="imp-html" rows="5" placeholder="texto da página oficial da lei (Ctrl+A, Ctrl+C na página do Planalto)">${esc(estado.form.html)}</textarea></label>
       <div class="form-row u-flex-12 u-wrap">
         <label class="inline">Vincular à disciplina <select id="imp-disc">${opcDisc}</select></label>
       </div>
       ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)</div>` : ""}
-      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
+      ${!estado.processando && estado.msg ? `<p class="${/desktop|traga|adicione/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="imp-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
         <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="imp-preparar" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Buscando…" : "Buscar / Preparar"}</button>
@@ -229,7 +239,7 @@ export function abrirImportarLei(app) {
     handlers: ({ rerender, fechar, corpo }) => ({
       "imp-preparar": async () => {
         lerForm(corpo);
-        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Escolha uma lei do catálogo, cole um link ou cole o texto da lei."; toast(estado.msg, "erro"); return rerender(); }
+        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Escolha uma lei do catálogo, informe um link ou traga o texto da lei."; toast(estado.msg, "erro"); return rerender(); }
         estado.processando = true; estado.msg = ""; rerender();
         toast(estado.form.html.trim() ? "Extraindo os artigos do texto…" : "Buscando a lei no Planalto…");
         try {
@@ -248,8 +258,8 @@ export function abrirImportarLei(app) {
           console.error("[importar-lei]", e);
           estado.processando = false;
           estado.msg = e && e.code === "SEM_DESKTOP"
-            ? "A busca automática no Planalto só funciona no app desktop. Abra a página oficial no navegador, copie o texto (Ctrl+A, Ctrl+C) e cole no campo acima."
-            : (e && e.message) || "Não consegui buscar a página. Confira o link ou cole o texto.";
+            ? "A busca automática no Planalto só funciona no app desktop. Abra a página oficial no navegador, copie o texto (Ctrl+A, Ctrl+C) e adicione ao campo acima."
+            : (e && e.message) || "Não consegui buscar a página. Confira o link ou traga o texto.";
           toast(estado.msg, "erro");
           rerender();
         }
@@ -298,7 +308,11 @@ export function abrirConferirAtualizacao(app) {
       ? normas.map((x) => `<option value="${esc(x.norma)}" data-url="${esc(x.url || "")}" ${estado.form.norma === x.norma ? "selected" : ""}>${esc(x.norma)} (${x.n})</option>`).join("")
       : "";
     return `<div class="card form-leiseca">
-      <p class="muted small u-m-0 u-mb-12">Reconsulta a <b>fonte oficial</b> e compara com o texto guardado: mostra o que <b>mudou</b>, foi <b>adicionado</b> ou <b>revogado</b> (diff mecânico, sem IA). No desktop a busca é automática; no navegador, <b>cole o texto atualizado</b> da lei.</p>
+      <details class="ed-ajuda"><summary>Como funciona a conferência</summary>
+        <div class="ed-ajuda-corpo">
+          <p>Reconsulta a <b>fonte oficial</b> e compara com o texto guardado: mostra o que <b>mudou</b>, foi <b>adicionado</b> ou <b>revogado</b> (diff mecânico, sem IA).</p>
+          <p>No <b>desktop</b> a busca é automática; no navegador, traga o <b>texto atualizado</b> da lei.</p>
+        </div></details>
       ${normas.length ? `<div class="form-row">
         <label style="flex:1 1 260px">Norma (importada com origem oficial)
           <select id="ca-norma">${opc}</select></label>
@@ -306,12 +320,12 @@ export function abrirConferirAtualizacao(app) {
           <input id="ca-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-30" /></label>
       </div>
       <label class="u-block u-mt-4 u-mb-8">Link da fonte (edite se mudou)
-        <input id="ca-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>` : `<p class="muted small">Nenhuma lei foi importada com <b>origem oficial</b> ainda. Cole abaixo o texto atualizado e informe a norma no campo.</p>
+        <input id="ca-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>` : `<p class="muted small">Nenhuma lei foi importada com <b>origem oficial</b> ainda. Traga abaixo o texto atualizado e informe a norma no campo.</p>
       <label class="u-block u-mt-4 u-mb-8">Norma <input id="ca-norma-txt" placeholder="Ex.: Lei 8.112/1990" value="${esc(estado.form.norma)}" /></label>`}
-      <label class="u-block u-mt-4 u-mb-8">Ou cole o texto/HTML atualizado (fallback do navegador)
-        <textarea id="ca-html" rows="5" placeholder="Cole o conteúdo atualizado da página oficial.">${esc(estado.form.html)}</textarea></label>
+      <label class="u-block u-mt-4 u-mb-8">Ou traga o texto/HTML atualizado (no navegador)
+        <textarea id="ca-html" rows="5" placeholder="texto atualizado da página oficial">${esc(estado.form.html)}</textarea></label>
       ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Consultando a fonte oficial e comparando com o texto guardado…</div>` : ""}
-      ${!estado.processando && estado.msg ? `<p class="${/desktop|cole/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
+      ${!estado.processando && estado.msg ? `<p class="${/desktop|traga|adicione/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="ca-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
         <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="ca-conferir" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Conferindo…" : "Conferir agora"}</button>
@@ -364,7 +378,7 @@ export function abrirConferirAtualizacao(app) {
         estado.form.html = corpo.querySelector("#ca-html")?.value || "";
         estado.form.intervalo = corpo.querySelector("#ca-intervalo")?.value?.trim() || "";
         if (!estado.form.norma) { estado.msg = "Informe a norma."; return rerender(); }
-        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Cole o texto atualizado ou informe o link da fonte."; return rerender(); }
+        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Traga o texto atualizado ou informe o link da fonte."; return rerender(); }
         estado.processando = true; estado.msg = ""; rerender();
         const fimConf = toastCarregando("Consultando a fonte oficial…");
         try {
@@ -382,8 +396,8 @@ export function abrirConferirAtualizacao(app) {
           console.error("[conferir-atualizacao]", e);
           estado.processando = false;
           estado.msg = e && e.code === "SEM_DESKTOP"
-            ? "A busca automática só funciona no app desktop. Abra a página oficial, copie o texto (Ctrl+A, Ctrl+C) e cole acima."
-            : (e && e.message) || "Não consegui conferir. Confira o link ou cole o texto.";
+            ? "A busca automática só funciona no app desktop. Abra a página oficial, copie o texto (Ctrl+A, Ctrl+C) e adicione acima."
+            : (e && e.message) || "Não consegui conferir. Confira o link ou traga o texto.";
           toast(estado.msg, "erro");
           rerender();
         } finally { fimConf(); }
