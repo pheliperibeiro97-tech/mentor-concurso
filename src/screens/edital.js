@@ -655,6 +655,106 @@ function abrirImportarAulas(app) {
   });
 }
 
+// Campo unificado de "Adicionar aulas": toggle Acrescentar × Atualizar + campo (colar/importar).
+function aulasAddInputHTML(estado) {
+  const atualizar = estado.modo === "atualizar";
+  return `<div class="card cursinho-card">
+    <h3>${icone("download")} Adicionar aulas</h3>
+    <div class="seg u-mb-12" role="tablist">
+      <button class="${!atualizar ? "on" : ""}" data-action="aulas-modo" data-modo="acrescentar" data-tip="Acrescenta as aulas trazidas às que já existem.">Acrescentar</button>
+      <button class="${atualizar ? "on" : ""}" data-action="aulas-modo" data-modo="atualizar" data-tip="Compara a grade nova com a atual (o que entrou, saiu, renomeou) e preserva os seus ajustes.">Atualizar grade</button>
+    </div>
+    <p class="muted small u-m-0 u-mb-8">${atualizar ? "Traga a nova grade — o app compara com a atual e mostra o que entrou, saiu e renomeações, preservando seus ajustes." : "Traga a divisão de aulas — uma aula por bloco, com os assuntos que ela cobre."}</p>
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+    <textarea id="aulas-texto" rows="6" placeholder="${esc(atualizar ? "nova grade do cursinho…" : "Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias\nAula 2: Atos administrativos")}">${esc(estado.texto || "")}</textarea>
+    <details class="ed-ajuda"><summary>Como o app monta o mapa</summary><div class="ed-ajuda-corpo"><p class="u-m-0">Cada aula é uma linha: o nome antes do "<b>:</b>", os assuntos depois, separados por "<b>;</b>". O app liga cada assunto aos seus tópicos (nome + sinônimos), montando o mapa aula ↔ tópico ↔ edital. Não muda a sua estrutura.</p></div></details>
+    <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-add-cancelar">Cancelar</button><button class="btn btn-primary" data-action="aulas-add-continuar">${atualizar ? "Conferir o que mudou" : "Revisar"}</button></div>
+  </div>`;
+}
+
+// Adicionar aulas UNIFICADO: um modal com toggle Acrescentar (parse→preview→cria) ou Atualizar
+// (parse→diff→aplica). Substitui os antigos "Colar mais aulas" e "Atualizar grade".
+function abrirAdicionarAulas(app, modoInicial = "acrescentar") {
+  const { store } = app;
+  const estado = { modo: modoInicial, texto: "", preview: null, diff: null };
+  abrirJanelaFluxo({
+    titulo: "Adicionar aulas",
+    render: (corpo, { rerender }) => {
+      if (estado.preview) {
+        corpo.innerHTML = aulasPreviewHTML(estado.preview);
+        corpo.querySelectorAll(".aula-nome").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); if (estado.preview[a]) estado.preview[a].nome = el.value; }));
+        corpo.querySelectorAll(".aula-top").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); const t = +el.getAttribute("data-t"); if (estado.preview[a] && estado.preview[a].topicos) estado.preview[a].topicos[t] = el.value; }));
+        return;
+      }
+      if (estado.diff) { corpo.innerHTML = aulasDiffHTML(estado.diff); return; }
+      corpo.innerHTML = aulasAddInputHTML(estado);
+      const aulasFile = corpo.querySelector("#aulas-file");
+      if (!aulasFile) return;
+      ligarDropZone(aulasFile);
+      aulasFile.addEventListener("change", async (e) => {
+        const f = e.target.files && e.target.files[0]; if (!f) return;
+        const cfg = store.get().config;
+        const ehPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
+        // Acrescentar aceita a leitura rica por IA do PDF (aulas + assuntos direto); atualizar só texto.
+        if (estado.modo === "acrescentar" && store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024) {
+          const fim = toastCarregando("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
+          try {
+            const aulas = await store.estruturarAulasDePDF(await arquivoParaBase64(f), f.type || "application/pdf");
+            if (aulas && aulas.length) { estado.preview = aulas; toast(`${plural(aulas.length, "aula lida", "aulas lidas")} pela IA. Revise e monte o plano.`, "ok"); rerender(); return; }
+            toast("A IA não reconheceu aulas. Extraindo o texto…", "erro");
+          } catch (_) { toast("A IA não conseguiu ler agora. Extraindo o texto…", "erro"); }
+          finally { fim(); }
+        }
+        const fim = toastCarregando("Lendo o arquivo…");
+        try { const texto = await lerArquivoTexto(f, cfg, ""); const ta = corpo.querySelector("#aulas-texto"); if (ta) ta.value = texto || ""; estado.texto = texto || ""; toast(texto && texto.trim() ? "Texto carregado." : (ehPdf ? "PDF escaneado: conecte a IA (Gemini) para OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente."), texto && texto.trim() ? "ok" : "erro"); }
+        catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
+        finally { fim(); }
+      });
+    },
+    handlers: ({ rerender, fechar, corpo }) => ({
+      "aulas-modo": (el) => { const ta = corpo.querySelector("#aulas-texto"); if (ta) estado.texto = ta.value; estado.modo = el.getAttribute("data-modo"); rerender(); },
+      "aulas-add-cancelar": () => fechar(),
+      "aulas-add-continuar": () => {
+        const texto = corpo.querySelector("#aulas-texto").value;
+        if (!texto.trim()) return toast("Traga a divisão de aulas.", "erro");
+        estado.texto = texto;
+        if (estado.modo === "atualizar") {
+          const diff = store.diffAulasCursinho(parseAulas(texto));
+          if (!diff.novas.length && !diff.removidas.length) { fechar(); return toast("Nenhuma diferença em relação à grade atual.", "ok"); }
+          estado.diff = diff; rerender();
+        } else {
+          const estrutura = parseAulas(texto).map((a) => ({ nome: a.nome || "", topicos: [...(a.topicos || [])], disciplina: a.disciplina || null }));
+          if (!estrutura.length) return toast("Não reconheci aulas no texto.", "erro");
+          estado.preview = estrutura; rerender();
+        }
+      },
+      // Preview (acrescentar)
+      "remover-aula-prev": (el) => { const a = +el.getAttribute("data-a"); if (estado.preview) estado.preview.splice(a, 1); if (estado.preview && !estado.preview.length) estado.preview = null; rerender(); },
+      "remover-aula-top": (el) => { const a = +el.getAttribute("data-a"); const t = +el.getAttribute("data-t"); if (estado.preview && estado.preview[a]) estado.preview[a].topicos.splice(t, 1); rerender(); },
+      "add-aula-top": (el) => { const a = +el.getAttribute("data-a"); if (estado.preview && estado.preview[a]) estado.preview[a].topicos.push(""); rerender(); },
+      "voltar-aulas": () => { estado.preview = null; rerender(); },
+      "descartar-aulas": () => fechar(),
+      "aceitar-aulas": () => {
+        const estrutura = (estado.preview || []).map((a) => ({ nome: (a.nome || "").trim(), topicos: (a.topicos || []).map((t) => (t || "").trim()).filter(Boolean), disciplina: a.disciplina || null })).filter((a) => a.nome);
+        if (!estrutura.length) return toast("Nenhuma aula para criar.", "erro");
+        const r = store.importarAulasCursinho(estrutura);
+        toast(r.criadas ? `${plural(r.criadas, "aula criada", "aulas criadas")}.${r.naoCasados.length ? ` ${plural(r.naoCasados.length, "assunto não casou", "assuntos não casaram")} com seus tópicos.` : ""}` : "Não reconheci aulas.", r.criadas ? "ok" : "erro");
+        fechar(); app.refresh();
+      },
+      // Diff (atualizar)
+      "aulas-cancelar-diff": () => { estado.diff = null; rerender(); },
+      "aulas-aplicar-diff": () => {
+        if (!estado.diff) return;
+        const renomearIds = [...corpo.querySelectorAll(".aula-ren-cb:checked")].map((cb) => cb.getAttribute("data-id"));
+        const removerIds = [...corpo.querySelectorAll(".aula-rem-cb:checked")].map((cb) => cb.getAttribute("data-id"));
+        const r = store.aplicarAulasDiff(estado.diff, renomearIds, removerIds);
+        toast(`Grade atualizada: ${plural(r.add, "nova", "novas")}, ${plural(r.rem, "removida", "removidas")}${r.ren ? `, ${plural(r.ren, "renomeação", "renomeações")}` : ""}.`);
+        fechar(); app.refresh();
+      },
+    }),
+  });
+}
+
 // ===== Sub-fluxos SECUNDÁRIOS do Edital em janela modal =====
 
 // Painel "Temas que mais caem" (corpo só, sem .card — a janela já é o cartão).
@@ -1075,18 +1175,16 @@ function aulasListaHTML(store, st) {
       </span>
       <span class="spacer"></span>
       <button class="btn btn-soft btn-sm" data-action="compatibilizar-aulas-ia" data-tip="A IA casa os assuntos das aulas com os tópicos do seu edital (vira sinônimo), sem você marcar um por um.">${icone("bot")} Compatibilizar com IA</button>
-      <button class="btn btn-soft btn-sm" data-action="add-aula">${icone("plus")} Nova aula</button>
+      <button class="btn btn-soft btn-sm" data-action="aulas-adicionar" data-tip="Trazer aulas: acrescentar à lista, ou atualizar a grade (comparar e preservar seus ajustes).">${icone("download")} Adicionar aulas</button>
       <details class="doc-mais ed-barra-mais">
-        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Atualizar a grade, colar mais aulas ou limpar o plano.">${icone("ellipsis")} Mais</summary>
+        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Limpar o plano do cursinho.">${icone("ellipsis")} Mais</summary>
         <div class="doc-mais-pop" role="menu">
-          <button class="menu-item" data-action="aulas-recolar" data-tip="Colar a grade nova/atualizada e ver o que mudou (preserva as aulas que você ajustou)."><span class="menu-ico">${icone("repeat-2")}</span> Atualizar grade</button>
-          <button class="menu-item" data-action="importar-aulas-mais" data-tip="Colar outra lista de aulas (acrescenta às atuais)."><span class="menu-ico">${icone("download")}</span> Colar mais aulas</button>
-          <div class="menu-sep"></div>
           <button class="menu-item menu-item-danger" data-action="limpar-aulas">Limpar plano</button>
         </div>
       </details>
     </div>
     ${cursinhoView === "aula" ? cards : bodyTopico}
+    ${cursinhoView === "aula" ? `<div class="cur-add-aula"><button class="btn btn-ghost btn-sm" data-action="add-aula" data-tip="Adicionar uma aula em branco para preencher à mão.">${icone("plus")} Nova aula</button></div>` : ""}
     ${cursinhoView === "aula" && soltos.length ? `<div class="card cursinho-soltos muted small">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> (não estão na divisão do cursinho): ${soltos.map((t) => esc(t.nome)).join(" · ")}</div>` : ""}`;
 }
 
@@ -1434,8 +1532,9 @@ export default function renderEdital(root, app) {
       );
       if (r.naoCasados.length) console.info("Assuntos do cursinho não casados:", r.naoCasados);
     },
-    "importar-aulas-mais": () => abrirImportarAulas(app),
-    "aulas-recolar": () => abrirAulasRecolar(app),
+    "aulas-adicionar": () => abrirAdicionarAulas(app),
+    "importar-aulas-mais": () => abrirAdicionarAulas(app, "acrescentar"), // compat: convite "Trazer a divisão do cursinho"
+    "aulas-recolar": () => abrirAdicionarAulas(app, "atualizar"),
     "importar-aulas-fechar": () => {
       aulasImportAberto = false;
       aulasPreview = null;

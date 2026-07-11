@@ -1685,6 +1685,8 @@ body.onboarding #crono-fab { display: none !important; }
 .add-via-alt > summary svg { width: 15px; height: 15px; color: var(--muted); flex: none; }
 .add-via-alt > summary:hover { color: var(--text); }
 .add-via-alt[open] > summary { margin-bottom: 10px; }
+/* "+ Nova aula" inline no fim da lista do plano de cursinho. */
+.cur-add-aula { margin-top: 12px; }
 .filtro-bar { margin-top: 4px; }
 .ft-painel { padding: 12px 14px; margin: 8px 0; max-height: 340px; overflow-y: auto; }
 .ft-painel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: var(--fs-sm); }

@@ -206,72 +206,62 @@ function lerPreviewQ(root, ce) {
 // extrai as questões e o GABARITO é o OFICIAL (selo ), com tela de revisão antes de
 // confirmar. O transitório (form e revisão) vive no `estado` da tela (persiste no render).
 function provaImportHTML(st, estado) {
-  const aberto = !!estado.provaAberto;
   const pf = estado.provaForm || {};
   const rev = estado.provaRevisao;
+  const aberto = !!estado.provaAberto || !!rev; // <details> recolhível (igual "De um material"); abre sozinho na revisão
   const lista = mesclarBancas(st.bancas || []);
   const dataOpts = lista.map((b) => `<option value="${esc(b.nome)}"></option>`).join("");
+  const sites = lista.filter((b) => b.siteOficial);
   const opcoesVincular =
     `<option value="">— sem tópico —</option>` +
     st.topicos.map((t) => `<option value="${t.id}" ${pf.topicoId === t.id ? "selected" : ""}>${esc(nomeTopico(st, t))}</option>`).join("");
 
-  let corpo;
-  if (!aberto) {
-    corpo = `<button class="btn btn-ghost btn-sm" data-action="toggle-prova" data-tip="Importe uma prova que você baixou do site da banca: questões reais + gabarito definitivo." data-tip-pos="cima-esq">${icone("file-text")} Importar prova anterior</button>`;
-  } else if (rev) {
-    corpo = provaRevisaoHTML(rev);
-  } else {
-    corpo = `
-      <p class="muted small">Traga o <b>texto da prova</b> e o <b>gabarito definitivo</b>; a IA extrai as questões e aplica o gabarito oficial.</p>
-      <details class="prova-fontes">
-        <summary>${icone("download")} Onde baixar provas anteriores (sites oficiais)</summary>
-        <div class="prova-fontes-lista">
-          ${lista.filter((b) => b.siteOficial).map((b) => `<a href="${esc(b.siteOficial)}" target="_blank" rel="noopener">${esc(b.nome)} ${icone("external-link")}</a>`).join("")}
-        </div>
-        <p class="muted small">Provas anteriores de concurso público costumam ser de acesso livre no site da banca. Baixe a prova e o gabarito e cole/importe aqui.</p>
-      </details>
-      <div class="form-row">
-        <label class="u-grow">Banca <input id="prova-banca" list="prova-bancas-list" value="${esc(pf.banca || "")}" placeholder="Ex.: VUNESP" /></label>
-        <label style="width:96px">Ano <input id="prova-ano" value="${esc(pf.ano || "")}" placeholder="2024" /></label>
-        <label class="u-grow">Órgão <input id="prova-orgao" value="${esc(pf.orgao || "")}" placeholder="Ex.: TJSP" /></label>
-      </div>
-      <datalist id="prova-bancas-list">${dataOpts}</datalist>
-      <div class="form-row">
-        <label class="u-grow">Cargo <input id="prova-cargo" value="${esc(pf.cargo || "")}" placeholder="Ex.: Escrevente" /></label>
-        <label class="u-grow-2">URL da fonte (opcional) <input id="prova-url" value="${esc(pf.url || "")}" placeholder="https://..." /></label>
-        <label>Formato
-          <select id="prova-formato">
-            <option value="mc" ${pf.formato !== "ce" ? "selected" : ""}>Múltipla escolha (A, B, C…)</option>
-            <option value="ce" ${pf.formato === "ce" ? "selected" : ""}>Certo/Errado</option>
-          </select>
-        </label>
-      </div>
-      <label class="inline">Vincular ao tópico: <select id="prova-topico">${opcoesVincular}</select></label>
-
+  const corpo = rev ? provaRevisaoHTML(rev) : `
+      <p class="muted small u-m-0 u-mb-8">A IA extrai as questões da prova e aplica o <b>gabarito oficial</b> (selo definitivo).</p>
       <div class="prova-campo">
-        <div class="prova-campo-tit"><b>1) Prova</b> <span class="muted small">— traga o texto abaixo <b>ou</b> importe o arquivo (faça só um)</span>
-          <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="PDF ou .txt da prova. PDF escaneado é transcrito por OCR (Visão) se a IA estiver conectada.">${icone("paperclip")} Importar arquivo<input id="prova-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+        <div class="prova-campo-tit"><b>Prova</b>
+          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF ou .txt da prova (OCR se escaneado).">${icone("paperclip")} Importar arquivo<input id="prova-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
         </div>
         <textarea id="prova-texto" rows="5" placeholder="Enunciados e alternativas da prova…">${esc(pf.textoProva || "")}</textarea>
       </div>
-
       <div class="prova-campo">
-        <div class="prova-campo-tit"><b>2) Gabarito definitivo</b> <span class="muted small">— traga o texto abaixo <b>ou</b> importe o arquivo (faça só um)</span>
-          <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="PDF ou .txt do gabarito. PDF escaneado é transcrito por OCR (Visão) se a IA estiver conectada.">${icone("paperclip")} Importar arquivo<input id="gab-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+        <div class="prova-campo-tit"><b>Gabarito definitivo</b>
+          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF ou .txt do gabarito.">${icone("paperclip")} Importar arquivo<input id="gab-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
         </div>
         <textarea id="gab-texto" rows="3" placeholder="1-A  2-C  3-E …  ·  Cebraspe: 1-C  2-E …">${esc(pf.textoGabarito || "")}</textarea>
       </div>
+      <details class="ed-ajuda">
+        <summary>Dados da prova e vínculo (opcional)</summary>
+        <div class="ed-ajuda-corpo">
+          <div class="form-row">
+            <label class="u-grow">Banca <input id="prova-banca" list="prova-bancas-list" value="${esc(pf.banca || "")}" placeholder="Ex.: VUNESP" /></label>
+            <label style="width:90px">Ano <input id="prova-ano" value="${esc(pf.ano || "")}" placeholder="2024" /></label>
+            <label class="u-grow">Órgão <input id="prova-orgao" value="${esc(pf.orgao || "")}" placeholder="Ex.: TJSP" /></label>
+          </div>
+          <datalist id="prova-bancas-list">${dataOpts}</datalist>
+          <div class="form-row">
+            <label class="u-grow">Cargo <input id="prova-cargo" value="${esc(pf.cargo || "")}" placeholder="Ex.: Escrevente" /></label>
+            <label class="u-grow-2">URL (opcional) <input id="prova-url" value="${esc(pf.url || "")}" placeholder="https://..." /></label>
+            <label>Formato
+              <select id="prova-formato">
+                <option value="mc" ${pf.formato !== "ce" ? "selected" : ""}>Múltipla escolha</option>
+                <option value="ce" ${pf.formato === "ce" ? "selected" : ""}>Certo/Errado</option>
+              </select>
+            </label>
+          </div>
+          <label class="inline">Vincular ao tópico <select id="prova-topico">${opcoesVincular}</select></label>
+          ${sites.length ? `<div class="muted small u-mt-8">Baixar no site da banca: ${sites.map((b) => `<a href="${esc(b.siteOficial)}" target="_blank" rel="noopener">${esc(b.nome)}</a>`).join(" · ")}</div>` : ""}
+        </div>
+      </details>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="prova-cancelar">Cancelar</button>
         <button class="btn btn-primary" data-action="prova-extrair">Extrair e revisar</button>
       </div>`;
-  }
-  // Colapsado: só o botão discreto (o próprio rótulo já explica). Aberto/revisão: cabeçalho + form.
-  if (!aberto) return `<div class="add-via add-via-alt">${corpo}</div>`;
-  return `<div class="add-via">
-    <h4>${icone("file-text")} De uma prova anterior <span class="muted small" style="font-weight:400">(gabarito definitivo)</span></h4>
+
+  return `<details class="add-via add-via-alt prova-details" ${aberto ? "open" : ""}>
+    <summary>${icone("file-text")} De uma prova anterior <span class="muted small" style="font-weight:400">(gabarito definitivo)</span></summary>
     ${corpo}
-  </div>`;
+  </details>`;
 }
 
 function provaRevisaoHTML(rev) {
@@ -404,6 +394,9 @@ function abrirAddQuestoes(app, estado, formato) {
       // Persiste o "Vincular todas ao tópico" no estado do fluxo, para sobreviver a re-renders
       // (ex.: abrir/fechar seções) e ser aplicado a cada questão ao revisar.
       corpo.querySelector("#q-add-top")?.addEventListener("change", (e) => { estado.vincularTop = e.target.value || ""; });
+      // "De uma prova anterior" agora é <details> nativo — sincroniza o aberto/fechado no estado
+      // para sobreviver a re-renders (ex.: importar arquivo re-renderiza o painel).
+      corpo.querySelector(".prova-details")?.addEventListener("toggle", (e) => { estado.provaAberto = e.target.open; });
     },
     handlers: ({ rerender, fechar, corpo }) => {
       // Fecha a janela e zera o transitório do fluxo.
@@ -493,7 +486,6 @@ function abrirAddQuestoes(app, estado, formato) {
         },
 
         // ---- Importar prova anterior ----
-        "toggle-prova": () => { estado.provaAberto = !estado.provaAberto; estado.provaRevisao = null; rerender(); },
         "prova-cancelar": () => { estado.provaAberto = false; estado.provaForm = null; estado.provaRevisao = null; rerender(); },
         "prova-voltar": () => { estado.provaRevisao = null; rerender(); },
         "prova-extrair": async (el) => {
