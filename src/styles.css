@@ -653,10 +653,8 @@ body.onboarding #lem-fab { display: none !important; }
   .mbb-item.ativo { color: var(--primary); }
   .mbb-ico { font-size: var(--fs-xl); line-height: 1; }
   .mbb-lbl { font-size: 0.7rem; font-weight: var(--fw-medium); letter-spacing: -0.01em; }
-  /* No mobile os 3 FABs sobem para não colidir com a barra inferior e empilham à direita
-     (chat 80 → cronômetro 146 → lembretes 204). Ver .cf e .lf nas media queries próprias. */
-  .chat-fab { bottom: 80px; }
-  .chat-panel { bottom: 148px; }
+  /* Os 3 FABs sobem para não colidir com a barra inferior — regras EFETIVAS no fim do arquivo
+     (precisam vir depois das bases .chat-fab/.cf, que estão mais abaixo). */
 }
 
 /* ===== Cabeçalho de página ===== */
@@ -5581,3 +5579,15 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .est-mais .estudar-tira:last-child { margin-bottom: 0; padding-bottom: 2px; border-bottom: 0; }
 .est-mais .est-temas { margin-bottom: 0; }
 .metas-resumo .lnk { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ===== Mobile: pilha dos 3 botões flutuantes ACIMA da barra inferior =====
+   Colocado no FIM do arquivo de propósito: as regras-base de .chat-fab (l.~4099) e .cf/.lf
+   vêm antes, então só uma regra posterior vence e efetivamente sobe o Assistente (antes ele
+   ficava em bottom:22 sobre o "Mais"). env(safe-area-inset-bottom) afasta do "home indicator"
+   do iPhone (a viewport já usa viewport-fit=cover). Espaçamento de 64px entre eles. */
+@media (max-width: 900px) {
+  .chat-fab { bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .cf { bottom: calc(156px + env(safe-area-inset-bottom)); }
+  .lf { bottom: calc(220px + env(safe-area-inset-bottom)); }
+  .chat-panel { bottom: calc(160px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 220px); }
+}
