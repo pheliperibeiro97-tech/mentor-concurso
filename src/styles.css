@@ -2795,6 +2795,14 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .ler-art-marks .ler-ic .ico { width: 15px; height: 15px; }
 .ler-art:hover .ler-art-marks .ler-ic, .ler-art:focus-within .ler-art-marks .ler-ic { opacity: 1; }
 .ler-art-marks .ler-ic.on-fav, .ler-art-marks .ler-ic.on-dif, .ler-art-marks .ler-ic.on-pq { opacity: 1; }
+/* TOQUE (sem hover): ações por item que só aparecem no hover ficariam inacessíveis no celular.
+   Aqui elas ficam sempre visíveis em dispositivos de toque (Lei Seca e ações de item afins). */
+@media (hover: none) {
+  .ler-art-acoes,
+  .ler-art-marks .ler-ic,
+  .lemc:focus-within .lemc-acts, .lemc-acts,
+  .dia-edit, .dia-del { opacity: 1; }
+}
 .ler-mais.ler-mais > summary { list-style: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 8px; cursor: pointer; }
 .ler-mais.ler-mais > summary::-webkit-details-marker { display: none; }
 .ler-mais.ler-mais > summary:hover { background: var(--surface-2); color: var(--text); }
