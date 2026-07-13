@@ -242,6 +242,9 @@ export default function renderPlanejamento(root, app) {
     mover: (el) => {
       store.moverMissao(el.getAttribute("data-id"), parseInt(el.getAttribute("data-dir"), 10));
     },
+    // Reordenar tarefa AVULSA por TOQUE (subir/descer) — mesma operação do arrastar (reordenarMissao).
+    "miss-sobe": (el) => moverAvulsaOrdem(store, el.getAttribute("data-id"), -1),
+    "miss-desce": (el) => moverAvulsaOrdem(store, el.getAttribute("data-id"), 1),
     "toggle-concluidas": () => {
       mostrarConcluidas = !mostrarConcluidas;
       app.refresh();
@@ -643,6 +646,16 @@ export default function renderPlanejamento(root, app) {
       dragMissId = null;
     });
   });
+  // Mover tarefa datada para outro dia por TOQUE (o arrastar não funciona no celular).
+  root.querySelectorAll(".dia-mover-sel").forEach((el) =>
+    el.addEventListener("change", () => {
+      const id = el.getAttribute("data-id");
+      if (el.value) {
+        store.setMissaoData(id, el.value);
+        toast("Tarefa movida de dia.");
+      }
+    })
+  );
   root.querySelector("#miss-sort")?.addEventListener("change", (e) => {
     missSort = e.target.value;
     app.refresh();
@@ -1318,6 +1331,10 @@ function soltasViewHTML(st) {
 function semanaViewHTML(st, store) {
   const semana = store.semanaAtual();
   const hoje = todayISO();
+  // Dias-destino para "mover para…" no toque: dias da semana que NÃO são folga (espelha o alvo do arrastar).
+  const diasMover = semana
+    .filter((dd) => !store.diaEhFolga(weekdayISO(dd)))
+    .map((dd) => ({ data: dd, label: `${DIAS_SEMANA_CURTO[weekdayISO(dd)]} ${dd.slice(8, 10)}/${dd.slice(5, 7)}` }));
   const grid = semana
     .map((d) => {
       const wd = weekdayISO(d);
@@ -1365,7 +1382,7 @@ function semanaViewHTML(st, store) {
           }
           ${
             itens.length
-              ? `<ul class="dia-itens">${itens.map((it) => diaItemHTML(st, it)).join("")}</ul>`
+              ? `<ul class="dia-itens">${itens.map((it) => diaItemHTML(st, it, diasMover)).join("")}</ul>`
               : addDiaForm === d
                 ? ""
                 : `<button class="dia-vazio-add" data-action="abrir-add-dia" data-data="${d}" data-tip="Adicionar uma tarefa neste dia.">${icone("plus")} Nada planejado — adicionar</button>`
@@ -1392,7 +1409,19 @@ function semanaViewHTML(st, store) {
     ${mostrarRotina ? rotinaPainelHTML(st) : ""}`;
 }
 
-function diaItemHTML(st, it) {
+// Seletor "mover para…" que só aparece no TOQUE (CSS .dia-mover-sel): dias-destino da semana,
+// exceto o dia atual da tarefa. É a alternativa ao arrastar-entre-dias no celular.
+function diasMoverSelectHTML(it, diasMover) {
+  if (!Array.isArray(diasMover)) return "";
+  const outros = diasMover.filter((x) => x.data !== it.data);
+  if (!outros.length) return "";
+  return `<select class="dia-mover-sel" data-id="${it.id}" data-tip="Mover para outro dia" aria-label="Mover para outro dia">
+    <option value="" selected>mover…</option>
+    ${outros.map((x) => `<option value="${x.data}">${esc(x.label)}</option>`).join("")}
+  </select>`;
+}
+
+function diaItemHTML(st, it, diasMover) {
   const cls = CAT_CLASSE[it.categoria] || "geral";
   // Edição inline (só tarefas datadas, tipo "missao"): título + tópico + categoria.
   if (it.tipo === "missao" && missEdit.has(it.id)) {
@@ -1425,7 +1454,8 @@ function diaItemHTML(st, it) {
     ${
       it.tipo === "rotina"
         ? `<span class="rot-badge" data-tip="Tarefa da sua rotina semanal (gerencie abaixo)">${icone("repeat-2")}</span>`
-        : `<button class="mover-btn dia-edit" data-action="edit-titulo" data-id="${it.id}" data-tip="Editar a tarefa">${icone("square-pen")}</button>
+        : `${diasMoverSelectHTML(it, diasMover)}
+           <button class="mover-btn dia-edit" data-action="edit-titulo" data-id="${it.id}" data-tip="Editar a tarefa">${icone("square-pen")}</button>
            <button class="mover-btn mover-del dia-del" data-action="del-dia-miss" data-id="${it.id}" data-tip="Remover tarefa">${icone("x")}</button>`
     }
   </li>`;
@@ -1550,6 +1580,12 @@ function missoesHTML(st, missoes, sortMode) {
           }
         </div>
         <div class="missao-acoes">
+          ${
+            arrastavel
+              ? `<button class="lnk toque-reord" data-action="miss-sobe" data-id="${m.id}" ${i === 0 ? "disabled" : ""} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
+                 <button class="lnk toque-reord" data-action="miss-desce" data-id="${m.id}" ${i === lista.length - 1 ? "disabled" : ""} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>`
+              : ""
+          }
           <button class="mover-btn" data-action="edit-titulo" data-id="${m.id}" data-tip="Editar a tarefa">${icone("square-pen")}</button>
           <button class="mover-btn mover-del" data-action="del-miss" data-id="${m.id}" data-tip="Remover tarefa">${icone("x")}</button>
         </div>
@@ -1557,6 +1593,25 @@ function missoesHTML(st, missoes, sortMode) {
     })
     .join("");
   return `<ul class="lista-missoes">${itensHTML}</ul>`;
+}
+
+// Sobe/desce (toque) uma tarefa AVULSA uma posição, reusando reordenarMissao (o mesmo
+// reordenamento do arrastar: "inserir ANTES de X"). Subir = inserir antes do anterior;
+// descer = inserir o próximo antes de mim (equivale a descer uma posição).
+function moverAvulsaOrdem(store, id, dir) {
+  const m = store.get().missoes.find((x) => x.id === id);
+  if (!m) return;
+  const lista = store
+    .get()
+    .missoes.filter((x) => !x.data && x.concluida === m.concluida)
+    .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+  const idx = lista.findIndex((x) => x.id === id);
+  if (idx < 0) return;
+  if (dir === -1) {
+    if (idx > 0) store.reordenarMissao(id, lista[idx - 1].id);
+  } else if (idx < lista.length - 1) {
+    store.reordenarMissao(lista[idx + 1].id, id);
+  }
 }
 
 function nomeTopico(st, t) {

@@ -477,7 +477,7 @@ export function abrirPersonalizarBarra(app, store) {
         <div class="ferr-linha ferr-filtros">
           ${FILTROS_DEF.map((f) => `<button class="ferr-fchip ${ocult().has(f.k) ? "" : "on"}" data-pz="filtro" data-k="${f.k}">${icone(f.ic)} ${f.lbl}</button>`).join("")}
         </div>
-        <p class="muted small">Os chips aparecem sob o progresso (o filtro em si continua a um clique).</p>
+        <p class="muted small">Os chips aparecem sob o progresso (o filtro em si continua a um toque).</p>
       </section>
     </div>`,
     aoMontar: (jan) => {
@@ -550,7 +550,7 @@ export function abrirEditarTemas(app, id) {
   abrirJanela({
     titulo: "Temas do artigo",
     corpoHTML: `<div class="card form-leiseca">
-      <div class="muted small u-mb-12">${esc(String(ind.referencia || "").split(",")[0])} — clique num tema para <b>remover</b>; escolha abaixo para <b>adicionar</b>.</div>
+      <div class="muted small u-mb-12">${esc(String(ind.referencia || "").split(",")[0])} — selecione um tema para <b>remover</b>; escolha abaixo para <b>adicionar</b>.</div>
       <div id="temas-atuais" class="temas-edit-atuais"></div>
       <div class="temas-edit-add-lbl">Adicionar</div>
       <div id="temas-sugestoes" class="temas-edit-sug"></div>
@@ -684,7 +684,7 @@ export function leitorBarraHTML(st, store, norma, normas, lista, opts = {}) {
   ].filter((d) => fAtivo === d.key || !ocultos.has(d.key));
   // Os filtros escolhidos em "Personalizar" aparecem sempre; os que ainda estão zerados vêm
   // desabilitados (com o "0"), para o usuário ver que existem sem cair num leitor vazio ao clicar.
-  const filtroIt = (d) => { const vazio = d.n === 0 && fAtivo !== d.key; return `<button class="ler-menu-it ler-filtro-it ${fAtivo === d.key ? "on" : ""}" ${vazio ? "disabled" : ""} data-action="ler-stat-filtro" data-f="${d.key}" data-tip="${vazio ? `Nenhum artigo ${d.lbl} ainda` : (fAtivo === d.key ? "Clique para limpar o filtro" : `Mostrar só os ${d.lbl}`)}">${icone(d.ic)} ${d.lbl[0].toUpperCase() + d.lbl.slice(1)}<span class="ler-filtro-n">${d.n}</span></button>`; };
+  const filtroIt = (d) => { const vazio = d.n === 0 && fAtivo !== d.key; return `<button class="ler-menu-it ler-filtro-it ${fAtivo === d.key ? "on" : ""}" ${vazio ? "disabled" : ""} data-action="ler-stat-filtro" data-f="${d.key}" data-tip="${vazio ? `Nenhum artigo ${d.lbl} ainda` : (fAtivo === d.key ? "Toque para limpar o filtro" : `Mostrar só os ${d.lbl}`)}">${icone(d.ic)} ${d.lbl[0].toUpperCase() + d.lbl.slice(1)}<span class="ler-filtro-n">${d.n}</span></button>`; };
   const menuFiltro = (filtrosDef.length || fAtivo)
     ? `<details class="ls-mais ler-filtro-tool"><summary class="ler-tool ${fAtivo ? "on" : ""}" data-tip="Filtrar os artigos (lidos, favoritos, grifos…)">${icone("list-filter")}${fAtivo ? `<span class="ler-filtro-badge">1</span>` : ""}</summary><div class="ls-mais-pop ler-mais-menu">
         <div class="ler-menu-lbl">Filtrar artigos</div>
@@ -867,7 +867,7 @@ function trechoComMarcas(text, rawStart, marcas, opts = {}) {
     const trecho = text.slice(m.a, m.b);
     // Recordar: grifo (não comentário) vira lacuna clicável, exceto se já revelado.
     if (modo === "recordar" && m.cor !== "comentario" && !(revelados && revelados.has(m.id))) {
-      html += `<span class="mk mk-cloze mk-${m.cor}" data-cloze="${m.id}" title="Clique para revelar">${"_".repeat(Math.max(3, Math.min(16, trecho.length)))}</span>`;
+      html += `<span class="mk mk-cloze mk-${m.cor}" data-cloze="${m.id}" title="Toque para revelar">${"_".repeat(Math.max(3, Math.min(16, trecho.length)))}</span>`;
     } else {
       const cls = m.cor === "comentario" ? "mk mk-comentario mk-tem-nota" : "mk mk-" + m.cor;
       html += `<mark class="${cls}" data-mid="${m.id}">${esc(trecho)}</mark>`;
@@ -934,10 +934,10 @@ function itemLeitorHTML(st, tipo, i, store, vincMap) {
   // (primeiro) + favoritar / difícil / o que mais cai. Um clique no ícone, sem abrir o menu ⋯.
   // Estado ativo pela cor (on-ok/fav/dif/pq).
   const marcasRapidas =
-    ic("ler-lido", i.lido ? "ok" : "", "check", i.lido ? "Lido — clique para desmarcar." : "Marcar como lido.") +
-    ic("toggle-favorito", i.favorito ? "fav" : "", "bookmark", i.favorito ? "Favorito (na revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão).") +
-    ic("toggle-dificil", i.dificil ? "dif" : "", "flame", i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão).") +
-    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "'O que mais cai'. Clique para tirar." : "Marcar: o que mais cai.");
+    ic("ler-lido", i.lido ? "ok" : "", "check", i.lido ? "Lido — toque para desmarcar." : "Marcar como lido.") +
+    ic("toggle-favorito", i.favorito ? "fav" : "", "bookmark", i.favorito ? "Favorito (na revisão). Toque para tirar." : "Favoritar (destaca e entra em revisão).") +
+    ic("toggle-dificil", i.dificil ? "dif" : "", "flame", i.dificil ? "Difícil (revisão 1/3/7/15/30). Toque para tirar." : "Marcar como difícil (agenda revisão).") +
+    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "'O que mais cai'. Toque para tirar." : "Marcar: o que mais cai.");
   // À direita, discreto (hover): só o menu ⋯ (as ações rápidas migraram para a esquerda).
   const acoes =
     `<details class="ls-mais ler-mais"><summary data-tip="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">${menuArtigoHTML(i, tipo)}</div></details>`;
@@ -1049,7 +1049,7 @@ export function indiceJurisHTML(st) {
     </details>`;
   }).join("");
   const limpar = (S.filtroRamo !== "todos" || S.filtroAssunto !== "todos") ? `<button class="ji-limpar lnk" data-action="juris-idx-limpar">${icone("x")} limpar filtro</button>` : "";
-  return `<aside class="juris-idx">${head}<div class="ji-tree">${body}</div><div class="ji-foot">Clique num assunto para <b>filtrar</b>.${limpar ? " " + limpar : ""}</div></aside>`;
+  return `<aside class="juris-idx">${head}<div class="ji-tree">${body}</div><div class="ji-foot">Selecione um assunto para <b>filtrar</b>.${limpar ? " " + limpar : ""}</div></aside>`;
 }
 function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   const topico = i.topicoId ? st.topicos.find((t) => t.id === i.topicoId) : null;
@@ -1074,7 +1074,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   // Ação principal visível: ★ (marcar como o que mais cai) + revisar marcas (se houver texto).
   // Fase 5 (grifo único): o botão NÃO arma mais pincéis — abre o painel de revisão (modos +
   // imprimir); grifar/comentar é selecionando o texto do card (menu flutuante).
-  const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")}</button>`;
+  const acaoPQ = `<button class="lnk-ic ${i.pq ? "on" : ""}" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Toque para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")}</button>`;
   // Fase 5 (grifo único): grifar/comentar é selecionando o texto do card — o antigo botão
   // "Revisar as marcas" (por-card) saiu daqui por ser redundante (as marcas já aparecem no texto).
   // Menu "⋯" LEAN: só organizar/gerenciar (nada de treino/geração — isso é da aba Estudar).

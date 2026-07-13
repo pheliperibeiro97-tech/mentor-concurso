@@ -599,7 +599,7 @@ function parseFlashcards(texto) {
 function fcPreviewHTML(itens) {
   return `<div class="card form-flashcard">
     <h3>${icone("download")} Revisar ${plural(itens.length, "flashcard", "flashcards")} antes de adicionar</h3>
-    <p class="muted small u-m-0 u-mb-12">A <b>frente</b> fica visível; o <b>verso</b> (resposta) fica oculto para não estragar a prática — clique "ver verso" só se quiser conferir. Edite e remova (✕) à vontade.</p>
+    <p class="muted small u-m-0 u-mb-12">A <b>frente</b> fica visível; o <b>verso</b> (resposta) fica oculto para não estragar a prática — abra "ver verso" só se quiser conferir. Edite e remova (✕) à vontade.</p>
     <ul class="prev-editavel">
       ${itens
         .map((c, i) => {

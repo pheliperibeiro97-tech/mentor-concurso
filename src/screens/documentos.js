@@ -242,7 +242,7 @@ function estruturaResumoHTML(est, store, docId) {
   // MODO COMPLETO (card do material salvo): editor técnico direto, com aplicar/caprichar.
   return `<details class="estr-card" open>
     <summary>${icone("files")} Sumário — <b>${nB}</b> ${nB === 1 ? "tópico do material" : "tópicos do material"} · ${comTopico}/${nB} vinculado${comTopico === 1 ? "" : "s"} ao edital${aula}${avisoConf} <span class="muted small">(${esc(rotuloOrigem(est.origem))})</span></summary>
-    <p class="muted small u-mt-8 u-mb-8">Revise: ajuste título, tópico e páginas, remova o que não quiser. Clique ${icone("eye")} para conferir a página.</p>
+    <p class="muted small u-mt-8 u-mb-8">Revise: ajuste título, tópico e páginas, remova o que não quiser. Toque ${icone("eye")} para conferir a página.</p>
     <ul class="estr-lista">${linhas}</ul>
     <div class="estr-acoes u-mt-8 u-flex u-wrap">${caprichar}${refino}${aplicar}</div>
   </details>`;
@@ -349,7 +349,7 @@ function sumarioNavegavelHTML(d, store) {
     : "";
   return `<div class="sum-nav">
     <div class="sum-nav-head">
-      <span class="muted small">${icone("list-tree")} Sumário — clique num tópico para ler o trecho e revisar por partes.</span>
+      <span class="muted small">${icone("list-tree")} Sumário — selecione um tópico para ler o trecho e revisar por partes.</span>
       ${revTodos}
     </div>
     ${estruturaAntiga}
@@ -1075,7 +1075,7 @@ function buscaSemanticaHTML(store) {
     ? "Busca inteligente: sem materiais ainda."
     : s.temIndice
     ? `Busca inteligente: ativa em <b>${s.indexadas}</b> de ${s.fontes} ${s.fontes === 1 ? "material" : "materiais"}.`
-    : `Busca inteligente: ainda não ativada — clique em “Atualizar índice”.`;
+    : `Busca inteligente: ainda não ativada — toque em “Atualizar índice”.`;
   const btnAtualizar = s.online && s.pendentes
     ? `<button class="btn btn-ghost btn-sm" data-action="atualizar-indice" data-tip="Prepara os materiais novos ou alterados para a busca por significado. Depois, novos materiais entram sozinhos.">${icone("refresh-cw")} Atualizar índice (${s.pendentes})</button>`
     : "";
@@ -1283,7 +1283,7 @@ function abrirImportarMaterial(app) {
               pend.img = await fileToDataUrl(f);
               pend.paginas = [{ n: 1, texto: "", vazia: true, temImagem: true, ocr: false }];
               corpo.querySelector("#doc-texto").value = "";
-              toast(iaOn ? "Imagem carregada. Salve e clique em “Ler páginas escaneadas” para extrair o texto." : "Imagem carregada. O texto será extraído por Visão quando você conectar a IA (fica pendente).", "ok");
+              toast(iaOn ? "Imagem carregada. Salve e toque em “Ler páginas escaneadas” para extrair o texto." : "Imagem carregada. O texto será extraído por Visão quando você conectar a IA (fica pendente).", "ok");
             } else {
               texto = await f.text();
               corpo.querySelector("#doc-texto").value = texto;

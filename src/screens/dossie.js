@@ -212,7 +212,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   const mostraSessoes = mostra("sessoes");
   const escondidas = TODAS_KEYS.filter((k) => !mostra(k));
   const secoesHTML = cheias
-    .map((k) => secaoWrap(CARDS[k], k, retraida(k)))
+    .map((k, i) => secaoWrap(CARDS[k], k, retraida(k), cheias[i - 1], cheias[i + 1]))
     .join("");
   const addStripHTML = escondidas.length
     ? `<div class="dossie-add"><span class="dossie-add-lbl">Adicionar ao dossiê</span>${escondidas.map((k) => `<button class="dossie-add-chip" data-action="dossie-revelar" data-key="${k}">${icone("plus")} ${tituloDe(k)}</button>`).join("")}</div>`
@@ -320,8 +320,17 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
         setTimeout(() => alvo.classList.remove("item-foco"), 2200);
       }
     },
-    // Retrair = recolhe a seção no lugar (só o título fica); reordenar é só pelo drag.
+    // Retrair = recolhe a seção no lugar (só o título fica); reordenar por drag ou pelos botões de toque.
     "dossie-retrair": (el) => store.toggleDossieOculta(el.getAttribute("data-key")),
+    // Reordenar seções por TOQUE: mesma operação do arrastar (reordenarDossieSecao = "inserir ANTES").
+    "dossie-sobe": (el) => {
+      const alvo = el.getAttribute("data-alvo");
+      if (alvo) { store.reordenarDossieSecao(el.getAttribute("data-key"), alvo, ORDER_KEYS); app.refresh(); }
+    },
+    "dossie-desce": (el) => {
+      const alvo = el.getAttribute("data-alvo");
+      if (alvo) { store.reordenarDossieSecao(alvo, el.getAttribute("data-key"), ORDER_KEYS); app.refresh(); }
+    },
     "dossie-revelar": (el) => { const k = el.getAttribute("data-key"); dossieRevelar.add(k); dossieEscondido.delete(k); app.refresh(); },
     // Tirar do dossiê = a seção sai da tela e volta para a faixa "Adicionar ao dossiê".
     "remover-do-dossie": (el) => { const k = el.getAttribute("data-key"); dossieEscondido.add(k); dossieRevelar.delete(k); app.refresh(); },
@@ -496,11 +505,16 @@ function corpoIndicacoes(itens, tipo) {
 // Envolve um card como uma SEÇÃO: cabeçalho (título + controles) e o corpo. Quando RETRAÍDA,
 // só o cabeçalho fica (o título e as funções permanecem no lugar); o chevron retrai/expande.
 // Reordenar é SÓ pelo drag (grip); o menu tem Imprimir + Tirar do dossiê.
-function secaoWrap(card, key, retraida) {
+function secaoWrap(card, key, retraida, prevKey, nextKey) {
   const printItem = card.print ? `<button class="menu-item" data-action="${card.print}"><span class="menu-ico">${icone("printer")}</span> Imprimir seção</button><div class="menu-sep"></div>` : "";
+  // Botões de reordenar por TOQUE (o arrastar do grip não funciona no celular). Só aparecem
+  // em telas sem hover (CSS .toque-reord); no desktop o arrastar segue intacto.
+  const reordToque = `<button class="lnk toque-reord" data-action="dossie-sobe" data-key="${key}" data-alvo="${prevKey || ""}" ${prevKey ? "" : "disabled"} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
+      <button class="lnk toque-reord" data-action="dossie-desce" data-key="${key}" data-alvo="${nextKey || ""}" ${nextKey ? "" : "disabled"} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>`;
   return `<section class="dossie-secao ${retraida ? "dossie-retraida" : ""}" data-sec="${key}" data-drag-id="${key}">
     <div class="dossie-secao-head">
       <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
+      ${reordToque}
       <button class="dossie-sec-chev" data-action="dossie-retrair" data-key="${key}" aria-label="${retraida ? "Expandir seção" : "Retrair seção"}">${icone("chevron-down")}</button>
       <h4>${card.titulo}</h4>
       <span class="spacer"></span>

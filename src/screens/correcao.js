@@ -288,7 +288,7 @@ function correcaoHTML(r) {
         <span class="cor-nota-tag" data-tip="Nota geral atribuída à resposta.">${seloBadge(c.selo)} ${esc(c.nota)}</span>
         <span class="spacer"></span>
         <span class="muted small">${fmtData(r.data)}</span>
-        ${r.texto && fbTxt ? `<button class="lnk cor-comparar-btn" data-action="cor-comparar" data-tip-pos="cima-dir" data-tip="Ver sua resposta e a correção lado a lado (clique de novo para empilhar).">${icone("arrow-left-right")} Comparar</button>` : ""}
+        ${r.texto && fbTxt ? `<button class="lnk cor-comparar-btn" data-action="cor-comparar" data-tip-pos="cima-dir" data-tip="Ver sua resposta e a correção lado a lado (toque de novo para empilhar).">${icone("arrow-left-right")} Comparar</button>` : ""}
         <details class="doc-mais">
           <summary data-tip-pos="cima-dir" data-tip="Mais ações">${icone("ellipsis")}</summary>
           <div class="doc-mais-pop">

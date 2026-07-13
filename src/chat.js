@@ -98,8 +98,8 @@ export function montarChat(store, app) {
     webBtn.classList.toggle("ativo", webOn);
     webBtn.setAttribute("aria-pressed", webOn ? "true" : "false");
     webBtn.title = webOn
-      ? "Busca ao vivo na internet ativada. Clique para desativar."
-      : "Busca ao vivo na internet (desativada). Clique para ativar. Requer uma IA conectada com suporte a busca na web.";
+      ? "Busca ao vivo na internet ativada. Toque para desativar."
+      : "Busca ao vivo na internet (desativada). Toque para ativar. Requer uma IA conectada com suporte a busca na web.";
   }
   webBtn.addEventListener("click", () => {
     webOn = !webOn;

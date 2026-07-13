@@ -44,7 +44,7 @@ export function iniciarAgendadorDiario(store) {
 // O QUE notificar é determinístico em store.notificacoesDevidas(); aqui é só o disparo (SO).
 export async function dispararNotificacoesDevidas(store) {
   // Web: silencioso de propósito (a decisão é notificar só no desktop/Tauri).
-  if (typeof window === "undefined" || !window.__TAURI__) return;
+  if (!(typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__))) return;
   if (typeof Notification === "undefined") return;
   const devidas = store.notificacoesDevidas();
   if (!devidas.length) return;

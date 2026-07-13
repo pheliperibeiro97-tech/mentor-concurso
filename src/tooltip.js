@@ -9,6 +9,13 @@
 let tipEl = null;
 let alvoAtual = null;
 let hoverTimer = null; // atraso de 300ms no hover (não pisca ao só passar o mouse)
+let toqueTimer = null; // no toque, o balão some sozinho após ~2,5s
+
+// Dispositivo de toque (sem hover fino): num tap, pointerover+click disparam quase juntos,
+// então o balão pisca e some. Nesses aparelhos o clique passa a MOSTRAR o balão (ver initTooltips).
+function ehToque() {
+  return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
+}
 
 function ensureEl() {
   if (!tipEl) {
@@ -22,6 +29,7 @@ function ensureEl() {
 
 function esconder() {
   if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+  if (toqueTimer) { clearTimeout(toqueTimer); toqueTimer = null; }
   alvoAtual = null;
   if (tipEl) tipEl.classList.remove("tip-on");
 }
@@ -95,6 +103,22 @@ export function initTooltips() {
   // some ao rolar/redimensionar (a posição fixa ficaria defasada)
   window.addEventListener("scroll", esconder, true);
   window.addEventListener("resize", esconder);
-  // clique some (evita balão preso após ação)
-  document.addEventListener("click", esconder, true);
+  // Clique: no desktop (hover fino) some, evitando balão preso após a ação.
+  // No toque, um tap num [data-tip] MOSTRA o balão (a ação do botão segue normalmente, pois
+  // NÃO damos preventDefault) e ele some no próximo tap fora ou após ~2,5s.
+  document.addEventListener("click", (e) => {
+    if (ehToque()) {
+      const alvo = e.target.closest?.("[data-tip]");
+      if (alvo && alvo.getAttribute("data-tip")) {
+        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+        posicionar(alvo);
+        if (toqueTimer) clearTimeout(toqueTimer);
+        toqueTimer = setTimeout(esconder, 2500);
+        return; // deixa a ação (clique no botão) prosseguir; mantém o balão visível
+      }
+      esconder(); // tap fora de qualquer [data-tip]
+      return;
+    }
+    esconder();
+  }, true);
 }

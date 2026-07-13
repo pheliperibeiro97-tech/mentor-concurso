@@ -351,7 +351,7 @@ export default function renderOnboarding(root, app) {
           <button class="btn btn-ghost btn-sm" data-action="testar">${icone("plug-zap")} Testar conexão</button>
           <span class="small" id="ob-ia-msg"></span>
         </div>
-        <p class="muted small">Pegue a chave grátis em aistudio.google.com/apikey, cole acima e clique em Testar conexão (ele escolhe sozinho o melhor modelo grátis que sua chave aceita).</p>` : ""}
+        <p class="muted small">Pegue a chave grátis em aistudio.google.com/apikey, cole acima e toque em Testar conexão (ele escolhe sozinho o melhor modelo grátis que sua chave aceita).</p>` : ""}
       </div>
       <div class="ob-final">
         <button class="btn btn-ghost" data-action="voltar">← Voltar</button>

@@ -180,7 +180,7 @@ export function garantirPopoverMarca() {
   const abrir = (mk, marca, ctx) => {
     const ehCom = marca.cor === "comentario";
     pop.innerHTML =
-      (ehCom ? `<div class="marca-pop-nota">${marca.nota ? esc(marca.nota) : '<span class="muted">(comentário vazio — clique em Editar)</span>'}</div>` : "") +
+      (ehCom ? `<div class="marca-pop-nota">${marca.nota ? esc(marca.nota) : '<span class="muted">(comentário vazio — toque em Editar)</span>'}</div>` : "") +
       `<div class="marca-pop-acoes">${ehCom ? `<button class="lnk" data-mp="editar">${icone("square-pen")} Editar</button>` : ""}<button class="lnk lnk-danger" data-mp="remover">${icone("x")} Remover</button></div>`;
     posicionar(mk);
     pop.onclick = (ev) => {
@@ -233,7 +233,7 @@ export function perguntarIASobreTrecho(ctx, id, trecho) {
       <div class="muted small">${icone("scroll-text")} ${esc(ref)}</div>
       <blockquote class="ia-trecho">${esc(trecho)}</blockquote>
       <label class="ia-lbl">Sua dúvida sobre este trecho
-        <textarea id="ia-pergunta" rows="2" placeholder="Ex.: qual a diferença para o art. seguinte? (ou clique em Explicar)"></textarea>
+        <textarea id="ia-pergunta" rows="2" placeholder="Ex.: qual a diferença para o art. seguinte? (ou toque em Explicar)"></textarea>
       </label>
       <div class="ia-acoes-row">
         <label class="inline ia-web" data-tip="A IA também pesquisa na web para responder."><input type="checkbox" id="ia-web" /> Consultar a web</label>

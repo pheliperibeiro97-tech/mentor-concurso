@@ -136,6 +136,10 @@ function indPreviewHTML(st, tipo, modo, r, itens, store) {
 // Nada de OCR nem IA adivinhando a letra — só parsing do texto oficial.
 export function abrirImportarLei(app) {
   const { store } = app;
+  // Busca automática no Planalto (catálogo/URL) só existe no app desktop (Tauri); a store
+  // rejeita com SEM_DESKTOP no navegador/celular. No mobile, escondemos o catálogo/link e
+  // priorizamos o caminho que funciona em qualquer aparelho: colar o texto da lei.
+  const ehDesktop = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
   const estado = {
     etapa: "form", processando: false, msg: "",
     norma: "", artigos: [], revogados: 0, decis: {},
@@ -147,30 +151,46 @@ export function abrirImportarLei(app) {
       CATALOGO_LEIS.map((l) => `<option value="${esc(l.url)}" data-nome="${esc(l.nome)}" ${estado.form.url === l.url ? "selected" : ""}>${esc(l.titulo)} (${esc(l.nome)})</option>`).join("");
     const opcDisc = `<option value="">— Geral (sem vínculo) —</option>` +
       st.disciplinas.map((d) => `<option value="${d.id}" ${estado.form.disciplinaId === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
-    return `<div class="card form-leiseca">
-      <details class="ed-ajuda"><summary>Como funciona a importação</summary>
+    const intervaloHTML = `<label style="flex:1 1 160px">Artigos (opcional)
+          <input id="imp-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-5, 37, 121-127" data-tip="Deixe vazio para trazer a lei inteira. Ou informe artigos/intervalos: 1-5, 37, 213-217." /></label>`;
+    // No desktop: catálogo + link (busca automática) como caminho principal, texto como alternativa.
+    // No mobile: colar o texto é o caminho principal; a busca automática não roda aqui.
+    const ajudaHTML = ehDesktop
+      ? `<details class="ed-ajuda"><summary>Como funciona a importação</summary>
         <div class="ed-ajuda-corpo">
           <p>Traz a <b>letra exata</b> do texto oficial. No app <b>desktop</b>, a busca é automática no site do Planalto.</p>
-          <p>No navegador (por segurança do site), traga o <b>texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
-        </div></details>
-      <div class="form-row">
+          <p>Você também pode colar o <b>texto/HTML</b> da página. O app detecta sozinho o que está <b>revogado</b>.</p>
+        </div></details>`
+      : `<details class="ed-ajuda"><summary>Como funciona no celular</summary>
+        <div class="ed-ajuda-corpo">
+          <p>No celular, <b>cole o texto da lei</b>: abra a página oficial (Planalto), selecione tudo (toque longo) e copie; depois cole no campo abaixo. O app detecta sozinho o que está <b>revogado</b>.</p>
+          <p>A busca automática pelo catálogo ou por link <b>só funciona no computador</b>.</p>
+        </div></details>`;
+    const buscaAutomaticaHTML = ehDesktop
+      ? `<div class="form-row">
         <label style="flex:1 1 260px">Lei mais cobrada (catálogo)
           <select id="imp-cat">${opcCat}</select></label>
-        <label style="flex:1 1 160px">Artigos (opcional)
-          <input id="imp-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-5, 37, 121-127" data-tip="Deixe vazio para trazer a lei inteira. Ou informe artigos/intervalos: 1-5, 37, 213-217." /></label>
+        ${intervaloHTML}
       </div>
       <label class="u-block u-mt-4 u-mb-8">Ou link direto da página oficial
         <input id="imp-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>
       <label class="u-block u-mt-4 u-mb-8">Ou traga o texto/HTML da lei (no navegador)
-        <textarea id="imp-html" rows="5" placeholder="texto da página oficial da lei (Ctrl+A, Ctrl+C na página do Planalto)">${esc(estado.form.html)}</textarea></label>
+        <textarea id="imp-html" rows="5" placeholder="texto da página oficial da lei (Ctrl+A, Ctrl+C na página do Planalto)">${esc(estado.form.html)}</textarea></label>`
+      : `<label class="u-block u-mb-8">Cole aqui o texto da lei
+        <textarea id="imp-html" rows="7" placeholder="cole o texto da página oficial da lei (Planalto)">${esc(estado.form.html)}</textarea></label>
+      <div class="form-row u-flex-12 u-wrap">${intervaloHTML}</div>
+      <p class="muted small u-m-0 u-mt-4">A busca automática pelo catálogo ou link só funciona no computador.</p>`;
+    return `<div class="card form-leiseca">
+      ${ajudaHTML}
+      ${buscaAutomaticaHTML}
       <div class="form-row u-flex-12 u-wrap">
         <label class="inline">Vincular à disciplina <select id="imp-disc">${opcDisc}</select></label>
       </div>
-      ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)</div>` : ""}
-      ${!estado.processando && estado.msg ? `<p class="${/desktop|traga|adicione/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
+      ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> ${ehDesktop ? "Buscando a lei no site oficial e extraindo os artigos… (leis grandes, como a CF, podem levar alguns segundos)" : "Extraindo os artigos do texto…"}</div>` : ""}
+      ${!estado.processando && estado.msg ? `<p class="${/desktop|traga|adicione|computador/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="imp-cancelar" ${estado.processando ? "disabled" : ""}>Cancelar</button>
-        <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="imp-preparar" ${estado.processando ? "disabled" : ""}>${estado.processando ? "Buscando…" : "Buscar / Preparar"}</button>
+        <button class="btn btn-primary ${estado.processando ? "carregando" : ""}" data-action="imp-preparar" ${estado.processando ? "disabled" : ""}>${estado.processando ? (ehDesktop ? "Buscando…" : "Preparando…") : (ehDesktop ? "Buscar / Preparar" : "Preparar")}</button>
       </div>
     </div>`;
   };
@@ -239,7 +259,7 @@ export function abrirImportarLei(app) {
     handlers: ({ rerender, fechar, corpo }) => ({
       "imp-preparar": async () => {
         lerForm(corpo);
-        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Escolha uma lei do catálogo, informe um link ou traga o texto da lei."; toast(estado.msg, "erro"); return rerender(); }
+        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = ehDesktop ? "Escolha uma lei do catálogo, informe um link ou traga o texto da lei." : "Cole o texto da lei no campo acima."; toast(estado.msg, "erro"); return rerender(); }
         estado.processando = true; estado.msg = ""; rerender();
         toast(estado.form.html.trim() ? "Extraindo os artigos do texto…" : "Buscando a lei no Planalto…");
         try {

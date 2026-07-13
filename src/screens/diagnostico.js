@@ -276,13 +276,13 @@ export default function renderDiagnostico(root, app) {
         <span class="sp"></span>
         <span class="chip chip-count" style="cursor:default">${ofensivaTexto(ofens)}</span>
       </div>
-      <p class="muted small u-m-0 u-mt-4 u-mb-12">Cada quadrado é um dia deste mês. Dia sem registro fica neutro — clique num dia para ver as sessões.</p>
+      <p class="muted small u-m-0 u-mt-4 u-mb-12">Cada quadrado é um dia deste mês. Dia sem registro fica neutro — selecione um dia para ver as sessões.</p>
       ${linhaConstanciaMes(store.get().sessoes, { folgaDias: store.get().config.diasFolga || [] })}
     </section>
 
     <!-- 2b) CALENDÁRIO (recolhível, logo abaixo da Constância). -->
     <details class="bloco-recolhe" id="cal-det" data-print="calendario" data-print-label="Calendário" ${calDetAberto ? "open" : ""}>
-      <summary><span class="sum-tit">${icone("calendar-days")} Calendário</span><span class="sum-dica muted small">clique num dia para ver as sessões</span></summary>
+      <summary><span class="sum-tit">${icone("calendar-days")} Calendário</span><span class="sum-dica muted small">selecione um dia para ver as sessões</span></summary>
       <div class="card card-plano">
         <div id="cal-container">${calendarioHTML(store)}</div>
       </div>
@@ -342,7 +342,7 @@ export default function renderDiagnostico(root, app) {
             ${graficoAcuraciaSemanal(store.acuraciaPorSemana(12, desempTop ? { topicoId: desempTop } : desempDisc ? { disciplinaId: desempDisc } : null))}
           </div>
         </div>
-        <div class="stat-sub"><span class="stat-sub-tit">${icone("library")} Por disciplina</span> <span class="muted small" data-tip="Clique numa disciplina para abrir o painel: KPIs, semáforo por tópico e análise do Mentor.">${icone("info")}</span></div>
+        <div class="stat-sub"><span class="stat-sub-tit">${icone("library")} Por disciplina</span> <span class="muted small" data-tip="Selecione uma disciplina para abrir o painel: KPIs, semáforo por tópico e análise do Mentor.">${icone("info")}</span></div>
         ${
           diag.porDisciplina.length
             ? `<div class="disc-grid stagger">${diag.porDisciplina.map((l) => cardDisciplina(l, store)).join("")}</div>
@@ -793,7 +793,7 @@ function calendarioHTML(store) {
       <button class="btn btn-ghost btn-sm" data-action="mes-next" data-tip="Próximo mês">${icone("chevron-right")}</button>
       <button class="btn btn-ghost btn-sm" data-action="mes-hoje" data-tip="Ir para o mês atual">hoje</button>
     </div>
-    <div class="cal-filtros" data-tip="Sem filtro = mostra tudo. Clique num tipo para destacar só ele; clique de novo para limpar.">
+    <div class="cal-filtros" data-tip="Sem filtro = mostra tudo. Selecione um tipo para destacar só ele; toque de novo para limpar.">
       ${chip("E", "Estudo", FASES.E.cor)}
       ${chip("A", "Prática", FASES.A.cor)}
       ${chip("R", "Revisão", FASES.R.cor)}

@@ -266,7 +266,7 @@ export default function renderConfig(root, app) {
       <p class="muted small">${AJUDA_IA[cfg.iaProvider] || ""}</p>
       <label class="inline small" style="display:flex; width:fit-content; align-items:flex-start; gap:8px; margin:4px 0 2px; font-weight:400">
         <input id="cfg-mentor-auto" type="checkbox" ${cfg.mentorAutoSemanal !== false ? "checked" : ""} />
-        <span>Deixar o <b>Mentor IA</b> analisar o seu progresso <b>automaticamente uma vez por semana</b> (mesmo sem você clicar em "Analisar"). Desmarque para analisar só quando você clicar.</span>
+        <span>Deixar o <b>Mentor IA</b> analisar o seu progresso <b>automaticamente uma vez por semana</b> (mesmo sem você acionar "Analisar"). Desmarque para analisar só quando você pedir.</span>
       </label>
       <div class="form-acoes">
         <button class="btn btn-primary btn-sm" data-action="salvar-ia">Salvar IA</button>
@@ -303,7 +303,7 @@ export default function renderConfig(root, app) {
 
     <details class="cfg-acordeao">
       <summary>${icone("star")} Atalhos rápidos</summary>
-      <p class="muted small">Crie botões de acesso rápido para o que você mais usa: uma <b>tela</b> (inclusive Acompanhamento e Central de Revisões), uma <b>disciplina</b> do edital, o <b>dossiê de um tópico</b> ou <b>Questões filtradas por tópico</b> (treinar um tema num clique). Defina o <b>nome</b>, o <b>ícone</b> e o <b>destino</b>. O atalho aparece na <b>barra lateral</b>.</p>
+      <p class="muted small">Crie botões de acesso rápido para o que você mais usa: uma <b>tela</b> (inclusive Acompanhamento e Central de Revisões), uma <b>disciplina</b> do edital, o <b>dossiê de um tópico</b> ou <b>Questões filtradas por tópico</b> (treinar um tema num toque). Defina o <b>nome</b>, o <b>ícone</b> e o <b>destino</b>. O atalho aparece na <b>barra lateral</b>.</p>
       <div class="form-row">
         <label class="u-grow">Nome <input id="atl-nome" type="text" placeholder="Ex.: Português" /></label>
         <label>Tipo
@@ -513,7 +513,7 @@ export default function renderConfig(root, app) {
 
   root.querySelector("#cfg-mentor-auto")?.addEventListener("change", (e) => {
     store.setConfig({ mentorAutoSemanal: e.target.checked });
-    toast(e.target.checked ? "Mentor IA: análise automática semanal ligada." : "Mentor IA: análise automática só quando você clicar.");
+    toast(e.target.checked ? "Mentor IA: análise automática semanal ligada." : "Mentor IA: análise automática só quando você pedir.");
   });
 
   root.querySelector("#cfg-descartar-pdf")?.addEventListener("change", (e) => {
@@ -694,7 +694,7 @@ export default function renderConfig(root, app) {
           setMsg(
             ` Conexão OK com o modelo <b>${modelo || "padrão"}</b>.` +
               (trocou ? ` (ajustei o modelo para um que sua chave aceita.)` : "") +
-              ` Clique em <b>Salvar IA</b> para ativar.`,
+              ` Toque em <b>Salvar IA</b> para ativar.`,
             "var(--success)"
           );
         } else {

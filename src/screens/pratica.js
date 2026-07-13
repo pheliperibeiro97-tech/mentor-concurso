@@ -529,7 +529,7 @@ function questaoHTML(st, q, formato, s) {
     if (ultima.acertou) {
       feedback = `<div class="feedback ok">${icone("check")} Você acertou.</div>${justif}
         <div class="duvida-row">
-          <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre esta questão? Escreva e clique em Comentar." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação do gabarito." />
+          <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre esta questão? Escreva e toque em Comentar." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação do gabarito." />
           <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
         </div>`;
       cardAcoes = `
@@ -550,7 +550,7 @@ function questaoHTML(st, q, formato, s) {
             </select>
           </label>
           <div class="duvida-row">
-            <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e clique em Comentar (opcional)." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
+            <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e toque em Comentar (opcional)." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
             <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
           </div>
           ${explicacaoIAHTML(ultima.comentarioIA)}

@@ -476,7 +476,7 @@ function resumoHTML(st, r) {
         marcarAberto.has(r.id)
           ? `<div class="resumo-marcar"><p class="muted small u-m-0 u-mb-8">Marcação sobre o <b>texto extraído</b> do resumo (a formatação rica fica preservada na edição).</p><div class="mk-host" data-mk-host="${r.id}"></div></div>`
           : ocultar
-            ? `<div class="resumo-conteudo resumo-oculto muted"><i>Conteúdo oculto — tente recordar o que este resumo traz e clique em “Revelar conteúdo”.</i></div>`
+            ? `<div class="resumo-conteudo resumo-oculto muted"><i>Conteúdo oculto — tente recordar o que este resumo traz e toque em “Revelar conteúdo”.</i></div>`
             : temTexto
               ? `<div class="resumo-conteudo">
                   <p class="resumo-previa">${previa}</p>

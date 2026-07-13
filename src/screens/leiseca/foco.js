@@ -55,7 +55,7 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     ${mostrarModos ? `<div class="lf-modos">
       ${["normal|Texto", "marcas|Só as marcas", "recordar|Recordar"].map((x) => { const [id, lbl] = x.split("|"); return `<button class="lf-modo ${modoLeitura === id ? "on" : ""}" data-action="lf-modo" data-modo="${id}">${lbl}</button>`; }).join("")}
     </div>` : ""}
-    <div class="lf-legenda">${icone("arrow-left")}${icone("arrow-right")} navegar · <b>Enter</b> marcar lido e avançar · <b>Esc</b> sair · ${mostrarModos ? "no Recordar, clique nas lacunas para revelar" : "selecione o texto para grifar / copiar / IA"}</div>
+    <div class="lf-legenda">${icone("arrow-left")}${icone("arrow-right")} navegar · <b>Enter</b> marcar lido e avançar · <b>Esc</b> sair · ${mostrarModos ? "no Recordar, toque nas lacunas para revelar" : "selecione o texto para grifar / copiar / IA"}</div>
   </div>`;
 
   // Atualiza SÓ o miolo + rodapé + progresso (mantém o overlay → NÃO pisca ao trocar de artigo).
@@ -183,11 +183,11 @@ export function abrirCompletarArtigo(app, store, ids, opts = {}) {
     let corpo, dica;
     if (nivel === "extremo") {
       corpo = `<div class="cl-extremo"><textarea class="cl-type" placeholder="Digite o artigo de memória…" spellcheck="false"></textarea><div class="cl-diff" hidden></div></div>`;
-      dica = "Redija o artigo inteiro de memória e clique em Conferir.";
+      dica = "Redija o artigo inteiro de memória e toque em Conferir.";
     } else {
       const lac = store.lacunasCloze(clean, nivel);
       if (!lac.length) { corpo = `<div class="cl-corpo">${esc(clean)}</div>`; dica = "Este texto é curto demais para gerar lacunas — tente outro nível."; }
-      else if (nivel === "dificil") { corpo = `<div class="cl-corpo cl-reveal">${renderClozeSpans(clean, lac)}</div>`; dica = "Recorde a cláusula e clique para conferir."; }
+      else if (nivel === "dificil") { corpo = `<div class="cl-corpo cl-reveal">${renderClozeSpans(clean, lac)}</div>`; dica = "Recorde a cláusula e toque para conferir."; }
       else { corpo = `<div class="cl-corpo">${renderClozeInputs(clean, lac)}</div>`; dica = "Preencha as lacunas — acento e maiúscula não importam."; }
     }
     return `<div class="cl-artigo">

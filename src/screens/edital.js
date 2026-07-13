@@ -925,6 +925,12 @@ function aulasListaHTML(store, st) {
       return `<div class="cur-aula-row" data-drag-id="${a.id}">
         <div class="cur-aula-head">
           <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
+          ${
+            custom
+              ? `<button class="lnk toque-reord" data-action="aula-subir" data-id="${a.id}" ${idx > 0 ? "" : "disabled"} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
+                 <button class="lnk toque-reord" data-action="aula-descer" data-id="${a.id}" ${idx < aulas.length - 1 ? "" : "disabled"} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>`
+              : ""
+          }
           <b class="cur-aula-nome">${esc(tituloAula(a))}</b>
           ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
@@ -1578,9 +1584,9 @@ function topHTML(store, st, t, n) {
     <tr class="${t.concluido ? "ed-tr-done" : ""}">
       <td class="edc-chk">${selMode ? `<input type="checkbox" class="ed-top-sel" data-id="${t.id}" ${topSel.has(t.id) ? "checked" : ""} title="Selecionar (para mover, unificar ou virar nova disciplina)" />` : `<button class="ed-chk ${t.concluido ? "on" : ""}" data-action="done-top" data-id="${t.id}" data-tip-pos="cima-esq" data-tip="${t.concluido ? "Concluído · clique para desmarcar" : "Marcar como concluído (já estudei)"}">${icone("check")}</button>`}</td>
       <td class="edc-nome"><button class="lnk ed-top-link" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico" aria-hidden="true">${icone("external-link")}</span></button>${linkInd}</td>
-      <td class="edc-rel">${relPillSelectHTML(t)}</td>
-      <td class="edc-ap">${apCell}</td>
-      <td class="edc-est">${estCell}</td>
+      <td class="edc-rel" data-label="Relevância">${relPillSelectHTML(t)}</td>
+      <td class="edc-ap" data-label="Aproveitamento">${apCell}</td>
+      <td class="edc-est" data-label="Estudo">${estCell}</td>
       <td class="edc-acts">
         <details class="doc-mais ed-top-mais">
           <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações para este tópico.">${icone("ellipsis")}</summary>

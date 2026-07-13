@@ -140,7 +140,7 @@ export default function renderMapas(root, app) {
       ${maps.length ? filtroHTML : ""}
       ${gerarBtn}
     </div>
-    ${filtrados.length ? filtrados.map(cardMapa).join("") : vazio(maps.length ? "Nenhum mapa neste filtro" : "Nenhum mapa mental ainda", maps.length ? "Troque o filtro ou gere um novo mapa." : "Clique em Gerar mapa mental (tópico, material, resumo, tema livre, arquivo ou estrutura escrita), ou gere pelo Dossiê/chat.", iconMapa)}
+    ${filtrados.length ? filtrados.map(cardMapa).join("") : vazio(maps.length ? "Nenhum mapa neste filtro" : "Nenhum mapa mental ainda", maps.length ? "Troque o filtro ou gere um novo mapa." : "Toque em Gerar mapa mental (tópico, material, resumo, tema livre, arquivo ou estrutura escrita), ou gere pelo Dossiê/chat.", iconMapa)}
   `;
 
   const abrir = (id) => { const m = store.get().mapasMentais.find((x) => x.id === id); if (m) abrirMapaCompleto(store, app, m); };
@@ -180,7 +180,7 @@ export default function renderMapas(root, app) {
       root.classList.add("mapas-sel");
       const cont = root.querySelector(".mapa-print-actions");
       if (cont) cont.innerHTML = `<button class="btn btn-ghost btn-sm" data-action="marcar-todos">Marcar todos</button> <button class="btn btn-primary btn-sm" data-action="imprimir-fazer">${icone("printer")} Imprimir marcados</button> <button class="btn btn-ghost btn-sm" data-action="imprimir-cancelar">Cancelar</button>`;
-      toast("Marque os mapas e clique em Imprimir marcados (nenhum marcado = todos do filtro).");
+      toast("Marque os mapas e toque em Imprimir marcados (nenhum marcado = todos do filtro).");
     },
     "imprimir-fazer": () => {
       const marcados = [...root.querySelectorAll(".mapa-chk:checked")].map((c) => c.getAttribute("data-id"));

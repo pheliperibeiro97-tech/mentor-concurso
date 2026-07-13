@@ -182,7 +182,7 @@ function renderSetup(root, app, st, formato) {
             <div class="foco-eyebrow">Simulado rápido</div>
             <p class="foco-desc"><b>${nRapido}</b> ${rotTotal(nRapido)} distribuídas ${temPesoEdital ? "pela relevância do seu edital" : "pelas suas disciplinas"} · ~<b>${minRapido} min</b>. Sem configurar nada: a prova começa agora.</p>
             <div class="foco-acoes">
-              <button class="btn btn-primary btn-lg" data-action="sim-rapido" data-tip="Monta e inicia a prova num clique. Para escolher as cotas, use Personalizar abaixo.">${icone("play")} Começar</button>
+              <button class="btn btn-primary btn-lg" data-action="sim-rapido" data-tip="Monta e inicia a prova num toque. Para escolher as cotas, use Personalizar abaixo.">${icone("play")} Começar</button>
             </div>
           </section>`
         : ""

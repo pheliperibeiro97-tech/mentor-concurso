@@ -5614,3 +5614,50 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   .ob-card { padding: 22px 18px; }
   .ob-card h1 { font-size: 1.5rem; }
 }
+
+/* ===== Reordenar/mover por TOQUE (o arrastar HTML5 não funciona no celular) ===== */
+/* Ocultos no desktop (onde vale o arrastar); revelados só em telas sem hover. */
+.toque-reord { display: none; }
+.dia-mover-sel { display: none; }
+@media (hover: none) {
+  .toque-reord {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; min-height: 34px;
+  }
+  .dia-mover-sel {
+    display: inline-block; width: auto; min-height: 0; height: 32px;
+    margin: 0; padding: 3px 24px 3px 8px; font-size: var(--fs-xs);
+  }
+  /* Sem arrastar no toque: os grips deixam de fazer sentido e são ocultados. */
+  .dia-grip,
+  .dossie-secao .drag-grip,
+  .cur-aula-row .drag-grip { display: none; }
+}
+
+/* ===== Edital: tabela de tópicos vira CARTÕES em telas estreitas ===== */
+@media (max-width: 560px) {
+  .ed-disc-acc > .ed-tabwrap { overflow-x: visible; padding: 0 10px 10px; }
+  .ed-tab { min-width: 0; display: block; font-size: .92rem; }
+  .ed-tab thead { display: none; }
+  .ed-tab tbody, .ed-tab tbody tr, .ed-tab tbody td { display: block; width: auto; }
+  .ed-tab tbody tr {
+    position: relative;
+    border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); padding: 12px 12px; margin-bottom: 10px;
+  }
+  .ed-tab tbody tr:hover td { background: transparent; }
+  .ed-tab tbody td { border-bottom: 0; padding: 5px 0; }
+  .ed-tab tbody td.edc-nome { padding: 0 66px 6px 0; font-size: 1rem; font-weight: var(--fw-medium); }
+  .ed-tab tbody td.edc-chk  { position: absolute; top: 12px; right: 40px; padding: 0; }
+  .ed-tab tbody td.edc-acts { position: absolute; top: 8px;  right: 6px;  padding: 0; text-align: right; }
+  .ed-tab tbody td[data-label] {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .ed-tab tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-size: .66rem; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); font-weight: var(--fw-bold);
+  }
+  .edc-chk, .edc-rel, .edc-ap, .edc-acts { width: auto; }
+}

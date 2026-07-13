@@ -47,7 +47,7 @@ export const GUIA = [
         <li><b>Constância</b> — mapa de calor dos seus dias: mais escuro = mais tempo estudado. Dia sem estudo não pune; dia de folga tem marca própria.</li>
         <li><b>Comportamental</b> (IA) — o Mentor lê horários e regularidade e aponta quando você rende mais e o que anda esquecido.</li>
         <li><b>Indicadores</b> — cobertura do edital, aproveitamento, tempo na semana e contagem regressiva da prova.</li>
-        <li><b>Por disciplina</b> — um card por disciplina (anel de aproveitamento, cobertura, tempo); clique para abrir o <b>Painel da disciplina</b>.</li>
+        <li><b>Por disciplina</b> — um card por disciplina (anel de aproveitamento, cobertura, tempo); abra o <b>Painel da disciplina</b>.</li>
         <li><b>Gráficos, metas, calendário</b> e a tabela de <b>sessões</b> (ordenável, com filtros; dá para editar ou apagar).</li>
       </ul>` },
 
@@ -75,7 +75,7 @@ export const GUIA = [
   { id: "materiais", grupo: "Estudar", titulo: "Materiais", html: `
       <p>Sua base de conteúdo: importe <b>PDF, imagem ou texto</b> (também arrastando o arquivo).</p>
       <ul>
-        <li>O texto é extraído automaticamente; páginas escaneadas ou com tabela ficam pendentes e podem ser processadas <b>sob clique</b> pela Visão/OCR (IA), página a página.</li>
+        <li>O texto é extraído automaticamente; páginas escaneadas ou com tabela ficam pendentes e podem ser processadas <b>sob demanda</b> pela Visão/OCR (IA), página a página.</li>
         <li><b>Busca no material</b> — palavra exata, offline, conforme você digita.</li>
         <li><b>Busca por significado</b> (IA) — acha pelo sentido; é preciso indexar ("separar") os materiais antes.</li>
         <li>Cada material pode ser <b>grifado</b> (selecione o texto) e ter os <b>tópicos detectados</b> pela IA para agendar revisão.</li>
@@ -85,7 +85,7 @@ export const GUIA = [
       <p>Telas gêmeas, cada uma com <b>três abas</b> — pense nelas como verbos: <b>Ler</b> (a letra), <b>Estudar</b> (praticar) e <b>Metas</b> (planejar).</p>
       <ul>
         <li><b>Ler</b> — a lista com o texto dos dispositivos. Para <b>grifar, selecione o trecho</b>: um menu flutuante aparece com as cores, comentar, copiar e perguntar à IA (não há painel de pincéis). A barra do leitor <b>se oculta ao rolar</b>, sobrando tela para o texto. O botão de estrela marca <b>"O que mais cai"</b> (incidência), que vira mini-barra no próprio artigo. No menu <b>⋯</b> de cada item: ler em foco, abrir na fonte oficial, marcar para revisar, editar, revogar/cancelar e remover.</li>
-        <li><b>Estudar</b> — lançador em tela cheia: <b>Certo/Errado</b> (na lei, com diff colorido), <b>Completar a letra</b> (lacunas), <b>Revisar o que vence</b> e <b>Refazer meus erros</b>; na jurisprudência, também a <b>Súmula-duelo</b> (número ou tribunal trocado). Escolha o escopo (tudo ou o que mais cai); <b>um clique já começa</b> no padrão e em <b>Opções…</b> você ajusta quantidade e dificuldade — dá ainda para gerar flashcards e questões do escopo.</li>
+        <li><b>Estudar</b> — lançador em tela cheia: <b>Certo/Errado</b> (na lei, com diff colorido), <b>Completar a letra</b> (lacunas), <b>Revisar o que vence</b> e <b>Refazer meus erros</b>; na jurisprudência, também a <b>Súmula-duelo</b> (número ou tribunal trocado). Escolha o escopo (tudo ou o que mais cai); <b>começa com um toque</b> no padrão e em <b>Opções…</b> você ajusta quantidade e dificuldade — dá ainda para gerar flashcards e questões do escopo.</li>
         <li><b>Metas</b> — metas cruas de leitura (ex.: "ler art. 1º a 20"), sem transcrever a letra; cada meta vira <b>tarefa no Planejamento</b>, e dá para importar um cronograma inteiro e dividir em etapas.</li>
         <li><b>Importar (aba Ler)</b> — um só botão: na lei, letra oficial (Planalto no app desktop, ou colar — o app detecta o que está revogado) ou lista/PDF; na jurisprudência, súmulas/teses ou o informativo (separável em teses). Tudo com preview editável.</li>
         <li><b>Manter atualizado (só lei)</b> — "Conferir atualização" reconsulta a fonte e mostra por diff o que mudou, entrou ou foi revogado; vira selo de novidade filtrável.</li>
@@ -115,7 +115,7 @@ export const GUIA = [
         <li><b>Treino</b> — responda, veja o gabarito e o comentário; o erro vai para o <b>Caderno de Erros</b>.</li>
         <li><b>Filtros</b> por tópico e situação (pendentes/acertei/errei) e o botão <b>Treinar erros</b> (refaz as erradas em branco).</li>
         <li><b>Adicionar</b> — digitar/colar, importar de arquivo, ou extrair/gerar com IA a partir de um material.</li>
-        <li><b>Modo foco</b> — uma a uma, em tela cheia, com correção imediata, comentário da IA e placar; atalhos: 1–4 (ou C/E) respondem, Espaço avança.</li>
+        <li><b>Modo foco</b> — uma a uma, em tela cheia, com correção imediata, comentário da IA e placar; no computador, teclas 1–4 (ou C/E) respondem e Espaço avança.</li>
         <li>Para prova cronometrada com gabarito só no fim, use <b>Simulados</b>.</li>
       </ul>` },
 
@@ -141,7 +141,7 @@ export const GUIA = [
       <ul>
         <li><b>Filtros</b> por status (atrasadas/hoje/próximas/concluídas), disciplina e tipo; reprograme, conclua ou traga as atrasadas para hoje.</li>
         <li><b>Baixa graduada</b> — ao concluir, avalie: <b>Esqueci</b> (reinicia a curva, volta em 24h), <b>Lembrei</b> (sobe um degrau) ou <b>Fácil</b> (sobe dois).</li>
-        <li><b>Revisar tudo em foco</b> — percorre as vencidas uma a uma, em tela cheia: tente recordar, revele o conteúdo e avalie (teclas 1/2/3; Espaço pula). Tem cronômetro e placar.</li>
+        <li><b>Revisar tudo em foco</b> — percorre as vencidas uma a uma, em tela cheia: tente recordar, revele o conteúdo e avalie (no computador, teclas 1/2/3 e Espaço pula). Tem cronômetro e placar.</li>
         <li>Ao <b>final da sessão em foco</b>, dá para <b>emendar os flashcards</b> vencidos — fecha o dia num funil só.</li>
         <li>Mostra a <b>taxa de conclusão</b> (30 dias).</li>
       </ul>` },
@@ -152,7 +152,7 @@ export const GUIA = [
         <li>Ao revisar, avalie <b>Errei / Difícil / Bom / Fácil</b> — intervalos fixos por nota (1 / 7 / 15 / 30 dias).</li>
         <li>Crie manualmente (frente ; verso), importe de arquivo, ou gere: do material (IA) e das questões (offline).</li>
         <li>Na revisão dá para <b>comentar com IA</b> (explica o porquê) e mandar ao Caderno de Erros.</li>
-        <li><b>Modo foco</b> — revisão imersiva em tela cheia, com virada do card e placar; atalhos: 1–4 dão a nota, Espaço vira, setas navegam.</li>
+        <li><b>Modo foco</b> — revisão imersiva em tela cheia, com virada do card e placar; no computador, teclas 1–4 dão a nota, Espaço vira e as setas navegam.</li>
       </ul>` },
 
   { id: "revtopico", grupo: "Revisar", titulo: "Revisão de Tópicos", html: `
@@ -176,7 +176,7 @@ export const GUIA = [
   { id: "dossie", grupo: "Recursos que atravessam as telas", titulo: "Dossiê por tópico (pasta viva)", html: `
       <p>Reúne, resumido e linkado, tudo de um tópico: materiais, resumos, marcações, lei/jurisprudência, pontos que mais caem, questões e desempenho, erros, flashcards, tarefas e sessões.</p>
       <ul>
-        <li><b>Clique em qualquer item</b> para abri-lo na tela dele (deep-link).</li>
+        <li><b>Selecione qualquer item</b> para abri-lo na tela dele (deep-link).</li>
         <li>Os números do topo rolam até a seção; seções longas vêm recolhidas ("ver mais/menos").</li>
         <li>Na <b>impressão</b> você escolhe quais seções incluir, e elas saem sempre integrais.</li>
       </ul>` },
@@ -208,13 +208,13 @@ export const GUIA = [
         <li>Responde com <b>quatro fontes</b>: o seu material (busca por significado), este guia (perguntas de "como usar"), a IA conectada e, opcionalmente, a <b>web</b> (botão "Buscar na web", desligado por padrão; requer IA com suporte a busca).</li>
         <li>As respostas mostram <b>selos de origem</b>: do seu material · gerado por IA (confira) · da web.</li>
         <li>Também <b>executa ações</b> quando você pede — sempre propõe e espera a sua confirmação.</li>
-        <li><b>Atalho Ctrl+K</b> (Cmd+K no Mac) — paleta de comando em qualquer tela: vá direto a uma tela/atalho (offline) ou digite uma pergunta/ação que ela repassa ao Mentor.</li>
+        <li><b>Paleta de comando</b> em qualquer tela (no computador, Ctrl+K ou Cmd+K no Mac a abre; no celular, toque na barra de busca no topo): vá direto a uma tela/atalho (offline) ou digite uma pergunta/ação que ela repassa ao Mentor.</li>
       </ul>` },
 
   { id: "sincronizacao", grupo: "Recursos que atravessam as telas", titulo: "Como tudo se sincroniza", html: `
       <p>Os módulos conversam entre si:</p>
       <ul>
-        <li><b>Deep-links do Dossiê</b> — clicar num item abre a tela dele já apontando para ele.</li>
+        <li><b>Deep-links do Dossiê</b> — selecionar um item abre a tela dele já apontando para ele.</li>
         <li><b>Meta de lei/juris e Tarefa</b> — criar a meta gera a tarefa no Planejamento; concluir de um lado conclui do outro; remover apaga o par.</li>
         <li><b>Sessão e Tarefa</b> — ao registrar/editar uma sessão você pode vinculá-la a uma tarefa (e concluí-la).</li>
         <li><b>Marcações → Dossiê</b> — os grifos de todas as fontes do tópico aparecem agregados; as palavras-chave (amarelo) viram material da Revisão de Tópicos.</li>

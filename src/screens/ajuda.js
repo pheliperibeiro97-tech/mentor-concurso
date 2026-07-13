@@ -7,7 +7,7 @@ import { GUIA } from "../guia.js";
 
 // Texto de introdução comum à tela e à janela.
 function introHTML() {
-  return `<p class="muted small ajuda-intro">Clique num título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com <b>(IA)</b> usam uma IA conectada (você liga em Configurações, com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Mentor</b> (o botão ${icone("sparkles")} no canto), que consulta este guia.</p>`;
+  return `<p class="muted small ajuda-intro">Selecione um título para abrir a seção. O essencial funciona <b>offline</b>; os recursos marcados com <b>(IA)</b> usam uma IA conectada (você liga em Configurações, com a sua própria chave). Dúvidas pontuais também podem ser feitas ao <b>Mentor</b> (o botão ${icone("sparkles")} no canto), que consulta este guia.</p>`;
 }
 
 // Barra do topo: filtro por texto + expandir/recolher.
