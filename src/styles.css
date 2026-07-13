@@ -5661,3 +5661,17 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   }
   .edc-chk, .edc-rel, .edc-ap, .edc-acts { width: auto; }
 }
+
+/* ===== CELULAR: conteúdo que estava sendo CORTADO agora quebra/rola ===== */
+@media (max-width: 560px) {
+  /* Linhas de campos (ex.: Metas diária/semanal/mensal) e de botões (ex.: backups de Dados)
+     que não cabem passam a QUEBRAR em vez de sair cortadas à direita. */
+  .form-row { flex-wrap: wrap; }
+  .form-acoes { flex-wrap: wrap; }
+  /* Abas (segmented) que transbordam ROLAM na horizontal, sem cortar o rótulo (ex.: a aba
+     "Dados & concurso" em Configurações). */
+  .seg { overflow-x: auto; scrollbar-width: thin; }
+  .seg > button { flex: 0 0 auto; white-space: nowrap; }
+  /* Tabelas densas com wrapper próprio rolam em vez de serem cortadas (Histórico de sessões). */
+  .tab-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}

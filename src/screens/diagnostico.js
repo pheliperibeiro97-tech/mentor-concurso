@@ -411,7 +411,7 @@ export default function renderDiagnostico(root, app) {
       ${sessPainelHTML(st)}
       ${
         sessoesFiltradas.length
-          ? `<table class="tabela tabela-sessoes">
+          ? `<div class="tab-scroll"><table class="tabela tabela-sessoes">
               <thead><tr>
                 ${thSort("data", "Data")}
                 ${thSort("disciplina", "Disciplina / Tópico")}
@@ -420,7 +420,7 @@ export default function renderDiagnostico(root, app) {
                 <th class="th-acoes"></th>
               </tr></thead>
               <tbody>${sessoesFiltradas.map((s) => linhaSessao(s, st, sessEdit.has(s.id))).join("")}</tbody>
-            </table>`
+            </table></div>`
           : todasSessoes.length
           ? vazio("Nenhuma sessão neste filtro\nAjuste o período, o dia ou os filtros acima.", "", icone("search"))
           : vazio("Ainda sem sessões registradas\nRegistre estudo no Hoje e seu progresso aparece aqui.", "", icone("clipboard-list"))
