@@ -890,14 +890,10 @@ export function renderLeiComMarcas(rawTexto, marcas, opts = {}) {
 }
 
 // Menu "⋯" do artigo (organizar/gerenciar) — usado pelo render do leitor.
-// Fase 5 (leitor sereno): favorito/difícil/"o que mais cai" saíram dos botões-ícone permanentes
-// do cabeçalho e vivem AQUI (mesmas ações/handlers); o estado segue visível nos badges do cabeçalho.
+// favorito/difícil/"o que mais cai" são ícones RÁPIDOS sempre visíveis no cabeçalho (marcarRapidasHTML),
+// não ficam aqui — este menu cuida de foco/estudo/revisão/nota/temas/editar/remover.
 function menuArtigoHTML(i, tipo) {
   return [
-    `<button class="lnk" data-action="toggle-favorito" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.favorito ? "Favorito (entra em revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão)."}">${icone("bookmark")} ${i.favorito ? "Tirar dos favoritos" : "Favoritar"}</button>`,
-    `<button class="lnk" data-action="toggle-dificil" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão)."}">${icone("flame")} ${i.dificil ? "Tirar dos difíceis" : "Marcar como difícil"}</button>`,
-    `<button class="lnk" data-action="toggle-pq" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="${i.pq ? "Marcado como 'o que mais cai'. Clique para desmarcar." : "Marcar como 'o que mais cai'."}">${icone("star")} ${i.pq ? "Desmarcar 'o que mais cai'" : "Marcar: o que mais cai"}</button>`,
-    `<div class="ls-mais-sep"></div>`,
     i.texto ? `<button class="lnk" data-action="ler-foco-art" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Abrir a leitura em foco (tela cheia) neste artigo.">${icone("book-open")} Ler em foco</button>` : "",
     i.texto ? `<button class="lnk" data-action="estudar-artigo" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Certo/Errado só deste artigo — testa a letra (certo/errado).">${icone("repeat-2")} Estudar este artigo</button>` : "",
     i.texto && !i.promovido ? `<button class="lnk" data-action="promover-mem" data-id="${i.id}">${icone("brain")} Marcar para revisar</button>` : "",
@@ -934,22 +930,25 @@ function itemLeitorHTML(st, tipo, i, store, vincMap) {
     (i.promovido ? `<span class="mini-tag" data-tip="Na sua revisão espaçada.">${icone("brain")} revisando</span>` : "");
   const incHTML = est ? `<span class="ler-art-inc" data-tip="Incidência ${i.pqIncidencia} — o quanto cai.">${"★".repeat(est)}<span class="ler-inc-off">${"★".repeat(5 - est)}</span></span>` : "";
   const ic = (acao, on, iconeNome, tip) => `<button class="ler-ic ${on ? "on-" + on : ""}" data-action="${acao}" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="${tip}">${icone(iconeNome)}</button>`;
-  // Fase 5 (leitor sereno): UMA ação visível por artigo — "lido" + menu ⋯ (favorito/difícil/
-  // "o que mais cai" migraram para o menu; o estado ativo segue visível nos badges do cabeçalho).
-  const acoes =
+  // Marcação rápida SEMPRE visível, à DIREITA (ao lado do menu ⋯, que fica por último): lido
+  // (primeiro) + favoritar / difícil / o que mais cai. Um clique no ícone, sem abrir o menu ⋯.
+  // Estado ativo pela cor (on-ok/fav/dif/pq).
+  const marcasRapidas =
     ic("ler-lido", i.lido ? "ok" : "", "check", i.lido ? "Lido — clique para desmarcar." : "Marcar como lido.") +
+    ic("toggle-favorito", i.favorito ? "fav" : "", "bookmark", i.favorito ? "Favorito (na revisão). Clique para tirar." : "Favoritar (destaca e entra em revisão).") +
+    ic("toggle-dificil", i.dificil ? "dif" : "", "flame", i.dificil ? "Difícil (revisão 1/3/7/15/30). Clique para tirar." : "Marcar como difícil (agenda revisão).") +
+    ic("toggle-pq", i.pq ? "pq" : "", "star", i.pq ? "'O que mais cai'. Clique para tirar." : "Marcar: o que mais cai.");
+  // À direita, discreto (hover): só o menu ⋯ (as ações rápidas migraram para a esquerda).
+  const acoes =
     `<details class="ls-mais ler-mais"><summary data-tip="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">${menuArtigoHTML(i, tipo)}</div></details>`;
   const grifos = store ? store.marcasAncoradas("indicacao", i.id, i.texto) : [];
   return `<article class="ler-art ${i.lido ? "lida" : ""} ${i.revogado ? "revogada" : ""} ${i.favorito ? "fav" : ""} ${i.dificil ? "dif" : ""}" data-foco-id="${i.id}" data-id="${i.id}">
     <div class="ler-art-head">
-      ${i.lido ? `<span class="ler-lido-mark" data-tip="Lido">${icone("check")}</span>` : ""}
       <span class="ler-art-ref">${esc(refCurta)}</span>
       ${i.nomeJuridico ? `<span class="ler-art-nome">${esc(i.nomeJuridico)}</span>` : ""}
-      ${i.dificil ? `<span class="ler-dif-mark" data-tip="Difícil">${icone("flame")}</span>` : ""}
-      ${i.favorito ? `<span class="ler-fav-mark" data-tip="Favorito">${icone("bookmark")}</span>` : ""}
-      ${i.pq && !est ? `<span class="ler-pq-mark" data-tip="Você marcou: o que mais cai">${icone("star")}</span>` : ""}
       ${incHTML}${badges}
       <span class="spacer"></span>
+      <span class="ler-art-marks">${marcasRapidas}</span>
       <div class="ler-art-acoes">${acoes}</div>
     </div>
     ${i.texto ? `<div class="ler-art-corpo" data-art-corpo="${i.id}">${renderLeiComMarcas(i.texto, grifos)}</div>` : ""}

@@ -210,14 +210,15 @@ export default function renderMapas(root, app) {
     },
     "gerar-mapa": async () => {
       let fonte = await escolher("Criar mapa mental a partir de quê?", [
-        { value: "escopo", label: "Tópico, aula ou material" },
+        { value: "escopo", label: "Material importado" },
         { value: "resumo", label: "Resumo" },
         { value: "tema", label: "Tema livre" },
         { value: "arquivo", label: "Arquivo (PDF/imagem)" },
         { value: "manual", label: "Montar manualmente" },
       ]);
       if (!fonte) return;
-      // Tópico/aula/material caem no seletor de escopo unificado (janela própria).
+      // Material (com subtópico opcional) cai no seletor de escopo unificado (janela própria),
+      // que já pergunta a quantidade de mapas.
       if (fonte === "escopo") return abrirSeletorEscopo(app, { tipo: "mapa", titulo: "Gerar mapa mental" });
       // Montar manualmente (offline): colar uma estrutura escrita OU começar em branco.
       if (fonte === "manual") {

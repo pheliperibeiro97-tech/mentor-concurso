@@ -1,0 +1,9 @@
+# Cloudflare Pages — publica o app (dist/) + as Functions (functions/), incluindo o cofre
+# de sincronização em /v1/cofre/:id. O binding KV "COFRE" é o mesmo namespace já criado.
+name = "mentor-concurso"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-11-01"
+
+[[kv_namespaces]]
+binding = "COFRE"
+id = "0964d6f3137342ce9466438e6acf456f"

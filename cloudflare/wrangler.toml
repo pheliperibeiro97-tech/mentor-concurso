@@ -1,0 +1,13 @@
+# Configuração do Worker "cofre de sincronização" do Mentor Concurso.
+# Deploy na conta grátis do usuário (ver instruções no topo de sync-worker.js).
+
+name = "mentor-sync"
+main = "sync-worker.js"
+compatibility_date = "2024-11-01"
+
+# Namespace KV que guarda os cofres cifrados. Crie com:
+#   wrangler kv namespace create COFRE
+# e cole o "id" retornado abaixo (substitui COLE_O_ID_DO_KV_AQUI).
+[[kv_namespaces]]
+binding = "COFRE"
+id = "0964d6f3137342ce9466438e6acf456f"

@@ -8,44 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
-    v: "0.6.1",
+    v: "0.6.4",
     data: "julho/2026",
-    titulo: "Lembretes em qualquer tela + refinamento ultrapremium",
+    titulo: "Estude no celular + sincronização por senha",
     itens: [
-      "Novo botão flutuante de Lembretes (ícone de anotação), ao lado do cronômetro e do Assistente, presente em todas as telas — inclusive no Modo Foco. O Assistente também passou a acompanhar você no Modo Foco.",
-      "Resumos legíveis no tema escuro: o texto e os grifos deixaram de sumir no fundo escuro.",
-      "Visual mais coeso: ícones padronizados (sem emojis soltos), abas iguais em Lei Seca, Edital e Simulados, e os botões flutuantes alinhados.",
-      "Acompanhamento mais leve: o Calendário agora é recolhível e há um único atalho para o Mentor.",
-      "Impressão corrigida: o Acompanhamento não imprime mais botões/menus, o Dossiê só imprime seções com conteúdo, e o Simulado ganhou 'Imprimir folha'.",
-      "Assistente e Mentor com papéis mais claros: o Assistente é para perguntas e ações rápidas; o Mentor é o seu treinador de estudos (análise + plano).",
-    ],
-  },
-  {
-    v: "0.6.0",
-    data: "julho/2026",
-    titulo: "Lei Seca e Jurisprudência repensadas",
-    itens: [
-      "Lei Seca e Jurisprudência agora têm 3 abas claras: Ler (a letra), Estudar e Metas — com visual premium.",
-      "Estudar virou um lançador: Certo/Errado, Completar a letra, Revisar o que vence e Refazer erros, em tela cheia. Dá para escolher o escopo (tudo ou o que mais cai).",
-      "Toda geração pergunta quantidade e dificuldade; também dá para gerar flashcards e questões de múltipla escolha a partir da letra.",
-      "Importar lei oficial: traz a letra exata do Planalto (ou colando o texto), você escolhe os artigos e o app detecta o que está revogado.",
-      "Novidade legislativa: reconsulte a fonte e veja o que mudou, entrou ou foi revogado — e treine só as novidades.",
-      "Incidência virou uma lente: o que mais cai aparece direto no artigo e prioriza o estudo.",
-      "Metas de leitura: crie, importe um cronograma inteiro e divida em etapas — cada etapa vira tarefa no Planejamento.",
-      "Jurisprudência: marque súmula cancelada/superada (sai do estudo), Súmula Vinculante, o ano do entendimento (avisa quando é antigo) e a súmula-duelo (número/tribunal trocado).",
-    ],
-  },
-  {
-    v: "0.5.0",
-    data: "julho/2026",
-    titulo: "Redesign visual + Mentor com rosto",
-    itens: [
-      "Nova cara do app: cards com profundidade, botões premium e movimento em tudo.",
-      "O Mentor ganhou um rosto (orb) e responde ao vivo, com texto que surge enquanto pensa.",
-      "Painel da Disciplina: KPIs, desempenho por tópico em semáforo e “✨ Explicar meu desempenho”.",
-      "Acompanhamento com heatmap de constância (o ano inteiro) — que motiva, sem punir.",
-      "Registrar sessão mais rápido: escolha o tipo num toque e abra só o detalhe que usar.",
-      "Home “Hoje” com o plano do Mentor e um “Começar agora” direto ao ponto.",
+      "Agora dá para usar o Mentor no CELULAR: abra o app pelo navegador e use 'Adicionar à tela inicial' — ele vira um ícone e abre em tela cheia, como um aplicativo.",
+      "Sincronização por senha entre o celular e os computadores: você escolhe uma senha, digita uma vez em cada aparelho e pronto — o que estuda num aparelho aparece no outro. Tudo é cifrado (só você lê); os PDFs originais ficam em cada aparelho.",
+      "Três formas de usar, os mesmos dados: aplicativo de computador (com os recursos nativos, como buscar a lei no Planalto), navegador no computador e navegador no celular.",
+      "Lei Seca — marcação rápida de volta: favoritar, marcar como difícil e 'o que mais cai' direto no artigo, num clique no ícone, sem abrir o menu.",
+      "Lei Seca — modo foco: botão 'Marcar lido' que marca o artigo e já avança para o próximo (igual à seta).",
+      "Gerar com IA ficou mais direto: uma única janela a partir do material importado (ou de um subtópico dele). Mapas mentais agora também perguntam a quantidade, como as demais telas.",
     ],
   },
 ];

@@ -41,6 +41,8 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   };
   const rodapeHTML = (ind) => `<div class="lf-barra">
     <div class="lf-acoes">
+      <button class="lfoco-btn ${ind.lido ? "on-ok" : ""}" data-action="lf-lido" data-tip-pos="cima" data-tip="Marcar como lido e avançar para o próximo">${icone("check")}</button>
+      <span class="lf-sep"></span>
       <button class="lfoco-btn ${ind.favorito ? "on-fav" : ""}" data-action="lf-fav" data-tip-pos="cima" data-tip="${ind.favorito ? "Favorito — tirar" : "Favoritar"}">${icone("bookmark")}</button>
       <button class="lfoco-btn ${ind.dificil ? "on-dif" : ""}" data-action="lf-dif" data-tip-pos="cima" data-tip="${ind.dificil ? "Difícil — tirar" : "Marcar difícil"}">${icone("flame")}</button>
       <button class="lfoco-btn ${ind.pq ? "on-pq" : ""}" data-action="lf-pq" data-tip-pos="cima" data-tip="O que mais cai">${icone("star")}</button>
@@ -53,7 +55,7 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     ${mostrarModos ? `<div class="lf-modos">
       ${["normal|Texto", "marcas|Só as marcas", "recordar|Recordar"].map((x) => { const [id, lbl] = x.split("|"); return `<button class="lf-modo ${modoLeitura === id ? "on" : ""}" data-action="lf-modo" data-modo="${id}">${lbl}</button>`; }).join("")}
     </div>` : ""}
-    <div class="lf-legenda">${icone("arrow-left")}${icone("arrow-right")} navegar · <b>Esc</b> sair · ${mostrarModos ? "no Recordar, clique nas lacunas para revelar" : "selecione o texto para grifar / copiar / IA"}</div>
+    <div class="lf-legenda">${icone("arrow-left")}${icone("arrow-right")} navegar · <b>Enter</b> marcar lido e avançar · <b>Esc</b> sair · ${mostrarModos ? "no Recordar, clique nas lacunas para revelar" : "selecione o texto para grifar / copiar / IA"}</div>
   </div>`;
 
   // Atualiza SÓ o miolo + rodapé + progresso (mantém o overlay → NÃO pisca ao trocar de artigo).
@@ -70,14 +72,17 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
     if (pos) pos.textContent = String(idx + 1);
     const prev = host.querySelector('[data-action="foco-anterior"]'); if (prev) prev.disabled = idx <= 0;
     const next = host.querySelector('[data-action="foco-proximo"]'); if (next) next.disabled = idx >= ids.length - 1;
-    // Fase 5 (fix P-04 da auditoria): EXIBIR não marca como lido — abrir o Foco e sair
-    // inflava o progresso da lei e o "lidos hoje". Lido = AVANÇAR (irProximo) ou botão.
+    // EXIBIR e a SETA apenas navegam — NÃO marcam lido (abrir o Foco e passar não deve inflar
+    // o progresso). Marcar lido é só pelo botão "Marcar lido", que marca e avança.
     if (normaFoco) store.setUltimaLeitura(normaFoco, { indicacaoId: ind.id, pct: Math.round((100 * (idx + 1)) / ids.length) }); // continuar leitura
   };
 
-  const irProximo = () => {
+  // A SETA (→) e a tecla apenas NAVEGAM — não marcam lido.
+  const navProximo = () => { if (idx < ids.length - 1) { idx++; atualizar("fade"); } };
+  // O botão "Marcar lido" marca o artigo atual como lido e avança para o próximo.
+  const marcarLidoEProximo = () => {
     const ind = cur();
-    if (ind && !ind.lido) store.toggleIndicacaoLida(ind.id); // avançar marca o artigo como lido
+    if (ind && !ind.lido) store.toggleIndicacaoLida(ind.id);
     if (idx < ids.length - 1) { idx++; atualizar("fade"); } else atualizar("none");
   };
 
@@ -111,8 +116,10 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   });
   bindActions(host, bindFocoCrono({
     "foco-anterior": () => { if (idx > 0) { idx--; atualizar("fade"); } },
-    "foco-proximo": irProximo,
+    "foco-proximo": navProximo,
     "sair-foco": () => cleanup(),
+    // "Marcar lido" no Foco: marca o atual como lido e avança (a seta sozinha NÃO marca).
+    "lf-lido": marcarLidoEProximo,
     "lf-fav": () => { const i = cur(); if (i) { store.toggleFavorito(i.id); atualizar("none"); } },
     "lf-dif": () => { const i = cur(); if (i) { store.toggleDificil(i.id); atualizar("none"); } },
     "lf-pq": () => { const i = cur(); if (i) { store.setIndicacaoPQ(i.id, !i.pq); atualizar("none"); } },
@@ -136,7 +143,17 @@ export function abrirLeituraFoco(app, store, ids, startIdx, opts = {}) {
   host.addEventListener("mousedown", (e) => { if (e.target.closest('[data-action="lf-anotar"]')) e.preventDefault(); });
   offTick = ligarTickCrono(host);
   const chip = host.querySelector(".fq-crono"); if (chip) atualizarChipCrono(chip);
-  const onKey = (e) => { focoChromeKey(e, { root: host }); };
+  const onKey = (e) => {
+    const r = focoChromeKey(e, { root: host });
+    if (r) return; // "input" (num campo/modal) ou "stop" (Esc/setas) — já tratado
+    // Enter = atalho para "Marcar lido e avançar" (não dispara em campos/botões/lacunas).
+    if (e.key === "Enter") {
+      const a = e.target;
+      if (a && (/^(INPUT|TEXTAREA)$/.test(a.tagName) || a.isContentEditable || (a.closest && a.closest('[data-cloze],button,[role="button"]')))) return;
+      e.preventDefault();
+      host.querySelector('[data-action="lf-lido"]')?.click();
+    }
+  };
   document.addEventListener("keydown", onKey);
 }
 

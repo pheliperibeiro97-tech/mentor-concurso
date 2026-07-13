@@ -1,11 +1,10 @@
 // Seletor de escopo unificado para GERAR/EXTRAIR conteúdo (Flashcards, Questões, Itens C/E,
-// Mapa mental). O usuário escolhe a BASE e navega:
-//  - Edital:   Disciplina → Tópico(s) → Aula (cursinho) → Subtópico (bloco do índice).
-//  - Material: o material cadastrado (ex.: "Aula 3") → Subtópico (bloco do índice dele).
-// Resolve um ESCOPO (store.resolverEscopo) e gera/extrai vinculando a fonte ao tópico.
-// Janela via abrirJanelaFluxo + shim { store, refresh: rerender } (o app.refresh real não
-// alcança a janela, que vive fora do root) — mesmo padrão dos outros modais.
-import { abrirJanelaFluxo, toast, avisoIA , plural } from "../ui.js";
+// Mapa mental, Resumo). Base ÚNICA: o MATERIAL importado. O usuário escolhe um material (aula)
+// e, opcionalmente, um SUBTÓPICO do índice dele. A geração usa SEMPRE o conteúdo real do
+// material (nunca "o conhecimento do Mentor" solto). Resolve um ESCOPO (store.resolverEscopo).
+// Janela via abrirJanelaFluxo + shim { store, refresh } (o app.refresh real não alcança a
+// janela, que vive fora do root) — mesmo padrão dos outros modais.
+import { abrirJanelaFluxo, toast, avisoIA } from "../ui.js";
 import { esc, humanizarErroIA } from "../util.js";
 import { icone } from "../icones.js";
 
@@ -14,39 +13,41 @@ const TIPOS = {
   flashcards: { rotulo: "flashcards", padrao: 6, pedeQuantidade: true, gerar: (s, e, n, d) => s.gerarFlashcardsDeEscopo(e, n, d), extrair: null },
   questoes: { rotulo: "questões", padrao: 5, pedeQuantidade: true, gerar: (s, e, n, d) => s.gerarQuestoesDeEscopo(e, n, d), extrair: (s, e) => s.extrairQuestoesDeEscopo(e) },
   ce: { rotulo: "itens Certo/Errado", padrao: 6, pedeQuantidade: true, gerar: (s, e, n, d) => s.gerarQuestoesCEDeEscopo(e, n, d), extrair: (s, e) => s.extrairQuestoesCEDeEscopo(e) },
-  mapa: { rotulo: "mapa mental", padrao: 1, pedeQuantidade: false, gerar: (s, e) => s.gerarMapaMentalDeEscopo(e), extrair: null },
+  // Mapa: agora TAMBÉM pergunta a quantidade (coerência com as demais telas). Gera N mapas do
+  // mesmo escopo (variações) chamando o gerador N vezes.
+  mapa: { rotulo: "mapa mental", padrao: 1, pedeQuantidade: true, semNivel: true, gerar: async (s, e, n) => { const out = []; for (let i = 0; i < Math.max(1, n || 1); i++) out.push(await s.gerarMapaMentalDeEscopo(e)); return out; }, extrair: null },
   resumo: { rotulo: "resumo", padrao: 1, pedeQuantidade: false, gerar: (s, e) => s.gerarResumoDeEscopo(e), extrair: null },
 };
+
+// Contexto (disciplina · tópico) do material, para o usuário se situar.
+function contextoDoMaterial(st, doc) {
+  const tid = doc && (doc.topicoId || (Array.isArray(doc.topicoIds) && doc.topicoIds[0]));
+  if (!tid) return "";
+  const t = st.topicos.find((x) => x.id === tid);
+  if (!t) return "";
+  const d = st.disciplinas.find((x) => x.id === t.disciplinaId);
+  return d ? `${d.nome} · ${t.nome}` : t.nome;
+}
 
 export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar com IA", permiteExtrair = false } = {}) {
   const store = app.store;
   if (!store.iaDisponivel()) return avisoIA(app, titulo);
   const cfg = TIPOS[tipo] || TIPOS.flashcards;
-  // base "edital": sel/aulaId/sub · base "material": docId/matBloco
-  const estado = { base: "edital", sel: [], disc: "", aulaId: "", sub: "", docId: "", matBloco: "", n: cfg.padrao, dificuldade: "medio" };
+  const estado = { docId: "", matBloco: "", n: cfg.padrao, dificuldade: "medio" };
   let ocupado = false;
   let rerender = () => {};
 
-  // Monta o escopo conforme a base.
+  // Escopo = 1 material (com bloco/subtópico opcional).
   function escopoAtual() {
-    if (estado.base === "material") {
-      if (!estado.docId) return { texto: "", modo: "material" };
-      const bi = estado.matBloco !== "" ? parseInt(estado.matBloco, 10) : null;
-      return store.resolverEscopo({ docId: estado.docId, bi });
-    }
-    if (estado.sub) {
-      const [docId, bi] = estado.sub.split("|");
-      return store.resolverEscopo({ topicoIds: estado.sel, aulaId: estado.aulaId || null, docId, bi: parseInt(bi, 10) });
-    }
-    return store.resolverEscopo({ topicoIds: estado.sel, aulaId: estado.aulaId || null });
+    if (!estado.docId) return { texto: "", modo: "material" };
+    const bi = estado.matBloco !== "" ? parseInt(estado.matBloco, 10) : null;
+    return store.resolverEscopo({ docId: estado.docId, bi });
   }
 
-  // A geração usa SEMPRE o conteúdo real (material/resumo vinculado ao tópico ou ao material
-  // escolhido). Não há mais "gerar do conhecimento do Mentor" (edital sem material).
   async function gerar() {
     if (ocupado) return;
     const escopo = escopoAtual();
-    if (!escopo.texto) return toast("A geração usa o material do tópico — importe ou vincule um material para gerar.", "erro");
+    if (!escopo.texto) return toast("Escolha um material importado para gerar.", "erro");
     ocupado = true;
     rerender();
     toast(`Gerando ${cfg.rotulo} com IA…`);
@@ -66,7 +67,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
   async function extrair() {
     if (ocupado || !cfg.extrair) return;
     const escopo = escopoAtual();
-    if (escopo.modo !== "material" || !escopo.docIds || !escopo.docIds.length) return toast("Para extrair, use a base Material e escolha um material/subtópico.", "erro");
+    if (escopo.modo !== "material" || !escopo.docIds || !escopo.docIds.length) return toast("Escolha um material (ou subtópico) para extrair.", "erro");
     ocupado = true;
     rerender();
     toast(`Extraindo ${cfg.rotulo} do material…`);
@@ -83,71 +84,26 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     }
   }
 
-  // ---- blocos HTML por base ----
-  function editalHTML(st) {
-    const grupos = st.disciplinas
-      .filter((d) => !estado.disc || d.id === estado.disc)
-      .map((d) => {
-        const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
-        if (!tops.length) return "";
-        const todos = tops.every((t) => estado.sel.includes(t.id));
-        return `<div class="ft-grupo">
-          <label class="ft-disc"><input type="checkbox" data-se-disc="${d.id}" ${todos ? "checked" : ""} /> <b>${esc(d.nome)}</b> <span class="muted small">(disciplina toda)</span></label>
-          ${tops.map((t) => `<label class="ft-top"><input type="checkbox" data-se-top="${t.id}" ${estado.sel.includes(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}
-        </div>`;
-      })
-      .join("");
-    const aulas = store.aulasDosTopicos(estado.sel);
-    const subs = store.subtopicosDoEscopo(estado.sel, estado.aulaId || null);
-    if (estado.aulaId && !aulas.some((a) => a.id === estado.aulaId)) estado.aulaId = "";
-    if (estado.sub && !subs.some((s) => `${s.docId}|${s.bi}` === estado.sub)) estado.sub = "";
-    return `
-      <label class="inline u-mb-8">Disciplina
-        <select data-se="disc">
-          <option value="">Todas</option>
-          ${st.disciplinas.map((d) => `<option value="${d.id}" ${estado.disc === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
-        </select>
-      </label>
-      <div class="card ft-painel">${grupos || `<p class="muted small">Nenhum tópico cadastrado ainda.</p>`}</div>
-      ${
-        aulas.length
-          ? `<label class="inline u-mt-8">Aula
-              <select data-se="aula">
-                <option value="">Todas as aulas</option>
-                ${aulas.map((a) => `<option value="${a.id}" ${estado.aulaId === a.id ? "selected" : ""}>${esc(a.nome)}</option>`).join("")}
-              </select>
-            </label>`
-          : ""
-      }
-      ${
-        subs.length
-          ? `<label class="inline u-mt-8">Subtópico (índice)
-              <select data-se="sub" style="max-width:340px">
-                <option value="">Material inteiro</option>
-                ${subs.map((s) => `<option value="${s.docId}|${s.bi}" ${estado.sub === `${s.docId}|${s.bi}` ? "selected" : ""}>${esc(s.rotulo)}</option>`).join("")}
-              </select>
-            </label>`
-          : ""
-      }`;
-  }
-
   function materialHTML(st) {
     const docs = st.documentos || [];
+    if (!docs.length) return `<p class="muted small u-mt-8">Você ainda não importou nenhum material. Vá em <b>Materiais</b> e adicione um material para poder gerar a partir dele.</p>`;
     const doc = estado.docId ? docs.find((d) => d.id === estado.docId) : null;
     if (estado.docId && !doc) estado.docId = "";
     const blocos = (doc && doc.estrutura && doc.estrutura.blocos) || [];
     if (estado.matBloco !== "" && !blocos[parseInt(estado.matBloco, 10)]) estado.matBloco = "";
+    const ctx = doc ? contextoDoMaterial(st, doc) : "";
     return `
-      <label class="inline u-mb-8">Material (aula)
-        <select data-se="mat" style="max-width:340px">
-          <option value="">— escolha —</option>
+      <label class="inline u-mb-8 u-block">Material (aula)
+        <select data-se="mat" style="max-width:360px">
+          <option value="">— escolha um material —</option>
           ${docs.map((d) => `<option value="${d.id}" ${estado.docId === d.id ? "selected" : ""}>${esc(d.titulo)}</option>`).join("")}
         </select>
       </label>
+      ${ctx ? `<p class="muted small u-mt-4 u-mb-4">${icone("list-checks")} ${esc(ctx)}</p>` : ""}
       ${
         blocos.length
           ? `<label class="inline u-mt-8 u-block">Subtópico (índice)
-              <select data-se="matbloco" style="max-width:340px">
+              <select data-se="matbloco" style="max-width:360px">
                 <option value="">Material inteiro</option>
                 ${blocos.map((b, bi) => `<option value="${bi}" ${estado.matBloco === String(bi) ? "selected" : ""}>${esc(`${b.numero || ""} ${b.titulo}`.trim())}</option>`).join("")}
               </select>
@@ -167,90 +123,37 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       const temConteudo = !!(escopo && escopo.texto);
 
       corpo.innerHTML = `
-        <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>Escolha a <b>base</b> e o escopo. A IA gera a partir do <b>material</b>, vinculando a fonte ao tópico.</span></p>
-        <div class="tile-grid se-base-grid" role="tablist">
-          <button class="tile-pick ${estado.base === "edital" ? "on" : ""}" data-se-base="edital" data-tip="Pelo edital: disciplina → tópico → aula → subtópico.">
-            <span class="tile-ico">${icone("list-checks")}</span>
-            <span class="tile-lbl">Pelo edital</span>
-            <span class="tile-desc">Disciplina → tópico → aula</span>
-          </button>
-          <button class="tile-pick ${estado.base === "material" ? "on" : ""}" data-se-base="material" data-tip="Pelos materiais cadastrados em Materiais (cada aula) → subtópico do índice.">
-            <span class="tile-ico">${icone("library")}</span>
-            <span class="tile-lbl">Pelo material</span>
-            <span class="tile-desc">Seus materiais importados</span>
-          </button>
-        </div>
-        ${estado.base === "material" ? materialHTML(st) : editalHTML(st)}
+        <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>A IA gera a partir do <b>material importado</b> que você escolher (ou de um <b>subtópico</b> específico dele).</span></p>
+        ${materialHTML(st)}
         ${
           cfg.pedeQuantidade
-            ? `<div class="form-row" style="gap:14px; margin-top:10px; align-items:flex-end">
+            ? `<div class="form-row" style="gap:14px; margin-top:12px; align-items:flex-end">
                 <label class="inline">Quantidade <input type="number" data-se="n" min="1" max="30" value="${estado.n}" style="width:64px; margin-left:6px" /></label>
-                <label class="inline">Nível
-                  <select data-se="dif">
-                    <option value="facil" ${estado.dificuldade === "facil" ? "selected" : ""}>Fácil</option>
-                    <option value="medio" ${estado.dificuldade === "medio" ? "selected" : ""}>Médio</option>
-                    <option value="dificil" ${estado.dificuldade === "dificil" ? "selected" : ""}>Difícil</option>
-                  </select>
-                </label>
+                ${
+                  cfg.semNivel
+                    ? ""
+                    : `<label class="inline">Nível
+                        <select data-se="dif">
+                          <option value="facil" ${estado.dificuldade === "facil" ? "selected" : ""}>Fácil</option>
+                          <option value="medio" ${estado.dificuldade === "medio" ? "selected" : ""}>Médio</option>
+                          <option value="dificil" ${estado.dificuldade === "dificil" ? "selected" : ""}>Difícil</option>
+                        </select>
+                      </label>`
+                }
               </div>`
             : ""
         }
         <p class="muted small u-mt-12">${
           temConteudo
             ? "Escopo: " + esc(escopo.contexto || "")
-            : estado.base === "material"
-              ? "Escolha um material."
-              : estado.sel.length
-                ? `${estado.sel.length === 1 ? "Este tópico ainda não tem" : "Estes tópicos ainda não têm"} material vinculado. Importe ou vincule um material (aba Materiais) para gerar.`
-                : "Escolha ao menos um tópico."
+            : "Escolha um material."
         }</p>
         <div class="form-acoes">
-          ${cfg.extrair && permiteExtrair ? `<button class="btn btn-ghost" data-se="extrair" ${ocupado ? "disabled" : ""} data-tip="Puxa itens que JÁ existem no material (base Material).">${icone("clipboard-list")} Extrair do material</button>` : ""}
+          ${cfg.extrair && permiteExtrair ? `<button class="btn btn-ghost" data-se="extrair" ${ocupado ? "disabled" : ""} data-tip="Puxa itens que JÁ existem no material (não inventa).">${icone("clipboard-list")} Extrair do material</button>` : ""}
           <button class="btn btn-ia ${ocupado ? "is-generating" : ""}" data-se="gerar" ${!temConteudo || ocupado ? "disabled" : ""} data-tip="Gera a partir do material do escopo escolhido.">${ocupado ? "Processando…" : `${icone("sparkles")} Gerar`}</button>
         </div>`;
 
       // ---- listeners (reatados a cada rerender) ----
-      corpo.querySelectorAll("[data-se-base]").forEach((b) =>
-        b.addEventListener("click", () => {
-          estado.base = b.getAttribute("data-se-base");
-          rerender();
-        })
-      );
-      // Edital
-      corpo.querySelector('[data-se="disc"]')?.addEventListener("change", (e) => {
-        estado.disc = e.target.value;
-        rerender();
-      });
-      corpo.querySelectorAll("[data-se-top]").forEach((cb) =>
-        cb.addEventListener("change", () => {
-          const id = cb.getAttribute("data-se-top");
-          if (cb.checked) estado.sel = [...new Set([...estado.sel, id])];
-          else estado.sel = estado.sel.filter((x) => x !== id);
-          estado.sub = "";
-          rerender();
-        })
-      );
-      corpo.querySelectorAll("[data-se-disc]").forEach((cb) =>
-        cb.addEventListener("change", () => {
-          const discId = cb.getAttribute("data-se-disc");
-          const topIds = st.topicos.filter((t) => t.disciplinaId === discId).map((t) => t.id);
-          const todosSel = topIds.length && topIds.every((id) => estado.sel.includes(id));
-          if (todosSel) estado.sel = estado.sel.filter((id) => !topIds.includes(id));
-          else estado.sel = [...new Set([...estado.sel, ...topIds])];
-          estado.sub = "";
-          rerender();
-        })
-      );
-      corpo.querySelector('[data-se="aula"]')?.addEventListener("change", (e) => {
-        estado.aulaId = e.target.value;
-        estado.sub = "";
-        rerender();
-      });
-      corpo.querySelector('[data-se="sub"]')?.addEventListener("change", (e) => {
-        estado.sub = e.target.value;
-        rerender();
-      });
-      // Material
       corpo.querySelector('[data-se="mat"]')?.addEventListener("change", (e) => {
         estado.docId = e.target.value;
         estado.matBloco = "";

@@ -2784,6 +2784,15 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .ler-ic.on-fav { color: var(--primary-l); }
 .ler-ic.on-dif { color: #ef4444; }
 .ler-ic.on-pq, .ler-ic.on-on { color: var(--amber); }
+/* Marcação rápida (lido + favoritar/difícil/o que mais cai): oculta até o hover no artigo,
+   igual ao menu ⋯ (leitor sereno). EXCEÇÃO: o que ESTÁ marcado (favorito/difícil/o que mais
+   cai) fica SEMPRE visível como indicador persistente; o "lido" não precisa (o artigo já
+   esmaece). A opacidade é por ÍCONE (não no grupo), para o marcado poder ficar visível. */
+.ler-art-marks { display: inline-flex; align-items: center; gap: 1px; flex: 0 0 auto; }
+.ler-art-marks .ler-ic { width: 26px; height: 26px; opacity: 0; transition: opacity var(--mo-fav) ease; }
+.ler-art-marks .ler-ic .ico { width: 15px; height: 15px; }
+.ler-art:hover .ler-art-marks .ler-ic, .ler-art:focus-within .ler-art-marks .ler-ic { opacity: 1; }
+.ler-art-marks .ler-ic.on-fav, .ler-art-marks .ler-ic.on-dif, .ler-art-marks .ler-ic.on-pq { opacity: 1; }
 .ler-mais.ler-mais > summary { list-style: none; width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); border-radius: 8px; cursor: pointer; }
 .ler-mais.ler-mais > summary::-webkit-details-marker { display: none; }
 .ler-mais.ler-mais > summary:hover { background: var(--surface-2); color: var(--text); }

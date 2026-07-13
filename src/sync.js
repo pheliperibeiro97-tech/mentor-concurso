@@ -39,7 +39,7 @@ function idb() {
 }
 // Guarda o snapshot (sem binários) do lado que será sobrescrito num conflito; mantém os
 // últimos MAX_BACKUPS. Nunca lança (é rede de segurança, não pode quebrar a sync).
-async function guardarBackupConflito(snap) {
+export async function guardarBackupConflito(snap) {
   try {
     const db = await idb();
     const key = "bkp-" + Date.now();
@@ -125,7 +125,8 @@ export function peso(snap) {
 }
 // Encolheria = o lado de origem tem um conjunto relevante (≥8 itens) e o destino ficaria com
 // menos da METADE disso. Pega o caso clássico do "máquina zerada sobrescreve a cheia".
-function encolheria(de, para) {
+// Exportada para o transporte de nuvem (sync-nuvem.js) reusar a MESMA guarda anti-perda.
+export function encolheria(de, para) {
   return de >= 8 && para < Math.ceil(de * 0.5);
 }
 
@@ -134,8 +135,13 @@ function encolheria(de, para) {
 export function montarSnapshotSync(state, dispositivo) {
   const snap = JSON.parse(JSON.stringify(state));
   snap.documentos = (snap.documentos || []).map((d) => ({ ...d, pdfData: null, imgData: null }));
-  // config.sync é metadado LOCAL de cada máquina (handle, dispositivo, base, status) — não sincroniza.
-  if (snap.config && snap.config.sync) { snap.config = { ...snap.config }; delete snap.config.sync; }
+  // config.sync / config.syncNuvem são metadados LOCAIS de cada máquina (handle, dispositivo,
+  // base, status e — no da nuvem — a SENHA local). Nunca sincronizam.
+  if (snap.config && (snap.config.sync || snap.config.syncNuvem)) {
+    snap.config = { ...snap.config };
+    delete snap.config.sync;
+    delete snap.config.syncNuvem;
+  }
   snap._sync = {
     app: "mentor-concurso",
     versao: 1,
@@ -160,9 +166,11 @@ export function aplicarRemoto(localState, remoto) {
     const bin = binPorId[d.id];
     return bin ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData } : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null };
   });
-  // Preserva os metadados de sync LOCAIS (cada máquina tem os seus); o remoto não os traz.
+  // Preserva os metadados de sync LOCAIS (cada máquina tem os seus, incl. a senha da nuvem);
+  // o remoto não os traz (foram removidos no snapshot).
   novo.config = { ...(novo.config || {}) };
   novo.config.sync = (localState.config && localState.config.sync) || novo.config.sync;
+  novo.config.syncNuvem = (localState.config && localState.config.syncNuvem) || novo.config.syncNuvem;
   return novo;
 }
 

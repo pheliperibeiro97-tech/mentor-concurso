@@ -240,15 +240,24 @@ export const GUIA = [
         <li>As <b>notificações</b> (lembrete diário, revisões, inatividade, marcos) são opcionais e só disparam no app desktop.</li>
       </ul>` },
 
-  { id: "sync-nuvem", grupo: "IA, dados e privacidade", titulo: "Sincronização entre computadores", html: `
-      <p>Opcional e <b>gratuita</b>: use os seus dados em mais de um computador, na <b>sua própria nuvem</b> (Google Drive ou OneDrive). Fica em <b>Configurações → Dados &amp; concurso → Sincronização na nuvem</b>; nada passa por servidor do app.</p>
+  { id: "sync-nuvem", grupo: "IA, dados e privacidade", titulo: "Sincronização entre celular e computadores", html: `
+      <p>Opcional e <b>gratuita</b>: mantenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>, por uma <b>senha</b>. Fica em <b>Configurações → Dados &amp; concurso → Sincronização — celular e computadores</b>.</p>
       <ul>
-        <li><b>1º computador — criar e enviar</b>: escolha um arquivo dentro de uma pasta que o seu Drive/OneDrive já sincroniza; o app grava ali os dados e o <b>texto</b> dos materiais.</li>
-        <li><b>2º computador — baixar</b>: instale o app, espere o Drive baixar o arquivo e selecione <b>o mesmo arquivo</b> — esse modo só lê e baixa, nunca sobrescreve a nuvem.</li>
-        <li>O app <b>puxa o mais recente ao abrir</b> e <b>sincroniza ao fechar</b>; há também o botão <b>Sincronizar agora</b> e o status.</li>
-        <li>Os <b>PDFs ficam só na máquina</b> de quem importou; na outra, o material segue legível pelo texto extraído.</li>
-        <li>Use <b>um computador de cada vez</b>; se editar offline nos dois, vence o mais recente e o app guarda uma <b>cópia de segurança</b> do outro lado.</li>
+        <li><b>Como ligar</b>: escolha uma <b>senha</b> (uma frase fácil de lembrar) e digite-a <b>uma vez em cada aparelho</b>. A partir daí sincroniza sozinho — <b>ao abrir</b> e <b>ao fechar</b> — e há o botão <b>Sincronizar agora</b>.</li>
+        <li><b>Privacidade</b>: a senha <b>cifra</b> tudo de ponta a ponta; nem nós nem o serviço de nuvem conseguem ler. A senha <b>não sai do aparelho</b> e <b>não tem recuperação</b> — se esquecer, escolha outra (cada aparelho mantém a cópia local).</li>
+        <li><b>PDFs</b>: os arquivos originais <b>ficam em cada aparelho</b> (não sobem); o <b>texto extraído</b> sincroniza normalmente, então o material segue legível e pesquisável.</li>
+        <li><b>Conflito</b>: vence o <b>mais recente</b>. Se um aparelho quase vazio fosse apagar um cheio, o app <b>para e pergunta</b> antes, guardando uma cópia de segurança.</li>
+        <li><b>Backup extra (opcional, só no app de computador)</b>: além disso, você pode manter uma cópia num arquivo dentro do seu <b>Google Drive/OneDrive</b> — em <b>Backup extra por arquivo</b>.</li>
       </ul>` },
+
+  { id: "plataformas", grupo: "IA, dados e privacidade", titulo: "Onde usar: computador, navegador e celular", html: `
+      <p>São <b>três formas</b> de usar o Mentor, com os <b>mesmos dados</b> (basta ligar a sincronização por senha):</p>
+      <ul>
+        <li><b>Aplicativo de computador</b> (instalado): a versão mais completa. Tem os <b>recursos nativos</b> — buscar a lei direto no <b>Planalto</b>, salvar arquivos, notificações do sistema e atualização automática.</li>
+        <li><b>Navegador no computador</b>: abra o endereço do app no Chrome/Edge. Funciona igual, exceto os recursos nativos acima (nesses casos o app avisa "melhor no aplicativo").</li>
+        <li><b>Celular (navegador)</b>: abra o endereço e use <b>"Adicionar à tela inicial"</b> — vira um ícone e abre em tela cheia, como um app. Ideal para <b>revisar e estudar</b> (ler a lei, flashcards, questões, o Mentor); a parte de <b>montar</b> (importar PDF, organizar edital) fica melhor no computador.</li>
+      </ul>
+      <p class="muted small">Dica: comece pelo computador (onde você monta e importa) e use o celular para revisar nos intervalos — a senha mantém os dois em dia.</p>` },
 ];
 
 // Versão para busca: título + texto puro (sem tags) de cada seção.

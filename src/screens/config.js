@@ -10,6 +10,7 @@ import { MODELO_PADRAO, testarConexao, iaDisponivel, GEMINI_FALLBACKS, CLAUDE_MO
 import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
 import { suportaSync, conectar as syncConectar, conectarBaixando as syncConectarBaixar, sincronizarAgora, desconectar as syncDesconectar, ultimoBackupConflito, resolverPendencia } from "../sync.js";
+import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem } from "../sync-nuvem.js";
 
 // "há X" curto para o status de sincronização.
 function haQuanto(iso) {
@@ -56,6 +57,18 @@ export default function renderConfig(root, app) {
     ? `${icone("triangle-alert")} Erro: ` + esc(sy.erro || "falha")
     : sy.ultimaSync
     ? `Sincronizado ${icone("check")} ` + haQuanto(sy.ultimaSync)
+    : "Ainda não sincronizado";
+  // Sincronização NA NUVEM por senha (funciona no celular e em qualquer navegador).
+  const sn = cfg.syncNuvem || {};
+  const nuvemSuporta = suportaSyncNuvem();
+  const nuvemStatus = sn.pendente
+    ? `${icone("triangle-alert")} Decisão necessária`
+    : sn.sincronizando
+    ? "Sincronizando…"
+    : sn.ultimoResultado === "erro"
+    ? `${icone("triangle-alert")} Erro: ` + esc(sn.erro || "falha")
+    : sn.ultimaSync
+    ? `Sincronizado ${icone("check")} ` + haQuanto(sn.ultimaSync)
     : "Ainda não sincronizado";
 
   root.innerHTML = `
@@ -353,14 +366,54 @@ export default function renderConfig(root, app) {
     </section>
 
     <section class="card">
-      <h3>${icone("refresh-cw")} Sincronização na nuvem <span class="muted small">(opcional)</span></h3>
-      <p class="muted small">Sincronize entre computadores pela sua própria nuvem (Drive/OneDrive e afins) — nada passa por servidores nossos.</p>
+      <h3>${icone("smartphone")} Sincronização <span class="muted small">(celular e computadores)</span></h3>
+      <p class="muted small">Use uma <b>senha</b> e tenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>.</p>
+      ${
+        nuvemSuporta
+          ? `<div class="sync-status ${sn.ultimoResultado === "erro" ? "erro" : sn.conectado ? "ok" : ""}">
+              <span>${sn.conectado ? `Conectado ${icone("lock")}` : "Não conectado"}</span>
+              ${sn.conectado ? `<span class="sync-status-sep">·</span><span>${nuvemStatus}</span>` : ""}
+            </div>
+            ${
+              sn.conectado
+                ? `<div class="form-acoes">
+                    <button class="btn btn-primary btn-sm" data-action="nuvem-agora" ${sn.sincronizando ? "disabled" : ""} data-tip="Envia ou baixa as alterações agora (o mais recente vence).">${icone("refresh-cw")} Sincronizar agora</button>
+                    <button class="btn btn-ghost btn-sm" data-action="nuvem-desconectar" data-tip="Para de sincronizar neste aparelho e esquece a senha daqui (os dados locais continuam).">Desconectar</button>
+                  </div>`
+                : `<div class="form-linha u-mt-8">
+                     <label class="small" for="nuvem-frase">Senha</label>
+                     <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
+                   </div>
+                   <div class="form-acoes u-mt-8">
+                     <button class="btn btn-primary btn-sm" data-action="nuvem-conectar">${icone("lock")} Conectar</button>
+                   </div>`
+            }
+            ${
+              sn.pendente
+                ? `<div class="sync-conflito">
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> (aqui: <b>${Number(sn.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sn.pendente.remoto) || 0} itens</b>). Isso costuma acontecer quando um aparelho <b>vazio</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
+                    <div class="form-acoes">
+                      <button class="btn btn-primary btn-sm" data-action="nuvem-manter-local">Manter os daqui (enviar p/ a nuvem)</button>
+                      <button class="btn btn-soft btn-sm" data-action="nuvem-usar-nuvem">Usar os da nuvem (substitui os daqui)</button>
+                    </div>
+                  </div>`
+                : ""
+            }
+            <details class="ed-ajuda u-mt-12">
+              <summary>Como funciona</summary>
+              <div class="ed-ajuda-corpo">
+                <p>Você escolhe uma <b>senha</b> (a mesma em todo aparelho) e o app guarda seus dados num <b>cofre cifrado</b> na nuvem. Digite a senha <b>uma vez por aparelho</b> e depois ele sincroniza sozinho (ao abrir e ao fechar). A senha cifra tudo de ponta a ponta (nem nós nem o serviço de nuvem conseguem ler) e <b>nunca sai do aparelho</b>. Não há recuperação de senha, então escolha uma frase fácil de lembrar. Os <b>PDFs originais</b> não sobem (ficam em cada aparelho); já o <b>texto extraído</b> sincroniza. Use <b>um aparelho por vez</b>: deixe um terminar de sincronizar antes de abrir no outro (se editar em dois ao mesmo tempo, vence o mais recente).</p>
+              </div>
+            </details>`
+          : `<p class="muted small">Este navegador não suporta a sincronização segura (falta o Web Crypto). Use um navegador atual (Chrome, Edge, Safari, Firefox).</p>`
+      }
+    </section>
+
+    <section class="card">
       <details class="ed-ajuda">
-        <summary>Como funciona</summary>
+        <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)</summary>
         <div class="ed-ajuda-corpo">
-          <p>Você conecta um arquivo dentro de uma pasta que o seu <b>Google Drive</b> ou <b>OneDrive</b> já sincroniza: o app grava ali os seus dados e o <b>texto</b> dos materiais, e o seu Drive leva isso para as outras máquinas. Os <b>PDFs ficam só nesta máquina</b> (não sobem). Nada passa por servidor nosso — é a sua conta de nuvem.</p>
-        </div>
-      </details>
+          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), só no app desktop. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
       ${
         syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">
@@ -374,16 +427,16 @@ export default function renderConfig(root, app) {
                     <button class="btn btn-primary btn-sm" data-action="sync-agora" ${sy.sincronizando ? "disabled" : ""} data-tip="Envia ou baixa as alterações agora (o mais recente vence).">${icone("refresh-cw")} Sincronizar agora</button>
                     <button class="btn btn-ghost btn-sm" data-action="sync-desconectar">Desconectar</button>
                   </div>`
-                : `<p class="muted small u-m-0 u-mt-8 u-mb-8"><b>1º computador</b>: cria o arquivo numa pasta do seu Drive/OneDrive e <b>envia</b> os seus dados.<br><b>2º computador</b>: espere o Drive baixar o arquivo e selecione-o — esse modo só <b>lê e baixa</b>, <b>nunca sobrescreve</b> a nuvem.</p>
+                : `<p class="muted small u-m-0 u-mt-8 u-mb-8"><b>1º computador</b>: cria o arquivo numa pasta do seu Drive/OneDrive e <b>envia</b> os seus dados.<br><b>2º computador</b>: espere o Drive baixar o arquivo e selecione-o (esse modo só <b>lê e baixa</b>, <b>nunca sobrescreve</b> a nuvem).</p>
                    <div class="form-acoes">
-                     <button class="btn btn-primary btn-sm" data-action="sync-conectar">${icone("refresh-cw")} 1º computador — criar e enviar</button>
-                     <button class="btn btn-soft btn-sm" data-action="sync-conectar-baixar">${icone("download")} 2º computador — baixar</button>
+                     <button class="btn btn-primary btn-sm" data-action="sync-conectar">${icone("refresh-cw")} 1º computador: criar e enviar</button>
+                     <button class="btn btn-soft btn-sm" data-action="sync-conectar-baixar">${icone("download")} 2º computador: baixar</button>
                    </div>`
             }
             ${
               sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> — aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>. Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> (aqui: <b>${Number(sy.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sy.pendente.remoto) || 0} itens</b>). Isso costuma acontecer quando uma máquina <b>vazia</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
                     <div class="form-acoes">
                       <button class="btn btn-primary btn-sm" data-action="sync-manter-local">Manter os daqui (enviar p/ a nuvem)</button>
                       <button class="btn btn-soft btn-sm" data-action="sync-usar-nuvem">Usar os da nuvem (substitui os daqui)</button>
@@ -394,7 +447,7 @@ export default function renderConfig(root, app) {
             ${
               sy.ultimoConflitoEm && !sy.pendente
                 ? `<div class="sync-conflito">
-                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} Conflito na última sincronização</b> — houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} Conflito na última sincronização</b>: houve edições offline nos dois computadores. Para não perder nada, foi guardada uma <b>cópia da versão anterior deste computador</b>.</p>
                     <div class="form-acoes">
                       <button class="btn btn-soft btn-sm" data-action="sync-baixar-backup">${icone("download")} Baixar cópia de segurança</button>
                       <button class="btn btn-ghost btn-sm" data-action="sync-dispensar-conflito">Dispensar aviso</button>
@@ -405,6 +458,8 @@ export default function renderConfig(root, app) {
             <p class="muted small u-m-0 u-mt-12">${icone("triangle-alert")} Use <b>um computador de cada vez</b> com o app aberto (deixe o Drive terminar de sincronizar antes de abrir na outra máquina). <b>Ao fechar o app, ele sincroniza sozinho.</b></p>`
           : `<p class="muted small">Este ambiente não suporta a sincronização por arquivo. No <b>aplicativo instalado</b> (desktop) ela funciona.</p>`
       }
+        </div>
+      </details>
     </section>
 
     <section class="card">
@@ -541,6 +596,44 @@ export default function renderConfig(root, app) {
       const ok = await confirmar("Isto vai SUBSTITUIR os dados deste computador pelos da nuvem. Uma cópia de segurança dos atuais será guardada. Continuar?");
       if (!ok) return;
       try { await resolverPendencia("nuvem"); toast("Aplicados os dados da nuvem.", "ok"); }
+      catch (e) { toast("Falha: " + e.message, "erro"); }
+      app.refresh();
+    },
+    // ---- Sincronização na nuvem por senha (celular + computadores) ----
+    "nuvem-conectar": async () => {
+      const frase = (root.querySelector("#nuvem-frase")?.value || "").trim();
+      const endpoint = (root.querySelector("#nuvem-endpoint")?.value || "").trim();
+      if (!frase) return toast("Digite a sua senha de sincronização.", "erro");
+      toast("Conectando…");
+      try {
+        const r = await conectarNuvem(frase, { endpoint });
+        toast(r.acao === "baixou" ? "Conectado — dados baixados da nuvem." : r.acao === "subiu" ? "Conectado — dados enviados para a nuvem." : "Conectado e sincronizado.", "ok");
+      } catch (e) { toast("Não foi possível conectar: " + e.message, "erro"); }
+      app.refresh();
+    },
+    "nuvem-agora": async () => {
+      toast("Sincronizando…");
+      try {
+        const r = await sincronizarNuvem({ motivo: "manual" });
+        toast(r.acao === "baixou" ? "Dados atualizados da nuvem." : r.acao === "subiu" ? "Dados enviados para a nuvem." : "Já estava sincronizado.", "ok");
+      } catch (e) { toast("Falha ao sincronizar: " + e.message, "erro"); }
+      app.refresh();
+    },
+    "nuvem-desconectar": async () => {
+      const ok = await confirmar("Desconectar a sincronização neste aparelho? A senha será esquecida aqui (os seus dados locais continuam intactos).");
+      if (!ok) return;
+      await desconectarNuvem(); toast("Sincronização desconectada neste aparelho."); app.refresh();
+    },
+    "nuvem-manter-local": async () => {
+      toast("Enviando os dados deste aparelho para a nuvem…");
+      try { await resolverPendenciaNuvem("local"); toast("Mantidos os dados deste aparelho (enviados à nuvem).", "ok"); }
+      catch (e) { toast("Falha: " + e.message, "erro"); }
+      app.refresh();
+    },
+    "nuvem-usar-nuvem": async () => {
+      const ok = await confirmar("Isto vai SUBSTITUIR os dados deste aparelho pelos da nuvem. Uma cópia de segurança dos atuais será guardada. Continuar?");
+      if (!ok) return;
+      try { await resolverPendenciaNuvem("nuvem"); toast("Aplicados os dados da nuvem.", "ok"); }
       catch (e) { toast("Falha: " + e.message, "erro"); }
       app.refresh();
     },

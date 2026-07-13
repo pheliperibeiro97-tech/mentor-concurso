@@ -7407,6 +7407,14 @@ export const store = {
     state.config.sync = { ...(state.config.sync || {}), ...patch };
     commit({ semCarimbo: true });
   },
+  // Metadados da sincronização NA NUVEM por senha (config.syncNuvem) — mesmo contrato do
+  // setSyncMeta (sem carimbar modificadoEm). Guarda status, dispositivo e a senha LOCAL
+  // (nunca sobe: montarSnapshotSync remove config.syncNuvem antes de cifrar). Usado por
+  // src/sync-nuvem.js.
+  setSyncNuvemMeta(patch) {
+    state.config.syncNuvem = { ...(state.config.syncNuvem || {}), ...patch };
+    commit({ semCarimbo: true });
+  },
   // ---------- atalhos personalizados (HOJE e, opcional, barra lateral) ----------
   addAtalho({ nome, tipo, alvo, icone, naNav, noHoje }) {
     const a = {

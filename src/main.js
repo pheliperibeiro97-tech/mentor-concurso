@@ -16,6 +16,7 @@ import { dispararNotificacoesDevidas, iniciarAgendadorDiario } from "./notificac
 import { checarLicenca } from "./licenca.js";
 import { verificarAtualizacao } from "./updater.js";
 import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "./sync.js";
+import { sincronizarNuvem, sincronizarNuvemAoFechar, estadoSyncNuvem } from "./sync-nuvem.js";
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
 import { montarLembretesFab } from "./lembretes.js";
@@ -676,7 +677,9 @@ async function bootstrap() {
     }
   });
   // Sincronização: ao ABRIR, puxa o mais recente da nuvem do usuário (se conectado).
+  // Dois canais independentes: por arquivo (Drive/OneDrive, desktop) e por senha (celular + PC).
   if (estadoSync().conectado) syncAgora({ motivo: "boot", silencioso: true });
+  if (estadoSyncNuvem().conectado) sincronizarNuvem({ motivo: "boot", silencioso: true });
   // E garante a sincronização ao FECHAR o app.
   ligarSyncAoFechar();
 }
@@ -694,7 +697,7 @@ async function ligarSyncAoFechar() {
         event.preventDefault(); // evita o fechamento parcial padrão (que deixaria o cronômetro segurando o app)
         if (fechando) return; // já estamos saindo
         fechando = true;
-        try { await Promise.race([sincronizarAoFechar(), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
+        try { await Promise.race([Promise.all([sincronizarAoFechar(), sincronizarNuvemAoFechar()]), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
         // Encerra o app INTEIRO (principal + cronômetro flutuante) de forma garantida.
         try {
           const { invoke } = await import("@tauri-apps/api/core");
@@ -705,8 +708,20 @@ async function ligarSyncAoFechar() {
       });
     } catch (_) {}
   } else {
-    window.addEventListener("pagehide", () => { try { sincronizarAoFechar(); } catch (_) {} });
+    window.addEventListener("pagehide", () => { try { sincronizarAoFechar(); sincronizarNuvemAoFechar(); } catch (_) {} });
   }
 }
 
 bootstrap();
+
+// PWA (só na WEB): registra o service worker para instalar no celular e funcionar offline.
+// No desktop Tauri isso não se aplica (o app já é nativo). Também pula a janela do cronômetro.
+(function registrarPWA() {
+  const ehDesktop = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
+  const ehCrono = typeof window !== "undefined" && window.__MENTOR_CRONO__ === true;
+  if (ehDesktop || ehCrono) return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  import("virtual:pwa-register")
+    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .catch(() => {});
+})();
