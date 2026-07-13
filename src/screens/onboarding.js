@@ -1,8 +1,9 @@
 // Onboarding (assistente curto, 3 etapas): concurso → prova/ritmo (opcional) →
 // Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
 // em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
-import { bindActions, toast } from "../ui.js";
+import { bindActions, toast, pedirTexto } from "../ui.js";
 import { esc, todayISO, daysBetween } from "../util.js";
+import { restaurarDaNuvem, suportaSyncNuvem } from "../sync-nuvem.js";
 import { icone } from "../icones.js";
 import { testarConexao, iaDisponivel } from "../ia-provider.js";
 import { AREAS, resumoArea } from "../areas.js";
@@ -213,6 +214,7 @@ export default function renderOnboarding(root, app) {
             <button class="btn btn-primary btn-lg" data-action="criar">Continuar →</button>
           </div>
         </div>
+        ${suportaSyncNuvem() ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="restaurar-nuvem">Restaurar meus dados da nuvem</button></p>` : ""}
         <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>
       </div>`;
 
@@ -233,6 +235,22 @@ export default function renderOnboarding(root, app) {
         if (!salvarConcurso(root, store)) return;
         if (temaOb) store.setConfig({ tema: temaOb });
         irComecar();
+      },
+      // Aparelho novo trazendo os dados pela senha (pula o cadastro do concurso).
+      "restaurar-nuvem": async () => {
+        const frase = await pedirTexto("Digite a sua senha de sincronização para trazer os seus dados:", { placeholder: "sua senha (a mesma dos outros aparelhos)", rotuloOk: "Restaurar" });
+        if (!frase || !frase.trim()) return;
+        toast("Restaurando da nuvem…");
+        try {
+          await restaurarDaNuvem(frase);
+          toast("Pronto! Seus dados foram restaurados neste aparelho.", "ok");
+          app.refresh();
+        } catch (e) {
+          const msg = e.code === "COFRE_VAZIO" ? "Não encontrei dados na nuvem para essa senha. Confira a senha, ou comece um novo plano."
+            : e.code === "SENHA_ERRADA" ? "Senha incorreta para este cofre."
+            : "Não consegui restaurar: " + e.message;
+          toast(msg, "erro");
+        }
       },
     });
     return;

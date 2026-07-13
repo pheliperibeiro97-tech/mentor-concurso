@@ -168,6 +168,25 @@ export async function conectarNuvem(frase, { endpoint } = {}) {
   return sincronizarNuvem({ motivo: "conexao" });
 }
 
+// Restauração EXPLÍCITA (aparelho novo trazendo os dados pela senha): baixa e aplica o cofre
+// SEM newest-wins — a intenção é claramente "trazer o que está na nuvem para cá". Valida a
+// senha decifrando; erra se o cofre não existe (senha errada ou nunca sincronizou).
+export async function restaurarDaNuvem(frase, { endpoint } = {}) {
+  if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a restauração segura.");
+  frase = (frase || "").trim();
+  if (frase.length < 6) throw new Error("A senha tem pelo menos 6 caracteres.");
+  marcar({ frase, endpoint: (endpoint || "").trim() || undefined });
+  const id = await cofreId(frase);
+  const envRemoto = await baixarEnvelope(id);
+  if (!envRemoto) { marcar({ frase: "", conectado: false }); const e = new Error("Não há dados na nuvem para essa senha."); e.code = "COFRE_VAZIO"; throw e; }
+  const remoto = await decifrar(frase, envRemoto); // lança SENHA_ERRADA se a senha não bate
+  const merged = aplicarRemoto(store.get(), remoto);
+  await store.importarBackup(merged);
+  const agora = new Date().toISOString();
+  marcar({ conectado: true, cofre: id.slice(0, 8), ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, erro: "" });
+  return { ok: true, acao: "baixou" };
+}
+
 export async function desconectarNuvem() {
   // Limpa também o status para o card não mostrar "Sincronizado há X" depois de desconectar.
   marcar({ conectado: false, frase: "", pendente: null, ultimaSync: null, ultimoResultado: "", baseEm: "", erro: "", cofre: "" });

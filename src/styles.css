@@ -833,6 +833,8 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .ob-grupo { padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; }
 .ob-grupo h3 { font-size: var(--fs-md); margin: 0 0 10px; }
 .ob-foot { font-size: var(--fs-xs); color: var(--muted); margin-top: 16px; }
+.ob-jatenho { text-align: center; font-size: .9rem; color: var(--muted); margin-top: 14px; }
+.ob-jatenho .lnk { font-weight: 600; }
 .ob-steps { font-size: var(--fs-sm); color: var(--muted); margin-bottom: 8px; }
 .ob-steps .done { color: var(--success); }
 .ob-steps .atual { color: var(--primary); font-weight: var(--fw-medium); }
