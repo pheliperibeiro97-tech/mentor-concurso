@@ -40,6 +40,9 @@ export default function renderConfig(root, app) {
   const st = store.get();
   const cfg = st.config;
   const c = st.concurso;
+  // No celular/navegador (sem Tauri) alguns recursos são só do app desktop — não mostrar o
+  // gatilho no mobile evita o toque que só entrega um aviso negativo.
+  const ehDesktop = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
   // Provedores ainda sem implementação (desabilitam chave/modelo na tela).
   const iaInativa = ["offline"].includes(cfg.iaProvider);
   // Provedores que NÃO usam chave de API (Claude Code local usa a autenticação local da CLI).
@@ -228,7 +231,7 @@ export default function renderConfig(root, app) {
           <select id="cfg-ia">
             <option value="offline" ${cfg.iaProvider === "offline" ? "selected" : ""}>Offline (sem IA)</option>
             <option value="gemini" ${cfg.iaProvider === "gemini" ? "selected" : ""}>Google Gemini (chave grátis)</option>
-            <option value="claude-cli" ${cfg.iaProvider === "claude-cli" ? "selected" : ""}>Claude Code local (pessoal · desktop)</option>
+            ${ehDesktop || cfg.iaProvider === "claude-cli" ? `<option value="claude-cli" ${cfg.iaProvider === "claude-cli" ? "selected" : ""}>Claude Code local (pessoal · desktop)</option>` : ""}
           </select>
         </label>
         <label>Modelo (vazio = automático; ou escolha um da lista)
@@ -360,7 +363,7 @@ export default function renderConfig(root, app) {
       <div class="u-row u-wrap">
         <button class="btn btn-soft btn-sm" data-action="enviar-sugestao" data-tip="Abre seu e-mail com uma mensagem pronta para enviar.">${icone("lightbulb")} Enviar sugestão</button>
         <button class="btn btn-ghost btn-sm" data-action="gerar-diagnostico" data-tip="Gera um arquivo com informações técnicas (versão, sistema, erros recentes) para você anexar num e-mail de suporte. Não inclui o conteúdo dos seus estudos.">${icone("life-buoy")} Relatar um problema (gerar diagnóstico)</button>
-        <button class="btn btn-ghost btn-sm" data-action="buscar-update" data-tip="Verifica se há uma versão mais nova (só no aplicativo instalado).">${icone("refresh-cw")} Procurar atualizações</button>
+        ${ehDesktop ? `<button class="btn btn-ghost btn-sm" data-action="buscar-update" data-tip="Verifica se há uma versão mais nova (só no aplicativo instalado).">${icone("refresh-cw")} Procurar atualizações</button>` : ""}
       </div>
       <p class="muted small u-m-0 u-mt-8">Versão ${esc(APP_VERSION)} · Desenvolvido por <b>Phelipe Ribeiro da Silva</b></p>
     </section>

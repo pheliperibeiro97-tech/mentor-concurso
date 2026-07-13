@@ -5591,3 +5591,26 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   .lf { bottom: calc(220px + env(safe-area-inset-bottom)); }
   .chat-panel { bottom: calc(160px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 220px); }
 }
+
+/* ===== TOQUE (celular): não há teclado, então some com toda pista de teclado ===== */
+@media (hover: none) {
+  /* legendas dos modos foco (quiz/flashcards/simulado/revisões/leitura), barra de atalhos,
+     selos de tecla nas alternativas/notas, rodapé da paleta e o kbd da barra de comando. */
+  .fq-rodape,
+  .lf-legenda,
+  .fc-atalhos,
+  .alt-key,
+  .fq-nota kbd,
+  .paleta-rodape,
+  .cmdbar-kbd { display: none !important; }
+}
+
+/* ===== CELULAR: reduzir tamanhos para não parecer "desktop encolhido" ===== */
+@media (max-width: 560px) {
+  .page-head { margin-bottom: 16px; padding-bottom: 14px; gap: 10px; }
+  .page-head h1 { font-size: 1.6rem; }
+  .content { padding: 18px 14px calc(96px + env(safe-area-inset-bottom)); }
+  .card { padding: 16px; margin-bottom: 14px; }
+  .ob-card { padding: 22px 18px; }
+  .ob-card h1 { font-size: 1.5rem; }
+}

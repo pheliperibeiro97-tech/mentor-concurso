@@ -340,7 +340,7 @@ export default function renderOnboarding(root, app) {
             <select id="ob-ia">
               <option value="offline" ${prov === "offline" ? "selected" : ""}>Offline (sem IA)</option>
               <option value="gemini" ${prov === "gemini" ? "selected" : ""}>Google Gemini (chave grátis)</option>
-              <option value="claude-cli" ${prov === "claude-cli" ? "selected" : ""}>Claude Code local (pessoal · desktop)</option>
+              ${(typeof window !== "undefined" && (window.__TAURI_INTERNALS__ || window.__TAURI__)) || prov === "claude-cli" ? `<option value="claude-cli" ${prov === "claude-cli" ? "selected" : ""}>Claude Code local (pessoal · desktop)</option>` : ""}
             </select>
           </label>
           <label>Chave de API
