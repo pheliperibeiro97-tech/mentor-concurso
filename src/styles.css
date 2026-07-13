@@ -5664,10 +5664,11 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 
 /* ===== CELULAR: conteúdo que estava sendo CORTADO agora quebra/rola ===== */
 @media (max-width: 560px) {
-  /* Linhas de campos (ex.: Metas diária/semanal/mensal) e de botões (ex.: backups de Dados)
-     que não cabem passam a QUEBRAR em vez de sair cortadas à direita. */
+  /* Linhas de campos (ex.: Metas diária/semanal/mensal) e QUALQUER linha de ações/botões
+     (form-acoes, rev-acoes, barra-acoes, sess-acoes…) que não cabem passam a QUEBRAR em vez
+     de sair cortadas à direita. */
   .form-row { flex-wrap: wrap; }
-  .form-acoes { flex-wrap: wrap; }
+  [class*="acoes"] { flex-wrap: wrap; }
   /* Abas (segmented) que transbordam ROLAM na horizontal, sem cortar o rótulo (ex.: a aba
      "Dados & concurso" em Configurações). */
   .seg { overflow-x: auto; scrollbar-width: thin; }
