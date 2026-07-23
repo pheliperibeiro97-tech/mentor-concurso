@@ -364,7 +364,8 @@ function abrirEditarResumo(app, { resumo = null, prefill = null } = {}) {
           const topicoId = corpo.querySelector("#res-top").value || null;
           const conteudoHTML = sanitize(corpo.querySelector("#res-editor").innerHTML);
           if (!titulo) return toast("Dê um título ao resumo.", "erro");
-          if (!disciplinaId && !topicoId) return toast("Vincule a uma disciplina (e, se quiser, a um tópico).", "erro");
+          // Disciplina e tópico são OPCIONAIS: dá para anotar primeiro e organizar depois
+          // (o resumo sem vínculo aparece na lista como "Sem disciplina").
           if (ehEdicao) { store.editarResumo(resumo.id, { titulo, disciplinaId, topicoId, conteudoHTML }); toast("Resumo atualizado."); }
           else { store.addResumo({ titulo, disciplinaId, topicoId, conteudoHTML }); toast("Resumo salvo."); }
           fechar();
@@ -382,14 +383,14 @@ function formHTML(st, e) {
     const t = st.topicos.find((x) => x.id === sel.topicoId);
     discId = t ? t.disciplinaId : "";
   }
-  const opcoesDisc = `<option value="">— selecione —</option>` + st.disciplinas.map((d) => `<option value="${d.id}" ${d.id === discId ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
+  const opcoesDisc = `<option value="">— sem disciplina —</option>` + st.disciplinas.map((d) => `<option value="${d.id}" ${d.id === discId ? "selected" : ""}>${esc(d.nome)}</option>`).join("");
   return `
     <div class="card form-resumo">
       <h3>${e && e.id ? "Editar resumo" : "Novo resumo"}</h3>
       <div class="form-row">
         <label class="u-grow-2">Título <input id="res-titulo" type="text" value="${esc(sel.titulo || "")}" placeholder="Ex.: Atributos do ato administrativo" /></label>
-        <label>Disciplina <select id="res-disc">${opcoesDisc}</select></label>
-        <label>Tópico (opcional) <select id="res-top">${topicoOptions(st, discId, sel.topicoId)}</select></label>
+        <label>Disciplina <span class="ob-tag-opt">opcional</span> <select id="res-disc">${opcoesDisc}</select></label>
+        <label>Tópico <span class="ob-tag-opt">opcional</span> <select id="res-top">${topicoOptions(st, discId, sel.topicoId)}</select></label>
       </div>
       <div class="rt-toolbar">
         <button type="button" class="rt-btn" data-cmd="formatBlock" data-val="h3" title="Título de seção">${icone("heading")}</button>
@@ -550,7 +551,7 @@ function vinculoNome(st, r) {
   const t = r.topicoId ? st.topicos.find((x) => x.id === r.topicoId) : null;
   if (t) return nomeTopico(st, t);
   const d = r.disciplinaId ? st.disciplinas.find((x) => x.id === r.disciplinaId) : null;
-  return d ? d.nome : "Tópico não definido";
+  return d ? d.nome : "Sem disciplina";
 }
 // <template> parseia em documento inerte: imagens não carregam e handlers on*
 // não disparam durante a extração — um div solto executaria onerror de conteúdo hostil.
