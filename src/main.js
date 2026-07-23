@@ -16,7 +16,7 @@ import { dispararNotificacoesDevidas, iniciarAgendadorDiario } from "./notificac
 import { checarLicenca } from "./licenca.js";
 import { verificarAtualizacao } from "./updater.js";
 import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "./sync.js";
-import { sincronizarNuvem, sincronizarNuvemAoFechar, estadoSyncNuvem } from "./sync-nuvem.js";
+import { sincronizarNuvemAoFechar, iniciarSyncNuvemAuto } from "./sync-nuvem.js";
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
 import { montarLembretesFab } from "./lembretes.js";
@@ -679,7 +679,8 @@ async function bootstrap() {
   // Sincronização: ao ABRIR, puxa o mais recente da nuvem do usuário (se conectado).
   // Dois canais independentes: por arquivo (Drive/OneDrive, desktop) e por senha (celular + PC).
   if (estadoSync().conectado) syncAgora({ motivo: "boot", silencioso: true });
-  if (estadoSyncNuvem().conectado) sincronizarNuvem({ motivo: "boot", silencioso: true });
+  // A nuvem por senha (celular + PCs) fica AUTOMÁTICA: abre, volta ao foco, alterou, saiu.
+  iniciarSyncNuvemAuto();
   // E garante a sincronização ao FECHAR o app.
   ligarSyncAoFechar();
 }

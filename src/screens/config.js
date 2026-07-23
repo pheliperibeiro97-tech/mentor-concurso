@@ -405,10 +405,10 @@ export default function renderConfig(root, app) {
             <details class="ed-ajuda u-mt-12">
               <summary>Como funciona</summary>
               <div class="ed-ajuda-corpo">
-                <p>Você escolhe uma <b>senha</b> (a mesma em todo aparelho) e o app guarda seus dados num <b>cofre cifrado</b> na nuvem. Digite a senha <b>uma vez por aparelho</b> e depois ele sincroniza sozinho (ao abrir e ao fechar). A senha cifra tudo de ponta a ponta (nem nós nem o serviço de nuvem conseguem ler) e <b>nunca sai do aparelho</b>. Não há recuperação de senha, então escolha uma frase fácil de lembrar. Os <b>PDFs originais</b> não sobem (ficam em cada aparelho); já o <b>texto extraído</b> sincroniza. Use <b>um aparelho por vez</b>: deixe um terminar de sincronizar antes de abrir no outro (se editar em dois ao mesmo tempo, vence o mais recente).</p>
+                <p>Você escolhe uma <b>senha</b> (a mesma em todo aparelho) e o app guarda seus dados num <b>cofre cifrado</b> na nuvem. Digite a senha <b>uma vez por aparelho</b> e depois ele sincroniza sozinho: ao <b>abrir</b>, poucos segundos <b>depois de cada alteração</b>, quando você <b>sai do app</b> (troca de aba/aplicativo no celular), quando <b>volta</b> a ele e a cada poucos minutos com ele aberto. A senha cifra tudo de ponta a ponta (nem nós nem o serviço de nuvem conseguem ler) e <b>nunca sai do aparelho</b>. Não há recuperação de senha, então escolha uma frase fácil de lembrar. Os <b>PDFs originais</b> não sobem (ficam em cada aparelho); já o <b>texto extraído</b> sincroniza. Use <b>um aparelho por vez</b>: deixe um terminar de sincronizar antes de abrir no outro (se editar em dois ao mesmo tempo, vence o mais recente).</p>
               </div>
             </details>`
-          : `<p class="muted small">Este navegador não suporta a sincronização segura (falta o Web Crypto). Use um navegador atual (Chrome, Edge, Safari, Firefox).</p>`
+          : `<p class="muted small">A sincronização segura não está disponível aqui (falta o Web Crypto). Ela exige um navegador atual (Chrome, Edge, Safari, Firefox) <b>e</b> um endereço <b>https://</b> — abrir o app por <code>http://</code> num IP da rede local desliga esse recurso do navegador.</p>`
       }
     </section>
 
