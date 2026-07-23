@@ -141,6 +141,13 @@ export function estadoSyncNuvem() {
 function marcar(patch) {
   store.setSyncNuvemMeta(patch);
 }
+// "Sincronizando" tem DUAS marcas: `config.syncNuvem.sincronizando` (persistida, só para a
+// tela mostrar o spinner) e esta, de processo. Fechar/recarregar o app no meio de uma
+// sincronização deixava a persistida presa em `true` para sempre — e isso barrava as
+// sincronizações seguintes e deixava o botão "Sincronizar agora" desabilitado. A marca de
+// processo morre junto com a página, então é ela que decide se há uma sync em andamento.
+let emVoo = false;
+
 // A senha viva só na memória do processo? Não: fica em config.syncNuvem.frase (local, e é
 // removida do snapshot antes de subir). Helper para lê-la.
 function fraseAtual() {
@@ -197,6 +204,7 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
   if (!suportaSyncNuvem()) { if (!silencioso) throw new Error("Ambiente sem suporte à nuvem."); return { ok: false, motivo: "sem-suporte" }; }
   const frase = fraseAtual();
   if (!frase) { if (!silencioso) throw new Error("Sem senha configurada. Conecte-se primeiro."); return { ok: false, motivo: "sem-senha" }; }
+  emVoo = true; // marca de PROCESSO (some ao recarregar) — a de estado abaixo é só para a tela
   marcar({ sincronizando: true });
   try {
     const id = await cofreId(frase);
@@ -239,6 +247,8 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
     marcar({ sincronizando: false, ultimoResultado: "erro", erro: e.message });
     if (!silencioso) throw e;
     return { ok: false, erro: e.message };
+  } finally {
+    emVoo = false;
   }
 }
 
@@ -284,7 +294,10 @@ export async function sincronizarNuvemAoFechar() {
 //   • ENVIA quando a conexão volta.
 const AUTO_DEBOUNCE_MS = 6000;      // espera depois da última alteração antes de enviar
 const AUTO_INTERVALO_MS = 3 * 60 * 1000; // varredura periódica com o app em foco
-const AUTO_MIN_INTERVALO_MS = 15000; // piso entre duas sincronizações não forçadas
+const AUTO_MIN_INTERVALO_MS = 15000; // piso padrão entre duas sincronizações
+// Voltar ao app é o momento em que o usuário mais espera ver o que fez no outro aparelho:
+// piso curto, senão uma sincronização recente "engole" a volta ao foco (visto em teste).
+const AUTO_MIN_VOLTA_MS = 4000;
 
 let autoLigado = false;
 let autoTimer = null;
@@ -292,13 +305,14 @@ let autoUltimoEm = 0;
 let autoModificadoVisto = "";
 
 // Dispara uma sincronização silenciosa se fizer sentido. Nunca lança.
-async function autoSync(motivo, { forcar = false } = {}) {
+// `piso` = tempo mínimo desde a última sincronização (0 = sempre).
+async function autoSync(motivo, { piso = AUTO_MIN_INTERVALO_MS } = {}) {
   const st = estadoSyncNuvem();
   // Conflito pendente = o usuário precisa decidir; sincronizar em laço só geraria backups.
-  if (!st.conectado || st.sincronizando || st.pendente) return;
+  if (!st.conectado || emVoo || st.pendente) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const agora = Date.now();
-  if (!forcar && agora - autoUltimoEm < AUTO_MIN_INTERVALO_MS) return;
+  if (agora - autoUltimoEm < piso) return;
   autoUltimoEm = agora;
   try { await sincronizarNuvem({ motivo, silencioso: true }); } catch (_) {}
   // Baixar altera o estado (e dispara o subscribe): evita o eco de uma segunda sync inútil.
@@ -312,6 +326,9 @@ export function iniciarSyncNuvemAuto() {
   if (autoLigado || !suportaSyncNuvem()) return;
   autoLigado = true;
   autoModificadoVisto = store.get().modificadoEm || "";
+  // Processo novo: nenhuma sync pode estar em andamento. Limpa a marca órfã deixada por um
+  // fechamento no meio do caminho (senão a tela mostra spinner e o botão fica desabilitado).
+  if (estadoSyncNuvem().sincronizando) marcar({ sincronizando: false });
 
   // 1) Qualquer alteração real de dados (config.syncNuvem não carimba modificadoEm, então
   //    os próprios metadados de sync não realimentam o laço).
@@ -321,20 +338,20 @@ export function iniciarSyncNuvemAuto() {
     autoModificadoVisto = m;
     if (!estadoSyncNuvem().conectado) return;
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => autoSync("alteracao", { forcar: true }), AUTO_DEBOUNCE_MS);
+    autoTimer = setTimeout(() => autoSync("alteracao", { piso: 0 }), AUTO_DEBOUNCE_MS);
   });
 
   // 2) Aba escondida (celular trocando de app) → envia agora; voltou ao foco → busca o novo.
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) { clearTimeout(autoTimer); autoSync("escondeu", { forcar: true }); }
-    else autoSync("voltou");
+    if (document.hidden) { clearTimeout(autoTimer); autoSync("escondeu", { piso: 0 }); }
+    else autoSync("voltou", { piso: AUTO_MIN_VOLTA_MS });
   });
-  window.addEventListener("focus", () => autoSync("foco"));
-  window.addEventListener("online", () => autoSync("online", { forcar: true }));
+  window.addEventListener("focus", () => autoSync("foco", { piso: AUTO_MIN_VOLTA_MS }));
+  window.addEventListener("online", () => autoSync("online", { piso: 0 }));
 
   // 3) Varredura periódica só com o app à vista (aba de fundo não gasta rede/bateria).
   setInterval(() => { if (!document.hidden) autoSync("periodico"); }, AUTO_INTERVALO_MS);
 
   // 4) Abertura.
-  autoSync("boot", { forcar: true });
+  autoSync("boot", { piso: 0 });
 }
