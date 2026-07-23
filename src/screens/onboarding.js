@@ -214,7 +214,14 @@ export default function renderOnboarding(root, app) {
             <button class="btn btn-primary btn-lg" data-action="criar">Continuar →</button>
           </div>
         </div>
-        ${suportaSyncNuvem() ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="restaurar-nuvem">Restaurar meus dados da nuvem</button></p>` : ""}
+        ${
+          // Sem Web Crypto (endereço http:// que não seja localhost, ex.: abrir pelo IP da
+          // rede no celular) a restauração não roda — e antes a linha simplesmente sumia,
+          // dando a impressão de que o app não sabe trazer os dados de outro aparelho.
+          suportaSyncNuvem()
+            ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="restaurar-nuvem">Restaurar meus dados da nuvem</button></p>`
+            : `<p class="ob-jatenho muted">Para trazer os dados de outro aparelho, abra o Mentor por um endereço <b>https://</b> (a sincronização segura exige conexão protegida).</p>`
+        }
         <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>
       </div>`;
 

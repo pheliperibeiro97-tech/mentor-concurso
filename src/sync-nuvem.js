@@ -272,3 +272,69 @@ export async function sincronizarNuvemAoFechar() {
   if (!estadoSyncNuvem().conectado) return;
   try { await sincronizarNuvem({ motivo: "fechar", silencioso: true }); } catch (_) {}
 }
+
+// ---- Sincronização AUTOMÁTICA ---------------------------------------------
+// Antes a nuvem só era consultada ao ABRIR e ao FECHAR. Com o app aberto o dia inteiro (ou
+// com a aba do celular apenas "congelada" pelo sistema, sem evento de fechamento confiável),
+// o que era editado num aparelho demorava a aparecer no outro. Agora o app se mantém em dia
+// sozinho, em quatro momentos:
+//   • ENVIA alguns segundos depois de qualquer alteração (debounce, não atrapalha digitação);
+//   • ENVIA quando a aba/janela é escondida (no celular é o único instante garantido);
+//   • BAIXA quando o app volta ao foco e a cada poucos minutos com ele aberto;
+//   • ENVIA quando a conexão volta.
+const AUTO_DEBOUNCE_MS = 6000;      // espera depois da última alteração antes de enviar
+const AUTO_INTERVALO_MS = 3 * 60 * 1000; // varredura periódica com o app em foco
+const AUTO_MIN_INTERVALO_MS = 15000; // piso entre duas sincronizações não forçadas
+
+let autoLigado = false;
+let autoTimer = null;
+let autoUltimoEm = 0;
+let autoModificadoVisto = "";
+
+// Dispara uma sincronização silenciosa se fizer sentido. Nunca lança.
+async function autoSync(motivo, { forcar = false } = {}) {
+  const st = estadoSyncNuvem();
+  // Conflito pendente = o usuário precisa decidir; sincronizar em laço só geraria backups.
+  if (!st.conectado || st.sincronizando || st.pendente) return;
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return;
+  const agora = Date.now();
+  if (!forcar && agora - autoUltimoEm < AUTO_MIN_INTERVALO_MS) return;
+  autoUltimoEm = agora;
+  try { await sincronizarNuvem({ motivo, silencioso: true }); } catch (_) {}
+  // Baixar altera o estado (e dispara o subscribe): evita o eco de uma segunda sync inútil.
+  autoModificadoVisto = store.get().modificadoEm || "";
+  clearTimeout(autoTimer);
+  autoTimer = null;
+}
+
+// Liga os gatilhos automáticos (uma única vez) e já faz a sincronização de abertura.
+export function iniciarSyncNuvemAuto() {
+  if (autoLigado || !suportaSyncNuvem()) return;
+  autoLigado = true;
+  autoModificadoVisto = store.get().modificadoEm || "";
+
+  // 1) Qualquer alteração real de dados (config.syncNuvem não carimba modificadoEm, então
+  //    os próprios metadados de sync não realimentam o laço).
+  store.subscribe(() => {
+    const m = store.get().modificadoEm || "";
+    if (!m || m === autoModificadoVisto) return;
+    autoModificadoVisto = m;
+    if (!estadoSyncNuvem().conectado) return;
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => autoSync("alteracao", { forcar: true }), AUTO_DEBOUNCE_MS);
+  });
+
+  // 2) Aba escondida (celular trocando de app) → envia agora; voltou ao foco → busca o novo.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { clearTimeout(autoTimer); autoSync("escondeu", { forcar: true }); }
+    else autoSync("voltou");
+  });
+  window.addEventListener("focus", () => autoSync("foco"));
+  window.addEventListener("online", () => autoSync("online", { forcar: true }));
+
+  // 3) Varredura periódica só com o app à vista (aba de fundo não gasta rede/bateria).
+  setInterval(() => { if (!document.hidden) autoSync("periodico"); }, AUTO_INTERVALO_MS);
+
+  // 4) Abertura.
+  autoSync("boot", { forcar: true });
+}
