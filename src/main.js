@@ -123,13 +123,27 @@ let cleanupAtual = null;
 // Sidebar de 2 níveis: quais grupos colapsáveis (Estudar/Praticar/Revisar) estão abertos.
 // O grupo que contém a rota ativa é sempre mantido aberto.
 let gruposNavAbertos = null;
+// Celular: a gaveta ("Mais") abre com Estudar/Praticar/Revisar já expandidos — os grupos são
+// semeados uma única vez, para o usuário ainda poder recolher o que não usa.
+let gavetaSemeada = false;
 
 const app = {
   store,
   navigate(id, p = {}) {
     rotaAtual = id;
     params = p;
+    // Janelas (.mm-overlay), gaveta e painel do Mentor vivem FORA do #app — o render()
+    // troca só o #app e não os remove. No computador isso passava batido (são caixas no meio
+    // da tela); no celular cada um deles ocupa a tela inteira, então a tela nova abria ATRÁS
+    // e a sensação era de que "gerou e não aconteceu nada". Fecha pelo próprio botão de
+    // fechar da janela, para soltar o focus-trap e os listeners junto.
+    document.querySelectorAll(".mm-overlay").forEach((ov) => ov.querySelector(".mm-close")?.click());
+    document.body.classList.remove("nav-aberta"); // gaveta do celular
+    document.getElementById("chat-panel")?.classList.add("oculto");
     render(false); // navegar volta ao topo
+    // A rolagem do DOCUMENTO (que aparece no celular quando a barra de endereço some/volta)
+    // não é reiniciada pelo innerHTML — sem isto a tela nova abre "no meio".
+    if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
   },
   toast,
   refresh: () => render(),
@@ -228,6 +242,15 @@ function navHTML() {
   const grupoDaRota = (rotaPorId(rotaAtual) || {}).grupo;
   if (COLAPSAVEIS.some((c) => c.grupo === grupoDaRota)) gruposNavAbertos.add(grupoDaRota);
 
+  // No CELULAR a barra vira a gaveta do botão "Mais": ela é aberta de propósito, para
+  // procurar um destino, e rola por conta própria. Abrir os 3 grupos de saída evita o toque
+  // extra em cada um — no computador o rail continua abrindo só o grupo da tela atual.
+  // Semeia UMA vez (não força a cada render): assim recolher um grupo continua funcionando.
+  const ehGaveta = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 900px)").matches;
+  if (ehGaveta && !gavetaSemeada) {
+    gavetaSemeada = true;
+    COLAPSAVEIS.forEach((c) => gruposNavAbertos.add(c.grupo));
+  }
   const colapsaveisHTML = COLAPSAVEIS.map(({ grupo, label }) => {
     const visiveis = itensPorGrupo[grupo] || [];
     if (!visiveis.length) return "";
@@ -447,6 +470,80 @@ function iniciarAriaSeg() {
   agendar();
 }
 
+// ===== Celular: os 3 flutuantes (Assistente, cronômetro, lembretes) saem da frente =====
+// Numa tela de ~390px os três círculos ficam permanentemente sobre a faixa de leitura. Aqui
+// eles descem enquanto o dedo rola PARA BAIXO e voltam ao parar ou subir (body.fabs-ocultos
+// faz o resto no CSS). Não se escondem com um popover/painel aberto — o painel some junto com
+// o botão que o ancora. O listener é ligado no #content de cada render (nó novo a cada vez).
+let ultimoScrollFab = 0;
+function mostrarFabs() {
+  document.body.classList.remove("fabs-ocultos");
+}
+// Enquanto se ESCREVE, os botoes saem da frente. O auto-ocultar por rolagem nao cobre este
+// caso: digitar nao rola, entao numa resposta longa da Discursiva (ou no chat, ou num
+// formulario) o botao fica parado POR CIMA do texto que se esta escrevendo. Mesma excecao da
+// rolagem: cronometro em uso nao some, porque ali o botao e mostrador, nao atalho.
+const CAMPOS_TEXTO = 'textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]), [contenteditable=""], [contenteditable="true"]';
+function ligarOcultarFabsAoDigitar() {
+  document.addEventListener("focusin", (e) => {
+    if (!e.target?.matches?.(CAMPOS_TEXTO)) return;
+    if (document.querySelector("#crono-fab.ativo")) return;
+    document.body.classList.add("fabs-digitando");
+  });
+  document.addEventListener("focusout", () => document.body.classList.remove("fabs-digitando"));
+}
+
+// O celular decide QUAL seletor abrir a partir do `accept`: havendo tipo de imagem na lista,
+// iOS e varios Android abrem o seletor de MIDIA (camera/fotos/videos) e o navegador de arquivos
+// — onde esta o PDF — nem aparece. Trocar "image/*" por tipos explicitos nao resolveu (testado
+// no aparelho). Entao, em tela de TOQUE, tiramos o `accept` um instante antes de abrir: sem
+// pista de tipo, o sistema mostra o navegador de arquivos inteiro e o PDF fica acessivel.
+// Nao afrouxa validacao: quem decide o que fazer com o arquivo e o handler, pelo MIME real.
+// So nos campos que aceitam DOCUMENTO — onde o campo e so de foto (a folha da discursiva),
+// o seletor de midia e exatamente o certo e fica como esta.
+function ligarSeletorDeArquivoNoToque() {
+  if (!window.matchMedia || !matchMedia("(pointer: coarse)").matches) return;
+  document.addEventListener("click", (e) => {
+    const alvo = e.target;
+    if (!alvo || !alvo.closest) return;
+    const lbl = alvo.closest("label");
+    const inp = alvo.matches && alvo.matches('input[type="file"]')
+      ? alvo
+      : lbl && (lbl.control && lbl.control.type === "file" ? lbl.control : lbl.querySelector('input[type="file"]'));
+    if (!inp || !inp.getAttribute("accept")) return;
+    if (!/pdf|text|json|csv|markdown/i.test(inp.getAttribute("accept"))) return; // campo so de imagem
+    inp.dataset.acceptOriginal = inp.getAttribute("accept");
+    inp.removeAttribute("accept");
+  }, true);
+}
+
+function ligarAutoOcultarFabs(content) {
+  if (!content) return;
+  // TODO render (inclusive trocar de tela) começa com os botões à vista. Sem isto eles
+  // ficavam escondidos "para sempre" depois de uma rolagem para baixo: a classe é do <body>,
+  // que sobrevive à troca de tela, e a tela nova podia nem ter rolagem para revelá-los.
+  mostrarFabs();
+  ultimoScrollFab = content.scrollTop;
+  content.addEventListener("scroll", () => {
+    const y = content.scrollTop;
+    const delta = y - ultimoScrollFab;
+    if (Math.abs(delta) < 10) return; // ignora tremidas do dedo
+    ultimoScrollFab = y;
+    // Os popovers do cronômetro/lembretes usam o atributo `hidden` — sem o :not eles
+    // contariam como "aberto" o tempo todo e os FABs nunca sumiriam.
+    const abertoAlgum = document.querySelector("#chat-panel:not(.oculto), .cf-pop:not([hidden]), .lf-pop:not([hidden])");
+    // Cronômetro RODANDO nunca some: ali o botão não é atalho, é mostrador — é onde o
+    // usuário lê o tempo e pausa. Esconder o relógio em uso é perder informação.
+    const cronoAtivo = !!document.querySelector("#crono-fab.ativo");
+    // Some ao rolar PARA BAIXO; volta ao rolar PARA CIMA (delta < 0 zera a classe aqui
+    // mesmo). Nada de voltar por tempo: rolar para baixo e parar quer dizer "estou lendo", e
+    // reaparecer sozinho poria os botões de volta justamente sobre o trecho onde o usuário
+    // parou. Quem decide é o gesto para cima — e a troca de tela também revela (mostrarFabs
+    // no início desta função), então eles nunca ficam presos escondidos.
+    document.body.classList.toggle("fabs-ocultos", delta > 0 && y > 90 && !abertoAlgum && !cronoAtivo);
+  }, { passive: true });
+}
+
 function render(preservarScroll = true) {
   esconderTooltip(); // re-render/navegação destrói a âncora — sem isto o portal fica "preso" visível
   const root = document.getElementById("app");
@@ -524,8 +621,16 @@ function render(preservarScroll = true) {
   // Toggle de tema no topbar (move a função que estava só em Configurações).
   root.querySelector("[data-toggle-tema]")?.addEventListener("click", () => store.setConfig({ tema: store.get().config.tema === "escuro" ? "claro" : "escuro" }));
 
-  root.querySelector("[data-mbb-mais]")?.addEventListener("click", () => document.body.classList.toggle("nav-aberta"));
-  root.querySelector("#nav-backdrop")?.addEventListener("click", fecharDrawer);
+  // Gaveta do celular: o botão "Mais" declara o estado (aria-expanded) e o Esc fecha —
+  // antes só o toque no fundo escuro ou num destino fechava, e leitor de tela não sabia
+  // que aquele botão abria alguma coisa.
+  const btnMais = root.querySelector("[data-mbb-mais]");
+  const sincronizarMais = () => btnMais?.setAttribute("aria-expanded", document.body.classList.contains("nav-aberta") ? "true" : "false");
+  btnMais?.setAttribute("aria-controls", "app-sidebar");
+  root.querySelector(".sidebar")?.setAttribute("id", "app-sidebar");
+  sincronizarMais();
+  btnMais?.addEventListener("click", () => { document.body.classList.toggle("nav-aberta"); sincronizarMais(); });
+  root.querySelector("#nav-backdrop")?.addEventListener("click", () => { fecharDrawer(); sincronizarMais(); });
 
   // Abre/fecha os grupos colapsáveis (Estudar/Praticar/Revisar) sem trocar de tela.
   root.querySelectorAll(".nav-sec-head").forEach((h) => {
@@ -553,6 +658,7 @@ function render(preservarScroll = true) {
   iniciarAriaSeg(); // Fase 8 (a11y): role=tab/aria-selected nos .seg (liga o observer 1x)
   setOrbsOffline(!store.iaDisponivel()); // Fase 2: orb informa o estado (apagado sem IA)
   montarOrbs(document); // orb "vivo" (plasma canvas) em todo .orb novo; ignora os já montados
+  ligarAutoOcultarFabs(content); // celular: os 3 flutuantes saem da frente ao rolar
   if (scrollAnterior) {
     // Reforça a restauração em vários momentos: imediato, próximos frames e um tick.
     // Evita o "pulo para o topo" quando o conteúdo recém-renderizado ainda não foi
@@ -610,7 +716,34 @@ async function bootstrap() {
       e.preventDefault();
       abrirPaleta(app);
     }
+    // Esc fecha a gaveta do celular (teclado externo / tablet). Só age se ela estiver aberta
+    // e não houver modal por cima — o modal tem o próprio Esc e vem primeiro.
+    if (e.key === "Escape" && document.body.classList.contains("nav-aberta") && !document.querySelector(".mm-overlay, .modal-overlay, .paleta-overlay")) {
+      document.body.classList.remove("nav-aberta");
+      document.querySelector("[data-mbb-mais]")?.setAttribute("aria-expanded", "false");
+    }
   });
+  // ===== Menus de reticências (<details> com popover): fechar por fora e por Esc =====
+  // Só a Lei Seca tinha isso; nas demais telas o menu contava com o re-render da ação para
+  // sumir — e ações que abrem um modal (Renomear, Anexar link…) deixavam o menu aberto atrás.
+  // No celular ficou evidente: o popover virou uma folha ancorada embaixo, longe do botão,
+  // e tocar fora dele (o gesto natural para dispensar) não fazia nada.
+  const menusAbertos = () =>
+    [...document.querySelectorAll("details[open]")].filter((d) =>
+      d.querySelector(":scope > .doc-mais-pop, :scope > .ls-mais-pop, :scope > .resumo-menu-pop")
+    );
+  document.addEventListener("pointerdown", (e) => {
+    menusAbertos().forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  }, true);
+  // Escolher uma opção fecha o menu. Em fase de bolha, depois do handler da própria ação.
+  document.addEventListener("click", (e) => {
+    const pop = e.target.closest?.(".doc-mais-pop, .ls-mais-pop, .resumo-menu-pop");
+    if (pop) pop.closest("details")?.removeAttribute("open");
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") menusAbertos().forEach((d) => (d.open = false)); });
+
+  ligarOcultarFabsAoDigitar();
+  ligarSeletorDeArquivoNoToque();
   montarCronometro(app); // cronômetro flutuante global (FAB único) que acompanha entre telas
   montarLembretesFab(store); // FAB de lembretes (acima do cronômetro), presente em todas as telas
 
@@ -641,8 +774,17 @@ async function bootstrap() {
   montarPlexus(); // malha "plexus" animada de fundo (atmosfera); respeita reduced-motion
   initTooltips(); // tooltips via portal (imunes a overflow:hidden dos ancestrais)
   setEstiloAlarme(store.get().config.somAlarme); // aplica a preferência de som do alarme
-  // Re-render em qualquer mudança de estado.
-  store.subscribe(() => render());
+  // Re-render em qualquer mudança de estado — EXCETO com o Modo Foco aberto.
+  // Com o overlay no ar, cada tela troca o miolo NO LUGAR (atualizarFocoFlash /
+  // atualizarOverlayFoco / atualizarFocoRev / o `atualizar()` da leitura em foco). Um render
+  // global aqui recriaria o `.fc-foco` e re-dispararia a animação de entrada (`fq-fade`), que
+  // é exatamente o "parece que recarregou" ao passar de card — quase invisível no desktop e
+  // muito evidente no celular, onde reconstruir o app inteiro custa caro. Quem fecha o foco
+  // sempre chama `app.refresh()`, então a tela de trás volta atualizada.
+  store.subscribe(() => {
+    if (document.querySelector(".fc-foco")) return;
+    render();
+  });
   render();
   // Virada do dia / da faixa horária com o app aberto: saudação e data do topo são
   // calculadas no render, então ficariam defasadas. Watcher registrado UMA vez no boot
@@ -723,6 +865,25 @@ bootstrap();
   if (ehDesktop || ehCrono) return;
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   import("virtual:pwa-register")
-    .then(({ registerSW }) => registerSW({ immediate: true }))
+    .then(({ registerSW }) => {
+      // `onNeedReload` é OBRIGATÓRIO aqui. O build usa registerType:"autoUpdate" e, nesse
+      // modo, o cliente do vite-plugin-pwa chama window.location.reload() SOZINHO assim que o
+      // service worker novo ativa (skipWaiting + clientsClaim) — a menos que este callback
+      // exista. No celular esse reload caía no meio de uma geração de IA: o app voltava para a
+      // rota inicial ("hoje") e o app.navigate("flashcards", …) que já tinha rodado era
+      // apagado, dando exatamente o sintoma "gerou e não abriu a tela do resultado". No
+      // desktop (Tauri) não há service worker, por isso o problema só aparecia no celular.
+      // Com o callback, quem decide a hora de recarregar é o usuário.
+      registerSW({
+        immediate: true,
+        onNeedReload: () => {
+          toast("Nova versão do app disponível.", "ok", {
+            acaoLabel: "Atualizar",
+            duracao: 12000,
+            onAcao: () => window.location.reload(),
+          });
+        },
+      });
+    })
     .catch(() => {});
 })();

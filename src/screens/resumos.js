@@ -1,7 +1,7 @@
 // Resumos: anotações em texto rico (negrito, itálico, sublinhado, marcador, cores,
 // listas), vinculadas a uma disciplina e (opcional) a um tópico. Importa de PDF/texto,
 // permite editar e imprimir.
-import { bindActions, toast, toastCarregando, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc } from "../ui.js";
+import { bindActions, toast, toastCarregando, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc, comOcupado, dicaArquivo } from "../ui.js";
 import { ligarImportArquivo } from "../pdf.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
 import { esc, fmtData, todayISO } from "../util.js";
@@ -67,7 +67,7 @@ export default function renderResumos(root, app) {
     ${header("Resumos", "Suas anotações com formatação, por disciplina e tópico", botaoImprimir())}
 
     <div class="barra-acoes">
-      <input id="res-busca" type="search" class="busca-input" placeholder="Buscar nos resumos..." value="${esc(busca)}" title="Busca por texto no título e no conteúdo dos seus resumos (correspondência literal, não semântica)." />
+      <input id="res-busca" type="search" class="busca-input" placeholder="Buscar nos resumos..." value="${esc(busca)}" data-tip="Busca por texto no título e no conteúdo dos seus resumos (correspondência literal, não semântica)." />
       ${filtroTopicosBotaoHTML(st, filtroTop.sel, filtroTop.aberto)}
       <span class="spacer"></span>
       <button class="btn btn-add btn-sm" data-action="toggle-gerar" data-tip="Compila do seu material/flashcards/erros/lei/juris, ou a IA sintetiza por tópico, aula e subtópico.">${icone("plus")} Gerar resumo de…</button>
@@ -110,6 +110,34 @@ export default function renderResumos(root, app) {
     if (texto.trim()) montarMarcacao(host, { store, alvoTipo: "resumo", alvoId: id, texto, topicoId: r.topicoId, tituloFonte: r.titulo });
   });
 
+  // Gerar flashcards / questões / itens C/E a PARTIR de um resumo. Um caminho só para os três,
+  // no padrão do resto do app: pergunta a quantidade, abre um lote, mostra o carregando no
+  // próprio botão e termina abrindo a tela de destino filtrada pelo que acabou de ser gerado.
+  const GER_RESUMO = {
+    flashcards: { pergunta: "Quantos flashcards a IA deve gerar deste resumo?", padrao: 6, rota: "flashcards", msg: "Gerando flashcards…",
+      fn: (id, n, d) => store.gerarFlashcardsDeResumo(id, n, d), ok: (k) => `${plural(k, "flashcard gerado", "flashcards gerados")} do resumo.`, vazio: "A IA não retornou flashcards." },
+    questoes: { pergunta: "Quantas questões a IA deve gerar deste resumo?", padrao: 5, rota: "pratica", msg: "Gerando questões…",
+      fn: (id, n, d) => store.gerarQuestoesDeResumo(id, n, d), ok: (k) => `${plural(k, "questão gerada", "questões geradas")} do resumo.`, vazio: "A IA não retornou questões." },
+    ce: { pergunta: "Quantas afirmações Certo/Errado a IA deve gerar deste resumo?", padrao: 6, rota: "pratica-ce", msg: "Gerando itens Certo/Errado…",
+      fn: (id, n, d) => store.gerarQuestoesCEDeResumo(id, n, d), ok: (k) => `${plural(k, "afirmação Certo/Errado gerada", "afirmações Certo/Errado geradas")} do resumo.`, vazio: "A IA não retornou itens." },
+  };
+
+  async function gerarDoResumo(el, tipo) {
+    const cfg = GER_RESUMO[tipo];
+    if (!store.iaDisponivel()) return avisoIA(app, "Gerar do resumo");
+    const r = await pedirNumero(cfg.pergunta, { padrao: cfg.padrao, min: 1, max: 30, nivel: true });
+    if (!r) return;
+    const id = el.getAttribute("data-id");
+    const res = store.get().resumos.find((x) => x.id === id);
+    const rot = `do resumo «${String((res && res.titulo) || "resumo").slice(0, 40)}»`;
+    const lote = store.iniciarLoteGeracao(rot);
+    const itens = await comOcupado(() => cfg.fn(id, r.n, r.dificuldade), { botao: el, msg: cfg.msg });
+    store.encerrarLoteGeracao();
+    if (itens == null) return; // erro já sinalizado pelo comOcupado
+    toast(itens.length ? cfg.ok(itens.length) : cfg.vazio, itens.length ? "ok" : "erro");
+    if (itens.length) app.navigate(cfg.rota, { lote, loteRotulo: rot });
+  }
+
   bindActions(root, {
     novo: () => abrirEditarResumo(app),
     // Clicar no título abre/fecha a leitura do resumo (o mesmo que "Ler resumo").
@@ -148,45 +176,12 @@ export default function renderResumos(root, app) {
       imprimir("Resumos — Mentor Concurso", printResumos(st, l));
     },
     "mapa-mental": (el) => gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeResumo(el.getAttribute("data-id"))),
-    "ger-flashcards": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards do resumo");
-      const r = await pedirNumero("Quantos flashcards a IA deve gerar deste resumo?", { padrao: 6, min: 1, max: 30, nivel: true });
-      if (!r) return;
-      const { n, dificuldade } = r;
-      el.classList.add("lnk-disabled");
-      try {
-        const cards = await store.gerarFlashcardsDeResumo(el.getAttribute("data-id"), n, dificuldade);
-        toast(cards.length ? `${plural(cards.length, "flashcard gerado", "flashcards gerados")} do resumo.` : "A IA não retornou flashcards.", cards.length ? "ok" : "erro");
-      } catch (e) {
-        toast("Não consegui gerar os flashcards agora. Tente de novo em instantes.", "erro");
-      }
-    },
-    "ger-questoes": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões do resumo");
-      const r = await pedirNumero("Quantas questões a IA deve gerar deste resumo?", { padrao: 5, min: 1, max: 30, nivel: true });
-      if (!r) return;
-      const { n, dificuldade } = r;
-      el.classList.add("lnk-disabled");
-      try {
-        const qs = await store.gerarQuestoesDeResumo(el.getAttribute("data-id"), n, dificuldade);
-        toast(qs.length ? `${plural(qs.length, "questão de múltipla escolha gerada", "questões de múltipla escolha geradas")} do resumo.` : "A IA não retornou questões.", qs.length ? "ok" : "erro");
-      } catch (e) {
-        toast("Não consegui gerar as questões agora. Tente de novo em instantes.", "erro");
-      }
-    },
-    "ger-questoes-ce": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões Certo/Errado do resumo");
-      const r = await pedirNumero("Quantas afirmações Certo/Errado a IA deve gerar deste resumo?", { padrao: 6, min: 1, max: 30, nivel: true });
-      if (!r) return;
-      const { n, dificuldade } = r;
-      el.classList.add("lnk-disabled");
-      try {
-        const qs = await store.gerarQuestoesCEDeResumo(el.getAttribute("data-id"), n, dificuldade);
-        toast(qs.length ? `${plural(qs.length, "afirmação Certo/Errado gerada", "afirmações Certo/Errado geradas")} do resumo.` : "A IA não retornou itens.", qs.length ? "ok" : "erro");
-      } catch (e) {
-        toast("Não consegui gerar agora. Tente de novo em instantes.", "erro");
-      }
-    },
+    // Gerar do resumo segue o padrão do app: comOcupado (spinner no botão + toast de
+    // carregando), LOTE de geração e, no fim, ABRE a tela do resultado só com o recém-gerado.
+    // Antes daqui saía apenas um toast e o botão ficava desabilitado até o próximo render.
+    "ger-flashcards": (el) => gerarDoResumo(el, "flashcards"),
+    "ger-questoes": (el) => gerarDoResumo(el, "questoes"),
+    "ger-questoes-ce": (el) => gerarDoResumo(el, "ce"),
     "ir-dossie": (el) => app.navigate("edital", { dossieTopicoId: el.getAttribute("data-top") }),
     // ---- revisão espaçada do resumo ----
     "prog-rev-resumo": async (el) => {
@@ -393,27 +388,27 @@ function formHTML(st, e) {
         <label>Tópico <span class="ob-tag-opt">opcional</span> <select id="res-top">${topicoOptions(st, discId, sel.topicoId)}</select></label>
       </div>
       <div class="rt-toolbar">
-        <button type="button" class="rt-btn" data-cmd="formatBlock" data-val="h3" title="Título de seção">${icone("heading")}</button>
-        <button type="button" class="rt-btn" data-cmd="bold" title="Negrito">${icone("bold")}</button>
-        <button type="button" class="rt-btn" data-cmd="italic" title="Itálico">${icone("italic")}</button>
-        <button type="button" class="rt-btn" data-cmd="underline" title="Sublinhado">${icone("underline")}</button>
-        <button type="button" class="rt-btn" data-cmd="strikeThrough" title="Tachado">${icone("strikethrough")}</button>
+        <button type="button" class="rt-btn" data-cmd="formatBlock" data-val="h3" data-tip="Título de seção">${icone("heading")}</button>
+        <button type="button" class="rt-btn" data-cmd="bold" data-tip="Negrito">${icone("bold")}</button>
+        <button type="button" class="rt-btn" data-cmd="italic" data-tip="Itálico">${icone("italic")}</button>
+        <button type="button" class="rt-btn" data-cmd="underline" data-tip="Sublinhado">${icone("underline")}</button>
+        <button type="button" class="rt-btn" data-cmd="strikeThrough" data-tip="Tachado">${icone("strikethrough")}</button>
         <span class="rt-sep"></span>
-        <span class="rt-grupo" title="Cor do marcador">
-          ${CORES_MARCA.map(([c, n]) => `<button type="button" class="rt-swatch" data-cmd="hilite" data-val="${c}" title="Marcador ${n}" style="background:${c}"></button>`).join("")}
+        <span class="rt-grupo" data-tip="Cor do marcador">
+          ${CORES_MARCA.map(([c, n]) => `<button type="button" class="rt-swatch" data-cmd="hilite" data-val="${c}" data-tip="Marcador ${n}" style="background:${c}"></button>`).join("")}
         </span>
         <span class="rt-sep"></span>
-        <span class="rt-grupo" title="Cor do texto">A
-          ${CORES_TEXTO.map(([c, n]) => `<button type="button" class="rt-swatch" data-cmd="forecolor" data-val="${c}" title="Texto ${n}" style="background:${c}"></button>`).join("")}
+        <span class="rt-grupo" data-tip="Cor do texto">A
+          ${CORES_TEXTO.map(([c, n]) => `<button type="button" class="rt-swatch" data-cmd="forecolor" data-val="${c}" data-tip="Texto ${n}" style="background:${c}"></button>`).join("")}
         </span>
         <span class="rt-sep"></span>
-        <button type="button" class="rt-btn" data-cmd="insertUnorderedList" title="Lista (tópicos)">${icone("list")}</button>
-        <button type="button" class="rt-btn" data-cmd="insertOrderedList" title="Lista numerada">${icone("list-ordered")}</button>
-        <button type="button" class="rt-btn" data-cmd="outdent" title="Subir nível (menos recuo)">${icone("indent-decrease")}</button>
-        <button type="button" class="rt-btn" data-cmd="indent" title="Sub-tópico (mais recuo)">${icone("indent-increase")}</button>
-        <button type="button" class="rt-btn" data-cmd="removeFormat" title="Limpar formatação">${icone("eraser")}</button>
+        <button type="button" class="rt-btn" data-cmd="insertUnorderedList" data-tip="Lista (tópicos)">${icone("list")}</button>
+        <button type="button" class="rt-btn" data-cmd="insertOrderedList" data-tip="Lista numerada">${icone("list-ordered")}</button>
+        <button type="button" class="rt-btn" data-cmd="outdent" data-tip="Subir nível (menos recuo)">${icone("indent-decrease")}</button>
+        <button type="button" class="rt-btn" data-cmd="indent" data-tip="Sub-tópico (mais recuo)">${icone("indent-increase")}</button>
+        <button type="button" class="rt-btn" data-cmd="removeFormat" data-tip="Limpar formatação">${icone("eraser")}</button>
         <span class="spacer"></span>
-        <label class="btn btn-ghost btn-sm btn-file" data-tip="Importar texto de um PDF ou arquivo .txt para o editor. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+        <label class="btn btn-ghost btn-sm btn-file" data-tip="${dicaArquivo("Importar texto de um PDF ou arquivo .txt para o editor.")}">${icone("paperclip")} Importar de arquivo
           <input id="res-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
         </label>
       </div>
@@ -440,7 +435,7 @@ function resumoHTML(st, r) {
   return `
     <div class="card resumo-item ${vencida ? "resumo-revisar" : ""}" data-foco-id="${r.id}">
       <div class="resumo-head">
-        <b class="resumo-titulo" data-action="ler-resumo" data-id="${r.id}" role="button" tabindex="0" title="Abrir/fechar a leitura do resumo">${esc(r.titulo)}</b>
+        <b class="resumo-titulo" data-action="ler-resumo" data-id="${r.id}" role="button" tabindex="0" data-tip="Abrir/fechar a leitura do resumo">${esc(r.titulo)}</b>
         ${r.origem && r.origem.tipo === "ia-sintese" ? `<span class="selo selo-amarelo">${icone("bot")} síntese IA · confira</span>` : r.origem && (r.origem.tipo === "ia" || r.origem.tipo === "compilado") ? `<span class="selo selo-amarelo">${icone("bot")} rascunho · confira</span>` : ""}
         ${vinc}
         <span class="spacer"></span>
@@ -448,7 +443,7 @@ function resumoHTML(st, r) {
       </div>
       <div class="resumo-acoes">
         <details class="resumo-menu">
-          <summary class="lnk" title="Mais ações">${icone("ellipsis")}</summary>
+          <summary class="lnk" data-tip="Mais ações">${icone("ellipsis")}</summary>
           <div class="resumo-menu-pop">
             ${
               !r.revisao && temTexto

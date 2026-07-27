@@ -109,7 +109,7 @@ export function estudarCorpoHTML(store, st, tipo, r) {
   const escopoLeiHTML = tipo !== "lei" ? "" : `<div class="estudar-escopo ${S._escopoAberto ? "aberto" : ""}">
       <span class="ee-label">${icone("target")} O que estudar</span>
       <button class="est-escopo-btn ${filtrado ? "on" : ""}" data-action="estudar-escopo-toggle" data-tip="Toque para escolher a lei e, se quiser, refinar por parte, artigos ou incidência.">
-        ${icone("book-open")}<span class="ee-resumo"><b class="ee-lei">${esc(leiNome)}</b><span class="ee-refino"> · ${esc(refinoPartes.join(" · "))}</span></span><span class="escopo-cont">${plural(nEsc, "artigo", "artigos")}</span><span class="ee-alterar">Alterar</span>${icone("chevron-down")}
+        ${icone("book-open")}<span class="ee-resumo"><b class="ee-lei">${esc(leiNome)}</b><span class="ee-refino">${refinoPartes.length ? (leiNome ? " · " : "") + esc(refinoPartes.join(" · ")) : ""}</span></span><span class="escopo-cont">${plural(nEsc, "artigo", "artigos")}</span><span class="ee-alterar">Alterar</span>${icone("chevron-down")}
       </button>
       ${S._escopoAberto ? `<div class="est-escopo-pop">
         <div class="ee-sec-lbl">${icone("book-open")} Lei a estudar</div>

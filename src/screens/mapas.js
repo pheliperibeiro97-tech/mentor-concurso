@@ -95,13 +95,19 @@ export default function renderMapas(root, app) {
 
   const cardMapa = (m) => `<div class="card mapa-card">
       <div class="mapa-card-top">
-        <input type="checkbox" class="mapa-chk" data-id="${m.id}" title="Selecionar para imprimir" />
+        <input type="checkbox" class="mapa-chk" data-id="${m.id}" data-tip="Selecionar para imprimir" aria-label="Selecionar para imprimir" />
         <b class="mapa-titulo" data-action="abrir" data-id="${m.id}" role="button" tabindex="0" data-tip="Abrir o mapa (imprimir, agendar revisão, gerar flashcards/questões).">${esc(m.titulo)}<span class="mapa-abrir-ico">${icone("external-link")}</span></b>${seloOrig(m)}${m.revisao ? ` <span class="muted small">· próxima revisão ${fmtData(m.revisao.proxima)}</span>` : ""}
       </div>
       <div class="barra-acoes">
         ${vincChip(m)}
         <span class="spacer"></span>
-        <button class="lnk lnk-danger" data-action="remover" data-id="${m.id}">${icone("x")} Remover</button>
+        <details class="doc-mais mapa-mais">
+          <summary class="lnk" data-tip="Mais ações para este mapa.">${icone("ellipsis")}</summary>
+          <div class="doc-mais-pop" role="menu">
+            <button class="menu-item" data-action="abrir" data-id="${m.id}"><span class="menu-ico">${icone("external-link")}</span> Abrir mapa</button>
+            <button class="menu-item lnk-danger" data-action="remover" data-id="${m.id}"><span class="menu-ico">${icone("x")}</span> Remover</button>
+          </div>
+        </details>
       </div>
     </div>`;
 
@@ -115,8 +121,8 @@ export default function renderMapas(root, app) {
       return `<optgroup label="${esc(d.nome)}"><option value="disc:${d.id}" ${filtroTop === "disc:" + d.id ? "selected" : ""}>Toda a disciplina (${esc(d.nome)})</option>${tops.map((t) => `<option value="${t.id}" ${filtroTop === t.id ? "selected" : ""}>${esc(t.nome)}</option>`).join("")}</optgroup>`;
     })
     .join("");
-  const filtroHTML = `<label class="inline">Filtrar:
-      <select id="mapa-filtro">
+  const filtroHTML = `<label class="inline mapa-filtro-lbl"><span class="mapa-filtro-txt">Filtrar:</span>
+      <select id="mapa-filtro" aria-label="Filtrar mapas por tópico">
         <option value="" ${filtroTop === "" ? "selected" : ""}>Todos os tópicos</option>
         ${grupos}
         <option value="sem" ${filtroTop === "sem" ? "selected" : ""}>Sem tópico</option>
@@ -126,7 +132,7 @@ export default function renderMapas(root, app) {
   // Topo: IMPRIMIR — abre o MODO SELEÇÃO (os checkboxes só aparecem aí; fora disso ficam ocultos).
   const btnImprimirPadrao = `<button class="btn btn-ghost btn-sm" data-action="imprimir-modo" data-tip-pos="bottom" data-tip="Selecionar mapas para imprimir (ou todos do filtro).">${icone("printer")} Imprimir</button>`;
   const imprimirBtn = `<span class="mapa-print-actions">${btnImprimirPadrao}</span>
-    <input id="mapa-file" type="file" accept=".pdf,image/*,application/pdf" hidden />`;
+    <input id="mapa-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" hidden />`;
   // Gerar fica na MESMA LINHA de "Todos os mapas".
   const gerarBtn = `<button class="btn btn-add btn-sm" data-action="gerar-mapa" data-tip="Criar um mapa mental: por IA (tópico/material/resumo/tema/arquivo) ou colando uma estrutura escrita.">${icone("plus")} Gerar mapa mental</button>`;
 
@@ -140,7 +146,20 @@ export default function renderMapas(root, app) {
       ${maps.length ? filtroHTML : ""}
       ${gerarBtn}
     </div>
-    ${filtrados.length ? filtrados.map(cardMapa).join("") : vazio(maps.length ? "Nenhum mapa neste filtro" : "Nenhum mapa mental ainda", maps.length ? "Troque o filtro ou gere um novo mapa." : "Toque em Gerar mapa mental (tópico, material, resumo, tema livre, arquivo ou estrutura escrita), ou gere pelo Dossiê/chat.", iconMapa)}
+    ${
+      filtrados.length
+        ? filtrados.map(cardMapa).join("")
+        // O 2º parâmetro de vazio() é o slot do BOTÃO — aqui ia texto de instrução, que saía
+        // como frase solta onde as outras telas mostram uma ação. A instrução passou para a
+        // 2ª linha da mensagem (subtítulo) e o slot recebeu o mesmo botão da barra.
+        : maps.length
+          ? vazio("Nenhum mapa neste filtro\nTroque o filtro ou gere um novo mapa.", gerarBtn, iconMapa)
+          : vazio(
+              "Nenhum mapa mental ainda\nGere a partir de um tópico, material, resumo, tema livre ou arquivo — ou peça pelo Dossiê e pelo Mentor.",
+              gerarBtn,
+              iconMapa
+            )
+    }
   `;
 
   const abrir = (id) => { const m = store.get().mapasMentais.find((x) => x.id === id); if (m) abrirMapaCompleto(store, app, m); };

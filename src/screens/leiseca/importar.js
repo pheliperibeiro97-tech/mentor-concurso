@@ -2,7 +2,7 @@
 // conferir atualização (diff), adicionar indicações (colar/PDF/material, com preview
 // editável) e marcar "o que mais cai" (IA/estatística).
 // (Extraído mecanicamente de leiseca.js — comportamento idêntico.)
-import { abrirJanelaFluxo, toast, toastCarregando, avisoIA, comOcupado, ligarDropZone, plural } from "../../ui.js";
+import { abrirJanelaFluxo, toast, toastCarregando, avisoIA, comOcupado, ligarDropZone, plural, dicaArquivo } from "../../ui.js";
 import { ligarImportArquivo } from "../../pdf.js";
 import { esc } from "../../util.js";
 import { icone } from "../../icones.js";
@@ -43,7 +43,7 @@ art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
         }
       </div>
       ${tipo === "juris" ? `<label class="u-block u-mb-8">Categoria ${categoriaPickerHTML("", "add-cat")}</label>` : ""}
-      <label class="btn btn-ghost btn-file u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-file u-mb-8" data-tip-pos="cima-esq" data-tip="${dicaArquivo("Importar de um PDF ou arquivo .txt.")}">${icone("paperclip")} Importar de arquivo
         <input id="add-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
       ${instrHTML}
@@ -278,7 +278,7 @@ export function abrirImportarLei(app) {
           console.error("[importar-lei]", e);
           estado.processando = false;
           estado.msg = e && e.code === "SEM_DESKTOP"
-            ? "A busca automática no Planalto só funciona no app desktop. Abra a página oficial no navegador, copie o texto (Ctrl+A, Ctrl+C) e adicione ao campo acima."
+            ? "A busca automática só funciona no aplicativo instalado. Abra a página oficial da lei, selecione todo o texto e copie; depois cole no campo acima."
             : (e && e.message) || "Não consegui buscar a página. Confira o link ou traga o texto.";
           toast(estado.msg, "erro");
           rerender();
@@ -320,7 +320,12 @@ export function abrirImportarLei(app) {
 export function abrirConferirAtualizacao(app) {
   const { store } = app;
   const normas = store.normasComFonte("lei");
-  const estado = { etapa: "form", processando: false, msg: "", diff: null, form: { norma: normas[0]?.norma || "", url: normas[0]?.url || "", html: "", intervalo: "" } };
+  // A busca automática na fonte oficial usa o cliente HTTP do Tauri e rejeita com SEM_DESKTOP
+  // no navegador/celular. Sem este gate, o campo de link vinha PREENCHIDO, a validação
+  // passava e a conferência falhava SEMPRE no telefone — sem indicar o caminho que funciona
+  // (colar o texto). Mesmo tratamento que abrirImportarLei já fazia.
+  const ehDesktop = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
+  const estado = { etapa: "form", processando: false, msg: "", diff: null, form: { norma: normas[0]?.norma || "", url: ehDesktop ? normas[0]?.url || "" : "", html: "", intervalo: "" } };
   const trunc = (s, n = 160) => { s = String(s || ""); return s.length > n ? s.slice(0, n) + "…" : s; };
 
   const formHTML = () => {
@@ -331,7 +336,7 @@ export function abrirConferirAtualizacao(app) {
       <details class="ed-ajuda"><summary>Como funciona a conferência</summary>
         <div class="ed-ajuda-corpo">
           <p>Reconsulta a <b>fonte oficial</b> e compara com o texto guardado: mostra o que <b>mudou</b>, foi <b>adicionado</b> ou <b>revogado</b> (diff mecânico, sem IA).</p>
-          <p>No <b>desktop</b> a busca é automática; no navegador, traga o <b>texto atualizado</b> da lei.</p>
+          <p>${ehDesktop ? "No <b>aplicativo instalado</b> a busca é automática." : "Neste aparelho, abra a página oficial da lei, <b>selecione tudo</b> (toque longo) e <b>copie</b>; depois cole o texto no campo abaixo."}</p>
         </div></details>
       ${normas.length ? `<div class="form-row">
         <label style="flex:1 1 260px">Norma (importada com origem oficial)
@@ -339,10 +344,10 @@ export function abrirConferirAtualizacao(app) {
         <label style="flex:0 1 160px">Artigos (opcional)
           <input id="ca-intervalo" value="${esc(estado.form.intervalo)}" placeholder="ex.: 1-30" /></label>
       </div>
-      <label class="u-block u-mt-4 u-mb-8">Link da fonte (edite se mudou)
-        <input id="ca-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>` : `<p class="muted small">Nenhuma lei foi importada com <b>origem oficial</b> ainda. Traga abaixo o texto atualizado e informe a norma no campo.</p>
+      ${ehDesktop ? `<label class="u-block u-mt-4 u-mb-8">Link da fonte (edite se mudou)
+        <input id="ca-url" value="${esc(estado.form.url)}" placeholder="https://www.planalto.gov.br/…" /></label>` : ""}` : `<p class="muted small">Nenhuma lei foi importada com <b>origem oficial</b> ainda. Traga abaixo o texto atualizado e informe a norma no campo.</p>
       <label class="u-block u-mt-4 u-mb-8">Norma <input id="ca-norma-txt" placeholder="Ex.: Lei 8.112/1990" value="${esc(estado.form.norma)}" /></label>`}
-      <label class="u-block u-mt-4 u-mb-8">Ou traga o texto/HTML atualizado (no navegador)
+      <label class="u-block u-mt-4 u-mb-8">${ehDesktop ? "Ou traga o texto/HTML atualizado (no navegador)" : "Cole aqui o texto atualizado da lei"}
         <textarea id="ca-html" rows="5" placeholder="texto atualizado da página oficial">${esc(estado.form.html)}</textarea></label>
       ${estado.processando ? `<div class="prova-status lendo u-flex u-mt-8"><span class="mini-spin"></span> Consultando a fonte oficial e comparando com o texto guardado…</div>` : ""}
       ${!estado.processando && estado.msg ? `<p class="${/desktop|traga|adicione/i.test(estado.msg) ? "muted" : "erro-msg"} small u-m-0 u-mt-8">${esc(estado.msg)}</p>` : ""}
@@ -398,7 +403,7 @@ export function abrirConferirAtualizacao(app) {
         estado.form.html = corpo.querySelector("#ca-html")?.value || "";
         estado.form.intervalo = corpo.querySelector("#ca-intervalo")?.value?.trim() || "";
         if (!estado.form.norma) { estado.msg = "Informe a norma."; return rerender(); }
-        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = "Traga o texto atualizado ou informe o link da fonte."; return rerender(); }
+        if (!estado.form.html.trim() && !estado.form.url) { estado.msg = ehDesktop ? "Traga o texto atualizado ou informe o link da fonte." : "Cole o texto atualizado da lei no campo acima."; return rerender(); }
         estado.processando = true; estado.msg = ""; rerender();
         const fimConf = toastCarregando("Consultando a fonte oficial…");
         try {
@@ -416,7 +421,7 @@ export function abrirConferirAtualizacao(app) {
           console.error("[conferir-atualizacao]", e);
           estado.processando = false;
           estado.msg = e && e.code === "SEM_DESKTOP"
-            ? "A busca automática só funciona no app desktop. Abra a página oficial, copie o texto (Ctrl+A, Ctrl+C) e adicione acima."
+            ? "A busca automática só funciona no aplicativo instalado. Abra a página oficial da lei, selecione todo o texto e copie; depois cole no campo acima."
             : (e && e.message) || "Não consegui conferir. Confira o link ou traga o texto.";
           toast(estado.msg, "erro");
           rerender();

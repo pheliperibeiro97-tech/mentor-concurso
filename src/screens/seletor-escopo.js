@@ -19,6 +19,9 @@ const TIPOS = {
   resumo: { rotulo: "resumo", padrao: 1, pedeQuantidade: false, gerar: (s, e) => s.gerarResumoDeEscopo(e), extrair: null },
 };
 
+// Tela que mostra o resultado de cada tipo (para onde navegar depois de gerar).
+const DESTINO = { flashcards: "flashcards", questoes: "pratica", ce: "pratica-ce", mapa: "mapas", resumo: "resumos" };
+
 // Contexto (disciplina · tópico) do material, para o usuário se situar.
 function contextoDoMaterial(st, doc) {
   const tid = doc && (doc.topicoId || (Array.isArray(doc.topicoIds) && doc.topicoIds[0]));
@@ -36,6 +39,20 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
   const estado = { docId: "", matBloco: "", n: cfg.padrao, dificuldade: "medio" };
   let ocupado = false;
   let rerender = () => {};
+  let fecharJanela = () => {};
+
+  // Rótulo do lote: a tela de destino abre mostrando SÓ o que acabou de ser gerado.
+  const rotuloLote = (escopo) => `de «${String((escopo && escopo.contexto) || "material").slice(0, 40)}»`;
+
+  // Terminou de gerar/extrair: fecha a janela e ABRE a tela do resultado, como fazem os demais
+  // fluxos (documentos.js, revtopico.js, mapa-mental.js). Antes daqui saía só um toast e um
+  // app.refresh() com a janela ainda aberta por cima — no computador dava para ver a lista
+  // atrás da caixa; no celular a janela ocupa a tela toda e a impressão era de que nada
+  // acontecera depois de gerar.
+  function abrirResultado(lote, rot) {
+    fecharJanela();
+    app.navigate(DESTINO[tipo] || "flashcards", { lote, loteRotulo: rot });
+  }
 
   // Escopo = 1 material (com bloco/subtópico opcional).
   function escopoAtual() {
@@ -51,16 +68,20 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     ocupado = true;
     rerender();
     toast(`Gerando ${cfg.rotulo} com IA…`);
+    const rot = rotuloLote(escopo);
+    const lote = store.iniciarLoteGeracao(rot);
+    let qtd = 0;
     try {
       const res = await cfg.gerar(store, escopo, estado.n, estado.dificuldade);
-      const qtd = Array.isArray(res) ? res.length : res ? 1 : 0;
+      qtd = Array.isArray(res) ? res.length : res ? 1 : 0;
       toast(qtd ? `Gerei ${qtd} ${cfg.rotulo} (IA).` : "A IA não retornou nada.", qtd ? "ok" : "erro");
-      app.refresh();
     } catch (e) {
       toast(humanizarErroIA(e), "erro");
     } finally {
+      store.encerrarLoteGeracao();
       ocupado = false;
-      rerender();
+      if (qtd) abrirResultado(lote, rot);
+      else rerender();
     }
   }
 
@@ -71,16 +92,20 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     ocupado = true;
     rerender();
     toast(`Extraindo ${cfg.rotulo} do material…`);
+    const rot = rotuloLote(escopo);
+    const lote = store.iniciarLoteGeracao(rot);
+    let qtd = 0;
     try {
       const res = await cfg.extrair(store, escopo);
-      const qtd = Array.isArray(res) ? res.length : 0;
+      qtd = Array.isArray(res) ? res.length : 0;
       toast(qtd ? `Extraí ${qtd} ${cfg.rotulo} do material.` : "Não encontrei itens prontos no material.", qtd ? "ok" : "erro");
-      app.refresh();
     } catch (e) {
       toast("A IA não conseguiu extrair agora. Tente de novo em instantes.", "erro");
     } finally {
+      store.encerrarLoteGeracao();
       ocupado = false;
-      rerender();
+      if (qtd) abrirResultado(lote, rot);
+      else rerender();
     }
   }
 
@@ -118,6 +143,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     titulo,
     render: (corpo, ctx) => {
       rerender = ctx.rerender;
+      fecharJanela = ctx.fechar;
       const st = store.get();
       const escopo = escopoAtual();
       const temConteudo = !!(escopo && escopo.texto);

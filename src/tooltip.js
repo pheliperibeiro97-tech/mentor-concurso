@@ -17,6 +17,36 @@ function ehToque() {
   return typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
 }
 
+// ===== Celular: a dica NÃO ensina tecla =====
+// Num aparelho de toque não existe teclado, mas o balão aparece assim mesmo — porque no toque
+// é o TAP que o exibe (ver initTooltips). Resultado: tocar na seta mostrava "Anterior (←)",
+// tocar numa nota mostrava "Atalho 1", no × mostrava "Sair (Esc)"… O bloco `@media (hover:none)`
+// do CSS não alcança nada disso: o texto vem de data-tip e é pintado no portal .tip-portal.
+// Aqui o texto é limpo ANTES de exibir; se só sobrar o atalho, o balão nem abre.
+const RE_TECLA = /(?:\bEsc\b|\bEnter\b|\bTab\b|Espa[çc]o|\bShift\b|\bCtrl\b|\bCmd\b|⌘|[←→↑↓]|\bteclas?\b|\batalhos?\b)/i;
+
+export function dicaParaToque(txt) {
+  let s = String(txt || "");
+  // Dica que é SÓ o nome da tecla ("Espaço", "Esc", "Enter") não sobra nada de útil no toque.
+  if (/^\s*(?:Esc|Enter|Tab|Espa[çc]o|Shift|Ctrl|Cmd|⌘|[←→↑↓])\s*$/i.test(s)) return "";
+  // 1) parênteses que só ensinam a tecla: "(Esc)", "(←)", "(Ctrl+P)", "(tecla 2 ou Enter)".
+  //    Parênteses com conteúdo normal ("(fica aqui, sem sair da tela)") ficam intactos.
+  s = s.replace(/\s*[(（][^)）]{0,32}[)）]/g, (m) => (RE_TECLA.test(m) ? "" : m));
+  // 2) "Atalho 1", "Atalho: C", "Atalho 1 · …" em qualquer posição.
+  s = s.replace(/(^|[\s·•|,;—-])atalhos?\s*:?\s*[A-Za-z0-9](?:\s*[–-]\s*[A-Za-z0-9])?\s*[·•|,;]?/gi, "$1");
+  // 3) frases inteiras dedicadas ao teclado ("Espaço vira, 1–4 nota, Esc sai."). Só com 2+
+  //    frases, para nunca esvaziar uma dica de uma frase só.
+  const frases = s.split(/([.!?])\s+/).reduce((acc, p, i, arr) => {
+    if (i % 2 === 0) acc.push(p + (arr[i + 1] || ""));
+    return acc;
+  }, []);
+  if (frases.length > 1) {
+    const mantidas = frases.filter((f) => !RE_TECLA.test(f));
+    if (mantidas.length) s = mantidas.join(" ");
+  }
+  return s.replace(/\s{2,}/g, " ").replace(/^[\s·•|,;–—-]+/, "").replace(/[\s·•|]+$/, "").trim();
+}
+
 function ensureEl() {
   if (!tipEl) {
     tipEl = document.createElement("div");
@@ -42,7 +72,10 @@ export function esconderTooltip() {
 }
 
 function posicionar(alvo) {
-  const txt = alvo.getAttribute("data-tip");
+  const bruto = alvo.getAttribute("data-tip");
+  if (!bruto) return esconder();
+  // No toque, a dica perde a parte que ensina tecla; se não sobrar nada, nem abre o balão.
+  const txt = ehToque() ? dicaParaToque(bruto) : bruto;
   if (!txt) return esconder();
   alvoAtual = alvo;
   const pos = alvo.getAttribute("data-tip-pos") || "cima";
@@ -114,6 +147,13 @@ export function initTooltips() {
         posicionar(alvo);
         if (toqueTimer) clearTimeout(toqueTimer);
         toqueTimer = setTimeout(esconder, 2500);
+        // Se o toque ABRIU um painel (cronômetro, lembretes, Mentor, janela/modal), o balão
+        // ficaria flutuando POR CIMA do que acabou de abrir — explicando um botão que o
+        // usuário já acionou. Nesse caso ele some na hora. Verificado no frame seguinte,
+        // depois de o handler do próprio botão rodar.
+        setTimeout(() => {
+          if (document.querySelector(".cf-pop:not([hidden]), .lf-pop:not([hidden]), #chat-panel:not(.oculto), .mm-overlay, .modal-overlay, .paleta-overlay")) esconder();
+        }, 60);
         return; // deixa a ação (clique no botão) prosseguir; mantém o balão visível
       }
       esconder(); // tap fora de qualquer [data-tip]

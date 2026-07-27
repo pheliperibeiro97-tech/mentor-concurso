@@ -210,10 +210,15 @@ export function escolher(msg, opcoes, opts = {}) {
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-overlay";
+    // Lista longa (vincular tópico chega a 300 opções) ganha um campo de BUSCA. Sem ele, o
+    // único caminho era rolar um contêiner de ~55vh — inviável no celular.
+    const comBusca = opts.lista && opcoes.length > 12;
     const corpo = opts.lista
-      ? `<div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto;margin-top:8px">
-          ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`).join("")}
-        </div>`
+      ? `${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
+        <div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55dvh;overflow:auto;margin-top:8px">
+          ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}" data-busca="${esc(((o.label || "") + " " + (o.desc || "")).toLowerCase())}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`).join("")}
+        </div>
+        ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}`
       : `<div class="modal-acoes u-wrap">
           ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"}" data-v="${esc(o.value)}">${esc(o.label)}</button>`).join("")}
         </div>`;
@@ -227,6 +232,22 @@ export function escolher(msg, opcoes, opts = {}) {
     const fim = (v) => { soltarFoco(); fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
     const onKey = (e) => { if (e.key === "Escape") fim(null); };
     document.addEventListener("keydown", onKey);
+    // Filtro incremental da lista longa (não re-renderiza: só esconde o que não casa).
+    const busca = ov.querySelector(".escolha-busca");
+    if (busca) {
+      const itens = [...ov.querySelectorAll(".escolha-item")];
+      const semNada = ov.querySelector(".escolha-vazia");
+      busca.addEventListener("input", () => {
+        const t = busca.value.trim().toLowerCase();
+        let n = 0;
+        itens.forEach((b) => {
+          const casa = !t || b.getAttribute("data-busca").includes(t);
+          b.hidden = !casa;
+          if (casa) n++;
+        });
+        if (semNada) semNada.hidden = n > 0;
+      });
+    }
     ov.addEventListener("click", (e) => {
       const b = e.target.closest("[data-v]");
       if (!b && e.target !== ov) return;
@@ -239,6 +260,15 @@ export function escolher(msg, opcoes, opts = {}) {
 // fundo escurecido, cabeçalho com Tela cheia + Fechar, corpo rolável, Esc/clique-fora fecham.
 // `corpoHTML` é o conteúdo; `aoMontar(janelaEl, fechar)` permite ligar listeners aos elementos
 // internos (botões/inputs do formulário). Devolve { overlay, fechar }.
+// A janela ja se anuncia pelo titulo do cabecalho, e varios formularios repetem exatamente o
+// mesmo texto num <h3> logo abaixo ("Novo resumo" duas vezes em 20px). Some com a repeticao —
+// e SO com ela: titulos que dizem outra coisa ("Revisar 3 erros antes de adicionar", "Editar
+// flashcard") continuam, porque acrescentam informacao.
+function tirarTituloRepetido(overlay, titulo) {
+  const alvo = overlay.querySelector(".mm-corpo > h3:first-child, .mm-corpo > * > h3:first-child");
+  if (alvo && alvo.textContent.trim() === String(titulo).trim()) alvo.remove();
+}
+
 export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, semTelaCheia = false, aoMontar } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "mm-overlay";
@@ -253,6 +283,7 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, se
       <div class="mm-corpo">${corpoHTML}</div>
     </div>`;
   document.body.appendChild(overlay);
+  tirarTituloRepetido(overlay, titulo);
   const soltarFoco = prenderFoco(overlay); // Fase 8: focus-trap (o autofocus abaixo refina o alvo)
   const fechar = () => { soltarFoco(); fecharAnimado(overlay); document.removeEventListener("keydown", onKey); };
   const onKey = (e) => { if (e.key === "Escape") fechar(); };
@@ -274,6 +305,15 @@ export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, se
     if (primeiro && document.body.contains(overlay)) primeiro.focus();
   }, 40);
   return { overlay, fechar };
+}
+
+// Dica de um botão de ARQUIVO. A frase "você também pode arrastar o arquivo aqui" só faz
+// sentido com mouse — no celular não há arrastar-e-soltar de arquivo, e a instrução vira
+// ruído (o balão aparece ao TOCAR no botão, então o usuário lê algo impossível bem na hora
+// de agir). Uso: data-tip="${dicaArquivo("Importar de um PDF ou .txt.")}"
+export function dicaArquivo(base) {
+  const temMouse = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: hover)").matches;
+  return temMouse ? `${base} Você também pode arrastar o arquivo aqui.` : base;
 }
 
 // Arrastar-para-reordenar genérico. Torna cada item [data-drag-id] dentro de `container`
@@ -331,7 +371,7 @@ export function abrirJanelaFluxo({ titulo = "", telaCheia = false, render, handl
     telaCheia,
     aoMontar: (overlay, fechar) => {
       const corpo = overlay.querySelector(".mm-corpo");
-      const rerender = () => render(corpo, { rerender, fechar });
+      const rerender = () => { render(corpo, { rerender, fechar }); tirarTituloRepetido(overlay, titulo); };
       if (handlers) bindActions(corpo, handlers({ rerender, fechar, corpo }));
       rerender();
     },

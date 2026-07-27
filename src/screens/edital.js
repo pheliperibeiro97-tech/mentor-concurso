@@ -1,6 +1,6 @@
 // Tela Edital: gerenciar disciplinas, tópicos e destaques a qualquer momento
 // (o onboarding monta a estrutura inicial; aqui você acrescenta/edita depois).
-import { bindActions, toast, toastCarregando, comOcupado, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar } from "../ui.js";
+import { bindActions, toast, toastCarregando, comOcupado, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar, dicaArquivo } from "../ui.js";
 import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
@@ -197,7 +197,7 @@ function oficialHTML(store, recolar = false, diff = null) {
     return `<div class="card oficial-card oficial-card-mini">
       <div class="plano-h"><h2>Checklist da banca</h2><span class="muted small">opcional</span></div>
       <p class="muted small">Tem o <b>edital da banca</b>? Traga abaixo para <b>validar a sua cobertura</b> (o que o seu edital já cobre e o que ficou de fora). <b>Não muda a sua estrutura</b>; é só uma conferência. O casamento é pelo nome + sinônimos () de cada tópico.</p>
-      <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de PDF ou .txt. Pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+      <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="${dicaArquivo("Importar de PDF ou .txt.")}">${icone("paperclip")} Importar de arquivo<input id="oficial-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
       <textarea id="oficial-texto" rows="5" placeholder="${esc("Ex.:\nDIREITO CONSTITUCIONAL\nPrincípios fundamentais; Direitos e garantias fundamentais\nOrganização do Estado")}"></textarea>
       <div class="form-acoes"><button class="btn btn-ghost" data-action="toggle-oficial">Cancelar</button><button class="btn btn-primary" data-action="conferir-oficial">Validar cobertura</button></div>
     </div>`;
@@ -333,7 +333,7 @@ function addDiscPanelHTML(texto = "") {
     <h3>Adicionar ao edital</h3>
     <p class="muted small u-m-0 u-mb-8">Traga o conteúdo programático — disciplinas e tópicos.</p>
     <details class="ed-ajuda"><summary>Como o app separa</summary><div class="ed-ajuda-corpo"><p>Uma disciplina por linha (em MAIÚSCULAS ou terminada em ":") e os tópicos nas linhas seguintes ou separados por ";". Também vale digitar só uma disciplina. O app separa disciplinas e tópicos para você revisar antes de aplicar.</p></div></details>
-    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="${dicaArquivo("Importar de um PDF ou .txt.")}">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
     <textarea id="ed-texto" rows="7" placeholder="Ex.: uma disciplina (uma linha):&#10;Direito Previdenciário&#10;&#10;Ou o edital completo:&#10;DIREITO CONSTITUCIONAL&#10;Princípios fundamentais; Direitos e garantias fundamentais&#10;Organização do Estado&#10;&#10;DIREITO ADMINISTRATIVO:&#10;Atos administrativos; Licitações; Servidores públicos">${esc(texto)}</textarea>
@@ -427,7 +427,7 @@ function abrirAddEdital(app) {
           try {
             const texto = await lerArquivoTexto(f, null, "");
             preencheCaixa(texto);
-            if (texto && texto.trim()) toast("Texto extraído. Clique em 'Revisar'.", "ok");
+            if (texto && texto.trim()) toast("Texto extraído. Use «Revisar» para conferir.", "ok");
             else toast("Não consegui ler o edital agora. Tente de novo em instantes ou cole o texto.", "erro");
           } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
           finally { fim2(); }
@@ -437,7 +437,7 @@ function abrirAddEdital(app) {
         try {
           const texto = await lerArquivoTexto(f, cfg, "");
           preencheCaixa(texto);
-          if (texto && texto.trim()) toast("Texto carregado. Clique em 'Revisar'.");
+          if (texto && texto.trim()) toast("Texto carregado. Use «Revisar» para conferir.");
           else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
         } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
         finally { fim(); }
@@ -655,7 +655,7 @@ function destaquesPanelHTML() {
   return `
     <h3>${icone("star")} Temas que mais caem</h3>
     <p class="muted small">Um tema <b>por linha</b>. Para preencher a <b>relevância sozinho</b>, inclua o percentual (ou número) após "<b>:</b>", "<b>–</b>" ou "<b>-</b>" — ex.: "Atos administrativos: 30%". Sem percentual, o tema fica marcado como <b>"mais cai" (relevante, sem %)</b>. Os temas que casarem com tópicos do edital ficam em destaque, ordenados por incidência.</p>
-    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Selecionar arquivo
+    <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="${dicaArquivo("Importar de um PDF ou .txt.")}">${icone("paperclip")} Selecionar arquivo
       <input id="dest-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
     <textarea id="dest-texto" rows="6" placeholder="Ex.:&#10;Atos administrativos: 30%&#10;Tutela provisória – 25%&#10;Direitos e garantias fundamentais"></textarea>
@@ -679,7 +679,7 @@ function abrirDestaques(app) {
         ligarImportArquivo(destFile, {
           getCfg: () => store.get().config,
           contexto: "uma lista de temas/assuntos que MAIS CAEM na prova, com o percentual de incidência de cada um quando houver",
-          onTexto: (texto) => { const ta = corpo.querySelector("#dest-texto"); if (ta) ta.value = texto; if (texto.trim()) toast("Texto carregado. Clique em 'Marcar relevância'."); },
+          onTexto: (texto) => { const ta = corpo.querySelector("#dest-texto"); if (ta) ta.value = texto; if (texto.trim()) toast("Texto carregado. Use «Marcar relevância»."); },
         });
       }
       bindActions(corpo, {
@@ -807,7 +807,7 @@ function abrirOficial(app) {
         ligarImportArquivo(oficialFile, {
           getCfg: () => store.get().config,
           contexto: "o conteúdo programático OFICIAL do edital da banca: disciplinas e seus tópicos/assuntos, para conferência de cobertura (ignore partes administrativas)",
-          onTexto: (texto) => { const ta = corpo.querySelector("#oficial-texto"); if (ta) ta.value = texto; if (texto.trim()) toast("Texto carregado. Clique em 'Conferir'."); },
+          onTexto: (texto) => { const ta = corpo.querySelector("#oficial-texto"); if (ta) ta.value = texto; if (texto.trim()) toast("Texto carregado. Use «Validar cobertura» para conferir."); },
         });
       }
       corpo.querySelectorAll(".oficial-vinc").forEach((sel) =>
@@ -1092,10 +1092,10 @@ export default function renderEdital(root, app) {
     <div class="barra-acoes ed-barra">
       <button class="btn btn-add btn-sm" data-action="toggle-add-disc" data-tip-pos="cima-esq" data-tip="Adicionar disciplinas e tópicos: digite uma disciplina ou traga/importe o edital (separado automaticamente).">${icone("plus")} Adicionar ao edital</button>
       <span class="spacer"></span>
-      <label class="inline ed-ord">Ordenar:
-        <select id="ed-top-sort" class="ed-ord-sel">
+      <label class="inline ed-ord"><span class="ed-ord-lbl">Ordenar:</span>
+        <select id="ed-top-sort" class="ed-ord-sel" aria-label="Ordenar os tópicos">
           <option value="custom" ${topSort === "custom" ? "selected" : ""}>Como cadastrei</option>
-          <option value="relevancia" ${topSort === "relevancia" ? "selected" : ""}>Mais relevantes primeiro</option>
+          <option value="relevancia" ${topSort === "relevancia" ? "selected" : ""}>Mais relevantes</option>
         </select>
       </label>
       ${st.disciplinas.length ? `<button class="lnk small" data-action="${algumAberto ? "ed-recolher" : "ed-expandir"}" data-tip-pos="cima-esq" data-tip="${algumAberto ? "Recolher todas as disciplinas." : "Abrir todas as disciplinas."}">${algumAberto ? "Recolher tudo" : "Expandir tudo"}</button>
@@ -1133,7 +1133,7 @@ export default function renderEdital(root, app) {
     </div>`;
 
   const resumoBody = `
-    <p class="muted small u-mt-4 u-mb-12">Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Clique num tópico</b> para abrir o <b>dossiê</b> dele.</p>
+    <p class="muted small u-mt-4 u-mb-12">Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele.</p>
     <div class="dossie-lista">${dossieResumoHTML(store)}</div>`;
 
   let cursinhoBody;
@@ -1217,7 +1217,7 @@ export default function renderEdital(root, app) {
         try {
           const texto = await lerArquivoTexto(f, null, "");
           preenche(texto);
-          toast(texto && texto.trim() ? "Texto extraído. Clique em 'Montar plano'." : "Não consegui ler agora. Tente de novo ou cole o texto.", texto && texto.trim() ? "ok" : "erro");
+          toast(texto && texto.trim() ? "Texto extraído. Use «Montar plano»." : "Não consegui ler agora. Tente de novo ou cole o texto.", texto && texto.trim() ? "ok" : "erro");
         } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
         finally { fim2(); }
         return;
@@ -1226,7 +1226,7 @@ export default function renderEdital(root, app) {
       try {
         const texto = await lerArquivoTexto(f, cfg, "");
         preenche(texto);
-        if (texto && texto.trim()) toast("Texto carregado. Clique em 'Montar plano'.");
+        if (texto && texto.trim()) toast("Texto carregado. Use «Montar plano».");
         else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
       } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
       finally { fim(); }
@@ -1485,11 +1485,6 @@ export default function renderEdital(root, app) {
     app.refresh();
   });
 
-  root.querySelector("#aulas-sort")?.addEventListener("change", (e) => {
-    aulasSort = e.target.value;
-    app.refresh();
-  });
-
   // Relevância = pílula NOMEADA (Não cai · Baixa · Média · Alta · Altíssima), a única escala
   // exibida ao usuário. (A escala em faixas de % foi removida — era código morto.)
   root.querySelectorAll("select[data-nivel-named]").forEach((el) =>
@@ -1554,10 +1549,41 @@ function discHTML(store, st, d) {
         <span class="ed-disc-chev">${icone("chevron-down")}</span>
       </summary>
       ${tops.length ? `<div class="ed-tabwrap"><table class="ed-tab">
-        <thead><tr><th class="edc-chk"></th><th data-tip="Clique no tópico para abrir o dossiê — a pasta viva do assunto.">Tópico</th><th class="edc-rel" data-tip="O quanto o tema cai na sua banca (Não cai a Altíssima) — clique na pílula para definir.">Relevância</th><th class="edc-ap" data-tip="Seu percentual de acertos nas questões deste tópico.">Aproveitamento</th><th class="edc-est" data-tip="Quantas vezes e há quanto tempo você estudou o tópico.">Estudo</th><th class="edc-acts"></th></tr></thead>
+        <thead><tr><th class="edc-chk"></th><th data-tip="Abre o dossiê — a pasta viva do assunto.">Tópico</th><th class="edc-rel" data-tip="O quanto o tema cai na sua banca (Não cai a Altíssima) — use a pílula para definir.">Relevância</th><th class="edc-ap" data-tip="Seu percentual de acertos nas questões deste tópico.">Aproveitamento</th><th class="edc-est" data-tip="Quantas vezes e há quanto tempo você estudou o tópico.">Estudo</th><th class="edc-acts"></th></tr></thead>
         <tbody>${tops.map((t, i) => topHTML(store, st, t, i + 1)).join("")}</tbody>
       </table></div>` : `<p class="muted small ed-semtop">Sem tópicos ainda. Use o "+" acima para adicionar.</p>`}
     </details>`;
+}
+
+// Acervo do tópico (materiais · questões · flashcards) como selo discreto na própria linha.
+// No computador esses números vêm do hover-preview (.ed-hovercard), que é EXCLUSIVO de mouse
+// — `ligarHoverPreview` sai cedo em `pointer: coarse`. No celular eles ficavam invisíveis.
+// O selo é oculto por CSS onde o hovercard existe, para não duplicar a informação.
+// Os índices são montados uma vez por render (ver acervoIndice) — nada de varrer por linha.
+let _acervoIdx = null;
+function acervoIndice(st) {
+  // A chave do cache NÃO pode ser a identidade de `st`: store.get() devolve sempre o mesmo
+  // objeto (mutado no lugar), então o índice nunca seria refeito e os números congelariam.
+  // `modificadoEm` é carimbado a cada commit; o tamanho das listas cobre escritas sem carimbo.
+  const chave = `${st.modificadoEm || ""}|${(st.documentos || []).length}|${(st.questoes || []).length}|${(st.flashcards || []).length}`;
+  if (_acervoIdx && _acervoIdx.chave === chave) return _acervoIdx;
+  const mat = new Map(), q = new Map(), fc = new Map();
+  const soma = (m, id) => { if (id) m.set(id, (m.get(id) || 0) + 1); };
+  (st.documentos || []).forEach((d) => { soma(mat, d.topicoId); (d.topicoIds || []).forEach((id) => soma(mat, id)); });
+  (st.questoes || []).forEach((x) => soma(q, x.topicoId));
+  (st.flashcards || []).forEach((x) => soma(fc, x.topicoId));
+  _acervoIdx = { chave, mat, q, fc };
+  return _acervoIdx;
+}
+function acervoTag(st, topicoId) {
+  const ix = acervoIndice(st);
+  const nMat = ix.mat.get(topicoId) || 0, nQ = ix.q.get(topicoId) || 0, nFc = ix.fc.get(topicoId) || 0;
+  if (!nMat && !nQ && !nFc) return "";
+  const partes = [];
+  if (nMat) partes.push(`${icone("library")} ${nMat}`);
+  if (nQ) partes.push(`${icone("pencil-line")} ${nQ}`);
+  if (nFc) partes.push(`${icone("layers")} ${nFc}`);
+  return ` <span class="mini-tag ed-acervo" data-tip="${nMat} ${nMat === 1 ? "material" : "materiais"} · ${nQ} ${nQ === 1 ? "questão" : "questões"} · ${nFc} ${nFc === 1 ? "flashcard" : "flashcards"} neste tópico">${partes.join(" ")}</span>`;
 }
 
 function topHTML(store, st, t, n) {
@@ -1582,8 +1608,8 @@ function topHTML(store, st, t, n) {
     : `<span class="ed-est none">nunca</span>`;
   return `
     <tr class="${t.concluido ? "ed-tr-done" : ""}">
-      <td class="edc-chk">${selMode ? `<input type="checkbox" class="ed-top-sel" data-id="${t.id}" ${topSel.has(t.id) ? "checked" : ""} title="Selecionar (para mover, unificar ou virar nova disciplina)" />` : `<button class="ed-chk ${t.concluido ? "on" : ""}" data-action="done-top" data-id="${t.id}" data-tip-pos="cima-esq" data-tip="${t.concluido ? "Concluído · clique para desmarcar" : "Marcar como concluído (já estudei)"}">${icone("check")}</button>`}</td>
-      <td class="edc-nome"><button class="lnk ed-top-link" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico" aria-hidden="true">${icone("external-link")}</span></button>${linkInd}</td>
+      <td class="edc-chk">${selMode ? `<input type="checkbox" class="ed-top-sel" data-id="${t.id}" ${topSel.has(t.id) ? "checked" : ""} data-tip="Selecionar (para mover, unificar ou virar nova disciplina)" />` : `<button class="ed-chk ${t.concluido ? "on" : ""}" data-action="done-top" data-id="${t.id}" data-tip-pos="cima-esq" data-tip="${t.concluido ? "Concluído · toque para desmarcar" : "Marcar como concluído (já estudei)"}">${icone("check")}</button>`}</td>
+      <td class="edc-nome"><button class="lnk ed-top-link" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico" aria-hidden="true">${icone("external-link")}</span></button>${linkInd}${acervoTag(st, t.id)}</td>
       <td class="edc-rel" data-label="Relevância">${relPillSelectHTML(t)}</td>
       <td class="edc-ap" data-label="Aproveitamento">${apCell}</td>
       <td class="edc-est" data-label="Estudo">${estCell}</td>

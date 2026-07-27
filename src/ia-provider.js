@@ -400,6 +400,108 @@ export async function gerarQuestoes(cfg, { texto, contexto, n = 5, dificuldade =
     .filter((q) => q.alternativas.length >= 2);
 }
 
+// ---------------------------------------------------------------------------
+// GERAÇÃO SEM FONTE (conceitual) — usada só quando o usuário não tem material do assunto e
+// pede explicitamente. O que o modelo mais erra é justamente o que a banca mais cobra: número
+// de artigo, de súmula, prazo, percentual. Uma questão que AFIRMA "art. 37, XXI" errado é pior
+// que questão nenhuma — o candidato estuda o erro e não tem como perceber.
+//
+// Por isso a regra não fica só no prompt: instrução é promessa, e o "quase sempre cumpre" é
+// onde mora o dano. O que sai do modelo passa por uma conferência de código; o que cita número
+// normativo é DESCARTADO. Questão boa descartada não custa nada; questão errada guardada custa.
+// ---------------------------------------------------------------------------
+export const PADROES_NUMERO_NORMATIVO = [
+  /\bart(igo)?\.?\s*\d/i,                          // art. 37, artigo 5
+  /\binciso\s+[ivxl]+\b/i,                         // inciso XXI
+  /§|\bpar[áa]grafo\s+([\d]|[úu]nico|primeiro|segundo|terceiro|quarto)/i,
+  /\bs[úu]mula\s*(vinculante\s*)?n?[º°o]?\s*\d/i,  // súmula 473, SV 13
+  /\blei\s*(complementar\s*)?n?[º°o]?\s*[\d.]+\s*\/\s*\d{2,4}/i, // Lei 8.666/93
+  /\b\d+\s*(dias?|meses|m[êe]s|anos?|horas?)\b/i,  // prazo de 5 dias
+  /\d+\s*%/,                                       // 25%
+];
+export function citaNumeroNormativo(...textos) {
+  const t = textos.filter(Boolean).join(" \n ");
+  return PADROES_NUMERO_NORMATIVO.some((re) => re.test(t));
+}
+
+// Devolve { questoes, pedidas, geradas, descartadas } — os contadores servem para a tela dizer
+// a verdade quando sobrou menos do que foi pedido, em vez de completar com o que foi barrado.
+export async function gerarQuestoesSemFonte(cfg, { assunto, n = 5, dificuldade = "medio", banca, cargo, web = false, formato = "mc" }) {
+  const ehCE = formato === "ce";
+  // Não há regra mandando "evitar matéria de reforma recente": ela existiu aqui e foi removida.
+  // Era inverificável e, pior, SILENCIOSA — se você pede a nova lei de licitações, o modelo
+  // desviaria do que você pediu sem lhe contar. A proibição de NÚMERO fica, porque é objetiva
+  // e conferida no código logo abaixo; o resto quem avisa é o selo.
+  const system =
+    "Você é um elaborador de questões para concursos públicos brasileiros. Você NÃO recebeu " +
+    "material de apoio: vai elaborar a partir de conhecimento consolidado do tema. Regras rígidas:\n" +
+    "(1) SOMENTE questões CONCEITUAIS — definição, natureza jurídica, classificação, distinção " +
+    "entre institutos, consequência jurídica de um conceito;\n" +
+    "(2) É PROIBIDO afirmar número: de artigo, inciso, parágrafo, súmula, lei, prazo (dias/meses/" +
+    "anos) ou percentual. Se o ponto que você ia cobrar depende de um desses números, ESCOLHA " +
+    "OUTRO PONTO do tema — não arrisque;\n" +
+    "(3) " +
+    (ehCE
+      ? "cada item é uma AFIRMAÇÃO claramente verdadeira (certo) ou falsa (errado), AUTOSSUFICIENTE " +
+        "(o candidato não verá texto de apoio), com uma justificativa breve"
+      : "enunciado AUTOSSUFICIENTE (o candidato não verá nenhum texto de apoio), 4 alternativas " +
+        "plausíveis, só uma correta") +
+    ";\n" +
+    "(4) responda exclusivamente em JSON válido, sem comentários." +
+    diretrizesIA({ banca, cargo, topico: assunto, dificuldade });
+  const user = ehCE
+    ? `Tema: ${assunto}\n\n` +
+      `Gere ${n + 3} itens CERTO/ERRADO sobre esse tema, seguindo as regras.\n` +
+      `Formato EXATO: {"itens":[{"afirmacao":"...","gabarito":"certo|errado","justificativa":"..."}]}`
+    : `Tema: ${assunto}\n\n` +
+      `Gere ${n + 3} questões de múltipla escolha (4 alternativas cada) sobre esse tema, seguindo as regras.\n` +
+      `Formato EXATO: {"questoes":[{"enunciado":"...","alternativas":["...","...","...","..."],"correta":0}]}\n` +
+      `("correta" = índice 0..3 da alternativa certa).`;
+  // Com a BUSCA ligada (só Gemini tem a ferramenta), a geração passa a ser ancorada em páginas
+  // reais e as fontes voltam junto — você julga de onde veio. Sem ela, é conhecimento do
+  // modelo, e o selo diz isso. Nunca ligamos sozinho: quem decide é o interruptor do chat,
+  // porque busca genérica também traz blog e post vencido, e afirmação errada COM citação
+  // engana mais que sem.
+  const usaWeb = !!web && (cfg.iaProvider || "") === "gemini";
+  let out;
+  let fontesWeb = [];
+  if (usaWeb) {
+    // A resposta com grounding vem em texto (às vezes com prosa em volta), não em JSON estrito:
+    // por isso o parser tolerante.
+    const r = await responderChatWebGemini(cfg, { system, user });
+    out = parseJSON(r.texto);
+    fontesWeb = r.fontesWeb || [];
+  } else {
+    out = await chamar(cfg, { system, user, json: true, temperature: 0.5 });
+  }
+  const base = ehCE
+    ? normalizaCE(Array.isArray(out) ? out : out.itens, () => "amarelo")
+    : (Array.isArray(out) ? out : out.questoes || [])
+        .filter((q) => q && q.enunciado && Array.isArray(q.alternativas) && q.alternativas.length >= 2)
+        .map((q) => ({
+          enunciado: String(q.enunciado).trim(),
+          alternativas: q.alternativas.map((a) => String(a).trim()).filter(Boolean),
+          gabarito: Math.max(0, Math.min(q.alternativas.length - 1, parseInt(q.correta, 10) || 0)),
+        }))
+        .filter((q) => q.alternativas.length >= 2);
+  // O filtro de número vale TAMBÉM com busca ligada: página achada pode estar desatualizada, e
+  // um número errado com fonte ao lado é ainda mais convincente.
+  const limpas = base.filter((q) =>
+    ehCE ? !citaNumeroNormativo(q.afirmacao, q.justificativa) : !citaNumeroNormativo(q.enunciado, ...q.alternativas)
+  );
+  const temFontes = usaWeb && fontesWeb.length > 0;
+  return {
+    // O selo sai daqui decidido: "web" só quando a busca REALMENTE trouxe links; "semfonte"
+    // caso contrário. O Gemini às vezes responde sem acionar a ferramenta mesmo com ela
+    // ligada — e aí carimbar "Fonte na web" seria pior que não carimbar nada: prometeria uma
+    // procedência que não existe. "amarelo" também não serve: ele significa "a IA transformou
+    // o SEU material", que não é o caso em nenhum dos dois.
+    questoes: limpas.slice(0, n).map((q) => ({ ...q, selo: temFontes ? "web" : "semfonte" })),
+    pedidas: n, geradas: base.length, descartadas: base.length - limpas.length,
+    fontesWeb, comWeb: temFontes, buscaPedida: usaWeb,
+  };
+}
+
 // EXTRAI as questões que JÁ EXISTEM no material (não inventa novas). Útil quando o
 // PDF da aula traz uma lista de exercícios. Quando o gabarito está no próprio material,
 // a questão recebe selo 📖 (extraída); quando a IA precisou inferir a correta, 🤖.
@@ -996,7 +1098,19 @@ async function responderChatWebGeminiRaw(cfg, { system, user }) {
   const fontesWeb = chunks
     .map((c) => (c.web ? { titulo: c.web.title || c.web.uri, uri: c.web.uri } : null))
     .filter(Boolean);
-  if (!texto) throw new Error("A IA não retornou conteúdo da busca web.");
+  // Resposta 200 e vazia com a ferramenta de busca quase sempre quer dizer que o grounding NÃO
+  // está liberado para a chave/plano (ou que o modelo em uso não o suporta) — a cota da busca é
+  // separada da cota normal. A mensagem antiga ("não retornou conteúdo") mandava o usuário
+  // procurar no lugar errado.
+  if (!texto) {
+    const err = new Error(
+      "A busca na web não retornou nada. Isso costuma ser a busca do Google (grounding) não " +
+      "liberada para a sua chave ou modelo — a cota dela é separada. Desligue «Buscar na web» " +
+      "para seguir com o conhecimento do modelo, ou use uma chave com a busca habilitada."
+    );
+    err.code = "WEB_INDISPONIVEL";
+    throw err;
+  }
   return { texto: texto.trim(), selo: "amarelo", fontesWeb };
 }
 

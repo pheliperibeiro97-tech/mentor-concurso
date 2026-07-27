@@ -1,7 +1,7 @@
 // Flashcards / Revisão: recall ativo + repetição espaçada (SM-2) + exportação Anki.
 // Criar cards num painel único (digitar/colar/importar, gerar do material com IA,
 // ou gerar das questões offline). Revisão filtrável por disciplina/tópicos.
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado, dicaArquivo } from "../ui.js";
 import { esc, fmtData, todayISO, addDays, MOTIVOS_ERRO, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import * as sm2 from "../sm2.js";
@@ -105,8 +105,21 @@ export default function renderFlashcards(root, app) {
     mostrarLista = false; revisarId = null; puladosSessao = new Set();
     filtroRev.sel = []; filtroTipo = "todos"; // não confundir com filtros antigos
   }
-  // Se o lote já não tem cards a estudar (todos revisados/removidos), desfaz o filtro e avisa.
-  if (filtroLote && !st.flashcards.some((c) => c.geracaoId === filtroLote && !c.suspenso)) { filtroLote = null; filtroLoteRotulo = ""; toast("Você concluiu os flashcards recém-gerados! Mostrando os demais.", "ok"); }
+  // Lote sem cards a estudar: desfaz o filtro. Mas são DOIS casos com significados opostos —
+  // "acabei de revisar todos" (parabéns) e "os cartões sumiram" (algo deu errado, por exemplo
+  // uma sincronização que trouxe um estado mais novo de outro aparelho). Antes os dois davam
+  // o mesmo toast de sucesso, o que escondia a perda.
+  if (filtroLote) {
+    const existem = st.flashcards.some((c) => c.geracaoId === filtroLote);
+    const sobraram = st.flashcards.some((c) => c.geracaoId === filtroLote && !c.suspenso);
+    if (!existem) {
+      filtroLote = null; filtroLoteRotulo = "";
+      toast("Não encontrei os flashcards recém-gerados (podem ter vindo de outra sincronização). Mostrando os demais.", "erro");
+    } else if (!sobraram) {
+      filtroLote = null; filtroLoteRotulo = "";
+      toast("Você concluiu os flashcards recém-gerados! Mostrando os demais.", "ok");
+    }
+  }
   const vencidos = filtroLote
     ? st.flashcards.filter((c) => c.geracaoId === filtroLote && !c.suspenso && !puladosSessao.has(c.id) && tipoNoFiltro(c, filtroTipo))
     : store.flashcardsVencidos().filter((c) => !puladosSessao.has(c.id) && questaoNoFiltro(c, filtroRev.sel) && tipoNoFiltro(c, filtroTipo));
@@ -163,7 +176,7 @@ export default function renderFlashcards(root, app) {
       mostrarExport
         ? `<div class="card export-panel">
             <h3>${icone("download")} Exportar para o Anki</h3>
-            <p class="muted small">Escolha quais flashcards exportar. Gera um <b>.txt</b> que o Anki importa (Arquivo → Importar).</p>
+            <p class="muted small">Escolha quais flashcards exportar. Gera um <b>.txt</b> que o Anki importa (no computador: Arquivo → Importar; no celular, abra o arquivo pelo AnkiDroid/AnkiMobile).</p>
             <div class="form-row u-items-end">
               <label class="u-grow">Baralho <select id="export-escopo">${opcoesBaralho(st, "todos")}</select></label>
               <label class="inline"><input type="checkbox" id="export-venc" /> Só os vencidos (revisar hoje)</label>
@@ -175,18 +188,18 @@ export default function renderFlashcards(root, app) {
 
     <div class="rev-barra">
       ${filtroTopicosBotaoHTML(st, filtroRev.sel, filtroRev.aberto)}
-      <span class="filtro-lbl muted small">Tipo:</span>
+      <div class="filtro-par"><span class="filtro-lbl muted small">Tipo:</span>
       <div class="seg seg-sm" role="tablist" data-tip-pos="cima-esq" data-tip="Filtra por formato: pergunta/resposta ou afirmações Certo/Errado.">
         <button class="${filtroTipo === "todos" ? "on" : ""}" data-filtro-tipo="todos">Todos</button>
         <button class="${filtroTipo === "qa" ? "on" : ""}" data-filtro-tipo="qa">P/R</button>
         <button class="${filtroTipo === "afirmacao" ? "on" : ""}" data-filtro-tipo="afirmacao">C/E</button>
-      </div>
+      </div></div>
       ${(filtroRev.sel.length || filtroTipo !== "todos") ? `<span class="muted small">${vencidos.length} nesta seleção</span>` : ""}
-      <span class="filtro-lbl muted small">Ordem:</span>
+      <div class="filtro-par"><span class="filtro-lbl muted small">Ordem:</span>
       <div class="seg seg-sm" role="tablist" data-tip-pos="cima-esq" data-tip="“Mais recentes” traz ao topo os flashcards recém-gerados, sem zerar os pendentes antigos.">
         <button class="${ordemRev === "vencimento" ? "on" : ""}" data-ordem-rev="vencimento">Vencimento</button>
         <button class="${ordemRev === "recentes" ? "on" : ""}" data-ordem-rev="recentes">Mais recentes</button>
-      </div>
+      </div></div>
       <span class="spacer"></span>
       ${suspensos ? `<button class="lnk" data-action="reativar-susp" data-tip="Voltam a aparecer nas revisões.">${icone("ban")} ${plural(suspensos, "dispensado", "dispensados")}: reativar</button>` : ""}
     </div>
@@ -335,18 +348,22 @@ export default function renderFlashcards(root, app) {
       const r = await comOcupado(() => store.comentarFlashcardIA(el.getAttribute("data-id")), { botao: el, msg: "Explicando este cartão com a IA…" });
       if (r === null) return;
       toast("Comentário da IA gerado.");
+      // No Modo Foco o render global é suspenso (para o overlay não ser recriado a cada
+      // gravação); quem repinta o card é esta chamada. Sem ela, a explicação fica salva mas
+      // invisível até sair do foco.
+      if (focoAtivo) atualizarFocoFlash(root, store);
     },
     // Após "Errei": um toque classifica o motivo no registro (auto) do Caderno e avança.
     "motivo-fc": (el) => {
       store.classificarErroFlashcard(el.getAttribute("data-id"), el.getAttribute("data-motivo"));
       perguntandoMotivoId = null;
-      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); app.refresh(); return; }
+      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); atualizarFocoFlash(root, store); return; }
       if (store.flashcardsVencidos().length === 0) { confetti(); toast("Fila concluída! Registrei o erro no Caderno.", "ok"); }
       else toast("Motivo registrado. Próximo cartão.");
     },
     "pular-motivo": () => {
       perguntandoMotivoId = null;
-      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); app.refresh(); return; }
+      if (focoAtivo) { focoIdx++; if (focoIdx >= focoFila.length) confetti(); atualizarFocoFlash(root, store); return; }
       if (store.flashcardsVencidos().length === 0) { confetti(); toast("Fila concluída!", "ok"); }
       app.refresh();
     },
@@ -406,12 +423,16 @@ export default function renderFlashcards(root, app) {
         revelado = false;
         revisarId = null;
         // "Errei": o card já entrou no Caderno; pergunta o motivo (1 toque) antes de avançar.
-        if (q === 0) { perguntandoMotivoId = id; app.refresh(); return; }
+        if (q === 0) {
+          perguntandoMotivoId = id;
+          if (focoAtivo) atualizarFocoFlash(root, store); else app.refresh();
+          return;
+        }
         // No foco, avança pela POSIÇÃO da sessão (permite voltar depois); zerou tudo → confete.
         if (focoAtivo) {
           focoIdx++;
           if (focoIdx >= focoFila.length) confetti();
-          app.refresh();
+          atualizarFocoFlash(root, store);
           return;
         }
         if (tinhaFila && store.flashcardsVencidos().length === 0) { confetti(); toast("Fila de revisão concluída! Mandou bem.", "ok"); }
@@ -522,7 +543,7 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
       <h3>Criar flashcards</h3>
       <p class="muted small u-m-0 u-mb-8">Um cartão por linha: a <b>frente (pergunta)</b> e o <b>verso (resposta)</b>, separados por <b>Tab</b>, <b>;</b>, <b>|</b> ou vírgula. Compatível com o Anki.</p>
       <label class="inline">Vincular ao tópico: <select id="fc-add-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
-      <label class="btn btn-ghost btn-file u-m-0 u-mt-8 u-mb-8" data-tip-pos="cima-esq" data-tip="Importar de um arquivo .txt/.csv (formato Anki). Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-file u-m-0 u-mt-8 u-mb-8" data-tip-pos="cima-esq" data-tip="${dicaArquivo("Importar de um arquivo .txt/.csv (formato Anki).")}">${icone("paperclip")} Importar de arquivo
         <input id="fc-add-file" type="file" accept=".txt,.csv,.tsv,text/plain" hidden />
       </label>
       <textarea id="fc-add-texto" rows="4" placeholder="${esc('Ex.:\nCapital do Brasil ; Brasília\nPrazo da apelação | 15 dias úteis (art. 1.003, CPC)')}">${esc(texto)}</textarea>
@@ -755,7 +776,7 @@ function vinculoFlashcard(st, c) {
 // ===================== MODO FOCO — quiz imersivo em tela cheia =====================
 // Overlay full-viewport (fundo aurora + card em vidro com flip 3D). Reusa os mesmos
 // handlers (revelar/nota/motivo-fc…) e a fila FILTRADA atual. Teclado: Espaço vira, 1–4 nota.
-function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }) {
+function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }, anim = "in") {
   const notas = Object.values(placar || {});
   const erros = notas.filter((q) => q === 0).length;      // "Errei"
   const acertos = notas.filter((q) => q >= 3).length;      // Difícil/Bom/Fácil
@@ -766,7 +787,7 @@ function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }) {
     ? `<kbd>Esc</kbd> sair · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> motivo · <kbd>Espaço</kbd> pular`
     : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>Espaço</kbd> virar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> nota · <kbd>C</kbd> comentar`;
   return focoShellHTML({
-    idx, total, fim,
+    idx, total, fim, anim,
     mostrarNav: !cardMotivo, // no passo de motivo, esconde as setas
     placar: { acertos, erros },
     centro, rodape,
@@ -781,7 +802,10 @@ function atualizarFocoFlash(root, store) {
   const st = store.get();
   const card = st.flashcards.find((c) => c.id === focoFila[focoIdx] && !c.suspenso);
   const cardMotivo = perguntandoMotivoId ? st.flashcards.find((c) => c.id === perguntandoMotivoId) : null;
-  const novoHTML = focoQuizHTML(st, { card, cardMotivo, idx: focoIdx, total: focoFila.length, placar: focoPlacar });
+  // "fade": só opacidade no miolo (16ms). Sem isto, cada troca em-lugar reexecutava a
+  // animação de ENTRADA plena (fq-stage-in, 340ms com deslocamento) — o card "subia" de novo
+  // a cada nota, que é o efeito de "recarregou a tela" percebido no celular.
+  const novoHTML = focoQuizHTML(st, { card, cardMotivo, idx: focoIdx, total: focoFila.length, placar: focoPlacar }, "fade");
   const foco = root.querySelector(".fc-foco");
   if (!foco) return;
   const tmp = document.createElement("div");
@@ -1022,7 +1046,7 @@ function exportarAnki(st, cards) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  toast(`${plural(cards.length, "cartão exportado", "cartões exportados")}. No Anki: Arquivo → Importar → selecione o .txt.`);
+  toast(`${plural(cards.length, "cartão exportado", "cartões exportados")}. Importe o .txt no Anki.`);
 }
 
 function printFlashcards(st, cards, lados = "ambos") {

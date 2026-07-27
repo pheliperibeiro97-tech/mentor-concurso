@@ -109,7 +109,15 @@ function renderTreino(root, app, formato) {
     app.params.lote = null; app.params.loteRotulo = null;
     s.filtroStatus = "todas"; s.filtroTop.sel = []; s.addState.aberto = false;
   }
-  if (s.filtroLote && !st.questoes.some((q) => q.geracaoId === s.filtroLote && ehDoFormato(q, formato))) { s.filtroLote = null; s.filtroLoteRotulo = ""; }
+  // Lote vazio: cai para a lista inteira. Se as questões nem existem mais (ex.: uma
+  // sincronização trouxe um estado mais novo de outro aparelho no meio da geração), avisa —
+  // antes o filtro caía calado e parecia que "gerou e não abriu nada".
+  if (s.filtroLote && !st.questoes.some((q) => q.geracaoId === s.filtroLote && ehDoFormato(q, formato))) {
+    if (!st.questoes.some((q) => q.geracaoId === s.filtroLote)) {
+      toast("Não encontrei as questões recém-geradas (podem ter vindo de outra sincronização). Mostrando as demais.", "erro");
+    }
+    s.filtroLote = null; s.filtroLoteRotulo = "";
+  }
   // Refazer erros em foco (vindo do Caderno de Erros): entra direto no Modo Foco com a
   // fila = questões erradas passadas (pode misturar MC e C/E — o foco detecta por questão).
   if (app.params && app.params.focoErrosIds) {
@@ -172,14 +180,13 @@ function renderTreino(root, app, formato) {
 
     <div class="barra-acoes filtro-bar">
       ${filtroTopicosBotaoHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
-      <label class="inline">Situação:
-        <select id="filtro-status">
+      <span class="ls-fpill ${s.filtroStatus !== "todas" ? "on" : ""}"><span class="ls-fpill-lbl">Situação</span>
+        <select class="ls-fpill-sel" id="filtro-status">
           <option value="todas" ${s.filtroStatus === "todas" ? "selected" : ""}>Todas</option>
           <option value="pendente" ${s.filtroStatus === "pendente" ? "selected" : ""}>Pendentes</option>
           <option value="acertei" ${s.filtroStatus === "acertei" ? "selected" : ""}>Acertei</option>
           <option value="errei" ${s.filtroStatus === "errei" ? "selected" : ""}>Errei</option>
-        </select>
-      </label>
+        </select></span>
     </div>
     ${filtroTopicosPainelHTML(st, s.filtroTop.sel, s.filtroTop.aberto)}
 
@@ -380,6 +387,10 @@ function renderTreino(root, app, formato) {
       const r = await comOcupado(() => store.comentarErroIA(tId), { botao: el, msg: "Analisando o erro com a IA…" });
       if (r === null) return;
       toast(inp && inp.value.trim() ? "A IA respondeu sua dúvida." : "Comentário da IA gerado.");
+      // No Modo Foco o render global é suspenso (para o overlay não ser recriado a cada
+      // gravação); quem repinta o card é esta chamada. Sem ela, o comentário fica salvo mas
+      // invisível até sair do foco.
+      if (s.focoAtivo) atualizarOverlayFoco(root, store, s, formato);
     },
     "comentar-questao": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar a questão");
@@ -391,6 +402,7 @@ function renderTreino(root, app, formato) {
       const r = await comOcupado(() => store.comentarQuestaoIA(qId, duvida), { botao: el, msg: "A IA está comentando a questão…" });
       if (r === null) return;
       toast(duvida ? "A IA respondeu sua dúvida." : "Comentário gerado.");
+      if (s.focoAtivo) atualizarOverlayFoco(root, store, s, formato); // idem: repinta o card no foco
     },
     "del-questao": async (el) => {
       if (await confirmar(formato === "ce" ? "Remover este item?" : "Remover esta questão?")) {
@@ -529,7 +541,7 @@ function questaoHTML(st, q, formato, s) {
     if (ultima.acertou) {
       feedback = `<div class="feedback ok">${icone("check")} Você acertou.</div>${justif}
         <div class="duvida-row">
-          <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre esta questão? Escreva e toque em Comentar." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação do gabarito." />
+          <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre esta questão? Escreva e toque em Comentar." value="${esc(ultima.duvida || "")}" data-tip="Escreva sua dúvida; a IA responde junto com a explicação do gabarito." />
           <button class="btn btn-ia btn-sm" data-action="comentar-questao" data-q="${q.id}" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica o gabarito e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
         </div>`;
       cardAcoes = `
@@ -550,7 +562,7 @@ function questaoHTML(st, q, formato, s) {
             </select>
           </label>
           <div class="duvida-row">
-            <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e toque em Comentar (opcional)." value="${esc(ultima.duvida || "")}" title="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
+            <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e toque em Comentar (opcional)." value="${esc(ultima.duvida || "")}" data-tip="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
             <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>
           </div>
           ${explicacaoIAHTML(ultima.comentarioIA)}
