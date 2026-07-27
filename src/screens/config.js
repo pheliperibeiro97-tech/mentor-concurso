@@ -1,6 +1,6 @@
 // Configurações: camada de IA, Pomodoro, concurso e dados.
 import { bindActions, toast, header, confirmar, ligarDropZone, escolher } from "../ui.js";
-import { baixarRelatorio, EMAIL_SUPORTE, APP_VERSION } from "../erro-log.js";
+import { baixarRelatorio, compartilharRelatorio, EMAIL_SUPORTE, APP_VERSION } from "../erro-log.js";
 import { verificarAtualizacao } from "../updater.js";
 import { setEstiloAlarme, tocarAlarmeTeste } from "../cronometro.js";
 import { esc } from "../util.js";
@@ -83,10 +83,10 @@ export default function renderConfig(root, app) {
     </section>
 
     <div class="seg u-mb-16" role="tablist">
-      <button data-aba-btn="estudo">${icone("target")} Estudo &amp; prova</button>
+      <button data-aba-btn="estudo">${icone("target")} Estudo</button>
       <button data-aba-btn="ia">${icone("bot")} IA</button>
       <button data-aba-btn="aparencia">${icone("palette")} Aparência</button>
-      <button data-aba-btn="conta">${icone("graduation-cap")} Dados &amp; concurso</button>
+      <button data-aba-btn="conta">${icone("graduation-cap")} Dados</button>
     </div>
 
     <div class="cfg-aba" data-aba="aparencia" ${abaCfg === "aparencia" ? "" : "hidden"}>
@@ -112,15 +112,25 @@ export default function renderConfig(root, app) {
       <label class="inline" style="font-weight:600; display:flex; width:fit-content; gap:8px; margin-bottom:6px">
         <input id="cfg-not-ativar" type="checkbox" ${nt.ativar ? "checked" : ""} /> Ativar lembretes
       </label>
-      <p class="muted small u-m-0 u-mb-12">As notificações são <b>facultativas</b> e só disparam no <b>aplicativo desktop</b> (na web o navegador não notifica). Escolha quais quer receber:</p>
+      <p class="muted small u-m-0 u-mb-12">${
+        ehDesktop
+          ? "As notificações são <b>facultativas</b> e só disparam no <b>aplicativo desktop</b>. Escolha quais quer receber:"
+          : "Neste aparelho o app não envia notificação do sistema — só o <b>aviso dentro do app</b>, quando ele está aberto. As demais opções aparecem no <b>aplicativo instalado</b> (desktop)."
+      }</p>
       <div class="not-opcoes" ${nt.ativar ? "" : "data-desativado"}>
-        <label class="inline small not-linha"><input id="cfg-not-diario" type="checkbox" ${nt.diario ? "checked" : ""} /> Lembrete diário no horário:
+        <label class="inline small not-linha"><input id="cfg-not-diario" type="checkbox" ${nt.diario ? "checked" : ""} /> ${ehDesktop ? "Lembrete diário no horário:" : "Aviso diário dentro do app, no horário:"}
           <input id="cfg-not-horario" type="time" value="${nt.horario || "08:00"}" style="width:auto; margin:0 0 0 6px" /></label>
-        <label class="inline small not-linha"><input id="cfg-not-revisoes" type="checkbox" ${nt.revisoes ? "checked" : ""} /> Revisões vencidas (flashcards e tópicos)</label>
+        ${
+          // Fora do Tauri, dispararNotificacoesDevidas sai cedo: estas 5 caixas ficariam
+          // clicáveis e inertes. Só o "aviso diário" acima funciona (é um toast no app).
+          !ehDesktop
+            ? ""
+            : `<label class="inline small not-linha"><input id="cfg-not-revisoes" type="checkbox" ${nt.revisoes ? "checked" : ""} /> Revisões vencidas (flashcards e tópicos)</label>
         <label class="inline small not-linha"><input id="cfg-not-tarefas" type="checkbox" ${nt.tarefasDia ? "checked" : ""} /> Tarefas planejadas do dia <span class="muted">(só um lembrete; é sugestão, nunca cobrança)</span></label>
         <label class="inline small not-linha"><input id="cfg-not-mentor" type="checkbox" ${nt.mentorPlano ? "checked" : ""} /> Revisar o progresso com o Mentor IA <span class="muted">(lembra a cada ~7 dias; você decide quando rodar)</span></label>
         <label class="inline small not-linha"><input id="cfg-not-inatividade" type="checkbox" ${nt.inatividade ? "checked" : ""} /> Aviso de inatividade (“faz N dias…”)</label>
-        <label class="inline small not-linha"><input id="cfg-not-marcos" type="checkbox" ${nt.marcos ? "checked" : ""} /> Marcos e conquistas (streak, simulado, reta final)</label>
+        <label class="inline small not-linha"><input id="cfg-not-marcos" type="checkbox" ${nt.marcos ? "checked" : ""} /> Marcos e conquistas (streak, simulado, reta final)</label>`
+        }
       </div>
     </section>
 
@@ -412,11 +422,15 @@ export default function renderConfig(root, app) {
       }
     </section>
 
-    <section class="card">
+    ${/* Some só onde o recurso NÃO existe. O gate certo é suportaSync() (File System Access),
+          não "é o app Tauri": no Chrome do computador o backup por arquivo funciona
+          normalmente, e no celular a API não existe — antes a seção aparecia lá só para
+          dizer "este ambiente não suporta". */ ""}
+    ${!syncSuporta ? "" : `<section class="card">
       <details class="ed-ajuda">
         <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)</summary>
         <div class="ed-ajuda-corpo">
-          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), só no app desktop. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
+          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
       ${
         syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">
@@ -463,7 +477,7 @@ export default function renderConfig(root, app) {
       }
         </div>
       </details>
-    </section>
+    </section>`}
 
     <section class="card">
       <h3>${icone("database")} Dados</h3>
@@ -529,16 +543,22 @@ export default function renderConfig(root, app) {
 
   // Notificações: salva o objeto inteiro a cada mudança (e re-renderiza só ao ligar/desligar o mestre).
   const salvarNotif = (rerender) => {
+    // As caixas de notificação do SISTEMA não são renderizadas fora do desktop (lá elas são
+    // inertes). Sem este fallback, mexer no aviso diário pelo celular leria `undefined` nas
+    // ausentes e GRAVARIA false em todas — apagando, via sincronização, o que você configurou
+    // no computador. Campo ausente = mantém o valor atual.
+    const atual = store.get().config.notificacoes || {};
+    const ler = (sel, chave) => { const el = root.querySelector(sel); return el ? !!el.checked : !!atual[chave]; };
     store.setConfig({
       notificacoes: {
-        ativar: !!root.querySelector("#cfg-not-ativar")?.checked,
-        diario: !!root.querySelector("#cfg-not-diario")?.checked,
-        horario: root.querySelector("#cfg-not-horario")?.value || "08:00",
-        revisoes: !!root.querySelector("#cfg-not-revisoes")?.checked,
-        tarefasDia: !!root.querySelector("#cfg-not-tarefas")?.checked,
-        mentorPlano: !!root.querySelector("#cfg-not-mentor")?.checked,
-        inatividade: !!root.querySelector("#cfg-not-inatividade")?.checked,
-        marcos: !!root.querySelector("#cfg-not-marcos")?.checked,
+        ativar: ler("#cfg-not-ativar", "ativar"),
+        diario: ler("#cfg-not-diario", "diario"),
+        horario: root.querySelector("#cfg-not-horario")?.value || atual.horario || "08:00",
+        revisoes: ler("#cfg-not-revisoes", "revisoes"),
+        tarefasDia: ler("#cfg-not-tarefas", "tarefasDia"),
+        mentorPlano: ler("#cfg-not-mentor", "mentorPlano"),
+        inatividade: ler("#cfg-not-inatividade", "inatividade"),
+        marcos: ler("#cfg-not-marcos", "marcos"),
       },
     });
     if (rerender) app.refresh();
@@ -641,9 +661,12 @@ export default function renderConfig(root, app) {
       app.refresh();
     },
     "gerar-diagnostico": async () => {
+      // Celular: abre a folha de compartilhamento do sistema com o arquivo pronto (WhatsApp,
+      // e-mail, o que o usuário quiser) em vez de baixar e mandar procurar na pasta.
+      if (await compartilharRelatorio(store)) return toast("Diagnóstico compartilhado. Envie para " + EMAIL_SUPORTE + ".", "ok");
       const nome = baixarRelatorio(store);
       const v = await escolher(
-        `Diagnóstico salvo (${nome}, na pasta Downloads). Anexe esse arquivo num e-mail e envie para ${EMAIL_SUPORTE} que a gente analisa.`,
+        `Diagnóstico salvo (${nome}). Anexe esse arquivo num e-mail e envie para ${EMAIL_SUPORTE} que a gente analisa.`,
         [
           { label: "Abrir e-mail agora", value: "email", cls: "btn-primary" },
           { label: "Fechar", value: "fechar" },
@@ -652,7 +675,7 @@ export default function renderConfig(root, app) {
       if (v === "email") {
         const assunto = encodeURIComponent("Problema — Mentor Concurso (diagnóstico anexo)");
         const corpo = encodeURIComponent(
-          "Descreva o que aconteceu e ANEXE o arquivo de diagnóstico que acabou de ser salvo na sua pasta Downloads.\n\n— O que você estava fazendo?\n— O que aconteceu?\n"
+          "Descreva o que aconteceu e ANEXE o arquivo de diagnóstico que o app acabou de salvar.\n\n— O que você estava fazendo?\n— O que aconteceu?\n"
         );
         window.location.href = `mailto:${EMAIL_SUPORTE}?subject=${assunto}&body=${corpo}`;
       }

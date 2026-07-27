@@ -226,7 +226,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
     )}
 
     <div class="dossie-acoes-topo">
-      <button class="chip ${t.concluido ? "on" : ""}" data-action="concluir" data-tip="${t.concluido ? "Tópico concluído — clique para desmarcar." : "Marcar este tópico como concluído (já estudei)."}">${t.concluido ? `${icone("check")} Concluído` : "Concluir"}</button>
+      <button class="chip ${t.concluido ? "on" : ""}" data-action="concluir" data-tip="${t.concluido ? "Tópico concluído — toque para desmarcar." : "Marcar este tópico como concluído (já estudei)."}">${t.concluido ? `${icone("check")} Concluído` : "Concluir"}</button>
       <label class="ed-nivel dossie-rel" data-tip="Relevância: o quanto o tema cai na sua banca. Sincronizada com o Edital.">
         <span class="muted">Relevância:</span>
         ${relPillSelectHTML(t)}
@@ -250,7 +250,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
         : ""
     }
 
-    <p class="muted small dossie-ajuda">Pasta viva do tópico: tudo o que você reuniu sobre o assunto. <b>Clique em qualquer item</b> para abri-lo; a <b>relevância</b> fica sincronizada com o Edital.</p>
+    <p class="muted small dossie-ajuda">Pasta viva do tópico: tudo o que você reuniu sobre o assunto. <b>Toque em qualquer item</b> para abri-lo; a <b>relevância</b> fica sincronizada com o Edital.</p>
 
     ${(() => {
       const maps = st.mapasMentais.filter((m) => m.topicoId === topicoId);
@@ -696,7 +696,10 @@ function sessoesSecaoHTML(st, dos, retraida) {
   const total = dos.sessoes.length;
   const corpo = !total
     ? vazioMini("Nenhum registro nesta seção. Registre no Hoje.")
+    // .tab-scroll: no celular a tabela de 5 colunas rola na horizontal em vez de comprimir
+    // as colunas até ficarem ilegíveis (mesmo tratamento do Acompanhamento).
     : `
+      <div class="tab-scroll">
       <table class="tabela tabela-sessoes">
         <thead><tr>
           ${thSess("data", "Data")}
@@ -706,7 +709,8 @@ function sessoesSecaoHTML(st, dos, retraida) {
           <th class="th-acoes"></th>
         </tr></thead>
         <tbody>${sessoes.map((s) => linhaSessaoDossie(st, s)).join("")}</tbody>
-      </table>`;
+      </table>
+      </div>`;
   const contagem = total ? ` <span class="muted small">(${sessoes.length}${sessFiltroFase ? ` de ${total}` : ""})</span>` : "";
   const faseSel = total
     ? `<label class="inline small sess-fase-sel">Fase
@@ -975,7 +979,7 @@ export function renderDossieDisciplina(root, app, discId, { onVoltar, onAbrirTop
           <button class="${ddxOrd === "tempo" ? "on" : ""}" data-action="ddx-ord" data-ord="tempo" data-tip="Menos estudados primeiro.">Tempo</button>
         </div>
       </div>
-      <p class="muted small u-m-0 u-mb-12">Sem questões suficientes o tópico fica <b>neutro</b> (a régua só vale com prática). Clique para abrir a pasta viva.</p>
+      <p class="muted small u-m-0 u-mb-12">Sem questões suficientes o tópico fica <b>neutro</b> (a régua só vale com prática). Abre a pasta viva do tópico.</p>
       <div class="ddx-lista stagger">
         ${ordenado.length ? ordenado.map(linhaTopico).join("") : `<p class="muted">Sem tópicos nesta disciplina.</p>`}
       </div>

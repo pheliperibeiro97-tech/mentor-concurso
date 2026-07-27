@@ -68,7 +68,7 @@ export default function renderCorrecao(root, app) {
       }
       <div class="form-acoes u-wrap">
         <span class="muted" id="cor-contador">${contaPalavras(rascunho.texto)} palavras</span>
-        ${iaOn ? `<label class="inline small" title="A IA pesquisa na web para conferir fatos e atualidade"><input type="checkbox" id="cor-web" /> pesquisar na web</label>` : ""}
+        ${iaOn ? `<label class="inline small" data-tip="A IA pesquisa na web para conferir fatos e atualidade"><input type="checkbox" id="cor-web" /> pesquisar na web</label>` : ""}
         <span class="spacer"></span>
         <button class="btn btn-ia" data-action="corrigir">${icone("sparkles")} Corrigir resposta</button>
       </div>

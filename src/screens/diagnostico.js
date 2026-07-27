@@ -1,7 +1,7 @@
 // Acompanhamento: controle das sessões por período (botões), por dia (calendário
 // mensal navegável) e desempenho por disciplina/tópico (com último dia estudado).
 // SEM "previsão de aprovação" (decisão do plano).
-import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, plural, defMetrica } from "../ui.js";
+import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, botaoImprimir, plural, defMetrica } from "../ui.js";
 import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
@@ -210,7 +210,7 @@ export default function renderDiagnostico(root, app) {
   const kpiAnima = !kpiAnimou;
   kpiAnimou = true;
   root.innerHTML = `
-    ${header("Acompanhamento", "Sua evolução, num relance.", `${app.store && app.store.iaDisponivel() ? `<button class="btn btn-ia btn-sm" data-action="explicar-semana" data-tip="O Mentor lê seus números da semana e explica em linguagem humana o que está bom e o que ajustar.">${icone("sparkles")} Explicar minha semana</button>` : ""}<button class="btn btn-ghost btn-sm" data-action="abrir-imprimir-acomp" data-tip="Escolha o que imprimir desta página">${icone("printer")} Imprimir</button>`)}
+    ${header("Acompanhamento", "Sua evolução, num relance.", `${app.store && app.store.iaDisponivel() ? `<button class="btn btn-ia btn-sm" data-action="explicar-semana" data-tip="O Mentor lê seus números da semana e explica em linguagem humana o que está bom e o que ajustar.">${icone("sparkles")} Explicar minha semana</button>` : ""}${botaoImprimir()}`)}
 
     ${
       pontoTopo
@@ -498,7 +498,9 @@ export default function renderDiagnostico(root, app) {
       app.perguntarNoChat(`Explique minha semana de estudos em linguagem simples e me diga o que ajustar (números desta semana: ${resumoNums}).`);
     },
     // Impressão SELECIONÁVEL: o usuário escolhe quais seções da página entram no PDF/impressão.
-    "abrir-imprimir-acomp": () => {
+    // Ação "imprimir" (a do botaoImprimir() padrão) — antes esta tela tinha botão e ação
+    // próprios, com markup e tooltip diferentes de todas as outras.
+    imprimir: () => {
       const secoes = [...root.querySelectorAll("[data-print]")];
       if (!secoes.length) return;
       const itens = secoes
@@ -779,7 +781,7 @@ function calendarioHTML(store) {
       ? (fasesPresentes.length ? `<span class="cal-dots">${fasesPresentes.map((f) => `<span class="cal-dot" style="background:${FASES[f].cor}"></span>`).join("")}</span>` : "")
       : (temNoFiltro ? `<span class="cal-min">${fmtMin(seg / 60)}</span>` : "");
     celulas += `
-      <button class="cal-dia ${temNoFiltro ? "tem" : ""} ${ehHoje ? "hoje" : ""} ${sel ? "sel" : ""}" data-action="dia" data-dia="${diaISO}" ${estilo} title="${titulo}">
+      <button class="cal-dia ${temNoFiltro ? "tem" : ""} ${ehHoje ? "hoje" : ""} ${sel ? "sel" : ""}" data-action="dia" data-dia="${diaISO}" ${estilo} data-tip="${titulo}">
         <span class="cal-num">${d}</span>
         ${rodape}
       </button>`;
@@ -1027,8 +1029,13 @@ function metasCompactasHTML(m) {
   const tip = m.dispDiariaMin
     ? ` data-tip="Disponibilidade: ${fmtMin(m.dispDiariaMin)}/dia · ${fmtMin(m.dispSemanaMin)}/semana${m.dispAteProvaMin != null ? ` · ~${Math.round(m.dispAteProvaMin / 60)}h até a prova` : ""}"`
     : "";
+  // "Metas" e o TITULO do cartao, nao o primeiro item da lista. Estava na mesma linha que
+  // "Hoje", enquanto "Semana" e "Mes" caiam na linha de baixo — o rotulo parecia parte do
+  // primeiro periodo. Agora e uma linha de titulo propria (como em todos os outros cartoes
+  // da tela) e os tres periodos ficam juntos embaixo.
   return `<section class="card metas-card" data-print="metas" data-print-label="Metas">
-    <p class="u-m-0 small u-flex u-wrap"${tip}>${icone("target")} <b>Metas</b><span class="muted">·</span>${corpo}</p>
+    <p class="metas-tit u-m-0"${tip}>${icone("target")} <b>Metas</b></p>
+    <div class="metas-itens small">${corpo}</div>
   </section>`;
 }
 
@@ -1128,7 +1135,7 @@ function heatmapHorario(comp) {
   const nivel = (v) => { if (!v) return 0; const r = v / comp.maxCel; return r > 0.75 ? 4 : r > 0.5 ? 3 : r > 0.25 ? 2 : 1; };
   const cabec = `<div class="hh-row hh-head"><span class="hh-dia"></span>${faixasLbl.map((f) => `<span class="hh-cel-lbl">${f}</span>`).join("")}</div>`;
   const linhas = diasLbl.map((d, di) =>
-    `<div class="hh-row"><span class="hh-dia">${d}</span>${comp.grade[di].map((v, fi) => `<span class="hh-cel hh-n${nivel(v)}" title="${d} · ${faixasLbl[fi]}: ${fmtTempoCurto(v)}"></span>`).join("")}</div>`
+    `<div class="hh-row"><span class="hh-dia">${d}</span>${comp.grade[di].map((v, fi) => `<span class="hh-cel hh-n${nivel(v)}" data-tip="${d} · ${faixasLbl[fi]}: ${fmtTempoCurto(v)}"></span>`).join("")}</div>`
   ).join("");
   const insight = comp.melhorDiaIdx != null
     ? `<p class="hh-insight"><span class="orb orb-sm" aria-hidden="true"></span> Você rende mais: <b>${diasLbl[comp.melhorDiaIdx]}</b> · <b>${faixasLbl[comp.melhorFaixaIdx]}</b></p>`

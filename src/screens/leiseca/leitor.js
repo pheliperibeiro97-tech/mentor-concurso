@@ -867,7 +867,7 @@ function trechoComMarcas(text, rawStart, marcas, opts = {}) {
     const trecho = text.slice(m.a, m.b);
     // Recordar: grifo (não comentário) vira lacuna clicável, exceto se já revelado.
     if (modo === "recordar" && m.cor !== "comentario" && !(revelados && revelados.has(m.id))) {
-      html += `<span class="mk mk-cloze mk-${m.cor}" data-cloze="${m.id}" title="Toque para revelar">${"_".repeat(Math.max(3, Math.min(16, trecho.length)))}</span>`;
+      html += `<span class="mk mk-cloze mk-${m.cor}" data-cloze="${m.id}" data-tip="Toque para revelar">${"_".repeat(Math.max(3, Math.min(16, trecho.length)))}</span>`;
     } else {
       const cls = m.cor === "comentario" ? "mk mk-comentario mk-tem-nota" : "mk mk-" + m.cor;
       html += `<mark class="${cls}" data-mid="${m.id}">${esc(trecho)}</mark>`;
@@ -1117,7 +1117,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
   return `
     <div class="card ls-item ${i.lido ? "lido" : ""} ${i.revogado ? "ls-revogado" : ""}" data-foco-id="${i.id}">
       <div class="ls-top">
-        <input type="checkbox" data-action="toggle-lido" data-id="${i.id}" ${i.lido ? "checked" : ""} title="Marcar como lido" />
+        <input type="checkbox" data-action="toggle-lido" data-id="${i.id}" ${i.lido ? "checked" : ""} data-tip="Marcar como lido" aria-label="Marcar como lido" />
         <span class="ls-ref">${i.revogado || i.lido ? `<s>${esc(i.referencia)}</s>` : esc(i.referencia)}</span>
         ${incHTML}
         ${badges}
@@ -1126,7 +1126,7 @@ function itemHTML(st, tipo, i, store, contexto = "ler", vincMap = null) {
         <div class="ls-acoes">
           ${acaoPQ}
           <details class="ls-mais">
-            <summary data-tip="Mais ações" title="Mais ações">${icone("ellipsis")}</summary>
+            <summary data-tip="Mais ações">${icone("ellipsis")}</summary>
             <div class="ls-mais-pop">${menu}</div>
           </details>
         </div>

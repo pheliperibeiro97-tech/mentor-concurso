@@ -9,7 +9,7 @@
 import { bindActions, toast, toastCarregando, header, seloBadge, vazio, confirmar, escolher, avisoIA, ligarDropZone, focarItem, pedirNumero, faixaIA, abrirJanela, iconMapa, plural, comOcupado } from "../ui.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
-import { extrairPdfPaginas, rasterizarPaginas, arquivoParaBase64 } from "../pdf.js";
+import { extrairPdfPaginas, rasterizarPaginas, rasterizarPaginasStream, arquivoParaBase64 } from "../pdf.js";
 import { extrairTextoArquivo } from "../ia-provider.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
@@ -134,11 +134,26 @@ function trechoBusca(texto, termo) {
   return (ini > 0 ? "…" : "") + texto.slice(ini, fim).trim() + (fim < texto.length ? "…" : "");
 }
 
+// Converte o PDF para data URL SEM montar a string gigante byte a byte na thread principal.
+// A versão antiga fazia `binary += String.fromCharCode(byte)` num laço: uma apostila de 30 MB
+// virava ~60 MB de string UTF-16 + ~40 MB de base64, tudo de uma vez e travando a interface
+// (no celular, a aba costuma ser encerrada por falta de memória). O FileReader faz o mesmo
+// trabalho em código nativo, fora da thread de layout.
 function abToDataUrl(ab) {
-  let binary = "";
-  const bytes = new Uint8Array(ab);
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return "data:application/pdf;base64," + btoa(binary);
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(new Blob([ab], { type: "application/pdf" }));
+  });
+}
+
+// Teto de tamanho do PDF guardado para visualização. No celular guardar 50 MB em IndexedDB
+// (e recarregá-lo a cada abertura do material) é inviável — o TEXTO extraído continua salvo
+// normalmente, só a cópia do arquivo original é dispensada.
+function tetoPdfGuardado() {
+  const toque = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  return (toque ? 12 : 50) * 1024 * 1024;
 }
 
 function fileToDataUrl(file) {
@@ -504,10 +519,13 @@ export default function renderDocumentos(root, app) {
     const rotulo = `${bloco.numero || ""} ${bloco.titulo}`.trim();
     if (tipo === "mapa") return gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeMaterial(id, bloco));
     if (tipo === "extrair") {
+      const rotEx = `de «${rotulo}»`;
+      const loteEx = store.iniciarLoteGeracao(rotEx); // extrair também abre só o recém-criado
       const qs = await comOcupado(() => store.extrairQuestoesDeDoc(id, bloco), { botao: el, msg: `Extraindo questões de "${rotulo}"…` });
+      store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} de "${rotulo}".` : "Não encontrei questões prontas neste tópico do material.", qs.length ? "ok" : "erro");
-      if (qs.length) app.navigate("pratica");
+      if (qs.length) app.navigate("pratica", { lote: loteEx, loteRotulo: rotEx });
       return;
     }
     const perguntas = {
@@ -771,14 +789,6 @@ export default function renderDocumentos(root, app) {
       else textoBrutoAberto.add(id);
       app.refresh();
     },
-    "abrir-pdf": (el) => {
-      const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
-      if (d && d.pdfData) {
-        const w = window.open("", "_blank");
-        if (w) w.document.write(`<iframe src="${d.pdfData}" style="border:0;width:100%;height:100%"></iframe>`);
-        else toast("Permita pop-ups para abrir o arquivo.", "erro");
-      }
-    },
     "del-doc": async (el) => {
       if (await confirmar("Remover este material da base?")) {
         store.removerDocumento(el.getAttribute("data-id"));
@@ -859,10 +869,13 @@ export default function renderDocumentos(root, app) {
       const id = el.getAttribute("data-id");
       const escopo = await escolherEscopoGeracao(id);
       if (!escopo) return;
+      const rotEx = rotuloDoc(id, escopo.bloco);
+      const loteEx = store.iniciarLoteGeracao(rotEx); // extrair também abre só o recém-criado
       const qs = await comOcupado(() => store.extrairQuestoesDeDoc(id, escopo.bloco), { botao: el, msg: "Extraindo do material…" });
+      store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} (quando o gabarito estava no material).` : "Não encontrei questões prontas neste material.", qs.length ? "ok" : "erro");
-      if (qs.length) app.navigate("pratica");
+      if (qs.length) app.navigate("pratica", { lote: loteEx, loteRotulo: rotEx });
     },
 
     // ---- F5: geração/extração POR BLOCO (a partir do sumário navegável) ----
@@ -1018,31 +1031,40 @@ async function processarOcr(app, store, doc, listaN) {
   let cancelado = false;
   const fim = toastCarregando("Preparando as páginas…", { aoCancelar: () => { cancelado = true; } });
   try {
-    let imagens;
-    if (doc.imgData && (!doc.pdfData)) {
-      imagens = listaN.includes(1) ? [{ n: 1, dataUrl: doc.imgData }] : [];
+    let ok = 0;
+    let erroPag = null;
+    // Transcreve UMA página por vez (rasterizarPaginasStream) em vez de rasterizar todas antes.
+    // Antes, "Ler páginas escaneadas (40+)" gerava dezenas de canvas de página inteira e
+    // guardava todas as imagens no array ao mesmo tempo — no celular isso mata a aba.
+    const transcrever = async (img, i, total) => {
+      if (cancelado) return false;
+      fim(`Lendo páginas escaneadas… ${i + 1}/${total} (pág. ${img.n})`);
+      try {
+        await store.ocrPagina(doc.id, img.n, img.dataUrl);
+        ok++;
+        return true;
+      } catch (e) {
+        console.error(e);
+        erroPag = img.n;
+        return false; // interrompe o fluxo; o que já foi transcrito está salvo
+      }
+    };
+
+    if (doc.imgData && !doc.pdfData) {
+      if (listaN.includes(1)) await transcrever({ n: 1, dataUrl: doc.imgData }, 0, 1);
     } else if (doc.pdfData) {
-      imagens = await rasterizarPaginas(doc.pdfData, listaN);
+      await rasterizarPaginasStream(doc.pdfData, listaN, transcrever);
     } else {
       fim();
       return toast("Sem PDF/imagem salvos para processar (arquivo grande não foi guardado).", "erro");
     }
-    let ok = 0;
-    for (const img of imagens) {
-      if (cancelado) break;
-      fim(`Lendo páginas escaneadas… ${ok + 1}/${imagens.length} (pág. ${img.n})`);
-      try {
-        await store.ocrPagina(doc.id, img.n, img.dataUrl);
-        ok++;
-      } catch (e) {
-        console.error(e);
-        fim();
-        toast(`A leitura parou na página ${img.n}. O que já foi transcrito está salvo; tente as restantes em instantes.`, "erro");
-        app.refresh();
-        return;
-      }
-    }
+
     fim();
+    if (erroPag != null) {
+      toast(`A leitura parou na página ${erroPag}. O que já foi transcrito está salvo; tente as restantes em instantes.`, "erro");
+      app.refresh();
+      return;
+    }
     if (cancelado) toast(`Leitura interrompida — ${plural(ok, "página transcrita ficou salva", "páginas transcritas ficaram salvas")}.`, "ok");
     else if (ok) toast(`${plural(ok, "página transcrita", "páginas transcritas")} — confira o texto.`, "ok");
     app.refresh();
@@ -1173,7 +1195,7 @@ function formHTML(opcoesTopico) {
         <label class="u-grow">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       </div>
       <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Você também pode arrastar o arquivo para este cartão.">${icone("paperclip")} Selecionar arquivo
-        <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/*" hidden />
+        <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden />
       </label>
       <label>Conteúdo <textarea id="doc-texto" rows="6" placeholder="${esc("Cole aqui o conteúdo da aula (ou importe um arquivo acima).\nEx.: Atos administrativos são toda manifestação unilateral de vontade da Administração… Atributos: presunção de legitimidade, imperatividade, autoexecutoriedade…")}"></textarea></label>
       <div id="doc-estrutura"></div>
@@ -1237,8 +1259,9 @@ function abrirImportarMaterial(app) {
               ]);
               painel.set("ler", "ativa");
               const ab = await f.arrayBuffer();
-              if (ab.byteLength <= 50 * 1024 * 1024) pend.pdf = abToDataUrl(ab);
-              else toast("PDF muito grande (>50MB): não será guardado para visualização; só o texto será mantido.", "erro");
+              const teto = tetoPdfGuardado();
+              if (ab.byteLength <= teto) pend.pdf = await abToDataUrl(ab);
+              else toast(`PDF acima de ${Math.round(teto / 1024 / 1024)} MB: não será guardado para visualização; o texto extraído continua salvo normalmente.`, "erro");
               const { paginas: paginasBrutas, numPaginas, outline, linhasPorPagina } = await extrairPdfPaginas(new File([ab], f.name, { type: "application/pdf" }));
               const paginas = limparRuidoDePaginas(paginasBrutas);
               texto = paginas.map((p) => p.texto || "").join("\n\n").trim();
@@ -1412,7 +1435,7 @@ function docHTML(store, st, d, busca) {
         <div class="doc-ident">
           <span class="doc-tipo-ico" data-tip="${tipo.lb}">${icone(tipo.ic)}</span>
           <div class="doc-ident-txt">
-            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" title="Ver/ocultar o texto extraído">${esc(d.titulo)}</span>
+            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" data-tip="Ver/ocultar o texto extraído">${esc(d.titulo)}</span>
             <div class="doc-sub muted small">${sub}</div>
           </div>
         </div>

@@ -256,20 +256,43 @@ async function lerOutline(pdf) {
 
 // Rasteriza páginas específicas para JPEG (data URL), para enviar à Visão.
 // listaN: array de números de página (1-based). escala 2 ≈ boa nitidez p/ OCR.
-export async function rasterizarPaginas(source, listaN, escala = 2) {
+// Escala menor no CELULAR: a 2× uma página A4 vira um canvas de ~1190×1684 (≈8 MB em RAM
+// antes do JPEG). Multiplicado por dezenas de páginas de uma vez, o navegador do telefone é
+// morto por falta de memória. 1.4× ainda é suficiente para a IA ler o texto.
+const ESCALA_TOQUE = 1.4;
+function escalaEfetiva(escala) {
+  const toque = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+  return toque ? Math.min(escala, ESCALA_TOQUE) : escala;
+}
+
+// Versão em FLUXO: rasteriza UMA página por vez e entrega ao chamador, liberando o canvas
+// antes da próxima. Use esta quando a lista for grande (OCR de material escaneado) — a versão
+// que devolve o array inteiro mantém todas as imagens na memória ao mesmo tempo.
+// `aoPagina(img, i, total)` pode devolver `false` para interromper (ex.: botão Cancelar).
+export async function rasterizarPaginasStream(source, listaN, aoPagina, escala = 2) {
   const pdf = await abrirPdf(source);
-  const out = [];
-  for (const n of listaN) {
-    if (n < 1 || n > pdf.numPages) continue;
+  const esc = escalaEfetiva(escala);
+  const alvos = listaN.filter((n) => n >= 1 && n <= pdf.numPages);
+  for (let i = 0; i < alvos.length; i++) {
+    const n = alvos[i];
     const page = await pdf.getPage(n);
-    const viewport = page.getViewport({ scale: escala });
+    const viewport = page.getViewport({ scale: esc });
     const canvas = document.createElement("canvas");
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
     const ctx = canvas.getContext("2d");
     await page.render({ canvasContext: ctx, viewport }).promise;
-    out.push({ n, dataUrl: canvas.toDataURL("image/jpeg", 0.82) });
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+    canvas.width = 0; canvas.height = 0; // libera o bitmap antes da próxima página
+    try { page.cleanup(); } catch (_) {}
+    const seguir = await aoPagina({ n, dataUrl }, i, alvos.length);
+    if (seguir === false) break;
   }
+}
+
+export async function rasterizarPaginas(source, listaN, escala = 2) {
+  const out = [];
+  await rasterizarPaginasStream(source, listaN, (img) => { out.push(img); }, escala);
   return out;
 }
 

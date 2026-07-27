@@ -310,6 +310,11 @@ async function autoSync(motivo, { piso = AUTO_MIN_INTERVALO_MS } = {}) {
   const st = estadoSyncNuvem();
   // Conflito pendente = o usuário precisa decidir; sincronizar em laço só geraria backups.
   if (!st.conectado || emVoo || st.pendente) return;
+  // Geração de IA em curso: NÃO sincronizar. `sincronizarNuvem` pode decidir "baixar" e
+  // chamar importarBackup, que troca o estado inteiro — os flashcards/questões recém-criados
+  // sumiriam e a tela de destino abriria sem eles. É o cenário típico do celular, onde
+  // esconder e voltar a aba (tela apagando durante uma geração longa) dispara uma sync.
+  if (store.geracaoEmAndamento && store.geracaoEmAndamento()) return;
   if (typeof navigator !== "undefined" && navigator.onLine === false) return;
   const agora = Date.now();
   if (agora - autoUltimoEm < piso) return;

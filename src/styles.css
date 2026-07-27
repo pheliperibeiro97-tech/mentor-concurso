@@ -390,8 +390,12 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible,
 /* Fundo plexus animado (v3): atrás do conteúdo; mais presente no escuro. */
 #app-plexus { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.6; }
 [data-tema="claro"] #app-plexus { opacity: 0.34; }
-#app { position: relative; z-index: 1; height: 100vh; }
-.shell { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); height: 100vh; }
+/* Altura em DVH (viewport dinâmico): no celular a barra de endereço aparece/some e 100vh
+   equivale ao viewport GRANDE — o app ficava mais alto que a área visível, empurrando o fim
+   de toda tela (e a barra inferior fixa) para baixo da dobra, com a rolagem "pulando" a cada
+   arrasto. O 100vh fica como reserva para navegador sem suporte a dvh. */
+#app { position: relative; z-index: 1; height: 100vh; height: 100dvh; }
+.shell { display: grid; grid-template-columns: var(--sidebar-w) minmax(0, 1fr); height: 100vh; height: 100dvh; }
 .sidebar {
   background: linear-gradient(190deg, var(--side-bg-1) 0%, var(--side-bg-2) 100%);
   color: var(--side-text-soft); display: flex; flex-direction: column;
@@ -706,7 +710,11 @@ body.onboarding #lem-fab { display: none !important; }
 .tema-opt.on { border-color: var(--primary); box-shadow: var(--ring); }
 .tema-amostra { width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.12);
   background-size: cover; }
-.tema-amostra-claro { background: linear-gradient(135deg, var(--bg) 60%, var(--primary) 60%); }
+/* As amostras sao uma PREVIA de cada tema: precisam mostrar as cores DAQUELE tema,
+   nao as do tema em uso. A amostra clara usava var(--bg)/var(--primary), que seguem o
+   tema atual — com o app no escuro, a previa do "Claro" aparecia preta e azul-clara em
+   vez de branca e azul. Valores fixos, iguais aos tokens do tema claro (:root). */
+.tema-amostra-claro { background: linear-gradient(135deg, #eaeef6 60%, #1d4ed8 60%); }
 .tema-amostra-escuro { background: linear-gradient(135deg, #090d18 60%, #22d3ee 60%); }
 
 /* ===== Forms ===== */
@@ -790,6 +798,10 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 /* Selo de IA com a borda-gradiente da marca (chip-ia): fundo suave + texto de acento. */
 .selo.chip-ia { background: var(--ai-grad-soft); color: var(--accent-d); border: none; }
 [data-tema="escuro"] .selo.chip-ia { color: #93c5fd; }
+/* "Sem fonte": tom de ATENÇÃO, distinto do amarelo de IA (que tem a borda-gradiente da marca).
+   Cor fixa nos dois temas seria ilegível no escuro — por isso o par próprio abaixo. */
+.selo-semfonte { background: var(--tint-amber-bg); color: var(--tint-amber-ink); }
+.selo-web { background: var(--tint-sky-bg); color: var(--tint-sky-ink); }
 .selo-manual { background: #eef2ff; color: #4338ca; }
 .selo-oficial { background: var(--tint-sky-bg); color: var(--tint-sky-ink); }
 .prova-rev-lista { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; margin: 6px 0; }
@@ -878,7 +890,10 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .ed-disc-chev { display: inline-flex; color: var(--muted); flex-shrink: 0; transition: transform var(--dur-2) var(--ease-std); }
 .ed-disc-acc[open] > summary .ed-disc-chev { transform: rotate(180deg); }
 .ed-disc-acc > .ed-tops { padding: 4px 18px 10px; }
-@media (max-width: 900px) { .ed-disc-prog .ed-prog-track { width: 56px; } .ed-disc-sum .ed-sem, .ed-disc-cont { display: none; } }
+/* .ed-disc-sum .ed-sem era seletor MORTO (nao ha .ed-sem dentro do <summary>) e
+   .ed-disc-cont ("3/12" concluidos) sumia sem alternativa — cabe, e e o unico lugar que
+   diz quantos faltam. Fica so a barra mais curta. */
+@media (max-width: 900px) { .ed-disc-prog .ed-prog-track { width: 56px; } }
 
 /* ===== Edital: tabela premium — reproduz o mockup (tamanhos exatos) ===== */
 .ed-disc-acc > .ed-tabwrap { padding: 0 14px 8px; overflow-x: auto; }
@@ -2012,9 +2027,21 @@ details.ajuda-sec[open] > summary { border-bottom: 1px solid var(--borda, #e5e7e
 .sim-tempo-sug { white-space: nowrap; }
 .sim-embaralhar { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-sm); color: var(--text-2); margin: 0; cursor: pointer; }
 .sim-total { font-size: var(--fs-lg); }
+/* "de N" ao lado do campo: no celular a coluna "Disponíveis" é escondida, e sem esta pista o
+   aluno digitava a cota sem saber se existem 3 ou 300 questões da disciplina. */
+.sim-cota-de { display: none; font-size: var(--fs-2xs); color: var(--muted); white-space: nowrap; }
 @media (max-width: 900px) {
-  .sim-cotas-head, .sim-cota-row { grid-template-columns: 1fr auto; }
+  /* "1fr auto" nas DUAS grades, mas elas sao independentes: a coluna "auto" do cabecalho
+     media "No simulado" (89px) e a das linhas media os controles (149px), entao as colunas
+     nao coincidiam — o rotulo caia 60px a direita do campo que nomeia. Largura fixa igual
+     nas duas resolve (e e o mesmo estilo do computador, que ja usa colunas fixas). */
+  .sim-cotas-head, .sim-cota-row { grid-template-columns: 1fr 156px; }
   .sim-cotas-head span:nth-child(2), .sim-cota-disp { display: none; }
+  .sim-cota-de { display: inline; }
+  /* Com duas colunas, o rotulo "No simulado" ficava encostado a direita da celula enquanto
+     o campo que ele nomeia comeca na esquerda dela: 60px de desencontro entre o cabecalho
+     e o dado. Alinha pelo inicio, como a coluna "Disciplina". */
+  .sim-cotas-head span:last-child { text-align: left; justify-self: start; }
 }
 .sim-por-mat { display: flex; flex-direction: column; gap: 8px; }
 .sim-mat-linha { display: grid; grid-template-columns: 1fr 2fr auto; align-items: center; gap: 12px; }
@@ -2205,12 +2232,20 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .fq-nav:hover:not(:disabled) { color: var(--primary-d); border-color: var(--primary); }
 .fq-nav:disabled { opacity: .3; cursor: default; }
 
-/* Palco: centraliza o card */
-.fq-palco { position: relative; z-index: 2; flex: 1; min-height: 0; display: grid; place-items: center; padding: 8px clamp(16px, 4vw, 40px) 8px; perspective: 1600px; }
+/* Palco: centraliza o card. ROLA quando o card não cabe (celular deitado, enunciado longo,
+   card com comentário da IA): sem isto o .fc-foco (overflow:hidden) recortava o excesso e as
+   alternativas/botões de nota ficavam inalcançáveis. `safe center` mantém a centralização
+   quando cabe e alinha ao topo quando não cabe (em vez de cortar em cima). */
+.fq-palco { position: relative; z-index: 2; flex: 1; min-height: 0; display: grid; place-items: center; align-content: safe center;
+  overflow-y: auto; overscroll-behavior: contain; padding: 8px clamp(16px, 4vw, 40px) 8px; perspective: 1600px; }
 
 /* Wrapper que anima a ENTRADA e a SAÍDA entre cards (no card em si brigaria com o flip). */
 .fq-stage { display: contents; }
-.fq-palco > .fq-stage { display: block; width: min(560px, 94vw); animation: fq-stage-in .34s cubic-bezier(.2,.9,.3,1.05) both; }
+/* 94vw media a JANELA (barra de rolagem inclusa) e ignora o padding lateral do palco: em
+   390px dava 367px dentro de um espaco de 338, e o palco ganhava rolagem horizontal — no
+   celular o dedo arrastava o cartao de lado em vez de responder. 100% mede o espaco real.
+   No computador nada muda: o limite de 560px continua sendo o menor dos dois. */
+.fq-palco > .fq-stage { display: block; width: min(560px, 100%); animation: fq-stage-in .34s cubic-bezier(.2,.9,.3,1.05) both; }
 .fq-palco > .fq-stage.fq-out { animation: fq-stage-out .22s ease forwards; }
 /* Troca EM-LUGAR (navegar entre questões): só opacidade, SEM transform — não "mexe a tela". */
 .fq-palco > .fq-stage.fq-fade { animation: fq-stage-fade .16s ease both; }
@@ -2629,7 +2664,7 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
    topo/base (o .fq-palco centraliza e o .fc-foco tem overflow:hidden). `safe center` centraliza o
    artigo curto e alinha ao topo (rolável) quando estoura. Escopado à leitura (não afeta os cards). */
 .leitura-foco-host .fq-palco { overflow-y: auto; align-content: safe center; overscroll-behavior: contain; }
-.leitura-foco-host .fq-palco > .fq-stage { width: min(720px, 94vw); }
+.leitura-foco-host .fq-palco > .fq-stage { width: min(720px, 100%); } /* mesmo motivo do .fq-stage acima */
 .leitura-foco-host .fq-palco::-webkit-scrollbar { width: 9px; }
 .leitura-foco-host .fq-palco::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--primary) 26%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 .lf-artigo { max-width: 760px; margin: 0 auto; padding: 8px 0 32px; }
@@ -2870,7 +2905,6 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .fq-notas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
 .fq-nota { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 12px 8px 10px; border-radius: var(--radius-lg);
   border: 1.5px solid; background: color-mix(in srgb, var(--surface) 70%, transparent); cursor: pointer; font-family: inherit; transition: all var(--dur-2); }
-.fq-nota kbd { position: absolute; top: -8px; right: -6px; }
 .fq-nota .fq-nota-l { font-size: var(--fs-sm); font-weight: var(--fw-bold); }
 .fq-nota .fq-nota-i { font-size: var(--fs-2xs); font-weight: var(--fw-medium); opacity: .8; font-variant-numeric: tabular-nums; }
 .fq-nota:hover { transform: translateY(-3px); }
@@ -3832,8 +3866,12 @@ i.fc-comp-novo { background: var(--accent); } i.fc-comp-apr { background: var(--
 .mk-amarelo { background: #fef9c3; box-shadow: inset 0 -2px 0 #fde047; } .mk-dot.mk-amarelo { background: #fde047; }
 .mk-azul { background: #dbeafe; box-shadow: inset 0 -2px 0 #60a5fa; } .mk-dot.mk-azul { background: #60a5fa; }
 .mk-vermelho { background: #fee2e2; box-shadow: inset 0 -2px 0 #f87171; } .mk-dot.mk-vermelho { background: #f87171; }
-.mk-verde { background: var(--tint-green-bg); box-shadow: inset 0 -2px 0 #4ade80; } .mk-dot.mk-verde { background: #4ade80; }
-.mk-roxo { background: var(--tint-violet-bg); box-shadow: inset 0 -2px 0 #a78bfa; } .mk-dot.mk-roxo { background: #a78bfa; }
+/* Cor FIXA, como as outras quatro marcas. Estavam ligadas a --tint-*-bg, que troca com o
+   tema: no escuro viravam #112e25 e #1a1430 (fundos escuros), enquanto a regra do tema
+   escuro forca `color: #0b1020` em TODA marca — preto sobre quase-preto, ilegivel. Grifo e
+   papel colorido: a cor nao pode depender do tema, senao o texto marcado some. */
+.mk-verde { background: #dcfce7; box-shadow: inset 0 -2px 0 #4ade80; } .mk-dot.mk-verde { background: #4ade80; }
+.mk-roxo { background: #ede9fe; box-shadow: inset 0 -2px 0 #a78bfa; } .mk-dot.mk-roxo { background: #a78bfa; }
 .mk-laranja { background: #ffedd5; box-shadow: inset 0 -2px 0 #fb923c; } .mk-dot.mk-laranja { background: #fb923c; }
 /* Paleta DALTONISMO (Okabe-Ito, segura para daltônicos) */
 .paleta-daltonismo .mk-amarelo { background: #fff4cc; box-shadow: inset 0 -2px 0 #e69f00; } .paleta-daltonismo .mk-dot.mk-amarelo { background: #e69f00; }
@@ -4299,6 +4337,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 [data-tema="escuro"] .chip.on { border-color: var(--primary); color: var(--primary-l); }
 [data-tema="escuro"] input:disabled, [data-tema="escuro"] select:disabled, [data-tema="escuro"] textarea:disabled { background: var(--surface-3); }
 [data-tema="escuro"] .selo-amarelo { background: var(--warn-soft); color: var(--warn); }
+[data-tema="escuro"] .selo-semfonte { background: var(--tint-amber-bg); color: var(--tint-amber-ink); }
+[data-tema="escuro"] .selo-web { background: var(--tint-sky-bg); color: var(--tint-sky-ink); }
+.selo-web { background: var(--tint-sky-bg); color: var(--tint-sky-ink); }
 [data-tema="escuro"] .selo-manual { background: var(--primary-soft); color: var(--primary-l); }
 [data-tema="escuro"] .selo-oficial { background: var(--accent-soft); color: var(--accent); }
 [data-tema="escuro"] .atalho-r { border-color: rgba(251,191,36,0.35); }
@@ -5600,7 +5641,6 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   .lf-legenda,
   .fc-atalhos,
   .alt-key,
-  .fq-nota kbd,
   .paleta-rodape,
   .cmdbar-kbd { display: none !important; }
 }
@@ -5676,3 +5716,1029 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   /* Tabelas densas com wrapper próprio rolam em vez de serem cortadas (Histórico de sessões). */
   .tab-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+
+/* =========================================================================
+   AUDITORIA MOBILE — correções de celular (toque, viewport dinâmico, estouro)
+   Bloco no FIM do arquivo de propósito: várias regras precisam VENCER as bases
+   declaradas acima (mesma especificidade, ganha a última).
+   ========================================================================= */
+
+/* ----- 1. ESTOURO HORIZONTAL: barras/linhas que empurravam a tela para o lado -----
+   Sintoma relatado: "a fonte está saindo do balão" em Questões. A causa não era a fonte —
+   era a linha de ações do cabeçalho, que não encolhe e alarga o conteúdo além dos 390px,
+   cortando a lateral direita dos cartões. */
+@media (max-width: 900px) {
+  /* Cabeçalho de página: título em cima, ações embaixo (antes disputavam a mesma linha e as
+     ações, com flex-shrink:0, saíam para fora da tela). */
+  /* Titulo em cima, acoes embaixo (na mesma linha eles nao cabiam e as acoes, com
+     flex-shrink:0, saiam da tela). As acoes seguem ALINHADAS A DIREITA, como no computador —
+     joga-las para a esquerda mudava o lugar onde o olho procura o botao. */
+  .page-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .page-head-extra { justify-content: flex-end; flex-shrink: 1; }
+
+  /* Segmented (.seg) é inline-flex: encolhia para o conteúdo e, com os botões em nowrap,
+     estourava (Configurações tinha 522px de abas em 390px de tela). Vira bloco que QUEBRA em
+     mais linhas. Antes eu tinha deixado rolando na horizontal, mas rolagem dentro de uma
+     barra de abas não é descobrível: em Configurações apareciam 3 abas e uma fatia da quarta,
+     e nada indicava que dava para deslizar. Como os .seg do app têm de 2 a 4 itens curtos,
+     quebrar em duas linhas mostra todos de uma vez. */
+  .seg { display: flex; flex-wrap: wrap; max-width: 100%; }
+  .seg > button { flex: 1 1 auto; justify-content: center; }
+
+  /* Rótulos com campo embutido (label.inline) — em Mapas o seletor sozinho tinha 326px. */
+  .inline { display: flex; flex-wrap: wrap; max-width: 100%; }
+  .inline select, .inline input { max-width: 100%; min-width: 0; }
+  select, input[type="text"], input[type="search"], input[type="url"] { max-width: 100%; }
+
+  /* Linhas de ação com nowrap (pontos de atenção do Mentor). */
+  .mentor-alertas .ponto-acoes, .mentor-alertas .ponto-sec { white-space: normal; flex-wrap: wrap; }
+  .mentor-alertas .ponto-acoes { flex-shrink: 1; }
+
+  /* Chips de contexto da questão (disciplina, nível, origem) quebram em vez de vazar. */
+  .questao-meta, .fq-tags { flex-wrap: wrap; }
+
+  /* Cabeçalho de lista (título + contador + filtro + botão) — em Mapas o filtro e o botão
+     "Gerar mapa mental" ficavam 275px fora da tela por causa do nowrap. */
+  .plano-h { flex-wrap: wrap; }
+
+  /* Rede de segurança: nada dentro do conteúdo pode alargar a coluna. */
+  .main-col, .topbar, .content { min-width: 0; }
+}
+
+/* ----- 2. iOS: zoom automático ao tocar num campo -----
+   Abaixo de 16px o Safari amplia a página ao focar o campo e NÃO volta — o app fica
+   "grande demais" e passa a rolar para os lados. É a causa mais comum de "a fonte ficou
+   enorme" no iPhone. 16px é o limiar exigido pelo iOS. */
+@media (max-width: 900px) {
+  /* Só nos campos em que se DIGITA: e neles que o iOS amplia a pagina ao focar. O <select>
+     abre o seletor nativo do sistema (nao ha foco de texto), entao nao precisa dos 16px — e
+     force-los deixava a caixa do filtro visivelmente maior que o texto ao lado. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea,
+  .paleta-input, .lem-inp, .sff-input, .sff-busca-input, .cl-blank, .fq-cm-input,
+  .chat-input textarea, .chat-input input { font-size: 16px; }
+}
+
+/* ----- 3. Viewport dinâmico (dvh) nos cartões do Modo Foco -----
+   Com 100vh o teto era maior que a área visível no iOS: os botões de nota / Esqueci-Lembrei-
+   Fácil caíam abaixo da dobra e eram recortados. */
+.fq-card--ia, .fq-qcard, .fq-revcard { max-height: calc(100dvh - 150px); }
+.fq-simcard { max-height: 60dvh; }
+.fq-simmapa { max-height: 18dvh; }
+@media (max-width: 560px) { .fq-card { height: min(62dvh, 520px); } }
+
+/* Overlay do foco: não deixa o arrasto vazar para a tela de trás (que rolava junto e fazia a
+   barra de endereço do celular aparecer/sumir), e respeita o entalhe/status bar do iPhone
+   (o index.html usa viewport-fit=cover, então o topo ficava sob o notch). */
+.fc-foco { overscroll-behavior: contain; padding-top: env(safe-area-inset-top); }
+
+/* ----- 4. Pistas de teclado que faltavam no bloco de toque -----
+   (o essencial é resolvido no tooltip.js, que limpa o texto do balão no toque) */
+@media (hover: none) {
+  .fq-qia-dica,
+  .fc-motivo-num { display: none !important; }
+}
+
+/* ----- 5. MODAIS e JANELAS: cabem, rolam e viram folha inferior no celular -----
+   .modal-overlay não tinha rolagem nem teto de altura: modal alto (imprimir, pedir texto,
+   pedir quantidade com nível) era cortado em cima e embaixo e os botões Confirmar/Cancelar
+   ficavam inalcançáveis — pior ainda com o teclado virtual aberto. */
+.modal-overlay { overflow-y: auto; }
+.modal { max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; }
+.mm-modal { max-height: 90dvh; }
+.mm-modal--full { width: 100%; height: 100dvh; max-height: 100dvh; }
+.pdf-viewer { height: 90dvh; }
+.lem-pop { max-height: calc(100dvh - 90px); }
+.chat-panel.expandido { height: calc(100dvh - 120px); }
+.onboarding-wrap { min-height: 100dvh; }
+.juris-idx { max-height: calc(100dvh - 40px); }
+
+@media (max-width: 560px) {
+  /* Folha inferior: nasce da borda de baixo, onde o polegar alcança, e sobra espaço em cima
+     para o teclado virtual. */
+  .modal-overlay { align-items: flex-end; padding: 0; }
+  .modal { width: 100%; max-width: none; border-radius: 16px 16px 0 0; max-height: 88dvh;
+    padding: 20px 18px calc(20px + env(safe-area-inset-bottom)); }
+  .mm-overlay { padding: 0; align-items: flex-end; }
+  .mm-modal { width: 100%; max-height: 92dvh; border-radius: 16px 16px 0 0; }
+  .mm-corpo { padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+  /* Paleta de comando: é a navegação principal do celular (a barra de comando é o único
+     controle do topo). Precisa da tela toda para os resultados não sumirem sob o teclado. */
+  .paleta-overlay { padding-top: 8px; }
+  .paleta { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .onboarding-wrap { padding: 16px 12px; }
+  .pdf-overlay { padding: 0; }
+  .pdf-viewer { height: 100dvh; border-radius: 0; }
+}
+
+/* ----- 6. FABs e toasts deixam de cobrir o conteúdo -----
+   Empilhados (92 / 156 / 220px) os três flutuantes tomavam os 268px de baixo da borda
+   direita — bem em cima da última linha de ações das telas (que é alinhada à direita) e do
+   canto do card no Modo Foco. Deitados lado a lado ocupam uma faixa só. */
+@media (max-width: 900px) {
+  /* Os TRES na mesma linha e com o mesmo tamanho (48px), alinhados pelo mesmo `bottom` —
+     antes o Assistente tinha 50px e um bottom diferente dos outros dois, e ficava
+     visivelmente mais baixo. Ordem da direita para a esquerda: Assistente, Lembretes,
+     Cronometro. O cronometro fica no EXTREMO ESQUERDO de proposito: quando esta rodando
+     ele vira uma pilula com o tempo e cresce para a esquerda — ali tem espaco livre, e
+     nos outros lugares ele passaria por cima do vizinho. */
+  .chat-fab { width: 48px; height: 48px; right: 20px; bottom: calc(90px + env(safe-area-inset-bottom)); }
+  .chat-fab .ico { width: 22px; height: 22px; }
+  .lf { right: 78px; bottom: calc(90px + env(safe-area-inset-bottom)); }
+  .cf { right: 136px; bottom: calc(90px + env(safe-area-inset-bottom)); }
+  /* Os popovers sao filhos dos botoes flutuantes, entao herdavam a ancoragem pela direita
+     DELES: com os botoes deitados, um popover largo vazava pela esquerda da tela. Aqui eles
+     saem do fluxo do botao e passam a ocupar a largura da tela, com folga nas duas bordas. */
+  .cf-pop, .lf-pop {
+    position: fixed; left: 12px; right: 12px; width: auto; max-width: none;
+    bottom: calc(148px + env(safe-area-inset-bottom));
+  }
+  .content { padding-bottom: calc(156px + env(safe-area-inset-bottom)); }
+  .chat-panel { bottom: calc(152px + env(safe-area-inset-bottom)); max-height: calc(100dvh - 212px); }
+  /* Toasts subiam por cima da barra inferior (escondiam metade da navegação) e o teto de
+     420px estourava numa tela de 360. */
+  #toasts { bottom: calc(80px + env(safe-area-inset-bottom)); left: 12px; right: 12px; transform: none; }
+  #toasts .toast { max-width: 100%; }
+  /* Gaveta lateral: respeita a área segura e não propaga a rolagem para a tela de trás. */
+  .sidebar { padding-bottom: calc(14px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+}
+
+/* ----- 7. ALVO DE TOQUE: área para o dedo SEM inchar o desenho -----
+   Primeira versão desta regra engordava a CAIXA de tudo até 40/44px. O resultado foi pior que
+   o problema: um "?" de 15px dentro de um título virava um círculo de 40px que descia abaixo
+   da linha; os chips de filtro cresciam 75% e viravam pílulas gordas; `.btn-sm` ficava quase
+   do tamanho do `.btn`; e `.lnk` (link de texto) ganhava padding e empurrava 12px em CADA
+   linha de tabela e em títulos que dependem de `line-height: 1`.
+
+   A regra agora separa dois casos:
+   • CONTROLE DE BLOCO (botão, chip, aba) — cresce um pouco, o suficiente para o dedo, sem
+     desmontar a proporção com o texto ao lado;
+   • ÍCONE PEQUENO INLINE (⋯, ✕, ✎, "?") — o desenho fica do tamanho original e só a ÁREA
+     SENSÍVEL cresce, projetada por um ::after invisível. Assim o dedo acerta sem que o
+     layout perceba. */
+@media (hover: none) {
+  /* -- controles de bloco: o MENOR aumento que ainda e confortavel --
+     Os valores de base sao .btn 34,6px · .btn-sm 29,4 · .chip 22,8 · .seg>button 28,6.
+     Levar tudo a 40/44px engordava a interface (o chip crescia 75% e virava uma pilula
+     gorda ao lado de um texto de 12,8px). O ganho de toque nao vem do tamanho visual e sim
+     da area sensivel — por isso os icones pequenos usam ::after em vez de crescer. */
+  .btn { min-height: 38px; }
+  .btn-sm, .btn.btn-sm { min-height: 32px; }
+  .chip, .rev-chip, .sim-chip, .ls-fpill, .lf-modo, .cl-nivel { min-height: 28px; }
+  .fc-motivo-chip, .btn-grad { min-height: 36px; }
+  .seg > button { min-height: 34px; }
+
+  /* -- Modo Foco: as setas sao a UNICA navegacao no celular, entao ficam um degrau acima -- */
+  .fq-nav, .fq-chip, .fq-sair { min-width: 40px; height: 40px; }
+  .fq-simdot { width: 34px; height: 34px; }
+
+  /* -- ícones pequenos: desenho intacto, área de toque expandida pelo ::after -- */
+  .kpi-info, .ed-top-mais-sum, .cur-edit, .ler-art-marks .ler-ic, .ler-mais.ler-mais > summary,
+  .ls-item .ls-mais > summary, .ls-acoes .lnk-ic, .rev-remover, .mm-ctrl, .mover-btn,
+  .dia-edit, .dia-del, .sess-chip-x, .lemc-acts button, .lemc-chk, .ed-chk, .pb-chk,
+  .prev-remover, .lf-x, .mm-close { position: relative; }
+  .kpi-info::after, .ed-top-mais-sum::after, .cur-edit::after, .ler-art-marks .ler-ic::after,
+  .ler-mais.ler-mais > summary::after, .ls-item .ls-mais > summary::after, .ls-acoes .lnk-ic::after,
+  .rev-remover::after, .mm-ctrl::after, .mover-btn::after, .dia-edit::after, .dia-del::after,
+  .sess-chip-x::after, .lemc-acts button::after, .lemc-chk::after, .ed-chk::after, .pb-chk::after,
+  .prev-remover::after, .lf-x::after, .mm-close::after {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 40px; height: 40px; transform: translate(-50%, -50%);
+  }
+  /* Caixas de marcar continuam um pouco maiores (são alvo primário, não ícone de apoio). */
+  input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; }
+  /* O botão que SUBSTITUI o arrastar no celular é o único que precisa ser generoso de fato. */
+  .toque-reord { min-width: 36px; min-height: 36px; }
+  .dia-mover-sel { height: 30px; }
+}
+
+/* ----- 8. Segunda rodada da auditoria: telas que ainda quebravam no celular ----- */
+
+/* Lei Seca / Jurisprudência ------------------------------------------------ */
+@media (max-width: 900px) {
+  /* "Continuar de onde parou" é position:fixed em bottom:24px e ficava ATRÁS da barra de
+     navegação inferior (z-index maior) — invisível e sem como tocar. */
+  .ler-continuar-pill { bottom: calc(150px + env(safe-area-inset-bottom)); z-index: calc(var(--z-nav) + 12); }
+}
+@media (max-width: 560px) {
+  /* Cabeçalho do artigo: referência + incidência + selo + ícones de marcação somavam mais que
+     a largura da tela e o menu de reticências saía para fora. */
+  .ler-art-head { flex-wrap: wrap; }
+  .ler-art-ref { min-width: 0; }
+}
+/* Menu flutuante de grifo (o gesto de selecionar texto): 6 cores + separador + 3 botões com
+   texto passavam de 440px numa tela de 360 e vazavam pela direita. Quebra em duas linhas e
+   nunca passa da largura da tela. */
+.grifo-fut { flex-wrap: wrap; max-width: calc(100vw - 16px); }
+
+/* Simulados ---------------------------------------------------------------- */
+@media (max-width: 560px) {
+  /* min-width vence max-width: os dois seletores de 260px estouravam a tela mesmo com o
+     max-width:100% geral. */
+  .sim-situacao { flex-wrap: wrap; }
+  .sim-situacao select { min-width: 0; width: 100%; margin-left: 0 !important; }
+  /* Linha por disciplina: nome + campo + barra não cabem em 3 colunas; a barra desce. */
+  .sim-mat-linha { grid-template-columns: 1fr auto; row-gap: 6px; }
+  .sim-mat-linha .sim-mat-barra { grid-column: 1 / -1; }
+}
+
+/* Tabelas densas ----------------------------------------------------------- */
+/* .tab-scroll só rola se a tabela tiver largura mínima — com width:100% ela comprimia as
+   colunas até ficarem ilegíveis em vez de rolar. */
+@media (max-width: 900px) {
+  .tab-scroll .tabela { min-width: 620px; }
+}
+@media (max-width: 560px) {
+  /* Edição de sessão no Acompanhamento: campos com largura fixa (210/200/150px) empilham. */
+  .sess-edit { flex-direction: column; align-items: stretch; }
+  .sess-edit .inline, .sess-edit input, .sess-edit select { width: 100%; max-width: none; }
+  /* Gráficos: o SVG tem viewBox de 520 e e desenhado a 100% da largura; em 390px isso da uma
+     escala de ~0,69, e a fonte dos eixos (10 unidades do viewBox) virava ~7px na tela.
+     A correcao ANTERIOR fixava o SVG em 520px e mandava o wrapper rolar — mas o cartao inteiro
+     ia junto para 520px, e o cabecalho do grafico saia da tela. Agora nada rola: quem cresce e
+     a fonte DENTRO do viewBox, que ao ser reduzida pela escala volta a ~11px reais. */
+  .grafico-svg .g-eixo, .grafico-svg .g-val, .grafico-svg .g-na, .grafico-svg .g-ref-lbl { font-size: 16px; }
+  .grafico-svg .g-lbl { font-size: 17px; }
+}
+
+/* Planejamento ------------------------------------------------------------- */
+@media (max-width: 560px) {
+  /* Dia da semana: rótulo de 116px numa coluna fixa deixava ~156px para a tarefa inteira
+     (caixa + título + tempo + mover + editar + remover). Vira cabeçalho em cima. */
+  .dia-linha { flex-direction: column; }
+  .dia-rotulo { width: 100%; flex-direction: row; align-items: center; gap: 8px;
+    border-right: 0; border-bottom: 1px solid var(--border); border-radius: 11px 11px 0 0; }
+}
+
+/* Abas com rótulo ---------------------------------------------------------- */
+/* Antes o rótulo sumia em ≤560px e sobravam ícones parecidos e sem nome (em Simulados,
+   "Múltipla escolha" e "Certo/Errado" viravam dois ícones de check quase iguais). Agora que
+   a .seg rola na horizontal, o texto cabe e volta. */
+@media (max-width: 560px) {
+  .seg .seg-txt { display: inline; }
+}
+
+/* Alvos de toque que faltaram --------------------------------------------- */
+@media (hover: none) {
+  /* Caixa de concluir tópico no Hoje: 16px dentro de um card que também é clicável — errar
+     por 4px trocava o foco do dia inteiro. Alvo de 40px sem mudar o desenho da caixinha. */
+  .pb-chk { position: relative; }
+  .pb-chk::after { content: ""; position: absolute; inset: -12px; }
+}
+
+/* ----- 9. Celular: os 3 flutuantes saem da frente ao ler -----
+   Assistente + cronômetro + lembretes ficavam permanentemente por cima do conteúdo (numa
+   tela de 390px três círculos ocupam boa parte da faixa de leitura). Agora eles descem
+   enquanto o dedo rola PARA BAIXO e voltam assim que o usuário para ou sobe — o padrão de
+   barra que se esconde na leitura. Só no celular; no computador continuam sempre visíveis.
+   Nunca se escondem com um popover aberto (senão o painel some junto com o botão). */
+@media (max-width: 900px) {
+  #chat-fab, #crono-fab, #lem-fab { transition: transform var(--dur-3) var(--ease-std), opacity var(--dur-2) var(--ease-std); }
+  body.fabs-ocultos #chat-fab, body.fabs-digitando #chat-fab,
+  body.fabs-ocultos #crono-fab, body.fabs-digitando #crono-fab,
+  body.fabs-ocultos #lem-fab, body.fabs-digitando #lem-fab { transform: translateY(150px); opacity: 0; pointer-events: none; }
+  /* O tamanho do Assistente no celular (48px, igual aos outros dois) e definido junto com
+     o alinhamento da linha, mais acima — aqui ficava um 50px que vencia por ordem e deixava
+     o botao maior e desalinhado dos vizinhos. */
+}
+
+/* ----- 10. Tela Hoje: anéis e lembretes cabendo em 360px -----
+   .hoje-rings é grade de 2 colunas em qualquer largura: em 360px sobravam ~80px de texto para
+   rótulos como "APROVEITAMENTO" (caixa alta + espaçamento entre letras ≈ 119px), que vazavam
+   por cima do anel vizinho. Uma coluna por linha resolve sem encolher fonte. */
+@media (max-width: 560px) {
+  .hoje-rings { grid-template-columns: 1fr; }
+  /* Lembrete com palavra longa (link, número de lei) empurrava o card para fora. */
+  .lemc-body, .lemc-txt { overflow-wrap: anywhere; }
+}
+
+/* ----- 11. Modo Foco no celular: os flutuantes saem de cima dos botões de nota -----
+   O auto-ocultar do item 9 depende da rolagem do #content, que NÃO rola com o overlay
+   aberto (o foco é position:fixed e quem rola é o próprio palco). Medido em 390×844: os
+   três FABs caem exatamente sobre Errei/Difícil/Bom/Fácil. Aqui eles descem para a faixa
+   do rodapé (livre no toque, onde a barra inferior fica coberta pelo overlay) e o palco
+   reserva essa altura, para o card nunca terminar embaixo deles. */
+@media (max-width: 900px) {
+  body:has(.fc-foco) #chat-fab { bottom: calc(10px + env(safe-area-inset-bottom)); }
+  body:has(.fc-foco) #crono-fab { bottom: calc(16px + env(safe-area-inset-bottom)); right: 86px; }
+  body:has(.fc-foco) #lem-fab { bottom: calc(16px + env(safe-area-inset-bottom)); right: 144px; }
+  .fc-foco .fq-palco { padding-bottom: calc(74px + env(safe-area-inset-bottom)); }
+}
+
+/* ----- 12. Edital: acervo do topico visivel no toque -----
+   O mini-card de previa (.ed-hovercard) e exclusivo de mouse; no celular os numeros de
+   materiais/questoes/flashcards do topico nao existiam em lugar nenhum da lista. O selo
+   .ed-acervo cobre esse buraco e some onde o hovercard funciona, para nao duplicar. */
+.ed-acervo { display: none; }
+.ed-acervo .ico { width: 12px; height: 12px; vertical-align: -1px; }
+@media (hover: none) { .ed-acervo { display: inline-flex; align-items: center; gap: 6px; } }
+
+/* ----- 13. Card com comentario da IA: altura extra tambem no celular -----
+   .fq-card--ia da altura maior ao cartao quando ha explicacao da IA, mas a regra de <=560px
+   de .fq-card (mesma especificidade, declarada depois) sobrescrevia o `height` e o texto da
+   IA ficava espremido justamente onde a tela e menor. */
+@media (max-width: 560px) { .fq-card--ia { height: min(78dvh, 620px); } }
+
+/* ----- 14. Lembretes no celular: mural de UMA coluna -----
+   .lem-board e uma grade auto-fill de minimo 148px. No popover de ~366px isso da DUAS
+   colunas de 165px: cada recado fica estreito, o texto quebra em varias linhas e, com um
+   lembrete so, metade do painel fica vazia. Num painel dessa largura, uma coluna por linha
+   e mais legivel — e o cartao passa a ocupar a largura toda. */
+@media (max-width: 900px) {
+  /* Vale para os DOIS murais: o do popover flutuante e o card de lembretes da tela Hoje
+     (que tambem ficava com duas colunas de ~176px numa tela de 390). */
+  .lem-board { grid-template-columns: 1fr; }
+  .lf-pop .lem-corpo { padding: 12px 14px; }
+}
+
+/* ----- 15. Paleta de comando no toque: campo + X de fechar -----
+   No celular nao ha Esc, entao o placeholder deixou de prometer a tecla e entrou um botao
+   de fechar de verdade, na mesma linha do campo. */
+.paleta-campo { position: relative; display: flex; align-items: center; }
+.paleta-campo .paleta-input { flex: 1; min-width: 0; }
+.paleta-x { flex: none; width: 44px; height: 44px; display: grid; place-items: center; margin-right: 6px;
+  border: none; background: transparent; color: var(--muted); cursor: pointer; border-radius: 10px; }
+.paleta-x:hover { background: var(--surface-2); color: var(--text); }
+.paleta-x .ico { width: 20px; height: 20px; }
+
+/* ----- 16. Campo de data dos lembretes: icone proprio -----
+   O input[type=date] tinha 38x38 com TODAS as partes internas escondidas, contando so com o
+   ::-webkit-calendar-picker-indicator para aparecer alguma coisa. No Chrome do Android esse
+   indicador vira uma setinha (ou some), e o botao ficava sem identidade. Aqui o icone de
+   calendario e desenhado pelo proprio CSS (mascara), independente do widget nativo. */
+/* Calendario (lucide) como mascara: a cor vem de background-color, entao acompanha o tema. */
+.lem-date { --ico-calendario: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cpath d='M16 2v4M8 2v4M3 10h18'/%3E%3C/svg%3E"); position: relative; color: transparent; }
+.lem-date::-webkit-calendar-picker-indicator { opacity: 0; width: 100%; height: 100%; position: absolute; inset: 0; margin: 0; padding: 0; cursor: pointer; }
+.lem-date::after {
+  content: ""; position: absolute; inset: 0; margin: auto; width: 18px; height: 18px; pointer-events: none;
+  background-color: var(--text-2);
+  -webkit-mask: var(--ico-calendario) center / 18px 18px no-repeat;
+  mask: var(--ico-calendario) center / 18px 18px no-repeat;
+}
+.lem-date:focus::after, .lem-date:hover::after { background-color: var(--primary); }
+
+/* ----- 17. Constancia: numeros dos dias legiveis (ou fora do caminho) -----
+   A tira e uma grade de ate 31 colunas iguais. Em 390px cada quadrado fica com ~7px de
+   largura, mas o numero do dia continuava em --fs-2xs (~11px): os digitos se encavalavam e
+   viravam um borrao ilegivel. Como 31 numeros nao cabem de jeito nenhum nessa largura, o
+   numero sai do quadrado (a cor ja diz quanto se estudou) e a leitura passa a ser pelo
+   toque, que abre o dia. Fica so a marca do DIA DE HOJE, que e a referencia que importa. */
+@media (max-width: 560px) {
+  .ml-d { font-size: 0; }
+  .ml-d.ml-hoje { font-size: 8px; }
+}
+
+
+/* =========================================================================
+   19. CELULAR: O TÍTULO NUNCA DIVIDE A LINHA COM O SUBTÍTULO
+   No computador esses cabeçalhos têm largura sobrando e o par "título + descrição"
+   na mesma linha funciona. Em 390px a descrição rouba metade da linha e o TÍTULO
+   quebra no meio da frase — "POR / BANCA", "VOLUME POR / TIPO", "Estatísticas /
+   detalhadas", "Histórico de / sessões". Levantamento: 19 contêineres com o mesmo
+   defeito, em quase todas as telas.
+
+   Duas técnicas, conforme o caso:
+   • contêiner FLEX → passa a quebrar e o título recebe `flex: 1 0 100%`;
+   • <summary> → vira BLOCO. Aqui `flex-basis:100%` não serve: o marcador ▸ do
+     <details> é um item flex e ficaria sozinho na linha ACIMA do título. Em bloco,
+     marcador e título voltam a fluir juntos.
+   ========================================================================= */
+@media (max-width: 560px) {
+
+  /* ---- 1) <summary>: bloco, para o ▸ ficar colado ao título ---- */
+  .bloco-recolhe > summary,
+  .sum-bloco > summary,
+  .ls-estr > summary,
+  .plan-sec-head { display: block; }
+  .sum-dica, .ls-estr-num { margin-left: 0; }
+  .sum-dica, .ls-estr-tit { display: block; margin-top: 2px; }
+
+  /* ---- 2) Contêineres flex que apertavam o título ---- */
+  .stat-sub, .eg-head, .ee-sec-lbl, .ji-head, .doc-grupo-head, .estr-pronto-head,
+  .cur-disc-h, .hmv-head, .rsx-card-h, .ce-artigo-h, .concluidas-head,
+  .dossie-secao-head, .erro-head, .revtop-review-head, .sim-setup-head,
+  .ls-grupo-head, .mentor-analise-h, .lbl-info-linha,
+  .plano-h, .grafico-tit-linha { flex-wrap: wrap; }
+
+  /* O título NUNCA encolhe abaixo do proprio texto — e so isso. Ele fica com a largura
+     natural; quem nao couber ao lado desce sozinho (o contêiner ja quebra). Assim:
+     • cabecalho curto ("Lembretes 3 Novo") continua TUDO na mesma linha;
+     • cabecalho longo ("Estatisticas detalhadas" + descricao) mantem a frase inteira e
+       manda a descricao para baixo.
+     Forcar `flex: 1 0 100%` no titulo, como eu tinha feito, quebrava a linha ATE quando
+     sobrava espaco — e separava contador e botao do titulo sem necessidade. */
+  .stat-sub > .stat-sub-tit,
+  .eg-head > b,
+  .grafico-tit-linha > .grafico-tit,
+  .cur-disc-h > .cur-disc-nome,
+  .hmv-head > b, .rsx-card-h > b, .ce-artigo-h > b,
+  .dossie-secao-head > h4,
+  .plano-h > h2 { flex: 0 0 auto; max-width: 100%; }
+  .hmv-badge { margin-left: auto; }
+
+  /* ---- 3) Título é TEXT NODE solto (não dá para usar flex-basis) ---- */
+  .rev-secao-h { display: block; }
+  .rev-secao-h > .cnt { margin-left: 6px; }
+  .rev-secao-h > .rev-lote { display: inline-flex; margin-top: 8px; }
+
+  /* ---- 4) nowrap que impedia a quebra ---- */
+  .ls-estr-rot, .tempo-est, .ee-resumo { white-space: normal; }
+  .ee-resumo { overflow: visible; text-overflow: clip; }
+
+  /* ---- 5) Descrição DENTRO do próprio título (h2/h3/h4 > span.muted) ---- */
+  .grafico-tit > .muted, .grafico-tit > .small,
+  .rev-resumo-tit > .muted, .mk-comentarios-titulo > .muted,
+  h2 > .muted.small, h3 > .muted.small, h4 > .muted.small { display: block; margin-top: 2px; font-weight: var(--fw-regular); }
+  /* Exceção: quando o span carrega SÓ um ícone (o "?" de ajuda), ele continua colado
+     ao título — virar bloco criaria uma linha com um ícone solto. */
+  h2 > .muted.small:has(> svg:only-child),
+  h3 > .muted.small:has(> svg:only-child),
+  h4 > .muted.small:has(> svg:only-child) { display: inline-flex; margin-top: 0; }
+}
+
+/* =========================================================================
+   20. CELULAR: MENOS COLUNAS, MENOS APERTO
+   Levantamento por medição em 390px: `.content` deixa 362px úteis e, dentro de um
+   `.card`, 330px. Toda grade de 2 colunas aqui vira ~165px por coluna — e o conteúdo
+   dessas células (número grande + rótulo + ícone de ajuda) precisa de mais que isso.
+   Em vez de encolher a tipografia, cai para uma coluna: o mesmo conteúdo, legível.
+   ========================================================================= */
+@media (max-width: 560px) {
+  /* Cartões de indicadores (Acompanhamento, Dossiê, Central de Revisões, Simulados):
+     em 2 colunas sobravam ~135px úteis para "Cobertura do edital" + o número grande. */
+  .scorecard, .rev-cards.scorecard, .sim-cards.scorecard, .dossie-stats { grid-template-columns: 1fr; }
+  /* Com uma coluna, o cartão vira uma LINHA: rótulo à esquerda, número à direita. Ocupa
+     um quarto da altura que ocuparia empilhado e fica mais fácil de comparar. */
+  /* Icone e numero JUNTOS a esquerda, rotulo logo depois. Com space-between os tres se
+     espalhavam e o numero ficava boiando no meio da linha (68px de vazio de cada lado),
+     desligado tanto do icone quanto do proprio rotulo. */
+  .sc-pilar, .sc-prova { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; padding: 12px 14px; }
+  .sc-pilar .kpi-ico, .sc-prova .kpi-ico { order: -1; }
+  .sc-pilar .sc-num, .sc-prova .sc-num { min-width: 62px; }
+  .sc-pilar .sc-rot, .sc-prova .sc-rot { margin-right: auto; }
+  .sc-num { font-size: 1.6rem; }
+
+  /* Fases do ciclo e demais grades de 2 colunas estreitas. */
+  .ciclo-explica, .rsx-fases, .cf-pomo-grid, .tile-grid.ob-areas, .print-sel-lista { grid-template-columns: 1fr; }
+
+  /* Heatmap "quando você rende mais": 4 faixas de ~68px não comportam os rótulos em
+     caixa-alta com espaçamento entre letras. Some o espaçamento e encolhe o rótulo. */
+  .hh-cel-lbl { letter-spacing: 0; font-size: 9px; }
+}
+
+/* ----- 21. Tabelas de sessões: menos colunas no celular -----
+   Histórico de sessões (Acompanhamento e Dossiê) tem 5 colunas e era forçada a 620px de
+   largura mínima, ou seja, rolava sempre para o lado. Tempo e Questões saem: os dois já
+   aparecem ao ABRIR a linha (detalhe da sessão) e nos indicadores acima. Ficam Data,
+   Disciplina/Fase e as ações — que cabem sem rolagem nenhuma. */
+@media (max-width: 560px) {
+  .tab-scroll .tabela-sessoes { min-width: 0; }
+  .tabela-sessoes th.num, .tabela-sessoes td.num { display: none; }
+  .tabela-sessoes th, .tabela-sessoes td { padding: 10px 6px; }
+}
+
+/* ----- 22. Chat do Mentor: folha de tela cheia no celular -----
+   Era uma caixa de 380×540 flutuando numa tela de 390: sobrava uma moldura de 5px de cada
+   lado, o painel cobria o conteúdo e o campo de escrever cortava o texto do placeholder.
+   No celular ele passa a ocupar a tela como uma folha, com o campo confortável embaixo. */
+@media (max-width: 560px) {
+  /* Painel ANCORADO embaixo, ocupando a largura da tela e pouco mais da metade da altura:
+     a tela por tras continua visivel, que e o comportamento de qualquer app de mensagem.
+     Antes ele era uma caixa de 380px numa tela de 390 — sobrava uma moldura de 5px de cada
+     lado e o campo de escrever cortava o texto. TELA CHEIA so pelo botao de expandir. */
+  .chat-panel {
+    left: 8px; right: 8px; width: auto; max-width: none;
+    top: auto; bottom: calc(146px + env(safe-area-inset-bottom));
+    height: min(58dvh, 470px); max-height: none;
+    border-radius: 16px;
+  }
+  .chat-panel.expandido {
+    top: calc(8px + env(safe-area-inset-top));
+    bottom: calc(146px + env(safe-area-inset-bottom));
+    height: auto; width: auto; max-width: none;
+  }
+  .chat-input { padding: 10px; }
+  .chat-input textarea { min-height: 42px; }
+  .chat-input button { width: 46px; }
+}
+
+/* ----- 23. Edital em modo cartão: o "⋯" não pode cobrir o check -----
+   As posições de `.edc-chk` (right:40px) e `.edc-acts` (right:6px) foram calculadas para um
+   "⋯" de 28px. Como agora a área de toque é projetada por ::after (sem mudar o desenho), as
+   duas voltam a caber — mas com folga maior, para o dedo não pegar o vizinho. */
+@media (max-width: 560px) {
+  .ed-tab tbody td.edc-chk { right: 46px; }
+  .ed-tab tbody td.edc-nome { padding-right: 78px; }
+}
+
+/* ----- 24. Mentor: linha de chamada volta a ser texto corrido -----
+   `.mentor-cross` e flex sem quebra: o <b> "conversar com o Mentor" virava um item flexivel
+   de 63px e quebrava em TRES linhas ao lado do icone. Em bloco, o icone fica inline e a
+   frase flui pela largura toda. */
+@media (max-width: 560px) {
+  .mentor-cross { display: block; }
+  .mentor-cross > .ico { vertical-align: -3px; margin-right: 6px; }
+}
+
+/* ----- 25. Seletores de FILTRO: caixa proporcional a letra -----
+   Estes selects sao pequenos por desenho (fonte de ~13px) mas herdavam a altura de campo de
+   formulario (--field-h, 40px). Ficava uma caixa 3x mais alta que a letra, encostada em links
+   de 28px — o "seletor maior que as demais letras". Compactos, seguem confortaveis no dedo. */
+@media (max-width: 900px) {
+  .hist-periodo-sel, .ls-fpill-sel, .rel-sel, .dia-mover-sel, .sess-fase-sel select,
+  .q-top-lbl select, .ed-nivel select { min-height: 32px; height: auto; }
+}
+
+/* ----- 26. Tela Hoje: acoes alinhadas a direita -----
+   No computador estas linhas tem o titulo a esquerda e as acoes empurradas para a direita
+   pelo espaco que sobra. No celular, sem sobra, elas caiam coladas na margem esquerda —
+   longe de onde o polegar espera e desalinhadas do resto da tela. */
+@media (max-width: 900px) {
+  /* "Cronometro" e "Registrar sessao", logo abaixo do titulo da tela. */
+  .hoje-head-acoes { justify-content: flex-end; }
+  /* "Trocar topico": o nome do topico ocupa a linha toda, entao o botao cai na linha de
+     baixo — mas encostado a direita, embaixo do proprio topico a que se refere. */
+  .foco-topline > .btn { margin-left: auto; }
+}
+
+/* ----- 27. Tela Hoje: rodape e lembretes compactos -----
+   Rodape: "Hoje: X em foco · Y sessoes · Z questoes" + "Ver acompanhamento completo" somam
+   ~590px; em 390 nao cabem lado a lado e o link caia solto na margem esquerda. Ficam
+   empilhados, mas com o link a DIREITA — o mesmo lugar de todas as outras acoes da tela.
+
+   Lembretes: cada recado gastava 87px para duas linhas de conteudo (padding 12+12, folga de
+   8px entre texto e meta, e um min-height de 62px que ainda sobrava). Sem tirar nada, a
+   mesma informacao passa a caber em ~66px. */
+@media (max-width: 900px) {
+  .hoje-rodape { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+  .hoje-rodape > .muted { flex: 1 0 100%; }
+
+  .lemc { padding: 9px 10px; min-height: 0; }
+  .lemc-body { gap: 3px; }
+  .lemc-meta { min-height: 0; }
+}
+
+/* ----- 28. Planejamento: menos ruido antes do conteudo -----
+   A "Agenda de estudos" empilhava SEIS faixas de controle antes de qualquer tarefa: abas,
+   botoes, contagem, "Ordenar por", legenda de categorias (duas linhas) e "Exportar". A
+   legenda virou um <details> recolhido (e referencia, nao acao) e as faixas ganharam
+   respiro entre si, para pararem de parecer um bloco unico. */
+.cat-legenda-det > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.cat-legenda-det > summary::-webkit-details-marker { display: none; }
+.cat-legenda-det > summary::before { content: "A"; display: inline-block; transition: transform var(--dur-1); }
+.cat-legenda-det[open] > summary::before { transform: rotate(90deg); }
+.cat-legenda-cores { display: inline-flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .missoes-barra, .cat-legenda { row-gap: 8px; margin-bottom: 10px; }
+  .missoes-barra > .spacer { display: none; }
+  .missoes-barra { justify-content: space-between; }
+}
+
+/* ----- 29. Proximas revisoes: o DIA primeiro -----
+   Cada item era uma frase corrida ("26/07/2026 (hoje) · 10 flashcards · 1 topico (Atos
+   administrativos) · 1 resumo (…)") que quebrava em tres linhas — e o que interessa, o dia,
+   ficava perdido no meio. Agora o dia e a primeira coisa, em destaque, com a data ao lado
+   em tom secundario; o que vence naquele dia vira etiquetas, que quebram sem virar texto. */
+.revprox { display: flex; flex-direction: column; gap: 5px; padding: 8px 0; }
+.revprox + .revprox { border-top: 1px solid var(--border); }
+.revprox-dia { display: inline-flex; align-items: baseline; gap: 8px; }
+.revprox-dia b { font-size: var(--fs-sm); color: var(--text); }
+.revprox-itens { display: flex; flex-wrap: wrap; gap: 6px; }
+.revprox-itens .chip-sm { display: inline-flex; align-items: center; gap: 5px; }
+.revprox-itens .chip-sm .ico { width: 13px; height: 13px; }
+.lista-simples:has(.revprox) { list-style: none; padding-left: 0; margin: 0; }
+
+/* ----- 30. Cartao de Metas: titulo em cima, periodos embaixo ----- */
+.metas-tit { display: flex; align-items: center; gap: 6px; }
+.metas-tit .ico { width: 15px; height: 15px; color: var(--muted); }
+.metas-itens { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 6px; }
+
+/* ----- 31. Acompanhamento: numeros no lugar e no tamanho certos -----
+   (a) O "%" do cartao Revisoes ficava na ponta OPOSTA do rotulo (rotulo em x 88..318, numero
+       em 332..360): numa tela estreita lia como um numero orfao, sem nada ligando ao texto.
+       Vai para baixo do proprio rotulo, com uma legenda curta que diz o que ele e.
+   (b) Cinco numeros de 25,6px na mesma dobra (titulo da tela, 0%, 74%, 0 min, 90) disputavam
+       atencao entre si. Como cada indicador virou uma linha, 21px ja destaca — o que
+       diferencia passa a ser o dado, nao o corpo da fonte. */
+@media (max-width: 560px) {
+  .rev-resumo-card { flex-wrap: wrap; row-gap: 4px; }
+  /* padding, nao margin: com flex-basis de 100% a margem SOMA por fora da caixa e o
+     numero vazava 40px para alem do cartao. */
+  .rev-resumo-num { order: 3; flex: 1 0 100%; padding-left: 40px; font-size: var(--fs-xl); }
+  .rev-resumo-num::after { content: " concluídas em 30 dias"; font-family: var(--font-sans, inherit); font-size: var(--fs-2xs); font-weight: var(--fw-medium); color: var(--muted); }
+  .sc-num { font-size: 1.3rem; }
+}
+
+/* ----- 32. Mentor IA: o alerta ganha a linha, as acoes vao para baixo -----
+   Cada ponto de atencao era uma linha unica com o TEXTO e as ACOES lado a lado. Em 390px a
+   conta nao fecha: as acoes ("Revisar agora" + "adiar 7d" + "dispensar") somam 239px e o
+   texto — que e o conteudo — sobrava com 73px, quebrando em quatro linhas dentro de uma
+   coluna estreita. Cada alerta gastava 121px de altura, vezes nove alertas.
+   Empilhado, o texto usa os 330px inteiros e as acoes, com a linha so para elas, cabem
+   juntas (239 < 330) em vez de quebrar em duas. */
+@media (max-width: 560px) {
+  .mentor-alertas li { flex-direction: column; align-items: stretch; gap: 6px; }
+  .mentor-alertas .ponto-acoes { justify-content: flex-end; flex-wrap: nowrap; }
+  .mentor-alertas .ponto-sec { flex: none; }
+}
+
+/* ----- 33. Ajustes finos vistos na tela (nao apareciam na medicao) ----- */
+@media (max-width: 560px) {
+  /* Metas: com um periodo por linha, os separadores "·" ficavam pendurados no fim de cada
+     linha ("Hoje 0 min / 2h (0%) ·"). Somem — a quebra de linha ja separa. */
+  .metas-itens > .muted { display: none; }
+  .metas-itens > span:not(.muted) { flex: 1 0 100%; }
+
+  /* Faixa do Mentor: o texto ficava com 160px (tres linhas espremidas) porque o botao e o
+     fechar dividiam a linha com ele. Empilha: recado inteiro em cima, acao embaixo. */
+  .faixa-ia { flex-wrap: wrap; row-gap: 8px; }
+  .faixa-ia-txt { flex: 1 0 100%; order: 1; }
+  .faixa-ia-selo { order: 0; }
+  .faixa-ia-cta { order: 2; margin-left: auto; }
+  .faixa-ia-x { order: 3; }
+}
+
+/* ----- 34. Edital: o nome da disciplina para de quebrar no meio da palavra -----
+   `.ed-disc-nome` tinha `flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere` e disputava a
+   linha com a barra de progresso (115px), o "⋯" e a seta. Em 390px sobravam 63px para o nome:
+   "Direito Administrativo" saia como "Direit / o / Admi / nistr / ativo" — cinco linhas, 96px
+   de cabecalho. Agora o nome ocupa a primeira linha com a seta no fim; progresso e "⋯" descem
+   para uma segunda linha compacta. E `break-word` no lugar de `anywhere`: so quebra palavra
+   se ela sozinha nao couber. */
+@media (max-width: 560px) {
+  /* O contêiner e o <summary class="ed-disc-sum"> do acordeao (o .ed-disc-head e a variante
+     sem acordeao) — sem os dois no seletor, o nome recebia as regras mas a linha continuava
+     `nowrap` e nada descia. */
+  .ed-disc-head, .ed-disc-sum { flex-wrap: wrap; row-gap: 6px; column-gap: 8px; }
+  .ed-disc-head .disc-cor, .ed-disc-sum .disc-cor { order: 0; margin-right: 0; }
+  .ed-disc-nome { order: 1; flex: 1 1 auto; overflow-wrap: break-word; }
+  .ed-disc-chev { order: 2; margin-left: auto; }
+  .ed-disc-prog { order: 3; }
+  .ed-disc-head .doc-mais, .ed-disc-sum .doc-mais { order: 4; margin-left: auto; }
+  .ed-disc-head .spacer, .ed-disc-sum .spacer { display: none; }
+}
+
+/* ----- 35. Celular: menus de reticencias nao podem sair da tela -----
+   O menu e `position: absolute; right: 0` — ancorado a direita do botao e crescendo para a
+   ESQUERDA. Quando o botao esta perto da margem esquerda (o "Mais" da barra do Edital), o
+   menu abria em x = -69: 69px de opcoes fora da tela, inalcancaveis. Aqui ele deixa de
+   depender da posicao do gatilho e vira uma folha ancorada embaixo, sempre inteira na tela.
+   Acima da faixa dos botoes flutuantes, para nao ficar por baixo deles. */
+@media (max-width: 560px) {
+  .doc-mais-pop, .resumo-menu-pop, .ls-mais-pop, .ls-mais-pop.ls-estudar-menu-pop {
+    position: fixed; left: 12px; right: 12px; top: auto;
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    width: auto; min-width: 0; max-width: none;
+    max-height: 60dvh;
+    z-index: var(--z-modal);
+  }
+}
+
+/* ----- 36. Edital: cartao de topico mais curto -----
+   No modo cartao cada topico virava quatro linhas rotuladas (nome + RELEVANCIA +
+   APROVEITAMENTO + ESTUDO), cada uma com o valor jogado na ponta direita e um vazio no meio:
+   185px por topico. Os tres dados somam ~180px e cabem numa linha so — a regra e a mesma que
+   voce pediu: se cabe junto, fica junto. O rotulo continua, menor, colado ao valor. */
+@media (max-width: 560px) {
+  .ed-tab tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 12px; }
+  .ed-tab tbody td.edc-nome { flex: 1 0 100%; padding: 0 66px 2px 0; }
+  .ed-tab tbody td[data-label] {
+    display: inline-flex; width: auto; flex: 0 0 auto;
+    justify-content: flex-start; gap: 5px; padding: 0;
+  }
+  .ed-tab tbody td[data-label]::before { font-size: .6rem; opacity: .75; }
+}
+
+/* ----- 37. Edital: a barra de acoes cabe em menos linhas -----
+   "Adicionar ao edital · Ordenar: [Como cadastrei] · Recolher tudo · Selecionar · ⋯ Mais"
+   quebrava em tres linhas. O rotulo "Ordenar:" e redundante — o proprio valor do seletor
+   ("Como cadastrei", "Mais relevantes primeiro") diz o que ele faz — e sai no celular,
+   liberando ~60px. Com isso os controles restantes sobem uma linha. */
+@media (max-width: 560px) {
+  .ed-ord { gap: 0; }
+  .ed-ord > .ed-ord-lbl { display: none; }
+  .barra-acoes { row-gap: 8px; }
+  /* O .spacer (flex:1) empurrava "Ordenar" para a linha seguinte e deixava
+     "Adicionar ao edital" sozinho numa linha inteira. Sem ele os controles
+     fluem e a barra cai de 3 linhas para 2. Só nesta barra: em outras telas o
+     .spacer é o que mantém "Imprimir" à direita. */
+  .ed-barra > .spacer { display: none; }
+}
+
+/* ----- 38. Edital: altura dos cartoes de topico consistente -----
+   So o primeiro cartao ficava com Aproveitamento e Estudo na mesma linha; nos demais
+   ("ontem", "ha 12 dias") o Estudo caia sozinho e o cartao crescia: 141 / 170 / 187px.
+   O peso esta no rotulo — "APROVEITAMENTO" ocupa 104px so de rotulo, mais que o proprio
+   valor. No cartao (celular) ele vira "Acertos", que e o que o dado significa e o que o
+   tooltip da coluna ja diz. Com isso a dupla cabe junta em qualquer data e a lista para
+   de ficar denteada. No desktop a coluna continua "Aproveitamento". */
+@media (max-width: 560px) {
+  .ed-tab tbody td.edc-ap[data-label]::before { content: "Acertos"; }
+}
+
+/* ----- 39. Botao fantasma precisa de contorno no toque -----
+   .btn-ghost so ganha borda no hover; sem mouse, "Selecionar" ficava identico a um texto
+   solto ao lado de um link e de um botao com contorno. Em ponteiro grosso ele nasce com
+   a borda visivel (discreta), para se ler como botao. */
+@media (hover: none) {
+  .btn-ghost { border-color: var(--border); }
+}
+
+/* ----- 40. Cabecalho de tela: acao unica sobe para a linha do subtitulo -----
+   No celular o cabecalho vira coluna (titulo / subtitulo / acoes), e um botao solitario
+   como "Imprimir" ficava numa faixa so dele, 32px de altura para um botao de 101px, com
+   um vazio enorme a esquerda. Quando a acao e UMA so, o cabecalho vira grade de duas
+   colunas e ela se alinha pelo rodape do bloco de texto — ou seja, na linha do subtitulo,
+   que e onde sobra espaco (subtitulo ~175px + botao ~101px em 342px disponiveis).
+   Com duas ou mais acoes o comportamento antigo continua: elas nao caberiam ao lado. */
+@media (max-width: 560px) {
+  /* "Acao unica" quer dizer uma acao VISIVEL: em Mapas mentais o bloco tem tambem um
+     <input type="file" hidden>, que quebrava o :only-child e devolvia o "Imprimir" para
+     uma faixa so dele. A condicao passa a ser "nao existem dois filhos nao-ocultos". */
+  .page-head:has(.page-head-extra > *):not(:has(.page-head-extra > :not([hidden]) ~ :not([hidden]))) {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end; column-gap: 12px;
+    /* o gap de 16px vinha do flex e, virando grade, passava a separar titulo e subtitulo
+       (que ja tem margem propria de 8px): 14px de sobra em cada cabecalho. */
+    row-gap: 0;
+  }
+  /* O bloco de texto vira "contents" para que o TITULO e o SUBTITULO sejam itens da grade
+     por conta propria. Assim so o subtitulo divide a linha com o botao; o titulo continua
+     com a largura inteira. Sem isto, a coluna estreitava tudo e titulos como "Discursiva e
+     redacao" quebravam em duas linhas para dar espaco a um botao que nem estava na linha. */
+  .page-head:has(.page-head-extra > *):not(:has(.page-head-extra > :not([hidden]) ~ :not([hidden]))) > div:first-child { display: contents; }
+  .page-head:has(.page-head-extra > *):not(:has(.page-head-extra > :not([hidden]) ~ :not([hidden]))) h1 { grid-column: 1 / -1; }
+  .page-head:has(.page-head-extra > *):not(:has(.page-head-extra > :not([hidden]) ~ :not([hidden]))) .sub { grid-column: 1; }
+  .page-head:has(.page-head-extra > *):not(:has(.page-head-extra > :not([hidden]) ~ :not([hidden]))) > .page-head-extra { grid-column: 2; padding-bottom: 2px; }
+}
+
+/* ----- 41. Materiais: busca recolhida sem padding duplo -----
+   ".buscas-recolhida { padding: 0 }" existe desde sempre, mas o bloco movel ".card
+   { padding: 16px }" (mesma especificidade, mais abaixo no arquivo) vencia. Resultado:
+   16px do cartao + 16/22px do proprio <summary> = 87px de altura para um botao de uma
+   linha. Volta a zero e o <summary> fica com o padding, um pouco menor no celular. */
+@media (max-width: 560px) {
+  .card.buscas-recolhida { padding: 0; }
+  .buscas-summary { padding: 13px 16px; }
+  .buscas-corpo { padding: 14px 16px 16px; }
+}
+
+/* ----- 42. Faixa de recado: o "x" nao fica pendurado numa linha so dele -----
+   O empilhamento do bloco 33 foi pensado para a faixa do Mentor, que tem um botao de acao:
+   la o "x" cai ao lado dele. Na faixa de Materiais nao ha acao nenhuma, entao o "x" descia
+   sozinho, encostado a esquerda, e cobrava uma linha inteira (105px de faixa). Vai para o
+   canto superior direito, que e onde se procura fechar um aviso. */
+@media (max-width: 560px) {
+  .faixa-ia-x { position: absolute; top: 5px; right: 5px; }
+  .faixa-ia-txt { padding-right: 26px; }
+}
+
+/* ----- 43. Materiais: o "..." do cartao sobe para o canto -----
+   ".doc-meta" mistura numa unica linha que quebra: etiqueta do topico, "ver texto extraido",
+   "Gerar com IA" e o "...". As duas acoes somam 297px e cabem nos 310 disponiveis; o "..."
+   estourava por 26px e caia sozinho numa terceira linha. Ele vai para o alto a direita do
+   cartao (mesmo lugar do cartao de topico do Edital), onde o cabecalho ja deixa folga.
+   162px -> ~134px por material, sem perder nada. */
+@media (max-width: 560px) {
+  .card.doc-item { position: relative; }
+  .card.doc-item .doc-meta > details.doc-mais:not(.doc-gerar-menu) {
+    position: absolute; top: 10px; right: 10px;
+  }
+  /* Espaco do "..." reservado so na PRIMEIRA linha do titulo: o padding no .doc-ident
+     inteiro fazia o titulo quebrar em duas linhas e devolvia os 28px economizados. */
+  .card.doc-item .doc-titulo { padding-right: 30px; }
+}
+
+/* ----- 44. Formulario dentro de janela: titulo repetido e seletor cortado -----
+   A janela ja se chama "Adicionar material" e o cartao do formulario repetia o mesmo
+   titulo 20px abaixo. Escondido SO quando o formulario esta dentro da janela (inline,
+   em outras telas, o titulo continua fazendo falta).
+   E o seletor de topico, com 105px, exibia "— sem t" no lugar de "— sem topico —":
+   escondia o proprio estado. Os dois campos passam a ocupar a
+   linha inteira, que e o normal de formulario em tela estreita e nao corta nada. */
+@media (max-width: 560px) {
+  /* (o titulo repetido agora e removido no proprio abrirJanela, para toda janela) */
+  /* Vale para TODO .form-row, nao so os dois formularios: o mesmo aperto aparecia no
+     "Concurso" de Configuracoes ("Escrevente Tecnico Ju..." cortado em 199px). Campo de
+     formulario em tela estreita ocupa a linha inteira — e o que evita valor truncado. */
+  .form-row > label { flex: 1 0 100%; min-width: 0; }
+}
+
+/* ----- 45. Lei Seca: a regua de leitura (Aa) abria fora da tela -----
+   ".lcfg-pop" e "position: absolute; right: 0; top: calc(100% + 6px)" com 280px de largura,
+   e ".ler-tools .ler-config .lcfg-pop" (tres classes) reforca o "right: 0". O painel nasce
+   de um botao que fica no meio da barra e cresce para a esquerda: no celular ele caia em
+   x = -78 (78px fora pela esquerda) e y = -29 (acima do topo), porque minha folha ancorada
+   do bloco 35 so conseguia impor "position: fixed" e o "top" antigo continuava valendo.
+   Aqui a especificidade e igual a da regra que atrapalhava, e o "top" e zerado. */
+@media (max-width: 560px) {
+  .ler-tools .ler-config .lcfg-pop, .lcfg-pop {
+    position: fixed; left: 12px; right: 12px; top: auto;
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    width: auto; max-width: none; max-height: 60dvh; overflow: auto;
+    z-index: var(--z-modal);
+  }
+}
+
+/* ----- 46. Jurisprudencia: filtros alinhados e divisor sem sobra -----
+   (a) Os tres filtros (.ls-fpill) tinham largura ditada pela opcao mais longa de cada um
+   (135 / 205 / 177px, sendo "Controle concentrado (ADI/ADC/ADPF)" o culpado do maior).
+   Tribunal + Tipo erravam a mesma linha por 6px (135+8+205 = 348 em 342), entao cada um
+   caia numa linha, cada um de um tamanho: tres faixas denteadas. Viram duas colunas
+   iguais, o terceiro alinhado sob o primeiro.
+   (b) ".ui-div" e a barrinha vertical entre STF e STJ. Numa linha so ela separa; quando
+   os itens empilham, ela fica pendurada no fim da linha do STF (o mesmo defeito dos "·"
+   das Metas). A quebra de linha ja separa. */
+@media (max-width: 560px) {
+  /* column-gap da barra e 10px, nao 8: 50%-4px dava 344 em 342 e cada pilula caia numa linha. */
+  .ls-fpill { flex: 0 1 calc(50% - 6px); min-width: 0; justify-content: space-between; }
+  .ls-fpill-sel { max-width: none; min-width: 0; flex: 1 1 auto; }
+  .ultimo-info .ui-div { display: none; }
+  .ultimo-info .ui-item { flex: 1 0 100%; }
+}
+
+/* ----- 47. Jurisprudencia: o indice deixa de sumir no celular -----
+   ".juris-idx { display: none }" abaixo de 900px apagava a arvore ramo -> assunto, que e o
+   UNICO jeito de filtrar por assunto: no celular a funcao simplesmente nao existia, enquanto
+   no computador ela ocupa a coluna da esquerda. Como e uma <aside> de uma grade que ja vira
+   coluna unica, basta deixar de esconde-la: ela cai como um cartao acima da lista, com os
+   ramos recolhidos (197px com tres ramos). O teto com rolagem so entra em cena para quem
+   tiver muitos ramos, para o indice nao empurrar a lista para fora da tela. */
+@media (max-width: 900px) {
+  .juris-idx { display: block; position: static; max-height: 45dvh; margin: 0 0 12px; }
+}
+
+/* ----- 48. Resumos: barra em duas linhas e "..." fora da linha propria -----
+   (a) A busca tem max-width 360px e sozinha ja preenchia a linha, empurrando o filtro de
+   topicos para a segunda e o "Novo resumo" para uma terceira, com a linha inteira vazia
+   a direita dele. Deixando a busca encolher, a linha 1 fica "buscar + Topicos" e a linha 2
+   "Gerar resumo de… + Novo resumo" — filtros juntos, acoes de criar juntas.
+   (b) ".resumo-acoes" so contem o menu "...", e gastava uma faixa inteira do cartao para um
+   icone de 29px, com todo o lado esquerdo vazio. Vai para o canto do cartao, como ja ficou
+   no Edital e nos Materiais. O padding no titulo evita que ele passe por baixo. */
+@media (max-width: 560px) {
+  #res-busca { flex: 1 1 190px; max-width: none; min-width: 0; }
+  /* Com a quebra, o .spacer sobra na linha 1 comendo 16px da busca (o placeholder cortava)
+     e nao alinha mais nada: os dois botoes ja comecam a linha 2 pela esquerda. */
+  #res-busca ~ .spacer { display: none; }
+  .card.resumo-item { position: relative; }
+  .card.resumo-item > .resumo-acoes { position: absolute; top: 10px; right: 10px; margin: 0; padding: 0; }
+  .card.resumo-item .resumo-titulo { padding-right: 34px; }
+}
+
+/* ----- 49. Mapas mentais: filtro e botao na mesma linha -----
+   O seletor de topico ocupava 328px (a linha quase inteira) para mostrar "Todos os topicos",
+   e o "Gerar mapa mental" caia numa linha so dele. Sem o rotulo "Filtrar:" — o proprio valor
+   do seletor ja diz o que ele faz, como no "Ordenar:" do Edital — os dois cabem juntos. */
+@media (max-width: 560px) {
+  .mapa-filtro-txt { display: none; }
+  .mapa-filtro-lbl { gap: 0; }
+  #mapa-filtro { width: 172px; max-width: 172px; min-width: 0; }
+}
+
+/* ----- 50. Mapa aberto: fechar longe do "Remover" -----
+   No cabecalho do mapa o X de fechar caia 10px depois do "Remover" (vermelho, e com um X
+   no proprio icone) na mesma linha quebrada. Dois X colados, um fecha e o outro APAGA o
+   mapa: no toque isso e um erro esperando para acontecer. O fechar vai para a ponta
+   direita da sua linha, longe da acao destrutiva. */
+@media (max-width: 560px) {
+  .mm-head:has(.mm-tabs) .mm-close { margin-left: auto; }
+}
+
+/* ----- 51. Questoes: abas, "..." e prosa justificada -----
+   (a) A barra de abas (Multipla escolha / Certo-Errado) mora no bloco de acoes do cabecalho
+   e ficava encostada a direita, com 83px de vazio a esquerda. Sendo uma barra de ABAS, ela
+   ocupa a linha inteira no celular.
+   (b) Mais um .spacer invisivel (33px de largura, altura zero) entre os botoes e o "...":
+   os tres somam 330px em 342 disponiveis e caberiam juntos, mas o espacador comia a sobra
+   e jogava o "..." sozinho para a linha de baixo.
+   (c) Justificacao: o proprio arquivo ja abre excecao para o chat, com a razao certa
+   ("coluna estreita gera rios de espaco"). No celular TODA coluna e estreita — o enunciado
+   tem 310px — entao a prosa passa a alinhar a esquerda. A opcao "Justificado" do leitor de
+   Lei Seca e outra regra (.ler-art-corpo, escolha explicita do usuario) e continua valendo. */
+@media (max-width: 560px) {
+  .page-head-extra > .seg { flex: 1 0 100%; }
+  .barra-acoes:has(.prat-mais) > .spacer { display: none; }
+  .questao-enun, .erro-enun, .ia-comentario p, .cor-feedback-txt, .criterio-obs,
+  .doc-corpo, .resumo-conteudo, .ls-texto, .mentor-analise p, .erro-coment-edit + *,
+  .mk-texto, .revtop-conteudo, .mentor-listas li, .fq-back .ia-coment-det-corpo {
+    text-align: left;
+  }
+}
+
+/* ----- 52. Contador entre parenteses nao e um item de flex -----
+   .btn e "display: flex; gap: 8px" (para separar icone do rotulo). Quando o numero vem num
+   <span class="num"> DENTRO do rotulo — "Treinar erros (1)", "Refazer em foco (2)" — o flex
+   o trata como item proprio e aplica o gap dos dois lados: "( 1 )" com buracos em volta.
+   Zerar o gap do botao inteiro so serve para botao SEM icone (o "Refazer em foco" tem um).
+   A margem negativa cancela a folga apenas em volta do numero. Vale nas duas larguras —
+   o defeito e o mesmo no computador. */
+.btn > .num { margin-inline: -8px; }
+
+/* ----- 53. Central de Revisoes: os tres filtros em colunas alinhadas -----
+   "Disciplina" e "Tipo" ficavam com rotulo e seletor na mesma linha, mas "Topico" nao: o
+   seletor dele mede 268px (dimensionado pelo nome de topico mais longo) e, somado ao rotulo,
+   estourava os 310px disponiveis, caindo para a linha de baixo. Um filtro quebrado no meio
+   de dois inteiros. Cada filtro vira uma grade de duas colunas: rotulos alinhados a esquerda
+   e seletores comecando todos no mesmo x, encolhendo quando o conteudo e longo. */
+@media (max-width: 560px) {
+  .rev-selects > label.inline, .filtro-bar > label.inline {
+    width: 100%; display: grid; grid-template-columns: 76px minmax(0, 1fr);
+    align-items: center; gap: 8px;
+  }
+  /* margin-left: 6px de "label.inline > select" (l. 4449) se somava a "gap" da grade e
+     empurrava o seletor 6px para fora da propria coluna — a barra de Questoes C/E ganhava
+     348px de conteudo em 342. Na grade quem separa e o gap. */
+  .rev-selects > label.inline > select, .filtro-bar > label.inline > select { width: 100%; max-width: none; min-width: 0; margin: 0; }
+}
+
+/* ----- 54. Cartao de revisao: tres linhas de acao viram duas -----
+   A ordem do DOM e "Reprogramar / Esqueci-Lembrei-Facil / lixeira / Iniciar". Reprogramar
+   (130px) nao dividia linha com o grupo de notas (291px), entao sobrava sozinho la em cima,
+   encostado a direita, e as outras duas acoes caiam numa terceira linha. Reordenando: o
+   grupo de notas (a acao principal) sobe para a primeira linha e as tres secundarias cabem
+   juntas embaixo (32+130+87+gaps = 265 em 306).
+   A lixeira tambem ficava a 8px do "Iniciar", que e azul e primario: apagar a revisao por
+   engano estava a um dedo de distancia. Ela vai para a ponta esquerda da linha. */
+@media (max-width: 560px) {
+  .rev-acoes > .rev-grad { order: -2; }
+  /* Sem margin-right:auto: num flex que quebra linha, a margem automatica engole a sobra
+     da linha e empurra o resto para baixo (virou quatro linhas na primeira tentativa).
+     So a ordem ja poe a lixeira antes do "Reprogramar", a 146px do "Iniciar". */
+  .rev-acoes > .rev-remover { order: -1; }
+}
+
+/* ----- 55. Flashcards: etiqueta de topico e rotulos dos filtros -----
+   (a) ".tag-topico" e uma pilula (raio 9999px) com "white-space: normal": com o nome longo
+   ("Direito Administrativo · Atos administrativos") ela quebrava em TRES linhas e virava um
+   bolo oval de 103x75px. Pior: a linha ".fc-meta" e centralizada e o conteudo somava 335px
+   em 310, entao ela vazava 13px para FORA nos dois lados. Uma linha so, com reticencias, e
+   a linha passa a quebrar em vez de vazar.
+   (b) Os rotulos "Tipo:" e "Ordem:" caiam no fim da linha ANTERIOR, longe do controle que
+   nomeiam — resolvido agrupando cada par num .filtro-par (ver no fim do arquivo). */
+@media (max-width: 560px) {
+  .fc-meta { flex-wrap: wrap; justify-content: flex-start; }
+  .fc-meta .tag-topico {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    min-width: 0; max-width: 100%; flex: 0 1 auto;
+  }
+}
+
+/* O par rotulo+controle e um item so, senao o flex quebra entre eles: a atribuicao de
+   itens as linhas acontece ANTES da distribuicao de sobra, entao fazer o segmentado
+   crescer nao empurra o rotulo seguinte para baixo (tentei; so mudou o defeito de lugar). */
+.filtro-par { display: flex; align-items: center; gap: 8px; }
+
+/* ----- 56. Segmentado de quatro abas: 2x2 alinhado -----
+   As quatro abas de Configuracoes quebravam com largura natural (209+121 / 137+193), entao
+   as "colunas" comecavam em x diferentes. Dar metade da linha a cada uma so funciona se
+   NENHUM rotulo passar de 165px — item de flex tem "min-width: auto" e nao encolhe abaixo do
+   conteudo (tentei antes e saiu 1+1+2 fileiras, pior que o problema). Por isso as duas abas
+   longas passaram a usar o nome que o cabecalho da propria secao ja repete logo abaixo
+   ("ESTUDO", "DADOS & CONCURSO"): agora o maior rotulo e "Aparencia", com 137px. */
+@media (max-width: 560px) {
+  .seg:has(> :nth-child(4)):not(:has(> :nth-child(5))) > * { flex: 1 1 calc(50% - 2px); }
+}
+
+/* ----- 57. Dossie: quatro numeros em 2x2 e "Praticar" junto dos irmaos -----
+   (a) ".dossie-stats" e 4 colunas no computador e vira UMA no celular: quatro blocos de
+   81px empilhados, 329px de rolagem para mostrar quatro numeros curtos. Em 2x2 fica 165px
+   e os quatro aparecem juntos, que e a graca de um painel de numeros.
+   (b) Mais um .spacer (o quarto desta auditoria): ele empurrava "Praticar" para a ponta
+   direita da primeira linha, separado de "Estudar agora" e "Mapa mental", que sao botoes
+   do mesmo tipo e caem na linha de baixo. Sem ele os tres ficam agrupados. */
+@media (max-width: 560px) {
+  .dossie-stats { grid-template-columns: 1fr 1fr; }
+  .dossie-acoes-topo > .spacer { display: none; }
+}
+
+/* ----- 58. Cartao de mapa mental: apagar deixa de ser a unica acao a vista -----
+   O cartao mostrava so "x Remover" — a acao mais destacada de um mapa era apaga-lo, e nao
+   havia botao nenhum para abri-lo (so o titulo, clicavel sem parecer). Virou o mesmo "..."
+   do Edital, Materiais e Resumos, com "Abrir mapa" e "Remover" dentro. No celular ele vai
+   para o canto do cartao, como nos outros; a folga a direita evita que titulo, selo e data
+   da revisao passem por baixo. */
+@media (max-width: 560px) {
+  .card.mapa-card { position: relative; }
+  .card.mapa-card > .barra-acoes > .mapa-mais { position: absolute; top: 10px; right: 10px; }
+  .card.mapa-card .mapa-card-top { padding-right: 34px; }
+}
+
+/* ----- 59. Contraste no tema escuro: texto sobre cor de acento -----
+   Os acentos CLAREIAM no tema escuro (ambar #dfa500 -> #fbbf24, verde #0d9b6c -> #34d399),
+   mas o texto continuava branco: "Treinar erros" ficava em 1.67:1 e a letra da alternativa
+   correta em 1.92:1 — o minimo legivel e 4.5. Texto escuro sobre esses fundos claros ganha
+   nos DOIS temas (ambar 6.75 no claro / 11.34 no escuro; verde 5.34 / 9.85; vermelho
+   4.46 / 6.84), entao nao precisa de condicional por tema.
+   O "errada" entra junto de proposito: deixar so a correta com texto escuro faria os dois
+   crachas da mesma pergunta parecerem de componentes diferentes. */
+.btn-treinar:not(:disabled) { color: #0b1020; }
+.alt.correta .alt-letra, .alt.errada .alt-letra,
+.sim-alt.correta .alt-letra, .sim-alt.errada .alt-letra,
+/* o Modo Foco tem regra propria com tres classes (l. 2371-2372), que venceria a de cima */
+.fq-qcard .alt.correta .alt-letra, .fq-qcard .alt.errada .alt-letra { color: #0b1020; }
+
+/* O link da faixa do Mentor usa --primary-d, que no tema escuro vale #2563eb: azul saturado
+   sobre fundo azul-escuro, 3.25:1. No escuro quem serve e --primary-l (6.61:1); no claro e o
+   contrario (--primary-d da 8.72 e --primary-l so 3.68), por isso a troca e so no escuro. */
+[data-tema="escuro"] .faixa-ia-cta { color: var(--primary-l); }

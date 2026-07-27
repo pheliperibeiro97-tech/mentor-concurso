@@ -15,7 +15,10 @@ const ehCE = (formato) => formato === "ce";
 export function addQuestoesBotaoHTML(aberto, formato) {
   // Sempre "Adicionar…": o fluxo virou JANELA MODAL (tem o próprio fechar). O rótulo
   // "Fechar" era do antigo painel inline e ficava preso quando o modal fechava pelo X.
-  const rotulo = "Adicionar questões";
+  // O rótulo acompanha o FORMATO da tela. Antes era fixo em "Adicionar questões": na tela de
+  // Questões C/E ele aparecia ao lado do CTA "Adicionar itens C/E" do estado vazio — dois
+  // botões com nomes diferentes disparando a MESMA ação e abrindo a MESMA janela.
+  const rotulo = formato === "ce" ? "Adicionar itens C/E" : "Adicionar questões";
   return `<button class="btn btn-add btn-sm" data-action="toggle-addq" data-tip-pos="cima-esq" data-tip="Digite ou cole, importe um arquivo, extraia do material ou gere com IA.">${rotulo}</button>`;
 }
 
@@ -61,7 +64,7 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
         <div class="add-via-linha">
           <label class="inline" style="flex:1; min-width:220px">Vincular todas ao tópico <select id="q-add-top">${opcoesVincular}</select></label>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo para cá.">${icone("paperclip")} Importar de arquivo
-            <input id="q-add-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
+            <input id="q-add-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden />
           </label>
         </div>
         <textarea id="q-add-texto" rows="4" placeholder="${esc(placeholder)}">${esc(estado.textoSalvo || "")}</textarea>
@@ -220,13 +223,13 @@ function provaImportHTML(st, estado) {
       <p class="muted small u-m-0 u-mb-8">A IA extrai as questões da prova e aplica o <b>gabarito oficial</b> (selo definitivo).</p>
       <div class="prova-campo">
         <div class="prova-campo-tit"><b>Prova</b>
-          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF ou .txt da prova (OCR se escaneado).">${icone("paperclip")} Importar arquivo<input id="prova-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF, .txt ou FOTO da prova (a IA lê imagem escaneada).">${icone("paperclip")} Importar arquivo<input id="prova-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden /></label>
         </div>
         <textarea id="prova-texto" rows="5" placeholder="Enunciados e alternativas da prova…">${esc(pf.textoProva || "")}</textarea>
       </div>
       <div class="prova-campo">
         <div class="prova-campo-tit"><b>Gabarito definitivo</b>
-          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF ou .txt do gabarito.">${icone("paperclip")} Importar arquivo<input id="gab-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
+          <label class="btn btn-ghost btn-sm btn-file" data-tip="PDF, .txt ou FOTO do gabarito.">${icone("paperclip")} Importar arquivo<input id="gab-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden /></label>
         </div>
         <textarea id="gab-texto" rows="3" placeholder="1-A  2-C  3-E …  ·  Cebraspe: 1-C  2-E …">${esc(pf.textoGabarito || "")}</textarea>
       </div>

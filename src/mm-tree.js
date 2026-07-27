@@ -440,7 +440,7 @@ export function renderTidyTree(svg, arv, opts = {}) {
     if (opts.onZoom) opts.onZoom(view.k);
   }
   function setAnim(on) { gZoom.classList.toggle("mm-anim", !!on); }
-  function fit(animar) {
+  function fit(animar, forcar) {
     const b = curBounds;
     if (!b || !isFinite(b.minX)) return;
     const r = rect();
@@ -451,8 +451,14 @@ export function renderTidyTree(svg, arv, opts = {}) {
     // Comportamento NotebookLM: prioriza LEGIBILIDADE. Ajusta para caber, mas com PISO de
     // ~72% (nós legíveis) e teto 1.0 (não amplia). Se não couber nesse piso, o excedente
     // (quase sempre VERTICAL, pois a árvore cresce para a direita) fica navegável por pan.
+    //
+    // `forcar` = o usuário PEDIU para ajustar (botão "Ajustar à tela"). Aí o piso cede: numa
+    // tela estreita o excedente é HORIZONTAL (a árvore cresce para a direita), o piso de 72%
+    // nunca era alcançado e o botão não fazia nada visível — parecia quebrado. Pedido
+    // explícito manda; o limite passa a ser o mesmo do zoom manual (25%).
     const cabe = Math.min((W - pad * 2) / Math.max(w, 1), (H - pad * 2) / Math.max(h, 1));
-    const k = Math.max(0.72, Math.min(1.0, cabe));
+    const piso = forcar ? 0.25 : 0.72;
+    const k = Math.max(piso, Math.min(1.0, cabe));
     view.k = k;
     // Raiz ancorada à esquerda, MAS após a barra de controles (que fica à esquerda) para
     // não sobrepor o nó raiz.
@@ -553,7 +559,7 @@ export function renderTidyTree(svg, arv, opts = {}) {
   }
 
   return {
-    fit: () => fit(true),
+    fit: () => fit(true, true), // pedido explícito do usuário: cabe de verdade
     zoomIn: () => zoomAround(vpW() / 2, vpH() / 2, 1.25, true),
     zoomOut: () => zoomAround(vpW() / 2, vpH() / 2, 1 / 1.25, true),
     expandAll: () => { collapsed.clear(); render(true); setTimeout(() => fit(true), DUR + 20); if (opts.onToggleAll) opts.onToggleAll(true); },

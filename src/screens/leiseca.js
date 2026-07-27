@@ -38,6 +38,14 @@ export function renderJurisprudencia(root, app) {
 }
 
 
+// Rótulo do lote de geração a partir de UM dispositivo (artigo/súmula): é o que a tela de
+// destino mostra na faixa "só os recém-gerados" (ex.: «Lei 8.112/1990, art. 2º»).
+function rotuloDispositivo(store, id) {
+  const ind = store.get().indicacoes.find((x) => x.id === id);
+  const ref = String((ind && (ind.referencia || ind.artigo)) || "").split(",")[0].trim();
+  return ref ? `de «${ref.slice(0, 40)}»` : "do dispositivo";
+}
+
 function renderIndicacoes(root, app, tipo) {
   const { store } = app;
   const st = store.get();
@@ -197,6 +205,20 @@ function renderIndicacoes(root, app, tipo) {
                 <option value="todos" ${S.filtroRamo === "todos" ? "selected" : ""}>Todos</option>
                 ${ramos.map((rm) => `<option value="${esc(rm)}" ${S.filtroRamo === rm ? "selected" : ""}>${esc(rm)}</option>`).join("")}
               </select></span>` : ""; })()}
+             ${(() => {
+               // ASSUNTO: no computador ele é escolhido no índice lateral (.juris-idx), que o
+               // celular esconde por falta de espaço — e o filtro ficava INALCANÇÁVEL no
+               // telefone. Esta pílula em cascata (só aparece com um ramo escolhido) devolve o
+               // mesmo filtro em qualquer tela; no computador ela convive com o índice.
+               if (S.filtroRamo === "todos") return "";
+               const assuntos = [...new Set(st.indicacoes.filter((i) => i.tipo === "juris" && i.ramo === S.filtroRamo && i.assunto).map((i) => i.assunto))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+               if (!assuntos.length) return "";
+               return `<span class="ls-fpill ${S.filtroAssunto !== "todos" ? "on" : ""}"><span class="ls-fpill-lbl">Assunto</span>
+              <select class="ls-fpill-sel" id="f-assunto">
+                <option value="todos" ${S.filtroAssunto === "todos" ? "selected" : ""}>Todos</option>
+                ${assuntos.map((as) => `<option value="${esc(as)}" ${S.filtroAssunto === as ? "selected" : ""}>${esc(as)}</option>`).join("")}
+              </select></span>`;
+             })()}
              <span class="ls-fpill ${S.filtroStatus !== "todos" ? "on" : ""}"><span class="ls-fpill-lbl">Vigência</span>
               <select class="ls-fpill-sel" id="f-status">
                 <option value="todos" ${S.filtroStatus === "todos" ? "selected" : ""}>Todas</option>
@@ -235,7 +257,9 @@ function renderIndicacoes(root, app, tipo) {
     S.filtroCategoria = e.target.value;
     app.refresh();
   });
-  root.querySelector("#f-ramo")?.addEventListener("change", (e) => { S.filtroRamo = e.target.value; app.refresh(); });
+  // Trocar de ramo zera o assunto (o antigo pertencia ao ramo anterior e esvaziaria a lista).
+  root.querySelector("#f-ramo")?.addEventListener("change", (e) => { S.filtroRamo = e.target.value; S.filtroAssunto = "todos"; app.refresh(); });
+  root.querySelector("#f-assunto")?.addEventListener("change", (e) => { S.filtroAssunto = e.target.value; app.refresh(); });
   root.querySelector("#f-status")?.addEventListener("change", (e) => { S.filtroStatus = e.target.value; app.refresh(); });
   // Leitor (F1a): trocar de lei + "ir para artigo".
   root.querySelector("#ler-norma")?.addEventListener("change", (e) => { S.leiAtiva.lei = e.target.value; app.refresh(); });
@@ -743,20 +767,26 @@ function renderIndicacoes(root, app, tipo) {
       const id = el.getAttribute("data-id");
       const g = await pedirNumero("Quantas questões de múltipla escolha desta tese?", { padrao: 2, min: 1, max: 5, nivel: true });
       if (!g) return;
+      const rot = rotuloDispositivo(store, id);
+      const lote = store.iniciarLoteGeracao(rot); // abre a tela mostrando só o recém-gerado
       const qs = await comOcupado(() => store.gerarQuestoesDeIndicacao(id, g.n, g.dificuldade, "mc"), { botao: el, msg: "Gerando questões…" });
+      store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão gerada", "questões geradas")}.` : "A IA não retornou questões.", qs.length ? "ok" : "erro");
-      if (qs.length) app.navigate("pratica");
+      if (qs.length) app.navigate("pratica", { lote, loteRotulo: rot });
     },
     "card-flash": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const id = el.getAttribute("data-id");
       const g = await pedirNumero("Quantos flashcards desta tese?", { padrao: 4, min: 1, max: 6, nivel: true });
       if (!g) return;
+      const rot = rotuloDispositivo(store, id);
+      const lote = store.iniciarLoteGeracao(rot); // abre a tela mostrando só o recém-gerado
       const cs = await comOcupado(() => store.gerarFlashcardsIADeIndicacao(id, g.n, g.dificuldade), { botao: el, msg: "Gerando flashcards…" });
+      store.encerrarLoteGeracao();
       if (cs == null) return;
       toast(cs.length ? `${plural(cs.length, "flashcard gerado", "flashcards gerados")}.` : "A IA não retornou flashcards.", cs.length ? "ok" : "erro");
-      if (cs.length) app.navigate("flashcards");
+      if (cs.length) app.navigate("flashcards", { lote, loteRotulo: rot });
     },
     "ir-vinculo": (el) => app.navigate(el.getAttribute("data-tipo") === "juris" ? "jurisprudencia" : "leiseca", { focoIndicacaoId: el.getAttribute("data-id") }),
     "conferir-vigencia": (el) => {

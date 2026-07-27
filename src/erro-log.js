@@ -83,6 +83,23 @@ export function montarRelatorio(store) {
 }
 
 // Gera e BAIXA o arquivo de diagnóstico. Devolve o nome do arquivo.
+// Compartilhamento NATIVO do diagnóstico (celular): baixar um arquivo e pedir que o usuário
+// "anexe da pasta Downloads" é um fluxo de computador — no telefone, achar o arquivo baixado
+// e anexá-lo num e-mail é penoso. Aqui o próprio SO abre a folha de compartilhamento com o
+// arquivo pronto. Devolve true se compartilhou; false = o chamador segue com o download.
+export async function compartilharRelatorio(store) {
+  try {
+    if (typeof navigator === "undefined" || !navigator.canShare || !navigator.share) return false;
+    const nome = `mentor-diagnostico-${new Date().toISOString().slice(0, 10)}.json`;
+    const arquivo = new File([montarRelatorio(store)], nome, { type: "application/json" });
+    if (!navigator.canShare({ files: [arquivo] })) return false;
+    await navigator.share({ files: [arquivo], title: "Diagnóstico — Mentor Concurso" });
+    return true;
+  } catch (_) {
+    return false; // usuário cancelou ou o SO recusou: cai no download normal
+  }
+}
+
 export function baixarRelatorio(store) {
   const txt = montarRelatorio(store);
   const nome = `mentor-diagnostico-${new Date().toISOString().slice(0, 10)}.json`;

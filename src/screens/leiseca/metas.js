@@ -299,7 +299,7 @@ export function metasCorpoHTML(st, tipo, lista, r, store) {
       : `<span class="tag-topico">${disc ? esc(disc.nome) : "Geral"}</span>`;
     return `<div class="card ls-item ls-meta-crua ${i.lido ? "lido" : ""}" data-foco-id="${i.id}">
       <div class="ls-top">
-        <input type="checkbox" data-action="toggle-lido" data-id="${i.id}" ${i.lido ? "checked" : ""} title="Concluir meta" />
+        <input type="checkbox" data-action="toggle-lido" data-id="${i.id}" ${i.lido ? "checked" : ""} data-tip="Concluir meta" aria-label="Concluir meta" />
         <span class="ls-ref">${i.lido ? `<s>${esc(i.referencia)}</s>` : esc(i.referencia)}</span>
         <span class="spacer"></span>
         ${vinc}
@@ -309,7 +309,7 @@ export function metasCorpoHTML(st, tipo, lista, r, store) {
       <div class="ls-rodape">
         <div class="ls-acoes">
           <button class="lnk" data-action="quebrar-meta" data-id="${i.id}" data-tip-pos="cima-esq" data-tip="Divide esta meta em etapas menores (ex.: blocos de artigos). Cada etapa vira uma tarefa.">${icone("list-checks")} Dividir em etapas</button>
-          <details class="ls-mais"><summary data-tip="Mais ações" title="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">
+          <details class="ls-mais"><summary data-tip="Mais ações">${icone("ellipsis")}</summary><div class="ls-mais-pop">
             <button class="lnk" data-action="editar" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Editar a referência e o vínculo.">${icone("square-pen")} Editar</button>
             <button class="lnk lnk-danger" data-action="remover" data-id="${i.id}" data-tip-pos="cima-dir" data-tip="Remover esta meta.">${icone("x")} Remover</button>
           </div></details>

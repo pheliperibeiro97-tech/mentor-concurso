@@ -28,9 +28,17 @@ export function abrirPaleta(app) {
 
   const ov = document.createElement("div");
   ov.className = "paleta-overlay";
+  // No celular não existe Esc: o placeholder prometia uma tecla que o aparelho não tem, e a
+  // paleta é justamente a navegação principal ali (a barra de comando é o único controle do
+  // topo). No toque o texto some e entra um X de fechar de verdade. O rodapé de teclas já é
+  // escondido pelo bloco @media (hover: none) do CSS.
+  const ehToque = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
   ov.innerHTML = `
     <div class="paleta" role="dialog" aria-modal="true">
-      <input class="paleta-input" type="text" placeholder="Ir para uma tela ou perguntar à IA…   (Esc fecha)" autocomplete="off" spellcheck="false" />
+      <div class="paleta-campo">
+        <input class="paleta-input" type="text" placeholder="Ir para uma tela ou perguntar à IA…${ehToque ? "" : "   (Esc fecha)"}" autocomplete="off" spellcheck="false" />
+        ${ehToque ? `<button class="paleta-x" type="button" aria-label="Fechar">${icone("x")}</button>` : ""}
+      </div>
       <div class="paleta-lista"></div>
       <div class="paleta-rodape muted">↑↓ navegar · Enter abrir · Esc fechar</div>
     </div>`;
@@ -88,6 +96,7 @@ export function abrirPaleta(app) {
     if (el) ativar(+el.getAttribute("data-i"));
   });
   ov.addEventListener("mousedown", (e) => { if (e.target === ov) fechar(); });
+  ov.querySelector(".paleta-x")?.addEventListener("click", fechar); // botão de fechar do toque
   function scrollSel() { const el = lista.querySelector(".paleta-item.on"); if (el) el.scrollIntoView({ block: "nearest" }); }
   function onEscGlobal(e) { if (e.key === "Escape") { e.preventDefault(); fechar(); } }
   document.addEventListener("keydown", onEscGlobal, true);

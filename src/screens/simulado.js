@@ -253,7 +253,8 @@ function renderSetup(root, app, st, formato) {
                       <span class="sim-cota-nome">${esc(c.nome)}</span>
                       <span class="sim-cota-disp"><span class="num">${c.disp}</span> ${c.disp === 1 ? "questão" : "questões"}</span>
                       <span class="sim-cota-set">
-                        <input type="number" class="sim-cota" data-disc="${esc(c.key)}" min="0" max="${c.disp}" value="${v}" aria-label="Quantas de ${esc(c.nome)}" />
+                        <input type="number" class="sim-cota" data-disc="${esc(c.key)}" min="0" max="${c.disp}" value="${v}" placeholder="0" aria-label="Quantas de ${esc(c.nome)} (há ${c.disp} disponíveis)" />
+                        <span class="sim-cota-de">de ${c.disp}</span>
                         <button class="lnk" data-action="cota-max" data-disc="${esc(c.key)}" data-tip="Usar todas desta disciplina">tudo</button>
                       </span>
                     </div>`;

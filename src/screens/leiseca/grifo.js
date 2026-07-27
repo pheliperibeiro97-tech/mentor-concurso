@@ -105,8 +105,31 @@ export function garantirGrifoFlutuante() {
     posicionar(lastRect);
   };
 
+  // ===== Abertura do menu: mouse E toque =====
+  // No computador, o gesto termina em `mouseup`. No CELULAR não existe mouseup confiável: a
+  // seleção nasce de toque longo e é ajustada arrastando as alças, e o navegador não emite
+  // mouseup nesse fluxo — por isso grifar / comentar / copiar / "Perguntar à IA" simplesmente
+  // não abriam no telefone. Aqui o toque tem dois gatilhos próprios: `touchend` (fim do toque
+  // longo) e `selectionchange` com espera (o dedo arrastando a alça dispara dezenas de eventos;
+  // só abrimos quando ele para). O `selectionchange` de ABERTURA é exclusivo do toque — no
+  // computador ele faria o menu aparecer no meio do arrasto do mouse.
+  const ehToque = () => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(hover: none)").matches;
+  // Enquanto o dedo está NA barra, a seleção pode colapsar (o toque no botão tira a seleção do
+  // texto). Sem esta trava o menu se escondia antes de o clique chegar ao botão.
+  let tocandoBarra = false;
+  bar.addEventListener("touchstart", () => { tocandoBarra = true; }, { passive: true });
+  bar.addEventListener("touchend", () => { setTimeout(() => { tocandoBarra = false; }, 500); }, { passive: true });
+
+  let selTimer = null;
   document.addEventListener("mouseup", () => setTimeout(abrir, 0));
-  document.addEventListener("selectionchange", () => { if (modo === "menu" && window.getSelection().isCollapsed) esconder(); });
+  document.addEventListener("touchend", () => { if (ehToque()) setTimeout(abrir, 80); }, { passive: true });
+  document.addEventListener("selectionchange", () => {
+    if (tocandoBarra) return;
+    if (modo === "menu" && window.getSelection().isCollapsed) { esconder(); return; }
+    if (!ehToque() || modo !== "menu") return; // no toque, abre quando o dedo para de ajustar
+    clearTimeout(selTimer);
+    selTimer = setTimeout(abrir, 350);
+  });
   // Fase 5: rolar NÃO fecha mais o menu (fechava e o usuário "perdia" a seleção) — REPOSICIONA
   // junto da seleção (throttle por rAF); só fecha se a seleção se perdeu/colapsou.
   let _reposPend = false;
@@ -122,7 +145,9 @@ export function garantirGrifoFlutuante() {
       posicionarAtual();
     });
   }, true);
-  window.addEventListener("resize", esconder);
+  // No celular, ABRIR O TECLADO dispara `resize` — e isso fechava o campo de comentário no
+  // instante em que o usuário ia digitar. Redimensionar só fecha o menu, nunca a nota.
+  window.addEventListener("resize", () => { if (modo !== "nota") esconder(); });
   bar.addEventListener("mousedown", (e) => { if (!e.target.closest(".gf-nota")) e.preventDefault(); }); // não perde a seleção (menos no input)
   bar.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && e.target.closest(".gf-nota")) { e.preventDefault(); salvarNota(); } if (e.key === "Escape") esconder(); });
 

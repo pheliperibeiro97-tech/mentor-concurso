@@ -1,5 +1,5 @@
 // Planejamento: ciclo de aprendizado + tarefas/trilhas + próximas revisões.
-import { bindActions, toast, header, vazio, confirmar, imprimir, botaoImprimir, ligarDropZone, focarItem, iconImprimir, abrirJanelaFluxo, plural, skeletonDoc, md } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, imprimir, botaoImprimir, ligarDropZone, focarItem, iconImprimir, abrirJanelaFluxo, plural, skeletonDoc, md, dicaArquivo } from "../ui.js";
 import { esc, fmtData, fmtMin, todayISO, daysBetween, addDays, weekdayISO, DIAS_SEMANA, DIAS_SEMANA_CURTO } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
@@ -54,7 +54,16 @@ export default function renderPlanejamento(root, app) {
   for (const r of st.resumos) {
     if (r.revisao && r.revisao.proxima) slot(r.revisao.proxima).resumos.push(r.titulo || "resumo");
   }
-  const datasRevisao = Object.keys(porData).sort().slice(0, 7);
+  // "Proximas" e daqui para a frente E dentro da SEMANA: datas passadas (revisao atrasada)
+  // sao assunto da Central de Revisoes, que ja as cobra; e o que vence em 15/30 dias nao e
+  // acionavel hoje — sao justamente as faixas que acumulam mais itens (os intervalos do SM-2
+  // sao 1/7/15/30) e que dariam a impressao de uma montanha de trabalho. Esta tela e "Sua
+  // semana de estudos"; a lista respeita esse recorte. Comparacao de string ISO = cronologica.
+  const hojeISO = todayISO();
+  const limiteISO = addDays(hojeISO, 7);
+  const todasDatas = Object.keys(porData);
+  const temAtrasadas = todasDatas.some((d) => d < hojeISO);
+  const datasRevisao = todasDatas.filter((d) => d >= hojeISO && d <= limiteISO).sort();
 
   root.innerHTML = `
     ${header("Planejamento", "Sua semana de estudos", botaoImprimir())}
@@ -64,7 +73,7 @@ export default function renderPlanejamento(root, app) {
       <button class="lnk" data-action="ir-hoje">Ir para Hoje →</button>
       <span class="spacer"></span>
       <details class="plano-ciclo-det">
-        <summary data-tip-pos="cima-dir" data-tip="Cada fase prepara a próxima. Clique para ver todas.">Ciclo de aprendizado</summary>
+        <summary data-tip-pos="cima-dir" data-tip="Cada fase prepara a próxima. Toque para ver todas.">Ciclo de aprendizado</summary>
         <div class="ciclo-explica">
           ${[...ORDEM_FASES, "Pl"].map((f) => {
             const info = FASES[f];
@@ -88,7 +97,7 @@ export default function renderPlanejamento(root, app) {
           ? `<ul class="lista-simples">${datasRevisao
               .map((d) => {
                 const dif = daysBetween(todayISO(), d);
-                const quando = dif <= 0 ? "hoje" : dif === 1 ? "amanhã" : `em ${dif} dias`;
+                const quando = dif === 0 ? "hoje" : dif === 1 ? "amanhã" : `em ${dif} dias`;
                 const info = porData[d];
                 const partes = [];
                 if (info.flashcards) partes.push(`${icone("layers")} ${plural(info.flashcards, "flashcard", "flashcards")}`);
@@ -96,10 +105,15 @@ export default function renderPlanejamento(root, app) {
                   partes.push(`${icone("repeat-2")} ${plural(info.topicos.length, "tópico", "tópicos")}${info.topicos.length <= 3 ? ` (${esc(info.topicos.join(", "))})` : ""}`);
                 if (info.resumos.length)
                   partes.push(`${icone("file-text")} ${plural(info.resumos.length, "resumo", "resumos")}${info.resumos.length <= 3 ? ` (${esc(info.resumos.join(", "))})` : ""}`);
-                return `<li>${fmtData(d)} <span class="muted">(${quando})</span> · ${partes.join(" · ")}</li>`;
+                return `<li class="revprox">
+                  <span class="revprox-dia"><b>${quando.charAt(0).toUpperCase() + quando.slice(1)}</b><span class="muted small">${fmtData(d)}</span></span>
+                  <span class="revprox-itens">${partes.map((x) => `<span class="chip-sm">${x}</span>`).join("")}</span>
+                </li>`;
               })
               .join("")}</ul>`
-          : `<p class="muted">Nenhuma revisão agendada.</p>`
+          : temAtrasadas
+            ? `<p class="muted">Nada agendado para os próximos dias. <button class="lnk" data-action="ir-central-atrasadas">Ver na Central de Revisões →</button></p>`
+            : `<p class="muted">Nenhuma revisão agendada para os próximos dias.</p>`
       }
     </section>
 
@@ -160,6 +174,9 @@ export default function renderPlanejamento(root, app) {
 
   bindActions(root, {
     imprimir: () => imprimir("Planejamento — Mentor Concurso", printPlanejamento(st, plano, datasRevisao, porData)),
+    // Atrasadas não aparecem aqui (esta seção é "próximas"). Quando existem, o vazio vira um
+    // caminho: abre a Central JÁ no filtro de atrasadas, em vez de deixar o usuário procurar.
+    "ir-central-atrasadas": () => app.navigate("revisoes", { status: "atrasada" }),
     "reta-ativar": () => {
       store.setConfig({ retaFinal: true });
       toast("Reta Final ativada: foco em revisão.");
@@ -933,7 +950,7 @@ function blocoAvulsasHTML(st, store, opcoesTopico) {
           </div>`
     }
     ${mostrarReplan ? replanHTML(store) : ""}
-    ${soltasViewHTML(st)}`;
+    ${soltasViewHTML(st, iaOn)}`;
 }
 
 // Janela modal "Adicionar tarefas" (avulsas) — fluxo stateful (digitar/colar/importar →
@@ -1023,7 +1040,7 @@ function extrairBoxHTML(opcoesTopico, store, texto = "", top = "", estim = "", e
       <textarea id="extrair-texto" rows="4" placeholder="Ex.: Ler a Lei 8.112 // atenção aos arts. 116 e 117 (45 min)&#10;Resolver 20 questões de licitações // focar na Lei 14.133 (30 min)">${esc(texto)}</textarea>
     </label>
     <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:10px">
-      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="Importar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="${dicaArquivo("Importar de um PDF ou .txt.")}">${icone("paperclip")} Importar de arquivo
         <input id="extrair-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
       <label class="inline u-m-0">Vincular ao tópico: <select id="extrair-top">${opTop}</select></label>
@@ -1080,7 +1097,7 @@ function importPanelHTML(st, store) {
       <textarea id="import-texto" rows="7" placeholder="Ex.:&#10;Segunda&#10;Direito Constitucional — princípios (50 min)&#10;20 questões de Administrativo (40 min)&#10;Revisar Lei 8.112 // atenção aos arts. 116/117&#10;Terça&#10;Resolver 15 questões de Português (30 min)&#10;Ler súmulas do STJ (1h)">${esc(importTextoSalvo)}</textarea>
     </label>
     <div class="form-row" style="align-items:flex-end; flex-wrap:wrap; gap:10px; margin-bottom:8px">
-      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="Carregar de um PDF ou .txt. Você também pode arrastar o arquivo aqui.">${icone("paperclip")} Importar de arquivo
+      <label class="btn btn-ghost btn-sm btn-file u-m-0" data-tip="${dicaArquivo("Carregar de um PDF ou .txt.")}">${icone("paperclip")} Importar de arquivo
         <input id="import-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
       </label>
     </div>
@@ -1279,7 +1296,7 @@ function previewHTML(st) {
 }
 
 // ---- Visão "Soltas": a lista livre de sempre, restrita às tarefas sem dia. ----
-function soltasViewHTML(st) {
+function soltasViewHTML(st, iaOn = false) {
   const soltas = st.missoes.filter((m) => !m.data);
   const pendentes = soltas.filter((m) => !m.concluida);
   const concluidas = soltas.filter((m) => m.concluida);
@@ -1297,8 +1314,10 @@ function soltasViewHTML(st) {
       </label>
     </div>
     <div class="cat-legenda">
-      <span class="muted small">Categoria (cor da borda):</span>
-      ${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}
+      <details class="cat-legenda-det">
+        <summary class="muted small">Categoria (cor da borda)</summary>
+        <span class="cat-legenda-cores">${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}</span>
+      </details>
       <span class="spacer"></span>
       ${soltas.length ? `<button class="btn btn-ghost btn-sm" data-action="limpar-avulsas" data-tip-pos="cima-dir" data-tip="Remove todas as tarefas avulsas (sem dia). Não mexe nas tarefas datadas da semana.">${icone("trash-2")} Limpar avulsas</button>` : ""}
       ${exportBarHTML("avulsas")}
@@ -1311,7 +1330,7 @@ function soltasViewHTML(st) {
         : vazio(
             "Sua semana está livre\nAdicione tarefas ou monte um cronograma com o Mentor.",
             `<button class="btn btn-add" data-action="toggle-extrair">${icone("square-pen")} Adicionar tarefas</button>
-             <button class="btn btn-ia" data-action="toggle-replan">${icone("zap")} Sugestões do Mentor</button>`,
+             <button class="btn ${iaOn ? "btn-ia" : "btn-ghost"}" data-action="toggle-replan">${icone("zap")} Sugestões do Mentor</button>`,
             ""
           )
     }
@@ -1364,7 +1383,7 @@ function semanaViewHTML(st, store) {
           ${ehHoje ? `<span class="dia-tag">hoje</span>` : ""}
           ${totDia > 0 ? `<span class="dia-tempo muted small" data-tip="Tempo sugerido para o dia (estimativa, não é cobrança).">≈ ${fmtMin(totDia)}</span>` : ""}
           <button class="lnk dia-add" data-action="abrir-add-dia" data-data="${d}">+ tarefa</button>
-          <button class="lnk dia-folga-set" data-action="toggle-folga" data-dia="${wd}" data-tip-pos="cima-esq" data-tip="Marcar ${DIAS_SEMANA[wd]} como dia de folga (some da agenda). Para desmarcar depois, clique em 'estudar neste dia' no próprio dia.">${icone("moon")} folga</button>
+          <button class="lnk dia-folga-set" data-action="toggle-folga" data-dia="${wd}" data-tip-pos="cima-esq" data-tip="Marcar ${DIAS_SEMANA[wd]} como dia de folga (some da agenda). Para desmarcar depois, use 'estudar neste dia' no próprio dia.">${icone("moon")} folga</button>
         </div>`;
       return `<div class="dia-linha ${ehHoje ? "dia-hoje" : ""}" data-dia-data="${d}">
         ${rotulo}
@@ -1373,8 +1392,8 @@ function semanaViewHTML(st, store) {
             addDiaForm === d
               ? `<div class="add-dia-box">
                   <input class="add-dia-input" data-data="${d}" placeholder="Tarefa neste dia" />
-                  <input type="number" min="0" max="1440" class="add-dia-estim u-w-64" data-data="${d}" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." />
-                  <select class="add-dia-top" data-data="${d}" title="Vincular a um tópico (opcional)"><option value="">— sem tópico —</option>${st.topicos.map((t) => { const dd = st.disciplinas.find((x) => x.id === t.disciplinaId); return `<option value="${t.id}">${esc((dd ? dd.nome + " · " : "") + t.nome)}</option>`; }).join("")}</select>
+                  <input type="number" min="0" max="1440" class="add-dia-estim u-w-64" data-data="${d}" placeholder="min" data-tip="Tempo sugerido (opcional); nunca interrompe nada." />
+                  <select class="add-dia-top" data-data="${d}" data-tip="Vincular a um tópico (opcional)"><option value="">— sem tópico —</option>${st.topicos.map((t) => { const dd = st.disciplinas.find((x) => x.id === t.disciplinaId); return `<option value="${t.id}">${esc((dd ? dd.nome + " · " : "") + t.nome)}</option>`; }).join("")}</select>
                   <button class="lnk" data-action="add-dia" data-data="${d}">adicionar</button>
                   <button class="lnk" data-action="cancelar-add-dia">cancelar</button>
                 </div>`
@@ -1394,8 +1413,10 @@ function semanaViewHTML(st, store) {
   const nRot = st.rotinas.filter((r) => r.ativa !== false).length;
   return `
     <div class="cat-legenda">
-      <span class="muted small">Categoria (cor da borda):</span>
-      ${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}
+      <details class="cat-legenda-det">
+        <summary class="muted small">Categoria (cor da borda)</summary>
+        <span class="cat-legenda-cores">${CATEGORIAS.map((c) => `<span class="cat-leg"><i class="cat-dot cd-${CAT_CLASSE[c]}"></i>${c}</span>`).join("")}</span>
+      </details>
       <span class="spacer"></span>
       <span class="muted small nota-folga" data-tip-pos="cima-dir" data-tip="Marque um dia como folga no próprio dia, ou defina todos de uma vez em Configurações ▸ Dias de estudo. As duas telas usam a mesma configuração.">${icone("moon")} sobre folgas</span>
       <button class="btn btn-ghost btn-sm" data-action="limpar-semana" data-tip-pos="cima-dir" data-tip="Remove as tarefas datadas desta semana (Seg→Dom). Não mexe na rotina recorrente nem nas avulsas.">${icone("trash-2")} Limpar semana</button>
@@ -1433,9 +1454,9 @@ function diaItemHTML(st, it, diasMover) {
       <div class="dia-item-edit">
         <input class="miss-titulo-input" data-id="${it.id}" value="${esc(it.titulo)}" placeholder="Título da tarefa" />
         <div class="dia-item-edit-campos">
-          <select class="miss-top-input" data-id="${it.id}" title="Tópico">${topOpts}</select>
-          <select class="miss-cat-input" data-id="${it.id}" title="Categoria">${catOpts}</select>
-          <input type="number" min="0" max="1440" class="miss-estim-input" data-id="${it.id}" value="${it.estimMin || ""}" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." style="width:74px" />
+          <select class="miss-top-input" data-id="${it.id}" data-tip="Tópico">${topOpts}</select>
+          <select class="miss-cat-input" data-id="${it.id}" data-tip="Categoria">${catOpts}</select>
+          <input type="number" min="0" max="1440" class="miss-estim-input" data-id="${it.id}" value="${it.estimMin || ""}" placeholder="min" data-tip="Tempo sugerido (opcional); nunca interrompe nada." style="width:74px" />
         </div>
         <div class="dia-item-edit-acoes">
           <button class="lnk" data-action="salvar-edit" data-id="${it.id}">salvar</button>
@@ -1495,10 +1516,10 @@ function rotinaPainelHTML(st) {
         ? `<p class="muted small">Todos os dias estão marcados como folga. Reative ao menos um dia (na agenda ou em Configurações ▸ Dias de estudo) para criar uma rotina.</p>`
         : `<div class="rotina-form">
             <input id="rot-titulo" placeholder="Ex.: Revisar flashcards do dia" />
-            <select id="rot-dia" title="Dia da semana em que se repete">${diaOpts}</select>
-            <select id="rot-cat" title="Categoria (cor)">${catOpts}</select>
-            <select id="rot-top" title="Tópico (opcional)"><option value="">— sem tópico —</option>${opcoesTopico}</select>
-            <input id="rot-estim" type="number" min="0" max="1440" placeholder="min" title="Tempo sugerido (opcional); nunca interrompe nada." class="u-w-64" />
+            <select id="rot-dia" data-tip="Dia da semana em que se repete">${diaOpts}</select>
+            <select id="rot-cat" data-tip="Categoria (cor)">${catOpts}</select>
+            <select id="rot-top" data-tip="Tópico (opcional)"><option value="">— sem tópico —</option>${opcoesTopico}</select>
+            <input id="rot-estim" type="number" min="0" max="1440" placeholder="min" data-tip="Tempo sugerido (opcional); nunca interrompe nada." class="u-w-64" />
             <button class="btn btn-add btn-sm" data-action="add-rotina">Adicionar à rotina</button>
           </div>`
     }

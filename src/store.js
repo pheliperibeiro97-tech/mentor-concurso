@@ -652,6 +652,7 @@ let emitAgendado = false;
 // Lote de geração atual: quando um handler abre um lote (iniciarLoteGeracao), TODO flashcard/questão
 // criado enquanto ele estiver aberto recebe o mesmo geracaoId — permite mostrar "só os recém-gerados".
 let loteGeracao = null;
+let geracoesEmVoo = 0; // quantas gerações estão em curso (trava a sync automática)
 
 function emit() {
   for (const fn of listeners) fn(state);
@@ -2493,6 +2494,35 @@ export const store = {
     });
     return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca }));
   },
+  // Gera SEM material, só com o conhecimento do modelo — e só quando o usuário pediu isso
+  // explicitamente, sabendo que não há fonte. As questões nascem com selo "semfonte" e, se o
+  // assunto casar com um tópico já cadastrado, ficam vinculadas a ele (para aparecerem no
+  // lugar certo); senão ficam soltas, sem inventar tópico.
+  // Devolve { questoes, pedidas, geradas, descartadas } — os contadores sobem para a tela
+  // poder dizer a verdade quando o filtro de números derrubar parte do lote.
+  async gerarQuestoesSemFonte(assunto, n = 5, dificuldade = "medio", web = false, formato = "mc") {
+    const t = this.acharTopicoPorNome(assunto);
+    const topicoId = t ? t.id : null;
+    const r = await iaProv.gerarQuestoesSemFonte(state.config, {
+      assunto,
+      n,
+      web,
+      formato,
+      ...iaExtras(state, { topicoId, dificuldade }),
+    });
+    // Com busca, a fonte deixa de ser "nenhuma" e vira a lista de páginas — guardada junto da
+    // questão para você poder conferir de onde saiu, que é o ponto de ligar a web.
+    const titulo = r.comWeb ? `Fonte na web · ${assunto}` : `Sem fonte · ${assunto}`;
+    const meta = { topicoId, fonte: { titulo, web: r.comWeb ? (r.fontesWeb || []).slice(0, 6) : undefined } };
+    const salvas = (r.questoes || []).map((q) =>
+      formato === "ce"
+        ? this.addQuestaoCE({ ...q, enunciado: q.enunciado || q.afirmacao, selo: q.selo, ...meta })
+        : this.addQuestao({ ...q, selo: q.selo, ...meta })
+    );
+    return { questoes: salvas, pedidas: r.pedidas, geradas: r.geradas, descartadas: r.descartadas,
+      comWeb: r.comWeb, fontesWeb: r.fontesWeb || [] };
+  },
+
   // EXTRAI as questões que já existem no próprio material (não inventa). Online.
   async extrairQuestoesDeDoc(docId, bloco = null) {
     const doc = state.documentos.find((d) => d.id === docId);
@@ -2915,8 +2945,15 @@ export const store = {
   },
   // Lote de geração: o handler abre um lote antes de gerar e encerra depois; tudo criado no meio
   // ganha o mesmo geracaoId (a tela mostra "só os recém-gerados de X" até o usuário ver todos).
-  iniciarLoteGeracao(rotulo) { loteGeracao = { id: uid("ger"), rotulo: (rotulo || "").trim(), em: nowISO() }; return loteGeracao.id; },
-  encerrarLoteGeracao() { const id = loteGeracao ? loteGeracao.id : null; loteGeracao = null; return id; },
+  // `geracoesEmVoo` é um CONTADOR (não um booleano): fluxos podem aninhar lotes, e um
+  // `encerrar` de dentro não pode declarar que o de fora acabou. Ver geracaoEmAndamento().
+  iniciarLoteGeracao(rotulo) { geracoesEmVoo++; loteGeracao = { id: uid("ger"), rotulo: (rotulo || "").trim(), em: nowISO() }; return loteGeracao.id; },
+  encerrarLoteGeracao() { geracoesEmVoo = Math.max(0, geracoesEmVoo - 1); const id = loteGeracao ? loteGeracao.id : null; loteGeracao = null; return id; },
+  // Há geração de IA em curso? A sincronização automática consulta isto antes de BAIXAR:
+  // um merge "o mais recente vence" no meio de uma geração substitui o estado inteiro e os
+  // itens recém-criados somem. No celular isso é frequente — a aba esconde/volta a cada vez
+  // que a tela apaga, e cada volta dispara uma sync.
+  geracaoEmAndamento() { return geracoesEmVoo > 0; },
   limparFlashcards() { const n = state.flashcards.length; state.flashcards = []; commit(); return n; },
   contarGeracao(geracaoId, tipo) {
     if (!geracaoId) return 0;
@@ -6439,19 +6476,21 @@ export const store = {
     });
 
     // Sugestões proativas básicas.
+    // As sugestoes por disciplina se repetiam quase palavra por palavra ("Cobertura baixa em
+    // X: N% dos topicos tem material/questoes."), uma linha por disciplina — com um edital
+    // real, oito linhas iguais empurravam o resto da tela para baixo sem dizer mais nada.
+    // Agora cada tipo vira UMA frase que enumera as disciplinas.
     const sugestoes = [];
+    const fracas = [], semCobertura = [];
     for (const linha of porDisciplina) {
-      if (linha.percentAcerto !== null && linha.percentAcerto < 60) {
-        sugestoes.push(
-          `Reforce ${linha.disciplina.nome}: aproveitamento de ${linha.percentAcerto}% (abaixo de 60%).`
-        );
-      }
-      if (linha.totalTopicos > 0 && linha.cobertura < 50) {
-        sugestoes.push(
-          `Cobertura baixa em ${linha.disciplina.nome}: ${linha.cobertura}% dos tópicos têm material/questões.`
-        );
-      }
+      if (linha.percentAcerto !== null && linha.percentAcerto < 60) fracas.push(linha);
+      if (linha.totalTopicos > 0 && linha.cobertura < 50) semCobertura.push(linha);
     }
+    const lista = (arr) => arr.map((l) => l.disciplina.nome).join(", ");
+    if (fracas.length === 1) sugestoes.push(`Reforce ${fracas[0].disciplina.nome}: aproveitamento de ${fracas[0].percentAcerto}% (abaixo de 60%).`);
+    else if (fracas.length > 1) sugestoes.push(`Reforce ${fracas.length} disciplinas com aproveitamento abaixo de 60%: ${lista(fracas)}.`);
+    if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos têm material/questões.`);
+    else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos com material/questões): ${lista(semCobertura)}.`);
     const vencidos = sm2.vencidos(state.flashcards).length;
     if (vencidos > 0) sugestoes.push(`Há ${vencidos} ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} para revisar hoje.`);
 

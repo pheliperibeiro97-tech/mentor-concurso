@@ -66,14 +66,17 @@ function cardItem(it) {
   const meta = [ti.nome, it.disciplinaNome && it.disciplinaNome !== "—" ? it.disciplinaNome : null].filter(Boolean).join(" · ");
   // Fase 1: baixa GRADUADA (mesma escala das telas de origem) — o "Concluir" binário
   // achatava tudo em "lembrei" e corrompia o espaçamento de quem tinha esquecido.
+  // Ordem das ações: Reprogramar → baixa graduada → REMOVER por último. A lixeira abria a
+  // fileira, encostada nos três botões que o aluno toca dezenas de vezes seguidas (e, no
+  // celular, num alvo de dedo). Destrutivo por último é o padrão dos tiles de Flashcards.
   const acoes = it.acoes
-    ? `<button class="rev-remover" data-action="rev-remover" data-id="${it.id}" data-tip="Remover da fila de revisão">${icone("trash-2")}</button>
-       <button class="btn btn-ghost btn-sm" data-action="rev-reprogramar" data-id="${it.id}" data-tip="Adiar para outra data">${icone("calendar-days")} Reprogramar</button>
+    ? `<button class="btn btn-ghost btn-sm" data-action="rev-reprogramar" data-id="${it.id}" data-tip="Adiar para outra data">${icone("calendar-days")} Reprogramar</button>
        <span class="rev-grad u-flex-6" role="group" aria-label="Dar baixa: como foi lembrar?">
          <button class="btn-grad bg-esqueci" data-action="rev-concluir" data-id="${it.id}" data-r="esqueci" data-tip="Esqueci — reinicia a curva (volta em 24h)">Esqueci</button>
          <button class="btn-grad bg-lembrei" data-action="rev-concluir" data-id="${it.id}" data-r="lembrei" data-tip="Lembrei — sobe um degrau na escada">Lembrei</button>
          <button class="btn-grad bg-facil" data-action="rev-concluir" data-id="${it.id}" data-r="facil" data-tip="Fácil — sobe dois degraus">Fácil</button>
-       </span>`
+       </span>
+       <button class="rev-remover" data-action="rev-remover" data-id="${it.id}" data-tip="Remover da fila de revisão">${icone("trash-2")}</button>`
     : "";
   return `<div class="rev-item rev-${it.status}" style="--cor:${ti.cor}" data-id="${it.id}">
       <span class="rev-ico">${icone(ti.ico)}</span>
@@ -110,6 +113,13 @@ function cardConcluida(c) {
 export default function renderCentralRevisoes(root, app) {
   const { store } = app;
   const st = store.get();
+  // Abertura vinda de outra tela já com um filtro de status aplicado (ex.: o Planejamento
+  // aponta para cá quando há revisões atrasadas). Consome o parâmetro para o filtro não
+  // voltar a se aplicar sozinho no próximo re-render.
+  if (app.params && app.params.status) {
+    filtroStatus = app.params.status;
+    app.params.status = null;
+  }
   const cont = store.revisoesResumoContagem();
   // Fila da sessão única: vencidas (atrasada+hoje) que dão baixa (exclui o lote de flashcards).
   const pendentesFoco = store.revisoesConsolidadas().filter((i) => (i.status === "atrasada" || i.status === "hoje") && i.acoes);
@@ -175,13 +185,26 @@ export default function renderCentralRevisoes(root, app) {
       modoConcluidas
         ? concluidas.length
           ? `<section class="rev-secao"><h3 class="rev-secao-h">${icone("check-check")} Concluídas (últimos 30 dias) <span class="cnt">${concluidas.length}</span></h3><div class="rev-lista">${concluidas.map(cardConcluida).join("")}</div></section>`
-          : vazio("Nenhuma revisão concluída ainda\nAo concluir revisões aqui (ou fazê-las nas outras telas), elas aparecem neste histórico.", "", icone("check-check"))
+          : vazio(
+              "Nenhuma revisão concluída ainda\nAo concluir revisões aqui (ou fazê-las nas outras telas), elas aparecem neste histórico.",
+              `<button class="btn btn-add btn-sm" data-action="rev-status" data-v="pendentes">${icone("calendar-check")} Ver as pendentes</button>`,
+              icone("check-check")
+            )
         : listaVazia
-        ? vazio(
-            cont.total === 0 ? "Nenhuma revisão agendada\nEstude um tópico e ligue as revisões no registro para começar a alimentar sua repetição espaçada." : "Nada aqui com esses filtros\nAjuste o status ou os filtros acima.",
-            "",
-            icone("calendar-check")
-          )
+        // Esta é a tela onde o aluno vem para AGIR: vazia sem uma saída, ela virava um beco.
+        // Sem nada agendado, o caminho é registrar o estudo (é o registro que liga a curva de
+        // revisão); vazia por filtro, o caminho é limpar o filtro.
+        ? cont.total === 0
+          ? vazio(
+              "Nenhuma revisão agendada\nEstude um tópico e ligue as revisões no registro para começar a alimentar sua repetição espaçada.",
+              `<button class="btn btn-add btn-sm" data-action="rev-registrar-estudo">${icone("clipboard-list")} Registrar estudo</button>`,
+              icone("calendar-check")
+            )
+          : vazio(
+              "Nada aqui com esses filtros\nAjuste o status ou os filtros acima.",
+              `<button class="btn btn-add btn-sm" data-action="rev-limpar">${icone("x")} Limpar filtros</button>`,
+              icone("calendar-check")
+            )
         : `${secao("Atrasadas", atrasadas, "triangle-alert", "rev-sec-atraso", atrasadas.length ? `<button class="btn btn-ghost btn-sm rev-lote" data-action="rev-lote-atrasadas" data-tip="Move todas as atrasadas para hoje">${icone("calendar-check")} Trazer todas para hoje</button>` : "")}
            ${secao("Para hoje", hoje, "calendar-check", "rev-sec-hoje")}
            ${secao("Próximas", proximas, "calendar-days", "rev-sec-prox")}`
@@ -278,6 +301,8 @@ export default function renderCentralRevisoes(root, app) {
     },
     "rev-status": (el) => { filtroStatus = el.getAttribute("data-v"); app.refresh(); },
     "rev-limpar": () => { filtroStatus = "pendentes"; filtroDisc = ""; filtroTop = ""; filtroTipo = ""; app.refresh(); },
+    // CTA do estado vazio "nenhuma revisão agendada": é o registro da sessão que liga a curva.
+    "rev-registrar-estudo": () => abrirRegistroSessao(store, app, { modo: "manual" }),
     "rev-iniciar": (el) => {
       const it = store.revisoesConsolidadas().find((x) => x.id === el.getAttribute("data-id"));
       if (!it) return;

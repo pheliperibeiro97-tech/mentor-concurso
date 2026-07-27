@@ -10,6 +10,14 @@ export const SELO = {
   amarelo: { icone: "bot", rotulo: "Criado pelo Mentor · confira" },
   manual: { icone: "notebook-pen", rotulo: "Inserido por você" },
   oficial: { icone: "landmark", rotulo: "Prova oficial · gabarito da banca" },
+  // Gerado SEM material do usuário, só com o conhecimento do modelo. É diferente do amarelo:
+  // lá a IA transformou o SEU conteúdo; aqui não havia conteúdo nenhum para transformar. O
+  // rótulo precisa dizer isso sem eufemismo — quem estuda por esta questão tem de saber que
+  // ela pede conferência antes de virar memória.
+  semfonte: { icone: "triangle-alert", rotulo: "Sem fonte · confira" },
+  // Gerado com BUSCA NA WEB ligada: existe fonte, mas é página da internet — não o seu
+  // material nem texto oficial. Continua pedindo conferência, e por isso o "confira" fica.
+  web: { icone: "globe", rotulo: "Fonte na web · confira" },
 };
 
 // ---------- 1. Separar edital em disciplinas e tópicos ----------

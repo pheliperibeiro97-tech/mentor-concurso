@@ -133,6 +133,48 @@ export function focoChromeKey(e, { root, bloquearNav = false } = {}) {
   return null;
 }
 
+// ---- Gesto de DESLIZAR (celular): ← → sem teclado ----
+// No computador o caminho principal de navegação são as teclas ← →; no celular elas não
+// existem e sobravam apenas as duas setas de 44px no topo. Um listener único no document
+// (ligado 1x, como o focus-trap) detecta o arrasto horizontal sobre o palco e aciona os
+// MESMOS `data-action` do shell — então vale de uma vez para Flashcards, Questões, C/E,
+// Simulado, Revisões e a leitura em foco.
+// Guardas: só com 1 dedo (pinça é zoom), só se o movimento for claramente horizontal (senão
+// atrapalha a rolagem do card), nunca a partir de um campo/alternativa/botão, e nunca quando
+// há texto selecionado (no leitor da Lei Seca o arrasto das alças é seleção, não navegação).
+let trapDeslizarLigado = false;
+function ligarDeslizarFoco() {
+  if (trapDeslizarLigado || typeof document === "undefined") return;
+  trapDeslizarLigado = true;
+  let x0 = 0, y0 = 0, valido = false;
+  document.addEventListener("touchstart", (e) => {
+    valido = false;
+    if (e.touches.length !== 1) return;
+    const ov = document.querySelector(".fc-foco");
+    if (!ov || document.querySelector(".mm-overlay, .modal-overlay")) return;
+    const t = e.touches[0];
+    const alvo = document.elementFromPoint(t.clientX, t.clientY);
+    if (!alvo || !ov.contains(alvo)) return;
+    if (alvo.closest("input, textarea, select, button, a, [data-action], .fq-simmapa, .ler-art-corpo, .lf-corpo")) return;
+    x0 = t.clientX; y0 = t.clientY; valido = true;
+  }, { passive: true });
+  document.addEventListener("touchend", (e) => {
+    if (!valido) return;
+    valido = false;
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - x0, dy = t.clientY - y0;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8) return; // curto ou vertical
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && String(sel).trim()) return; // seleção de texto, não navegação
+    const ov = document.querySelector(".fc-foco");
+    if (!ov) return;
+    // Deslizar para a ESQUERDA avança (como virar a página de um livro).
+    const acao = dx < 0 ? "foco-proximo" : "foco-anterior";
+    ov.querySelector(`[data-action="${acao}"]:not([disabled])`)?.click();
+  }, { passive: true });
+}
+
 // ---- Markup do shell ----
 
 // Chip do cronômetro + menu de modo (Progressivo × Regressivo com presets 10/25 + livre).
@@ -200,6 +242,7 @@ function placarHTML(placar) {
  */
 export function focoShellHTML({ idx, total, fim = false, mostrarNav = true, placar = null, placarExtra = "", centro, rodape, aria = "Modo foco", anim = "in", crono = true, acoesExtra = "" }) {
   ligarTrapModoFoco(); // Fase 8: garante o focus-trap do overlay (idempotente)
+  ligarDeslizarFoco(); // celular: deslizar ← → navega (idempotente)
   const pctProg = total ? Math.round((Math.min(idx, total) / total) * 100) : 100;
   const posicao = Math.min(idx + (fim ? 0 : 1), total);
   const nav = mostrarNav && !fim;

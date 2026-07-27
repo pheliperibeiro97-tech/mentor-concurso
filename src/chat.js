@@ -3,7 +3,7 @@
 // multi-turno no prompt) e STREAMING REAL (o texto chega token a token, com markdown
 // formatado desde o primeiro pedaço; botão Parar disponível durante a geração).
 import { iaDisponivel, responderChatStream, interpretarComando } from "./ia-provider.js";
-import { executarComando } from "./chat-acoes.js";
+import { executarComando, motivoParaNaoExecutar, podeOferecerSemFonte } from "./chat-acoes.js";
 import { esc, humanizarErroIA } from "./util.js";
 import { icone } from "./icones.js";
 import { skeletonDoc, plural, md } from "./ui.js";
@@ -36,7 +36,14 @@ export function montarChat(store, app) {
     </div>
     <div class="chat-msgs" id="chat-msgs"></div>
     <div class="chat-input">
-      <textarea id="chat-in" rows="1" placeholder="Pergunte ou peça uma ação (ex.: crie 5 flashcards de...)"></textarea>
+      <textarea id="chat-in" rows="1" placeholder="${
+        // O campo tem UMA linha: no celular a frase longa era cortada no meio ("…ex.: crie 5"
+        // e o resto sumia). Texto curto onde a largura é curta; o exemplo completo fica no
+        // computador, onde cabe.
+        typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 560px)").matches
+          ? "Pergunte ou peça uma ação"
+          : "Pergunte ou peça uma ação (ex.: crie 5 flashcards de...)"
+      }"></textarea>
       <button id="chat-send" title="Enviar">${icone("send")}</button>
     </div>`;
 
@@ -121,12 +128,18 @@ export function montarChat(store, app) {
     msgs.scrollTop = msgs.scrollHeight;
   }
 
+  // Um pedido de GERAR reconhecido SEM IA (regex simples). Serve de rede de segurança: se o
+  // roteador falhar, sabemos que a mensagem era um comando e NÃO podemos deixar virar resposta
+  // em prosa — o modelo escreveria as questões no texto do chat, parecendo que executou quando
+  // nada foi salvo. Prefiro admitir a falha a fingir que fiz.
+  const PEDE_GERAR = /\b(ger(e|ar|a)|cri(e|ar|a)|fa(ç|c)a|elabor(e|ar)|mont(e|ar)|prepar(e|ar))\b[\s\S]{0,40}(quest|flashcard|resumo|mapa|simulado|tarefa|lembrete|meta)/i;
+
   // Roteador: tenta interpretar como COMANDO (ação a executar, com confirmação).
   // Se não for comando (ou sem IA), cai na resposta normal (RAG).
   async function responder(q) {
     const cfg = store.get().config;
     if (iaDisponivel(cfg)) {
-      const pensando = addPensando();
+      const pensando = addPensando("entendendo o pedido");
       try {
         const st = store.get();
         const cmd = await interpretarComando(cfg, {
@@ -137,14 +150,62 @@ export function montarChat(store, app) {
         });
         pensando.remove();
         if (cmd.acao) {
+          // Antes de propor, ver se da para fazer. Sem isto o app propunha "criar 5 questoes de
+          // direito previdenciario", o usuario confirmava e SO ENTAO ouvia que nao ha material
+          // do assunto — o motivo certo, na hora errada.
+          const impedimento = motivoParaNaoExecutar(store, cmd.acao, cmd.params);
+          if (impedimento) {
+            // Sem material NÃO é o fim da conversa: existe a saída sem fonte, com as questões
+            // marcadas. Ela é OPT-IN, um toque por vez — nunca o caminho automático, porque
+            // gerar do nada é aceitável só quando quem estuda sabe que aquilo pede conferência.
+            oferecerSemFonte(cmd, impedimento);
+            return;
+          }
           propor(cmd);
           return;
         }
+        // Sem ação, mas a mensagem pede claramente para gerar algo: não caia na prosa.
+        if (PEDE_GERAR.test(q)) {
+          add(`<p>Entendi que você quer <b>gerar</b> algo, mas não consegui montar o comando. Tente dizer o alvo por extenso — por exemplo: <i>"gere 5 questões de múltipla escolha sobre Atos administrativos"</i>.</p>`, "bot");
+          return;
+        }
       } catch (_) {
-        pensando.remove(); // falhou o roteador: segue como pergunta normal
+        pensando.remove(); // falhou o roteador
+        if (PEDE_GERAR.test(q)) {
+          add(`<p>Não consegui falar com a IA para interpretar esse pedido — então <b>não gerei nada</b>. Tente de novo em alguns segundos.</p>`, "bot");
+          return;
+        }
+        // não era comando: segue como pergunta normal
       }
     }
     await responderPergunta(q);
+  }
+
+  // Diz por que não dá pelo caminho normal e, quando existe, oferece a saída sem fonte.
+  function oferecerSemFonte(cmd, motivo) {
+    const d = document.createElement("div");
+    d.className = "chat-msg bot";
+    const oferece = podeOferecerSemFonte(cmd.acao, cmd.params);
+    d.innerHTML = `<p>${esc(motivo)}</p>${
+      oferece
+        ? `<div class="chat-acao-btns"><button class="btn btn-sm btn-ghost chat-semfonte-ok">${icone("triangle-alert")} Gerar mesmo assim (sem fonte)</button></div>`
+        : ""
+    }`;
+    msgs.appendChild(d);
+    msgs.scrollTop = msgs.scrollHeight;
+    if (!oferece) return;
+    d.querySelector(".chat-semfonte-ok").addEventListener("click", async () => {
+      const btns = d.querySelector(".chat-acao-btns");
+      btns.innerHTML = `<span class="chat-nota">Gerando…</span>`;
+      try {
+        // Respeita o SEU interruptor de busca — o app nunca liga a web sozinho.
+        const msg = await executarComando(store, app, "criar_questoes_sem_fonte", { ...cmd.params, web: webOn });
+        btns.outerHTML = `<p class="chat-nota chat-acao-feito">${icone("check")} ${esc(msg)}</p>`;
+      } catch (e) {
+        btns.outerHTML = `<p class="chat-nota">${esc(humanizarErroIA(e))}</p>`;
+      }
+      store.chatRegistrar("bot", motivo); // memória do chat (o nome certo é chatRegistrar)
+    });
   }
 
   // Propõe uma ação e só executa após CONFIRMAÇÃO (o assistente sugere, não age sozinho).
@@ -286,10 +347,14 @@ export function montarChat(store, app) {
     }
   }
 
-  function addPensando() {
+  // O rotulo diz o que esta REALMENTE acontecendo. Antes era sempre "lendo seu material":
+  // mentira quando o app so esta interpretando o pedido, e mentira maior ainda para quem nao
+  // importou material nenhum.
+  function addPensando(rotulo) {
+    const txt = rotulo || ((store.get().documentos || []).length ? "lendo seu material" : "pensando");
     const d = document.createElement("div");
     d.className = "chat-msg bot chat-pensando";
-    d.innerHTML = `<p class="chat-nota chat-pensando-linha"><span class="orb orb-xs is-thinking" aria-hidden="true"></span> lendo seu material <span class="typing" aria-label="digitando"><i></i><i></i><i></i></span></p>${skeletonDoc(2, { titulo: false })}`;
+    d.innerHTML = `<p class="chat-nota chat-pensando-linha"><span class="orb orb-xs is-thinking" aria-hidden="true"></span> ${esc(txt)} <span class="typing" aria-label="digitando"><i></i><i></i><i></i></span></p>${skeletonDoc(2, { titulo: false })}`;
     msgs.appendChild(d);
     msgs.scrollTop = msgs.scrollHeight;
     return d;

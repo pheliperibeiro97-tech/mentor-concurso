@@ -101,7 +101,13 @@ export default function renderSimulados(root, app) {
            <section class="rev-secao"><h3 class="rev-secao-h">${icone("clipboard-list")} Seus simulados <span class="cnt">${lista.length}</span></h3>
              <div class="sim-lista">${lista.map((s) => cardSimulado(s)).join("")}</div>
            </section>`
-        : vazio("Nenhum simulado ainda\nMonte um simulado na aba \"Novo simulado\" ou registre um simulado feito fora do app para acompanhar sua evolução.", "", icone("clipboard-list"))
+        // Empty state com AÇÃO: mandava para outra aba por escrito e não oferecia nada.
+        : vazio(
+            "Nenhum simulado ainda\nMonte uma prova cronometrada com as suas questões, ou registre um simulado que você fez fora do app.",
+            `<button class="btn btn-add btn-sm" data-sub="fazer">${icone("clipboard-list")} Montar simulado</button>
+             <button class="btn btn-ghost btn-sm" data-action="sim-registrar-externo">${icone("square-pen")} Registrar simulado externo</button>`,
+            icone("clipboard-list")
+          )
     }`;
   ligarSubtabs(root, app);
 

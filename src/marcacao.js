@@ -228,7 +228,10 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
     });
 
     // Pintar: selecionar um trecho com o pincel ativo grava a marca.
-    textoEl?.addEventListener("mouseup", () => {
+    // Ligado a mouseup E touchend: no celular a seleção nasce de toque longo + alças e NÃO
+    // emite mouseup, então o pincel simplesmente não pintava no telefone. O `setTimeout(…, 60)`
+    // dá tempo de a seleção final assentar antes de lermos os offsets.
+    const pintarSelecao = () => {
       if (!estado.brush || estado.modo !== "normal") return;
       const sel = window.getSelection();
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
@@ -247,7 +250,9 @@ export function montarMarcacao(container, { store, alvoTipo, alvoId, texto, onCh
       if (estado.brush === "comentario" && nova) estado.notaEditando = nova.id;
       onChange && onChange();
       pintar();
-    });
+    };
+    textoEl?.addEventListener("mouseup", pintarSelecao);
+    textoEl?.addEventListener("touchend", () => setTimeout(pintarSelecao, 60), { passive: true });
 
     // Ações da lista de comentários.
     container.querySelectorAll("[data-coment-acao]").forEach((b) =>
