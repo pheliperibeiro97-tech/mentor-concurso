@@ -5,6 +5,7 @@
 import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto, comOcupado, md } from "../ui.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
+import { setModo as setModoCrono, setTarget as setTargetCrono, iniciar as iniciarCrono } from "../cronometro.js";
 
 let tipo = "discursiva";
 let genFonte = "topico";
@@ -22,6 +23,7 @@ export default function renderCorrecao(root, app) {
   const st = store.get();
   const iaOn = store.iaDisponivel();
   const contaPalavras = (s) => (s.trim() ? s.trim().split(/\s+/).length : 0);
+  const ehSentenca = tipo === "sentenca-civel" || tipo === "sentenca-criminal";
 
   root.innerHTML = `
     ${header("Discursiva e redação", "Pratique com correção no nível de um examinador de banca.", botaoImprimir())}
@@ -32,16 +34,27 @@ export default function renderCorrecao(root, app) {
           <select id="gen-tipo">
             <option value="discursiva" ${tipo === "discursiva" ? "selected" : ""}>Discursiva</option>
             <option value="redacao" ${tipo === "redacao" ? "selected" : ""}>Redação</option>
+            <option value="sentenca-civel" ${tipo === "sentenca-civel" ? "selected" : ""}>Sentença cível</option>
+            <option value="sentenca-criminal" ${tipo === "sentenca-criminal" ? "selected" : ""}>Sentença criminal</option>
           </select>
         </label>
-        <span class="muted small">Escreva o <b>tema</b> e a <b>resposta</b> abaixo. Se preferir, a IA cria o tema para você.</span>
+        <span class="muted small">${
+          ehSentenca
+            ? "O enunciado é um <b>caso</b> com as peças do processo. A correção vem por <b>itens esperados</b>, como o espelho da banca."
+            : "Escreva o <b>tema</b> e a <b>resposta</b> abaixo. Se preferir, a IA cria o tema para você."
+        }</span>
+        ${
+          ehSentenca
+            ? `<button class="btn btn-ghost btn-sm u-ml-auto" data-action="cronometrar-prova" data-tip="Começa o cronômetro com o tempo da prova real (4 h por sentença, no TJSP). Ele fica no relógio flutuante.">${icone("alarm-clock")} Cronometrar 4 h</button>`
+            : ""
+        }
       </div>
 
       <div class="cor-tema-head">
-        <label for="cor-enun" class="u-m-0">Pergunta / tema</label>
-        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="A IA cria um tema a partir de um tópico, de um material ou de um tema livre.">${icone("sparkles")} Criar tema com IA</button>
+        <label for="cor-enun" class="u-m-0">${ehSentenca ? "Caso concreto (peças do processo)" : "Pergunta / tema"}</label>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="${ehSentenca ? "A IA monta um caso completo, com as peças e as teses a enfrentar." : "A IA cria um tema a partir de um tópico, de um material ou de um tema livre."}">${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}</button>
       </div>
-      <textarea id="cor-enun" rows="3" placeholder="Escreva aqui o tema/enunciado…" class="u-mb-16">${esc(rascunho.enun)}</textarea>
+      <textarea id="cor-enun" rows="${ehSentenca ? 8 : 3}" placeholder="${ehSentenca ? "Cole aqui o caso da prova (ou peça à IA para criar um)…" : "Escreva aqui o tema/enunciado…"}" class="u-mb-16">${esc(rascunho.enun)}</textarea>
       <div id="ia-gen-box" class="ia-gen-box" hidden>
         <div class="form-row u-items-end">
           <label>De onde
@@ -85,10 +98,12 @@ export default function renderCorrecao(root, app) {
         st.redacoes.length
           ? [...st.redacoes].reverse().map((r) => correcaoHTML(r)).join("")
           : vazio(
-              "Sua primeira redação\nEscreva e peça a correção no nível de um examinador.",
+              ehSentenca
+                ? "Sua primeira sentença\nEscreva e receba a correção por itens esperados, como no espelho da banca."
+                : "Sua primeira redação\nEscreva e peça a correção no nível de um examinador.",
               // CTA: dispara a MESMA ação do gerador ("gerar-pergunta" lê #gen-fonte/#gen-alvo,
               // que existem no formulário acima mesmo com o box fechado) e preenche o tema.
-              `<button class="btn btn-ia" data-action="gerar-pergunta">${icone("sparkles")} Criar tema com IA</button>`,
+              `<button class="btn btn-ia" data-action="gerar-pergunta">${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}</button>`,
               icone("square-pen")
             )
       }
@@ -131,7 +146,13 @@ export default function renderCorrecao(root, app) {
       }
     });
   }
-  root.querySelector("#gen-tipo").addEventListener("change", (e) => (tipo = e.target.value));
+  // Trocar o tipo REDESENHA a tela: sentença muda rótulo, altura do enunciado, texto de
+  // apoio e ganha o cronômetro de 4 h. O rascunho é gravado a cada tecla (l. 113-119),
+  // então o refresh não perde o que está escrito.
+  root.querySelector("#gen-tipo").addEventListener("change", (e) => {
+    tipo = e.target.value;
+    app.refresh();
+  });
   root.querySelector("#gen-fonte").addEventListener("change", (e) => {
     genFonte = e.target.value;
     root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st);
@@ -171,7 +192,20 @@ export default function renderCorrecao(root, app) {
       if (oculto) box.removeAttribute("hidden");
       else box.setAttribute("hidden", "");
       // innerHTML preserva o ícone (textContent apagava o sparkles ao alternar).
-      el.innerHTML = oculto ? `${icone("x")} Fechar gerador` : `${icone("sparkles")} Criar tema com IA`;
+      el.innerHTML = oculto
+        ? `${icone("x")} Fechar gerador`
+        : `${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}`;
+    },
+    // Cronômetro no tempo da prova real: 4 h por sentença (TJSP). Reusa o relógio
+    // flutuante que já existe — nada de um segundo cronômetro dentro da tela.
+    // Import ESTÁTICO (topo do arquivo), não dinâmico: `await import()` em dev cria uma
+    // SEGUNDA instância do módulo (o HMR do Vite anexa ?t= à URL), e o estado do
+    // cronômetro é de módulo — o alvo era gravado numa instância e lido de outra.
+    "cronometrar-prova": () => {
+      setModoCrono("regressivo");
+      setTargetCrono(4 * 60 * 60);
+      iniciarCrono();
+      toast("Cronômetro em 4 h — o tempo real de uma sentença no TJSP.");
     },
     "gerar-pergunta": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar pergunta discursiva");

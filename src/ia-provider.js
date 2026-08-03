@@ -1116,9 +1116,24 @@ async function responderChatWebGeminiRaw(cfg, { system, user }) {
 
 // DISCURSIVA — gera UMA pergunta discursiva (ou tema de redação) a partir de um
 // tópico/material/tema livre. Devolve só o enunciado.
+export const EH_SENTENCA = (t) => t === "sentenca-civel" || t === "sentenca-criminal";
+
 export async function gerarPerguntaDiscursiva(cfg, { contexto, texto, tipo }) {
   const ehRedacao = tipo === "redacao";
-  const system = ehRedacao
+  // SENTENÇA: a prova prática não dá uma "pergunta", dá um CASO — relatório das peças,
+  // com teses de parte a parte, para o candidato decidir. Gerar 1-3 frases aqui seria
+  // treinar outra coisa. Modelo tirado das provas reais do TJSP (192º).
+  const system = EH_SENTENCA(tipo)
+    ? "Você elabora o ENUNCIADO de uma prova prática de SENTENÇA de concurso da magistratura estadual brasileira, " +
+      "no formato do TJSP/VUNESP. Escreva o relatório das peças do processo em seções nomeadas " +
+      (tipo === "sentenca-criminal"
+        ? "(DENÚNCIA · RESPOSTA À ACUSAÇÃO · INSTRUÇÃO · ALEGAÇÕES FINAIS DO MINISTÉRIO PÚBLICO · ALEGAÇÕES FINAIS DA DEFESA · FOLHA DE ANTECEDENTES), " +
+          "com teses defensivas concretas a enfrentar (preliminares, excludentes, desclassificação) e os elementos necessários à DOSIMETRIA."
+        : "(PETIÇÃO INICIAL · CONTESTAÇÃO/RECONVENÇÃO · RÉPLICA · ESPECIFICAÇÃO DE PROVAS · MANIFESTAÇÃO DO MINISTÉRIO PÚBLICO, quando couber), " +
+          "com pedidos cumulados, questões processuais a enfrentar e pontos controvertidos de mérito.") +
+      " Feche com o comando (ex.: \"proferir sentença, dispensado o relatório, enfrentando todos os fundamentos\"). " +
+      "NÃO resolva o caso, NÃO antecipe a solução e NÃO use nomes de pessoas reais. Responda apenas com o enunciado."
+    : ehRedacao
     ? "Você propõe UM tema de redação dissertativo-argumentativa de concurso, claro e atual, no estilo de banca brasileira. Responda APENAS com o tema/proposta (1 a 3 frases), sem desenvolver."
     : "Você elabora UMA questão discursiva de concurso brasileiro, clara e objetiva, no estilo de banca, exigindo desenvolvimento. Responda APENAS com o enunciado (1 a 3 frases), sem resolver.";
   const user =
@@ -1135,6 +1150,52 @@ export async function corrigirDiscursiva(cfg, { enunciado, texto, tipo, web, pal
   const usaWeb = web && cfg.iaProvider === "gemini";
   const ehRedacao = tipo === "redacao";
   const linhasEstim = palavras ? Math.max(1, Math.round(palavras / 11)) : null; // ~11 palavras/linha
+
+  // SENTENÇA tem rubrica PRÓPRIA. A da discursiva avalia "introdução com tese",
+  // "conectivos", "paralelismo" — critérios de dissertação, que numa sentença não
+  // significam nada. O espelho oficial do TJSP ("abordagem esperada") não é uma grade
+  // genérica: é uma LISTA DE ITENS ESPERADOS PARA AQUELE CASO, cada um valendo pontos,
+  // e declara até o que NÃO será considerado erro. É esse formato que se imita aqui.
+  if (EH_SENTENCA(tipo)) {
+    const criminal = tipo === "sentenca-criminal";
+    const sysSent =
+      "Você é EXAMINADOR de prova prática de SENTENÇA em concurso da magistratura estadual brasileira " +
+      "(padrão TJSP/VUNESP), corrigindo pelo espelho de 'abordagem esperada'. Rigoroso, técnico, sem elogio genérico.\n\n" +
+      "Primeiro, DECOMPONHA o caso nos ITENS QUE O ESPELHO COBRARIA — cada questão processual e cada tese de mérito " +
+      "que o enunciado obriga a enfrentar. Depois avalie a resposta item a item, EXATAMENTE assim:\n\n" +
+      "**Itens esperados** — tabela com uma linha por item: | Item | Situação | Observação |\n" +
+      "Situação = ENFRENTADO / PARCIAL / AUSENTE / EQUIVOCADO. Na observação, cite o TRECHO do candidato entre aspas.\n\n" +
+      "**Estrutura da sentença** — diga Conforme/Inconforme e por quê:\n" +
+      "• Relatório (ou registro correto da dispensa, quando o enunciado dispensar).\n" +
+      "• Fundamentação: enfrenta TODOS os fundamentos das partes? Há questão decidida sem fundamento?\n" +
+      (criminal
+        ? "• DOSIMETRIA nas três fases (art. 68 do CP): pena-base e circunstâncias do art. 59; agravantes/atenuantes, " +
+          "vedado bis in idem entre maus antecedentes e reincidência; causas de aumento/diminuição, concurso de crimes " +
+          "(material, formal, continuidade). Confira a ARITMÉTICA das penas.\n" +
+          "• Regime inicial, substituição/sursis, detração, direito de recorrer em liberdade e custas.\n"
+        : "• Congruência: decidiu todos os pedidos e SÓ os pedidos (arts. 141 e 492 do CPC)? Houve julgamento extra, ultra ou citra petita?\n" +
+          "• Dispositivo completo: procedência/improcedência de cada pedido, sucumbência, honorários e sua base, juros e correção.\n") +
+      "• Linguagem judicial: impessoalidade, técnica e objetividade. Aponte excessos e coloquialismos pelo trecho.\n\n" +
+      "**Base legal** — cada dispositivo citado pelo candidato: correto, incorreto, revogado ou inventado. Seja explícito.\n\n" +
+      "**Nota** — 0 a 10, com memória de cálculo a partir dos itens esperados (peso maior aos de mérito e ao dispositivo). " +
+      "Feche com Insuficiente / Regular / Bom / Excelente.\n\n" +
+      "**O que faria diferença na próxima** — 2 a 4 orientações acionáveis.\n\n" +
+      "REGRAS: baseie-se SOMENTE no que o candidato escreveu. Onde houver divergência doutrinária ou " +
+      "jurisprudencial legítima, diga que a solução contrária TAMBÉM seria aceita — o espelho oficial faz isso. " +
+      "Não invente dispositivo nem precedente; quando não puder confirmar, mande conferir na fonte oficial.";
+    const userSent =
+      `Tipo: sentença ${criminal ? "criminal" : "cível"}\n` +
+      `CASO (enunciado da prova):\n"""\n${corta(enunciado || "(não informado)", 6000)}\n"""\n` +
+      (palavras ? `\nExtensão da resposta: ${palavras} palavras (~${linhasEstim} linhas).\n` : "") +
+      `\nSENTENÇA DO CANDIDATO:\n"""\n${corta(texto, 9000)}\n"""`;
+    if (usaWeb) {
+      const r = await responderChatWebGemini(cfg, { system: sysSent, user: userSent });
+      return { texto: r.texto, fontesWeb: r.fontesWeb, selo: "amarelo" };
+    }
+    const ts = await chamar(cfg, { system: sysSent, user: userSent, json: false, temperature: 0.3 });
+    return { texto: String(ts).trim(), fontesWeb: [], selo: "amarelo" };
+  }
+
   const system =
     "Você é um EXAMINADOR SÊNIOR de provas discursivas/redações de concurso público brasileiro " +
     "(padrão Cebraspe/FGV/FCC/VUNESP), rigoroso, analítico e técnico, corrigindo por ESPELHO oficial. " +

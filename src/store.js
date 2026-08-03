@@ -6142,9 +6142,41 @@ export const store = {
   // detecta. Fonte ÚNICA usada tanto no aviso proativo do HOJE quanto no painel do
   // Mentor — garante que as duas telas digam a mesma coisa.
   // Lista BRUTA de pontos de atenção (com chave estável por ponto).
+  // Há quantos dias você não traz um informativo deste tribunal. `null` = nunca trouxe.
+  // O app NÃO sabe qual foi a última edição publicada (isso exigiria a web) — ele sabe o
+  // SEU intervalo. Por isso a frase que sai daqui fala do seu hábito, não de uma edição.
+  diasSemInformativo(tribunal) {
+    const t = String(tribunal || "").toUpperCase();
+    let maisRecente = null;
+    for (const i of state.indicacoes) {
+      if (!i.nInformativo) continue;
+      if (String(i.tribunal || "").toUpperCase() !== t) continue;
+      const d = i.criadoEm || i.novidadeEm || null;
+      if (d && (!maisRecente || d > maisRecente)) maisRecente = d;
+    }
+    if (!maisRecente) return null;
+    const ms = Date.parse(todayISO()) - Date.parse(String(maisRecente).slice(0, 10));
+    return Math.max(0, Math.round(ms / 86400000));
+  },
+
   _pontosBrutos() {
     const snap = this.snapshotMentor();
     const lista = [];
+    // INFORMATIVOS — o gatilho que faltava. A tela de Jurisprudência já importa e extrai
+    // teses; o que ninguém lembrava era de VOLTAR lá. Ciclo real: STF semanal, STJ
+    // quinzenal; o limite tem folga sobre o ciclo para não cobrar no dia exato.
+    // Só cobra quem JÁ trouxe algum: lembrar é para quem começou e parou, não para quem
+    // nunca quis. E, como todo ponto, pode ser adiado ou dispensado pelo usuário.
+    for (const [trib, limite] of [["STF", 10], ["STJ", 20]]) {
+      const dias = this.diasSemInformativo(trib);
+      if (dias !== null && dias >= limite)
+        lista.push({
+          key: "inf:" + trib,
+          icone: "scale",
+          txt: `Faz ${dias} dias que você não traz um informativo do ${trib}`,
+          acao: { rota: "jurisprudencia", label: "Trazer informativo" },
+        });
+    }
     // Cada ponto carrega uma AÇÃO direta (atalho) para a tela onde se resolve.
     if (snap.prova && snap.prova.diasRestantes >= 0 && snap.prova.diasRestantes <= 30)
       lista.push({ key: "reta", icone: "calendar", txt: `Reta final: ${snap.prova.diasRestantes} ${snap.prova.diasRestantes === 1 ? "dia" : "dias"} para a prova`, acao: { rota: "planejamento", label: "Planejar reta" } });
