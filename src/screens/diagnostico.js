@@ -2,7 +2,8 @@
 // mensal navegável) e desempenho por disciplina/tópico (com último dia estudado).
 // SEM "previsão de aprovação" (decisão do plano).
 import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, botaoImprimir, plural, defMetrica } from "../ui.js";
-import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween } from "../util.js";
+import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween, LEITURA_MOTIVO } from "../util.js";
+import { padroesPorDisciplina } from "./erros.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { linhaConstanciaMes, progressRing } from "../viz.js";
@@ -153,6 +154,83 @@ function sessPainelHTML(st) {
     </div>`;
 }
 
+// RISCO POR GRUPO — a forma mais comum de reprovar em concurso grande é o piso de um
+// bloco, não a média. Até aqui o app só mostrava a média, o que TRANQUILIZA quem está
+// caminhando para o corte: 80% em Civil e 10% em Tributário viram "60%, bom caminho".
+//
+// Só aparece se o usuário tiver definido grupos E uma regra (Config → Dados & concurso).
+// Sem isso não há veredito a dar, e um painel vazio seria só ocupação de tela.
+function riscoGrupoHTML(d) {
+  if (!d.configurado) return "";
+  const abaixo = d.grupos.filter((g) => g.abaixo);
+  const semAmostra = d.grupos.filter((g) => !g.suficiente);
+  const linhas = d.grupos
+    .map((g) => {
+      // Sem amostra o grupo não recebe cor de veredito — ele informa o que falta medir.
+      if (!g.suficiente) {
+        return `<li class="rg-linha rg-medindo">
+          <span class="rg-nome">${esc(g.grupo)}</span>
+          <span class="rg-num rg-num-fraco">${g.pct === null ? "—" : g.pct + "%"}</span>
+          <span class="rg-det">${g.total} de ${d.minAmostra} questões · faltam ${g.faltam} para medir</span>
+        </li>`;
+      }
+      // o mínimo é o DAQUELE grupo (pode diferir entre grupos), não um único global
+      const alvo = g.min != null ? ` · <span class="rg-alvo">mín. ${g.min}%</span>` : "";
+      // peso só aparece quando ALGUM grupo tem peso ≠ 1; senão seria "peso 1" em toda
+      // linha, que é enfeite
+      const peso = d.temPeso ? ` · <span class="rg-alvo">peso ${g.peso}</span>` : "";
+      return `<li class="rg-linha ${g.abaixo ? "rg-abaixo" : "rg-ok"}">
+        <span class="rg-nome">${esc(g.grupo)}</span>
+        <span class="rg-num">${g.pct}%</span>
+        <span class="rg-det">${g.acertos}/${g.total}${alvo}${peso}</span>
+      </li>`;
+    })
+    .join("");
+
+  // DISTÂNCIA, não sentença. A prova é no futuro e este número existe justamente porque
+  // muda: "você seria eliminado" afirma um fato sobre um evento que ainda não aconteceu,
+  // e transforma diagnóstico em ameaça — que produz evitação, não estudo.
+  let frase;
+  if (abaixo.length) {
+    const pior = [...abaixo].sort((a, b) => b.gap - a.gap)[0];
+    frase =
+      abaixo.length === 1
+        ? `<b>${esc(pior.grupo)}</b> está <b>${pior.gap} ${pior.gap === 1 ? "ponto" : "pontos"}</b> abaixo do mínimo. É o que decide a aprovação antes da média.`
+        : `${abaixo.length} grupos estão abaixo do mínimo. O mais distante é <b>${esc(pior.grupo)}</b>, a <b>${pior.gap} pontos</b> — comece por ele.`;
+  } else if (d.geralAbaixo) {
+    frase = `Nenhum grupo abaixo do mínimo, mas a média geral (${d.geral.pct}%) ainda não alcança os ${d.regra.minGeral}%.`;
+  } else if (d.grupos.every((g) => !g.suficiente)) {
+    frase = `Ainda sem questões suficientes para medir os grupos.`;
+  } else {
+    frase = `Nenhum grupo abaixo do mínimo${d.regra.minGeral != null && d.geral.suficiente ? ` e a média geral (${d.geral.pct}%) atende aos ${d.regra.minGeral}%` : ""}.`;
+  }
+  const ressalva = semAmostra.length && !d.grupos.every((g) => !g.suficiente)
+    ? ` <span class="muted">${semAmostra.length === 1 ? "Um grupo ainda não tem" : `${semAmostra.length} grupos ainda não têm`} questões suficientes para medir.</span>`
+    : "";
+  // Média ponderada: só com peso definido. "Parcial" quando algum grupo ainda não tem
+  // amostra — a nota estimada vai mudar, e omitir isso seria vender precisão que não há.
+  const pond =
+    d.ponderada != null
+      ? `<p class="rg-pond">Nota ponderada pelos pesos: <b>${d.ponderada}%</b>${
+          d.ponderadaParcial ? ` <span class="muted">— parcial, só com os grupos já medidos</span>` : ""
+        }</p>`
+      : "";
+  // Pré-edital a regra é referência de um certame passado — informa, não sentencia.
+  const nota = d.referencia
+    ? `<p class="rg-nota">${icone("circle-help")} Sem data de prova cadastrada: estes mínimos valem como <b>referência</b>, não como a regra do seu certame.</p>`
+    : "";
+  // O vermelho só acende quando há veredito de verdade: amostra suficiente E grupo
+  // abaixo. Alarme que dispara sempre é desligado, e aí não avisa quando importa.
+  const alerta = abaixo.length > 0;
+  return `<section class="card risco-grupo${alerta ? " rg-alerta" : ""}">
+    <h3>${icone(alerta ? "triangle-alert" : "target")} Desempenho por grupo de matérias</h3>
+    <p class="rg-veredito">${frase}${ressalva}</p>
+    <ul class="rg-lista">${linhas}</ul>
+    ${pond}
+    ${nota}
+  </section>`;
+}
+
 export default function renderDiagnostico(root, app) {
   const { store } = app;
   const st = store.get();
@@ -222,6 +300,8 @@ export default function renderDiagnostico(root, app) {
           })
         : ""
     }
+
+    ${riscoGrupoHTML(store.desempenhoPorGrupo())}
 
     <!-- 1) VISÃO GERAL (o "num relance"): KPIs primeiro. -->
     <section class="scorecard stagger" data-print="kpis" data-print-label="Indicadores (cobertura, aproveitamento, prova)">
@@ -1053,22 +1133,33 @@ function perfClasse(store, percent) {
 }
 
 // ----- pontos fracos ("onde você mais erra"): até 5 piores aproveitamentos -----
+// Mostra a DISCIPLINA e, quando o Caderno de Erros já tem massa para dizer, também a
+// CAUSA dominante. Esta lista sozinha diz onde doer; sem o porquê, ela manda estudar
+// mais — o que é a receita errada quando o problema é leitura de enunciado ou memória.
 function pontosFracosHTML(store, porDisciplina) {
   const fracos = (porDisciplina || [])
     .filter((l) => l.percentAcerto !== null)
     .sort((a, b) => a.percentAcerto - b.percentAcerto)
     .slice(0, 5);
   if (!fracos.length) return "";
+  const st = store.get();
+  // mesma função do Caderno (mesmos limites de amostra e concentração)
+  const porCausa = new Map(padroesPorDisciplina(st, store.cadernoErros()).map((p) => [p.disc, p]));
   const itens = fracos
-    .map(
-      (l) => `<li class="fraco-item">
+    .map((l) => {
+      const p = porCausa.get(l.disciplina.nome);
+      const causa = p
+        ? `<span class="fraco-causa" data-tip="${p.n} dos ${p.total} erros classificados nesta disciplina. ${esc(LEITURA_MOTIVO[p.motivo] || "")}">${icone("flag")} ${esc(p.motivo.toLowerCase())}</span>`
+        : "";
+      return `<li class="fraco-item">
         <span class="fraco-nome">${esc(l.disciplina.nome)}</span>
+        ${causa}
         <span class="fraco-pct ${perfClasse(store, l.percentAcerto)}">${l.percentAcerto}%</span>
-      </li>`
-    )
+      </li>`;
+    })
     .join("");
   return `
-    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas).">${icone("info")}</span></h3>
+    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas). Quando há erros classificados suficientes, mostra também a causa dominante.">${icone("info")}</span></h3>
     <ul class="fracos-lista">${itens}</ul>`;
 }
 

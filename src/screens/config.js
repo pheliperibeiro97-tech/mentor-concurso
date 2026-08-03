@@ -27,6 +27,11 @@ function haQuanto(iso) {
 
 // Aba ativa das Configurações (persiste entre re-renders desta sessão).
 let abaCfg = "estudo";
+// O autosave re-renderiza a tela, e <details open> volta ao default no HTML novo. Sem
+// guardar isto, o painel FECHAVA no meio da digitação (e levava o foco junto): dava para
+// digitar o "3" de "30" e ver o campo sumir. Mesmo padrão dos outros estados de abertura
+// do app (filtros, alias do dossiê).
+let regraAberta = false;
 
 // Texto de ajuda por provedor (onde pegar a chave grátis).
 const AJUDA_IA = {
@@ -40,6 +45,7 @@ export default function renderConfig(root, app) {
   const st = store.get();
   const cfg = st.config;
   const c = st.concurso;
+  const regra = (c && c.regra) || {};
   // No celular/navegador (sem Tauri) alguns recursos são só do app desktop — não mostrar o
   // gatilho no mobile evita o toque que só entrega um aviso negativo.
   const ehDesktop = typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
@@ -366,6 +372,51 @@ export default function renderConfig(root, app) {
         <label class="u-grow">Banca <input id="cfg-banca" type="text" value="${esc(c ? c.banca : "")}" /></label>
       </div>
       <p class="muted small">Multi-concurso e modo fusão chegam na v3.</p>
+
+      <details class="ed-ajuda u-mt-12" id="cfg-regra-det" ${regraAberta ? "open" : ""}>
+        <summary>Regra de aprovação (grupos de matérias)</summary>
+        <div class="ed-ajuda-corpo">
+          <p class="u-mt-0">Muitos concursos reprovam por <b>piso em um grupo</b>, não pela média — dá para ter média boa e ser eliminado por ficar abaixo do mínimo num bloco só. Preencha se o seu edital tiver essa regra; deixe em branco se não tiver.</p>
+          <div class="form-row">
+            <label class="u-w-120">Mínimo padrão <input id="cfg-min-grupo" type="number" min="0" max="100" placeholder="%" value="${regra.minGrupo ?? ""}" /></label>
+            <label class="u-w-120">Mínimo geral <input id="cfg-min-geral" type="number" min="0" max="100" placeholder="%" value="${regra.minGeral ?? ""}" /></label>
+            <label class="u-w-120" data-tip="Quantas questões um grupo precisa ter para o app dar veredito. Abaixo disso ele só informa quanto falta para medir. Menor = fala antes e erra mais.">Medir a partir de <input id="cfg-min-amostra" type="number" min="1" placeholder="30" value="${regra.minAmostra ?? ""}" /></label>
+          </div>
+          <p class="muted small u-mb-8">Ex.: no 192º do TJSP são <b>30%</b> em cada bloco e <b>60%</b> de média. Se o seu edital pedir percentuais <b>diferentes por grupo</b>, use os campos abaixo.</p>
+          ${
+            st.disciplinas.length
+              ? `<p class="u-mb-4"><b>A que grupo pertence cada disciplina</b></p>
+                 <div class="cfg-grupos">${st.disciplinas
+                   .map(
+                     (d) => `<label class="cfg-grupo-linha"><span>${esc(d.nome)}</span>
+                       <input type="text" id="cfg-grupo-${d.id}" data-grupo-disc="${d.id}" value="${esc(d.grupo || "")}" placeholder="sem grupo" /></label>`
+                   )
+                   .join("")}</div>
+                 <p class="muted small u-m-0 u-mt-8 u-mb-12">O nome do grupo é livre — "Bloco I", "Eixo 2", o que o seu edital usar. Disciplinas sem grupo ficam de fora do cálculo.</p>
+                 ${
+                   store.gruposDisciplinas().length
+                     ? `<p class="u-mb-4"><b>Por grupo</b> <span class="muted small">(opcional — mínimo em branco usa o padrão; peso em branco vale 1)</span></p>
+                        <div class="cfg-grupos cfg-grupos-num">
+                          <div class="cfg-grupo-linha cfg-grupo-cab"><span></span><b>Mínimo</b><b>Peso</b></div>
+                          ${store
+                            .gruposDisciplinas()
+                            .map((g) => {
+                              const k = esc(g).replace(/\W/g, "_");
+                              return `<div class="cfg-grupo-linha"><span>${esc(g)}</span>
+                              <input type="number" min="0" max="100" id="cfg-mg-${k}" data-min-grupo="${esc(g)}"
+                                placeholder="${regra.minGrupo ?? "%"}" value="${(regra.minPorGrupo && regra.minPorGrupo[g]) ?? ""}" />
+                              <input type="number" min="0" step="0.5" id="cfg-pg-${k}" data-peso-grupo="${esc(g)}"
+                                placeholder="1" value="${(regra.pesoPorGrupo && regra.pesoPorGrupo[g]) ?? ""}" /></div>`;
+                            })
+                            .join("")}
+                        </div>
+                        <p class="muted small u-m-0 u-mt-8">O <b>mínimo</b> elimina; o <b>peso</b> muda quanto o grupo vale na nota final. São coisas diferentes, e alguns editais têm as duas.</p>`
+                     : ""
+                 }`
+              : `<p class="muted small u-m-0">Monte o edital primeiro para atribuir os grupos.</p>`
+          }
+        </div>
+      </details>
     </section>
 
     <section class="card">
@@ -816,6 +867,43 @@ export default function renderConfig(root, app) {
     let t = null;
     return () => { clearTimeout(t); t = setTimeout(fn, ms); };
   };
+
+  // Regra de aprovação + grupos das disciplinas: mesmo autosave dos demais campos.
+  const salvarRegra = () => {
+    const g = root.querySelector("#cfg-min-grupo");
+    if (!g) return; // a tela mudou antes do debounce disparar
+    // O mapa vai INTEIRO: campo esvaziado precisa chegar como "" para o store apagar a
+    // exceção daquele grupo e ele voltar a seguir o padrão.
+    const porGrupo = {};
+    root.querySelectorAll("[data-min-grupo]").forEach((el) => {
+      porGrupo[el.getAttribute("data-min-grupo")] = el.value;
+    });
+    const pesos = {};
+    root.querySelectorAll("[data-peso-grupo]").forEach((el) => {
+      pesos[el.getAttribute("data-peso-grupo")] = el.value;
+    });
+    salvarPreservandoFoco(() => {
+      store.setRegraAprovacao({
+        minGrupo: g.value,
+        minGeral: root.querySelector("#cfg-min-geral")?.value,
+        minAmostra: root.querySelector("#cfg-min-amostra")?.value,
+        minPorGrupo: porGrupo,
+        pesoPorGrupo: pesos,
+      });
+      toast("Salvo.");
+    });
+  };
+  root.querySelector("#cfg-regra-det")?.addEventListener("toggle", (e) => { regraAberta = e.target.open; });
+  const salvarRegraDeb = debounce(salvarRegra, 600);
+  root
+    .querySelectorAll("#cfg-min-grupo, #cfg-min-geral, #cfg-min-amostra, [data-min-grupo], [data-peso-grupo]")
+    .forEach((el) => el.addEventListener("input", salvarRegraDeb));
+  root.querySelectorAll("[data-grupo-disc]").forEach((el) => {
+    el.addEventListener(
+      "input",
+      debounce(() => salvarPreservandoFoco(() => store.setGrupoDisciplina(el.getAttribute("data-grupo-disc"), el.value)), 600)
+    );
+  });
 
   // Metas e prova: mesma lógica de parse (h/min -> minutos; NaN vira 0) do antigo "Salvar metas/prova".
   const salvarMetas = () => {

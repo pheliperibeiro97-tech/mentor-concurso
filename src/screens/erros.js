@@ -2,7 +2,7 @@
 // manualmente (vinculados a disciplina e/ou tópico). Permite classificar motivo,
 // editar o comentário e (para manuais) editar/remover.
 import { bindActions, toast, header, seloBadge, vazio, confirmar, imprimir, botaoImprimir, opcoesImpressao, avisoIA, focarItem, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, plural, comOcupado } from "../ui.js";
-import { esc, fmtData, MOTIVOS_ERRO as MOTIVOS, textoComentario } from "../util.js";
+import { esc, fmtData, MOTIVOS_ERRO as MOTIVOS, LEITURA_MOTIVO, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
 
@@ -49,6 +49,7 @@ export default function renderErros(root, app) {
   const porMotivo = {};
   for (const m of MOTIVOS) porMotivo[m] = todos.filter((e) => e.motivoErro === m).length;
   const semMotivo = todos.filter((e) => !e.motivoErro).length;
+  const padroes = padroesPorDisciplina(st, todos);
 
   // Ids únicos das QUESTÕES erradas no filtro atual (para "Refazer em foco" — reaproveita
   // o Modo Foco de Questões, com correção item a item). Erros manuais/flashcard ficam fora.
@@ -60,6 +61,8 @@ export default function renderErros(root, app) {
     <div class="erros-resumo muted small">
       <b class="num">${todos.length}</b> ${todos.length === 1 ? "erro" : "erros"}${MOTIVOS.map((m) => (porMotivo[m] ? ` · <span class="num">${porMotivo[m]}</span> ${esc(m).toLowerCase()}` : "")).join("")}${semMotivo ? ` · <span class="num">${semMotivo}</span> não definido` : ""}
     </div>
+
+    ${padroesHTML(padroes)}
 
     <div class="barra-acoes">
       <button class="btn btn-add btn-sm" data-action="toggle-add" data-tip-pos="cima-esq" data-tip="Digite um erro ou cole vários (um por linha).">Adicionar erro</button>
@@ -374,6 +377,62 @@ function abrirAdicionarErro(app) {
       },
     }),
   });
+}
+
+// PADRÕES POR DISCIPLINA — a parte que faltava do "caderno vira diagnóstico".
+// A linha de resumo acima diz QUANTOS erros de cada motivo existem no total; isso não
+// muda decisão nenhuma. O que muda é saber ONDE o motivo se concentra: "quase todo erro
+// seu em Processo Civil é de leitura de enunciado" manda estudar outra coisa.
+//
+// Sem IA: é contagem. E com piso, porque percentual sobre 3 erros é ruído com cara de
+// dado — a regra do plano é que número sem massa crítica vira frase, não estatística.
+const MIN_ERROS_DISC = 6; // abaixo disso a disciplina não entra
+const MIN_CONCENTRACAO = 0.5; // o motivo tem de responder por metade ou mais
+// Exportada para o Acompanhamento: lá a lista "Onde você mais erra" mostra a DISCIPLINA,
+// aqui se sabe a CAUSA. Eram duas metades da mesma pergunta em telas que se ignoravam.
+// Reusar a função (em vez de recalcular) garante que os dois lugares nunca divirjam nos
+// limites de amostra e de concentração.
+export function padroesPorDisciplina(st, todos) {
+  const discDe = (e) => {
+    const t = st.topicos.find((x) => x.id === e.topicoId);
+    return t ? t.disciplinaId : e.disciplinaId || null;
+  };
+  const porDisc = new Map();
+  for (const e of todos) {
+    if (!e.motivoErro) continue; // só erro classificado entra: o resto não é diagnosticável
+    const d = discDe(e);
+    if (!d) continue;
+    if (!porDisc.has(d)) porDisc.set(d, { total: 0, motivos: {} });
+    const reg = porDisc.get(d);
+    reg.total++;
+    reg.motivos[e.motivoErro] = (reg.motivos[e.motivoErro] || 0) + 1;
+  }
+  const achados = [];
+  for (const [discId, reg] of porDisc) {
+    if (reg.total < MIN_ERROS_DISC) continue;
+    const [motivo, n] = Object.entries(reg.motivos).sort((a, b) => b[1] - a[1])[0];
+    if (n / reg.total < MIN_CONCENTRACAO) continue; // sem concentração não há padrão
+    const disc = st.disciplinas.find((d) => d.id === discId);
+    if (!disc) continue;
+    achados.push({ disc: disc.nome, motivo, n, total: reg.total, forca: n / reg.total });
+  }
+  // no máximo 3: uma lista longa vira tabela, e tabela ninguém lê
+  return achados.sort((a, b) => b.forca - a.forca || b.total - a.total).slice(0, 3);
+}
+
+function padroesHTML(padroes) {
+  if (!padroes.length) return ""; // sem padrão, o bloco não existe — nada de card vazio
+  const linhas = padroes
+    .map(
+      (p) => `<li><b>${esc(p.disc)}</b>: <span class="num">${p.n}</span> dos
+        <span class="num">${p.total}</span> erros classificados são de
+        <b>${esc(p.motivo.toLowerCase())}</b> — ${esc(LEITURA_MOTIVO[p.motivo] || "")}.</li>`
+    )
+    .join("");
+  return `<div class="erros-padroes">
+    <div class="erros-padroes-tit">${icone("trending-up")} O que seus erros têm em comum</div>
+    <ul>${linhas}</ul>
+  </div>`;
 }
 
 function erroHTML(st, e) {

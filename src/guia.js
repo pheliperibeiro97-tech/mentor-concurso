@@ -119,12 +119,14 @@ export const GUIA = [
         <li>Para prova cronometrada com gabarito só no fim, use <b>Simulados</b>.</li>
       </ul>` },
 
-  { id: "discursiva", grupo: "Praticar", titulo: "Discursiva e redação", html: `
-      <p>Escreva o tema/enunciado e a sua resposta e peça a <b>correção</b> (IA) no nível de um examinador de banca.</p>
+  { id: "discursiva", grupo: "Praticar", titulo: "Escrita", html: `
+      <p>Tudo que se escreve à mão numa prova: <b>discursiva</b>, <b>redação</b> e <b>sentença</b> (cível e criminal). Escreva o enunciado e a sua resposta e peça a <b>correção</b> (IA) no nível de um examinador de banca.</p>
       <ul>
-        <li>Correção estruturada: <b>Macroestrutura</b> (conteúdo e base legal), <b>Mesoestrutura</b> (coesão e proporção), <b>Microestrutura</b> (erros gramaticais um a um) e <b>Nota 0–10</b> com memória de cálculo, além de pontos fortes e como melhorar.</li>
+        <li>Discursiva e redação: correção em <b>Macroestrutura</b> (conteúdo e base legal), <b>Mesoestrutura</b> (coesão e proporção), <b>Microestrutura</b> (erros gramaticais um a um) e <b>Nota 0–10</b> com memória de cálculo.</li>
+        <li><b>Sentença</b>: o enunciado é um <b>caso</b> com as peças do processo, e a correção vem por <b>itens esperados</b> — como o espelho da banca —, com dosimetria em três fases no criminal. Tem <b>cronômetro de 4 h</b>, o tempo real da prova.</li>
+        <li><b>Foto da resposta manuscrita</b>: escreva à mão, fotografe e a Visão transcreve para o campo.</li>
         <li>Offline, dá métricas estruturais.</li>
-        <li>Dá para <b>gerar um tema</b> com IA, transformar a correção em flashcard ou enviar ao Caderno de Erros.</li>
+        <li>Dá para <b>gerar o tema ou o caso</b> com IA (de um tópico, de um material, de uma matéria que você digita ou aleatório), transformar a correção em flashcard ou enviar ao Caderno de Erros.</li>
         <li>No <b>histórico</b>, o botão <b>Comparar</b> põe a sua resposta e a correção lado a lado.</li>
       </ul>` },
 

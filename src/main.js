@@ -65,7 +65,7 @@ const ROTAS = [
   { id: "pratica", label: "Questões", icone: "pencil-line", cor: "#059669", grupo: "Prática", render: renderPratica },
   // Fase 1: "Questões C/E" saiu da barra — vira modo dentro de Questões (rota preservada p/ deep-links).
   { id: "pratica-ce", label: "Questões C/E", icone: "check-check", cor: "#059669", grupo: "Prática", semNav: true, render: renderPraticaCE },
-  { id: "correcao", label: "Discursiva e redação", icone: "square-pen", cor: "#059669", grupo: "Prática", render: renderCorrecao },
+  { id: "correcao", label: "Escrita", icone: "square-pen", cor: "#059669", grupo: "Prática", render: renderCorrecao },
   { id: "simulados", label: "Simulados", icone: "clipboard-list", cor: "#059669", grupo: "Prática", render: renderSimulados },
 
   { id: "revisoes", label: "Revisões", icone: "calendar-check", cor: "#f59e0b", grupo: "Revisão", render: renderCentralRevisoes },

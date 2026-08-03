@@ -10,6 +10,7 @@ import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, r
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { gerarEAbrirMapa, abrirMapaCompleto } from "../mapa-mental.js";
 import { sanitize } from "./resumos.js"; // conteudoHTML pode vir de sync/import antigo sem passar pelo save
+import { gradeEstados, legendaEstadosHTML } from "../componentes.js";
 
 // Ordenação/edição das SESSÕES do tópico (mesma lógica do Acompanhamento, sem as
 // colunas de disciplina/tópico — aqui já está tudo vinculado a um tópico).
@@ -19,6 +20,67 @@ let sessFiltroFase = "";
 let aliasAberto = false; // editor de "também conhecido como" (sinônimos) do tópico aberto
 let dossieRevelar = new Set(); // seções vazias que o usuário optou por revelar (para adicionar)
 let dossieEscondido = new Set(); // seções que o usuário tirou do dossiê (voltam para "Adicionar")
+
+// Visão COMPACTA de todo o edital: uma linha por tópico, com 4 pontos de estado.
+//
+// MEDIDO com o edital oficial do 192º (21 disciplinas, 1.735 tópicos) — a versão
+// anterior deste comentário exagerava o diagnóstico e foi corrigida:
+//
+//   1. DENSIDADE DE DOM — este é o gargalo real. Trocar para os cards com 1.735 tópicos
+//      leva ~2.650ms contra ~757ms do compacto (3,5×). Não trava, mas 2,6s para trocar
+//      de aba é inaceitável. E 1.735 cards não se leem de todo jeito.
+//   2. O(n²) do store.dossie() — real, porém MENOR do que eu havia afirmado. Cada
+//      chamada faz 9 varreduras do estado mais um `questoesIds.includes()` dentro de um
+//      filter. Medido: 0,012ms/tópico com o acervo atual (≈21ms no total). Simulado com
+//      acervo grande: ~254ms (2 mil questões / 5 mil tentativas) e ~854ms (5 mil / 15
+//      mil). Cresce mal, mas não é o que causa os 2,6s.
+//
+// Aqui os índices são montados em UMA passada por coleção, o que resolve (2) de graça e
+// permite a linha enxuta que resolve (1).
+export function dossieCompactoHTML(store) {
+  const st = store.get();
+  const indice = (arr, chave) => {
+    const m = new Map();
+    for (const it of arr) {
+      const k = chave(it);
+      for (const x of Array.isArray(k) ? k : [k]) if (x) m.set(x, (m.get(x) || 0) + 1);
+    }
+    return m;
+  };
+  // mesma regra do docTops() do store: topicoIds é canônico, topicoId é o legado
+  const mat = indice(st.documentos, (d) => (Array.isArray(d.topicoIds) && d.topicoIds.length ? d.topicoIds : d.topicoId));
+  const qs = indice(st.questoes, (x) => x.topicoId);
+  const fcs = indice(st.flashcards, (x) => x.topicoId);
+
+  const ETAPAS = [
+    { chave: "mat", rotulo: "Tem material" },
+    { chave: "q", rotulo: "Tem questão" },
+    { chave: "fc", rotulo: "Tem cartão" },
+    { chave: "ok", rotulo: "Marcado como concluído" },
+  ];
+
+  // legenda UMA vez, no topo — não uma por disciplina
+  return legendaEstadosHTML(ETAPAS) + st.disciplinas
+    .map((d) => {
+      const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
+      const concl = tops.filter((t) => t.concluido).length;
+      const itens = tops.map((t) => ({
+        id: t.id,
+        nome: t.nome,
+        estados: [Boolean(mat.get(t.id)), Boolean(qs.get(t.id)), Boolean(fcs.get(t.id)), Boolean(t.concluido)],
+      }));
+      return `
+        <div class="dossie-disc">
+          <h3 class="ddx-disc-tit">
+            <span class="cur-dot" style="background:${store.corDisciplina(d.id)}"></span>
+            <button class="lnk" data-action="ir-dossie-disc" data-id="${d.id}">${esc(d.nome)} <span class="mapa-abrir-ico">${icone("external-link")}</span></button>
+            <span class="ddx-disc-cont">${concl}/${tops.length}</span>
+          </h3>
+          ${itens.length ? gradeEstados({ itens, etapas: ETAPAS, acao: "ir-dossie" }) : `<p class="muted">Sem tópicos.</p>`}
+        </div>`;
+    })
+    .join("");
+}
 
 // Visão de TODO o edital: cards por tópico (agrupados por disciplina) com as
 // estatísticas resumidas. Reutilizado pelo Edital (modo "Resumo"). Cada card usa

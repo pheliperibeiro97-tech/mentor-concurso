@@ -5,6 +5,7 @@
 // então tentativas, Caderno de Erros e Acompanhamento funcionam igual.
 import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, pedirTexto, focarItem, explicacaoIAHTML, abrirJanela , plural, comOcupado } from "../ui.js";
 import { esc, MOTIVOS_ERRO as MOTIVOS } from "../util.js";
+import { chipsEscolha } from "../componentes.js";
 import { icone } from "../icones.js";
 import { addQuestoesBotaoHTML, addQuestoesPanelHTML, ligarAddQuestoesArquivo, addQuestoesHandlers, statusQuestao } from "./questoes-add.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, questaoNoFiltro } from "./questoes-filtro.js";
@@ -375,6 +376,26 @@ function renderTreino(root, app, formato) {
       }
       if (t) toast(t.acertou ? "Acertou!" : "Errou. Registrado no caderno.", t.acertou ? "ok" : "erro");
     },
+    // Motivo do erro em 1 toque (antes era um select). Tocar de novo no mesmo chip
+    // desmarca — classificar continua sendo opcional. Redesenha SÓ a linha de chips:
+    // um app.refresh() aqui rolaria a página e tiraria o card de baixo do olho.
+    "motivo-chip": (el) => {
+      const tId = el.getAttribute("data-t");
+      const jaEra = el.getAttribute("aria-pressed") === "true";
+      const valor = jaEra ? "" : el.getAttribute("data-valor");
+      store.setMotivoErro(tId, valor);
+      const linha = el.closest(".chips-rapidos");
+      if (linha) {
+        linha.outerHTML = chipsEscolha({
+          rotulo: "Por que errou?",
+          opcoes: MOTIVOS,
+          valor,
+          acao: "motivo-chip",
+          nome: "Motivo do erro",
+          dados: { t: tId },
+        });
+      }
+    },
     refazer: (el) => {
       s.refazer.add(el.getAttribute("data-q"));
       app.refresh();
@@ -412,9 +433,6 @@ function renderTreino(root, app, formato) {
     },
   });
 
-  root.querySelectorAll('select[data-action="motivo"]').forEach((selEl) => {
-    selEl.addEventListener("change", () => store.setMotivoErro(selEl.getAttribute("data-t"), selEl.value));
-  });
 
   // ===== Modo Foco: teclado + cronômetro vivo (só quando ativo) =====
   if (!s.focoAtivo) return;
@@ -555,12 +573,14 @@ function questaoHTML(st, q, formato, s) {
         <div class="feedback erro">${icone("x")} Resposta incorreta. Salva no Caderno de Erros.</div>${justif}
         <div class="analise-erro">
           <div class="analise-erro-titulo">Análise do erro</div>
-          <label class="inline analise-erro-motivo">Motivo:
-            <select data-action="motivo" data-t="${ultima.id}">
-              <option value="">—</option>
-              ${MOTIVOS.map((m) => `<option ${ultima.motivoErro === m ? "selected" : ""}>${m}</option>`).join("")}
-            </select>
-          </label>
+          ${chipsEscolha({
+            rotulo: "Por que errou?",
+            opcoes: MOTIVOS,
+            valor: ultima.motivoErro || "",
+            acao: "motivo-chip",
+            nome: "Motivo do erro",
+            dados: { t: ultima.id },
+          })}
           <div class="duvida-row">
             <input id="duv-${ultima.id}" type="text" placeholder="Tem uma dúvida sobre este erro? Escreva e toque em Comentar (opcional)." value="${esc(ultima.duvida || "")}" data-tip="Escreva sua dúvida; a IA responde junto com a explicação. Não é obrigatório." />
             <button class="btn btn-ia btn-sm" data-action="comentar-ia" data-t="${ultima.id}" data-tip-pos="cima-dir" data-tip="A IA explica por que a resposta certa é a correta e, se você escrever uma dúvida, responde a ela primeiro.">${icone("sparkles")} Comentar com IA</button>

@@ -5248,8 +5248,43 @@ export const store = {
       }
     } else if (fonte === "topico") {
       contexto = nomeContexto(state, alvo);
+    } else if (fonte === "escrito") {
+      // O texto do campo é o BRIEFING: a IA parte dele em vez de descartá-lo. Vai como
+      // `texto` (o conteúdo em que se basear), não como `contexto` (o assunto), porque
+      // pode ser uma instrução inteira e não só um tema.
+      texto = String(alvo || "");
+      contexto = "a instrução do candidato abaixo";
+    } else if (fonte === "aleatorio") {
+      // ALEATÓRIO DE VERDADE: sorteio UNIFORME sobre tudo que você tem — tópicos do
+      // edital E materiais importados, no mesmo bolo. Sem peso por relevância, por
+      // lacuna ou por incidência.
+      //
+      // Optei por união proporcional em vez de "50% tópico / 50% material": com 1.700
+      // tópicos e 3 materiais, o meio a meio faria os 3 materiais aparecerem em metade
+      // dos sorteios — um viés forte, silencioso e não pedido. Quem quiser que material
+      // apareça mais escolhe "Material" na origem; aí é preferência, não sorteio.
+      //
+      // Sortear dentro do SEU acervo é melhor que pedir "qualquer coisa" à IA, que
+      // devolveria o assunto mais óbvio da matéria toda vez. Sem acervo, cai no geral.
+      const cands = [
+        ...state.topicos.map((t) => ({ tipo: "topico", id: t.id })),
+        ...state.documentos.map((d) => ({ tipo: "doc", id: d.id })),
+      ];
+      if (!cands.length) {
+        contexto = "geral";
+      } else {
+        const escolhido = cands[Math.floor(Math.random() * cands.length)];
+        if (escolhido.tipo === "doc") {
+          const d = state.documentos.find((x) => x.id === escolhido.id);
+          // material sorteado entra como CONTEÚDO, igual à origem "Material" — o caso
+          // sai ancorado no que você importou, não só no nome do arquivo.
+          if (d) { texto = d.texto; contexto = nomeContexto(state, d.topicoId); }
+        } else {
+          contexto = nomeContexto(state, escolhido.id);
+        }
+      }
     } else {
-      contexto = (alvo || "").trim() || "geral"; // tema livre digitado
+      contexto = (alvo || "").trim() || "geral"; // tema/matéria digitado
     }
     const r = await iaProv.gerarPerguntaDiscursiva(state.config, { contexto, texto, tipo });
     return r.enunciado;
@@ -5265,6 +5300,12 @@ export const store = {
         const m = await iaProv.corrigirDiscursiva(state.config, { enunciado, texto, tipo, web, palavras: correcao.palavras });
         correcao.feedbackIA = { texto: m.texto, fontesWeb: m.fontesWeb || [] };
         correcao.comIA = true;
+        // Espelho estruturado (só sentença, e só quando o JSON veio íntegro): guarda os
+        // itens e a fração enfrentada, que é o número comparável entre provas.
+        if (m.espelho) {
+          correcao.espelho = m.espelho;
+          correcao.itensPct = iaProv.itensEnfrentadosPct(m.espelho);
+        }
         correcao.nota = web
           ? "Correção da IA com busca na web (, confira a fonte oficial)."
           : "Correção de mérito pela IA (, confira) + métricas estruturais.";
@@ -6142,9 +6183,41 @@ export const store = {
   // detecta. Fonte ÚNICA usada tanto no aviso proativo do HOJE quanto no painel do
   // Mentor — garante que as duas telas digam a mesma coisa.
   // Lista BRUTA de pontos de atenção (com chave estável por ponto).
+  // Há quantos dias você não traz um informativo deste tribunal. `null` = nunca trouxe.
+  // O app NÃO sabe qual foi a última edição publicada (isso exigiria a web) — ele sabe o
+  // SEU intervalo. Por isso a frase que sai daqui fala do seu hábito, não de uma edição.
+  diasSemInformativo(tribunal) {
+    const t = String(tribunal || "").toUpperCase();
+    let maisRecente = null;
+    for (const i of state.indicacoes) {
+      if (!i.nInformativo) continue;
+      if (String(i.tribunal || "").toUpperCase() !== t) continue;
+      const d = i.criadoEm || i.novidadeEm || null;
+      if (d && (!maisRecente || d > maisRecente)) maisRecente = d;
+    }
+    if (!maisRecente) return null;
+    const ms = Date.parse(todayISO()) - Date.parse(String(maisRecente).slice(0, 10));
+    return Math.max(0, Math.round(ms / 86400000));
+  },
+
   _pontosBrutos() {
     const snap = this.snapshotMentor();
     const lista = [];
+    // INFORMATIVOS — o gatilho que faltava. A tela de Jurisprudência já importa e extrai
+    // teses; o que ninguém lembrava era de VOLTAR lá. Ciclo real: STF semanal, STJ
+    // quinzenal; o limite tem folga sobre o ciclo para não cobrar no dia exato.
+    // Só cobra quem JÁ trouxe algum: lembrar é para quem começou e parou, não para quem
+    // nunca quis. E, como todo ponto, pode ser adiado ou dispensado pelo usuário.
+    for (const [trib, limite] of [["STF", 10], ["STJ", 20]]) {
+      const dias = this.diasSemInformativo(trib);
+      if (dias !== null && dias >= limite)
+        lista.push({
+          key: "inf:" + trib,
+          icone: "scale",
+          txt: `Faz ${dias} dias que você não traz um informativo do ${trib}`,
+          acao: { rota: "jurisprudencia", label: "Trazer informativo" },
+        });
+    }
     // Cada ponto carrega uma AÇÃO direta (atalho) para a tela onde se resolve.
     if (snap.prova && snap.prova.diasRestantes >= 0 && snap.prova.diasRestantes <= 30)
       lista.push({ key: "reta", icone: "calendar", txt: `Reta final: ${snap.prova.diasRestantes} ${snap.prova.diasRestantes === 1 ? "dia" : "dias"} para a prova`, acao: { rota: "planejamento", label: "Planejar reta" } });
@@ -6741,6 +6814,152 @@ export const store = {
 
   // Cor estável de uma disciplina (mesma em todo o app: edital, gráficos, tabelas).
   // Derivada por hash do id → não precisa migração nem armazenamento, e não muda se a ordem muda.
+  // ---------- grupos de disciplinas + regra de corte (Fase C) ----------
+  // Muitos concursos grandes reprovam por PISO EM UM GRUPO, não pela média: dá para ter
+  // 70% no geral e ser eliminado por ficar abaixo do mínimo num bloco só. É a forma mais
+  // comum de reprovar em concurso jurídico, e a que o app não enxergava — ele mostrava a
+  // média e passava tranquilidade enquanto o candidato caminhava para o corte.
+  // O grupo é TEXTO LIVRE (não um enum "Bloco I/II/III") para servir a qualquer certame:
+  // blocos da Res. 75, eixos do CNU, áreas de concurso policial.
+  setGrupoDisciplina(id, grupo) {
+    const d = state.disciplinas.find((x) => x.id === id);
+    if (!d) return;
+    const g = (grupo || "").trim();
+    if (g) d.grupo = g;
+    else delete d.grupo;
+    commit();
+  },
+  // `minGrupo` é o PADRÃO; `minPorGrupo` sobrescreve por grupo. Muitos editais exigem
+  // percentuais diferentes por bloco (o clássico "30% nas básicas e 50% nas específicas"),
+  // e um mínimo único não representaria esses — mas exigir preencher grupo a grupo
+  // atrapalharia quem tem regra uniforme (a Res. 75, p.ex., é 30% em todos).
+  setRegraAprovacao({ minGrupo, minGeral, minPorGrupo, minAmostra, pesoPorGrupo }) {
+    if (!state.concurso) return;
+    const lim = (v) => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.min(100, Number(v) || 0)));
+    const atual = state.concurso.regra || {};
+    const mapa = { ...(atual.minPorGrupo || {}) };
+    if (minPorGrupo && typeof minPorGrupo === "object") {
+      for (const [g, v] of Object.entries(minPorGrupo)) {
+        const n = lim(v);
+        if (n === null) delete mapa[g];
+        else mapa[g] = n;
+      }
+    }
+    // PESO ≠ MÍNIMO: o mínimo elimina, o peso muda quanto o grupo vale na nota final.
+    // Alguns editais têm os dois. Vazio ou 1 = sem peso especial (não guardamos, para o
+    // app saber que não há ponderação e não poluir a tela com "peso 1" em toda linha).
+    const pesos = { ...(atual.pesoPorGrupo || {}) };
+    if (pesoPorGrupo && typeof pesoPorGrupo === "object") {
+      for (const [g, v] of Object.entries(pesoPorGrupo)) {
+        const n = v === "" || v === null || v === undefined ? null : Math.max(0, Number(v) || 0);
+        if (n === null || n === 1) delete pesos[g];
+        else pesos[g] = n;
+      }
+    }
+    state.concurso.regra = {
+      minGrupo: minGrupo === undefined ? (atual.minGrupo ?? null) : lim(minGrupo),
+      minGeral: minGeral === undefined ? (atual.minGeral ?? null) : lim(minGeral),
+      minPorGrupo: mapa,
+      pesoPorGrupo: pesos,
+      // Quantas questões um grupo precisa ter para o painel dar veredito. 30 é só o
+      // default; quem quiser ouvir mais cedo (e errar mais) ou mais tarde (e errar
+      // menos) ajusta. Estava fixo no código — decisão que não era minha.
+      minAmostra:
+        minAmostra === undefined
+          ? (atual.minAmostra ?? null)
+          : minAmostra === "" || minAmostra === null
+          ? null
+          : Math.max(1, Number(minAmostra) || 1),
+    };
+    commit();
+  },
+  // Mínimo que vale para um grupo: o dele, se houver; senão o padrão.
+  minimoDoGrupo(nome) {
+    const r = (state.concurso && state.concurso.regra) || {};
+    const esp = r.minPorGrupo && r.minPorGrupo[nome];
+    return esp === undefined || esp === null ? (r.minGrupo ?? null) : esp;
+  },
+  pesoDoGrupo(nome) {
+    const r = (state.concurso && state.concurso.regra) || {};
+    const p = r.pesoPorGrupo && r.pesoPorGrupo[nome];
+    return p === undefined || p === null ? 1 : p;
+  },
+  gruposDisciplinas() {
+    return [...new Set(state.disciplinas.map((d) => d.grupo).filter(Boolean))].sort();
+  },
+  // Aproveitamento por grupo + veredito contra a regra. Uma passada: monta o mapa
+  // tópico→disciplina→grupo e depois varre as tentativas uma única vez.
+  desempenhoPorGrupo() {
+    const regra = (state.concurso && state.concurso.regra) || {};
+    const grupoDaDisc = new Map(state.disciplinas.map((d) => [d.id, d.grupo || null]));
+    const grupoDoTopico = new Map(state.topicos.map((t) => [t.id, grupoDaDisc.get(t.disciplinaId) || null]));
+    const acc = new Map();
+    let gAcertos = 0, gTotal = 0;
+    for (const t of state.tentativas) {
+      gTotal++;
+      if (t.acertou) gAcertos++;
+      const g = grupoDoTopico.get(t.topicoId);
+      if (!g) continue; // questão sem tópico ou disciplina sem grupo não entra no cálculo
+      if (!acc.has(g)) acc.set(g, { grupo: g, acertos: 0, total: 0 });
+      const r = acc.get(g);
+      r.total++;
+      if (t.acertou) r.acertos++;
+    }
+    // AMOSTRA MÍNIMA. Percentual sobre 3 questões não é a sua habilidade, é ruído — e
+    // dizer "abaixo do mínimo" com 3 questões é a mesma falsa precisão que o app combate
+    // no conteúdo gerado por IA. Abaixo do piso o grupo aparece, mas SEM veredito: o que
+    // ele informa é quantas questões faltam para poder medir, que já é instrução útil.
+    const MIN_AMOSTRA = regra.minAmostra ?? 30;
+    const grupos = [...acc.values()]
+      .map((r) => {
+        const pct = r.total ? Math.round((r.acertos / r.total) * 100) : null;
+        const suficiente = r.total >= MIN_AMOSTRA;
+        const min = this.minimoDoGrupo(r.grupo); // o do grupo, ou o padrão
+        return {
+          ...r,
+          pct,
+          min,
+          peso: this.pesoDoGrupo(r.grupo),
+          suficiente,
+          faltam: Math.max(0, MIN_AMOSTRA - r.total),
+          abaixo: suficiente && min != null && pct != null && pct < min,
+          // distância em pontos percentuais até o mínimo (o número acionável)
+          gap: suficiente && min != null && pct != null ? min - pct : null,
+        };
+      })
+      .sort((a, b) => a.grupo.localeCompare(b.grupo));
+    const geralPct = gTotal ? Math.round((gAcertos / gTotal) * 100) : null;
+    const geralSuficiente = gTotal >= MIN_AMOSTRA;
+    // MÉDIA PONDERADA — só faz sentido quando há peso diferente de 1 em algum grupo, e
+    // só entram grupos COM amostra suficiente (senão a ponderação carrega o ruído dos
+    // grupos ainda não medidos e devolve uma nota final inventada).
+    const temPeso = grupos.some((g) => g.peso !== 1);
+    const comDado = grupos.filter((g) => g.suficiente && g.pct !== null);
+    const somaPesos = comDado.reduce((a, g) => a + g.peso, 0);
+    const ponderada =
+      temPeso && somaPesos > 0 ? Math.round(comDado.reduce((a, g) => a + g.pct * g.peso, 0) / somaPesos) : null;
+    return {
+      grupos,
+      regra,
+      minAmostra: MIN_AMOSTRA,
+      geral: { acertos: gAcertos, total: gTotal, pct: geralPct, suficiente: geralSuficiente },
+      temPeso,
+      ponderada,
+      // ponderada incompleta = há grupo com peso mas ainda sem amostra; a nota estimada
+      // ainda vai mudar, e a tela precisa dizer isso em vez de exibir número redondo.
+      ponderadaParcial: temPeso && comDado.length < grupos.length,
+      geralAbaixo: geralSuficiente && regra.minGeral != null && geralPct != null && geralPct < regra.minGeral,
+      // Sem DATA DE PROVA a regra é referência de um certame passado, não a regra do seu.
+      // O painel muda de tom por causa disto: pré-edital ele informa, não sentencia.
+      referencia: !state.config.dataProva,
+      // Sem grupo definido não há veredito nenhum a dar. Basta UM mínimo em qualquer
+      // lugar (padrão, específico de grupo ou geral) para o painel ter o que dizer.
+      configurado:
+        grupos.length > 0 &&
+        (regra.minGrupo != null || regra.minGeral != null || grupos.some((g) => g.min != null)),
+    };
+  },
+
   corDisciplina(id) {
     const palette = ["#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0891b2", "#db2777", "#65a30d", "#9333ea", "#0d9488", "#ea580c", "#4f46e5"];
     const s = String(id || "");
