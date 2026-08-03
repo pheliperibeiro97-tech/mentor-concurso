@@ -6834,3 +6834,19 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 /* Linha nenhuma etapa cumprida: NÃO esmaecer. Esmaecer faz o que falta recuar, que é o
    oposto do objetivo — e num edital recém-criado tudo está vazio, então gritar em tudo
    seria ruído. Os quatro anéis apagados já dizem "0 de 4"; o nome fica legível. */
+
+/* Padrões por disciplina no Caderno de Erros: um achado, não uma tabela. Só existe
+   quando há concentração real (ver erros.js), então não precisa de estado vazio. */
+.erros-padroes {
+  margin: 0 0 14px; padding: 12px 14px;
+  border: 1px solid var(--border); border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm); background: var(--surface);
+}
+.erros-padroes-tit {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  font-size: var(--fs-2xs); font-weight: var(--fw-bold); text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--muted);
+}
+.erros-padroes ul { margin: 0; padding-left: 18px; }
+.erros-padroes li { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.55; }
+.erros-padroes li + li { margin-top: 4px; }

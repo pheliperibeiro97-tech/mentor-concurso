@@ -109,6 +109,16 @@ export function fmtData(iso) {
 // Não sabia→estudar · Esqueci→revisar · Interpretação→ler melhor · Distração→atenção.
 export const MOTIVOS_ERRO = ["Não sabia", "Esqueci", "Interpretação", "Distração/Pegadinha"];
 
+// A leitura de cada motivo — o que o padrão SIGNIFICA para o estudo. Estava só no
+// comentário acima; virou dado porque o Caderno de Erros passou a escrever a conclusão
+// em texto ("o problema é leitura, não conteúdo") e ela não pode divergir da lista.
+export const LEITURA_MOTIVO = {
+  "Não sabia": "falta base: o caminho é estudar o conteúdo, não fazer mais questões",
+  Esqueci: "a base existe e não fixou: o caminho é revisão espaçada, não reestudo",
+  Interpretação: "o problema é leitura de enunciado, não conteúdo",
+  "Distração/Pegadinha": "o problema é atenção na hora da prova, não conteúdo",
+};
+
 export function pct(num, den) {
   if (!den) return 0;
   return Math.round((num / den) * 100);
