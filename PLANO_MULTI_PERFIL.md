@@ -477,4 +477,17 @@ Os acessores do config são instalados **pela lista**, não pelas chaves present
 
 - **Fase 1 — seletor de perfil** (a UI; hoje o app tem 1 perfil e nenhuma forma de criar o 2º).
 - **Fase 2 — sync por perfil**, quando a sincronização volta a ser ligada.
-- Rodar 0a+0b no **desktop** (SQLite), com o backup de 2026-08-03 como volta.
+
+### Quando isto chega ao app que o usuário usa (decidido em 2026-08-03)
+
+**Só depois de tudo pronto.** Não faz sentido o multi-perfil aparecer pela metade — sem seletor
+não há o que trocar, e com o sync pausado o app fica pior do que estava. A migração do desktop
+não é uma pendência a resolver agora; é consequência da publicação, no fim da fila.
+
+Estado de hoje, para não haver surpresa:
+- **`Mentor Concurso.exe`** é o binário Tauri de junho, com o `dist` embutido: não enxerga o
+  código do branch e **não migra nada**. O updater só puxa release publicado, e não publicamos.
+- ⚠️ **`Iniciar Mentor Concurso.cmd` roda `npm run dev`** na pasta do projeto — serve o código do
+  branch em que o repositório estiver. Abrir o app por ele durante o trabalho no multi-perfil usa
+  a versão incompleta e migra o IndexedDB daquele navegador. Enquanto a implantação não fechar:
+  abrir pelo `.exe`, ou deixar o repositório na `main` ao fim da sessão.
