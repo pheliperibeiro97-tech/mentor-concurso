@@ -6,7 +6,7 @@ import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 import { separarEdital } from "../ia.js";
 import { lerArquivoTexto, ligarImportArquivo, arquivoParaBase64 } from "../pdf.js";
-import { renderDossieDetalhe, dossieResumoHTML, renderDossieDisciplina } from "./dossie.js";
+import { renderDossieDetalhe, dossieResumoHTML, dossieCompactoHTML, renderDossieDisciplina } from "./dossie.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos } from "./questoes-filtro.js";
 
 let aulasPreview = null; // proposta de aulas do cursinho (preview editável)
@@ -23,6 +23,7 @@ let discAcInit = false; // na 1ª vez, abre só a primeira disciplina (fim do "p
 let edModo = "estrutura"; // "estrutura" (editar) | "resumo" (dossiê) | "cursinho" (plano de aulas)
 const filtroEd = { sel: [], aberto: false }; // filtro multi-tópico (disciplina inteira / tópicos avulsos)
 let edModoIniciado = false; // ao abrir pela 1ª vez na sessão, respeita config.baseEstudo
+let edCompacto = null; // dossiê: null = automático pelo tamanho do edital; true/false = escolha do usuário
 let dossieTopicoId = null; // quando setado, o Edital mostra o DOSSIÊ do tópico (desdobramento)
 let dossieDiscId = null; // quando setado (e sem tópico aberto), mostra o PAINEL da disciplina
 let _lastParams = null; // identidade do objeto de params: distingue navegação de re-render
@@ -1132,9 +1133,23 @@ export default function renderEdital(root, app) {
       }
     </div>`;
 
+  // Cards × lista compacta. O padrão segue o TAMANHO do edital: acima de 60 tópicos os
+  // cards deixam de ser legíveis (e o cálculo por card fica caro), então a lista compacta
+  // entra sozinha. O usuário troca quando quiser — a escolha manual vence o automático.
+  const totalTops = st.topicos.length;
+  const compacto = edCompacto === null ? totalTops > 60 : edCompacto;
   const resumoBody = `
-    <p class="muted small u-mt-4 u-mb-12">Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele.</p>
-    <div class="dossie-lista">${dossieResumoHTML(store)}</div>`;
+    <div class="u-flex-12 u-between u-items-end u-wrap u-mb-12">
+      <p class="muted small u-m-0">${
+        compacto
+          ? "Uma linha por tópico: material, questão, cartão e concluído. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele."
+          : "Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele."
+      }</p>
+      <button class="btn btn-ghost btn-sm u-nowrap" data-action="ed-densidade" data-tip="${
+        compacto ? "Ver os cards com os números de cada tópico." : "Ver uma linha por tópico — melhor para edital grande."
+      }">${icone(compacto ? "table" : "list-tree")} ${compacto ? "Ver em cards" : "Ver compacto"}</button>
+    </div>
+    <div class="dossie-lista">${compacto ? dossieCompactoHTML(store) : dossieResumoHTML(store)}</div>`;
 
   let cursinhoBody;
   if (aulasPreview) cursinhoBody = aulasPreviewHTML(aulasPreview) + (st.aulas.length ? aulasListaHTML(store, st) : "");
@@ -1316,6 +1331,12 @@ export default function renderEdital(root, app) {
     },
     "modo-resumo": () => {
       edModo = "resumo";
+      app.refresh();
+    },
+    // Alterna cards × lista compacta. A partir do 1º clique a escolha é do usuário e o
+    // automático pelo tamanho do edital não volta a mandar.
+    "ed-densidade": () => {
+      edCompacto = !(edCompacto === null ? st.topicos.length > 60 : edCompacto);
       app.refresh();
     },
     "modo-cursinho": () => {

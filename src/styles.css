@@ -6806,8 +6806,11 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .conf-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* --- 4. Grade de estados -------------------------------------------------- */
-.grade-estados { display: flex; flex-direction: column; gap: 8px; }
-.ge-legendas { display: flex; flex-wrap: wrap; gap: 14px; font-size: var(--fs-2xs); color: var(--muted); }
+/* max-width: sem isso, numa tela larga os pontos fogem para a borda direita e o olho
+   perde a associação nome ↔ pontos — justamente o que a grade existe para dar. */
+.grade-estados { display: flex; flex-direction: column; gap: 8px; max-width: 56rem; }
+.ge-legendas { display: flex; flex-wrap: wrap; gap: 14px; font-size: var(--fs-2xs); color: var(--muted); margin-bottom: 4px; }
+.ge-leg-off { opacity: 0.75; }
 .ge-leg { display: inline-flex; align-items: center; gap: 5px; }
 .ge-corpo { display: flex; flex-direction: column; }
 .ge-linha {

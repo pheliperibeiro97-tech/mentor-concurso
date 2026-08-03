@@ -89,10 +89,18 @@ export function blocoConferencia({ afirmacao = "", fonte = null, trecho = "", ac
 //
 // itens: [{ nome, estados: [bool, bool, …], href }]  ·  etapas: [{ chave, rotulo }]
 // ---------------------------------------------------------------------------
-export function gradeEstados({ itens = [], etapas = [], acao = "" } = {}) {
-  const legenda = etapas
+// A legenda é SEPARADA de propósito: quando a grade se repete (uma por disciplina), a
+// legenda deve aparecer UMA vez no topo. Repeti-la em cada bloco seria, num edital de 21
+// disciplinas, 21 legendas idênticas — poluição pura.
+export function legendaEstadosHTML(etapas = []) {
+  const itens = etapas
     .map((e) => `<span class="ge-leg"><i class="ge-p is-on"></i>${esc(e.rotulo)}</span>`)
     .join("");
+  return `<div class="ge-legendas">${itens}<span class="ge-leg ge-leg-off"><i class="ge-p"></i>ainda não</span></div>`;
+}
+
+export function gradeEstados({ itens = [], etapas = [], acao = "", legenda = false } = {}) {
+  const legendaHTML = legenda ? legendaEstadosHTML(etapas) : "";
   const linhas = itens
     .map((it) => {
       const pontos = etapas
@@ -107,7 +115,7 @@ export function gradeEstados({ itens = [], etapas = [], acao = "" } = {}) {
     })
     .join("");
   return `<div class="grade-estados">
-    <div class="ge-legendas">${legenda}</div>
+    ${legendaHTML}
     <div class="ge-corpo">${linhas}</div>
   </div>`;
 }
