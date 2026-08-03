@@ -2,7 +2,8 @@
 // mensal navegável) e desempenho por disciplina/tópico (com último dia estudado).
 // SEM "previsão de aprovação" (decisão do plano).
 import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, botaoImprimir, plural, defMetrica } from "../ui.js";
-import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween } from "../util.js";
+import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween, LEITURA_MOTIVO } from "../util.js";
+import { padroesPorDisciplina } from "./erros.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { linhaConstanciaMes, progressRing } from "../viz.js";
@@ -1132,22 +1133,33 @@ function perfClasse(store, percent) {
 }
 
 // ----- pontos fracos ("onde você mais erra"): até 5 piores aproveitamentos -----
+// Mostra a DISCIPLINA e, quando o Caderno de Erros já tem massa para dizer, também a
+// CAUSA dominante. Esta lista sozinha diz onde doer; sem o porquê, ela manda estudar
+// mais — o que é a receita errada quando o problema é leitura de enunciado ou memória.
 function pontosFracosHTML(store, porDisciplina) {
   const fracos = (porDisciplina || [])
     .filter((l) => l.percentAcerto !== null)
     .sort((a, b) => a.percentAcerto - b.percentAcerto)
     .slice(0, 5);
   if (!fracos.length) return "";
+  const st = store.get();
+  // mesma função do Caderno (mesmos limites de amostra e concentração)
+  const porCausa = new Map(padroesPorDisciplina(st, store.cadernoErros()).map((p) => [p.disc, p]));
   const itens = fracos
-    .map(
-      (l) => `<li class="fraco-item">
+    .map((l) => {
+      const p = porCausa.get(l.disciplina.nome);
+      const causa = p
+        ? `<span class="fraco-causa" data-tip="${p.n} dos ${p.total} erros classificados nesta disciplina. ${esc(LEITURA_MOTIVO[p.motivo] || "")}">${icone("flag")} ${esc(p.motivo.toLowerCase())}</span>`
+        : "";
+      return `<li class="fraco-item">
         <span class="fraco-nome">${esc(l.disciplina.nome)}</span>
+        ${causa}
         <span class="fraco-pct ${perfClasse(store, l.percentAcerto)}">${l.percentAcerto}%</span>
-      </li>`
-    )
+      </li>`;
+    })
     .join("");
   return `
-    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas).">${icone("info")}</span></h3>
+    <h3 style="margin-top:20px">${icone("target")} Onde você mais erra <span class="muted small" data-tip="Disciplinas com pior aproveitamento (apenas as que têm questões registradas). Quando há erros classificados suficientes, mostra também a causa dominante.">${icone("info")}</span></h3>
     <ul class="fracos-lista">${itens}</ul>`;
 }
 

@@ -1118,6 +1118,42 @@ async function responderChatWebGeminiRaw(cfg, { system, user }) {
 // tópico/material/tema livre. Devolve só o enunciado.
 export const EH_SENTENCA = (t) => t === "sentenca-civel" || t === "sentenca-criminal";
 
+// Fração de itens do espelho que o candidato ENFRENTOU. É a métrica comparável entre
+// provas (ver o comentário em corrigirDiscursiva): PARCIAL vale meio.
+export function itensEnfrentadosPct(espelho) {
+  const itens = (espelho && espelho.itens) || [];
+  if (!itens.length) return null;
+  const pontos = itens.reduce((a, i) => {
+    const s = String(i.situacao || "").toUpperCase();
+    return a + (s === "ENFRENTADO" ? 1 : s === "PARCIAL" ? 0.5 : 0);
+  }, 0);
+  return Math.round((pontos / itens.length) * 100);
+}
+
+// Espelho estruturado → markdown, para o mesmo componente de feedback já existente
+// mostrar (e para a impressão continuar funcionando sem tratamento especial).
+function espelhoParaTexto(e) {
+  const lin = [];
+  const pct = itensEnfrentadosPct(e);
+  lin.push(`**Itens esperados** — você enfrentou **${pct}%** deles.\n`);
+  lin.push("| Item | Situação | Observação |", "| --- | --- | --- |");
+  for (const i of e.itens) lin.push(`| ${i.titulo || ""} | ${i.situacao || ""} | ${i.observacao || ""} |`);
+  if (Array.isArray(e.eixos) && e.eixos.length) {
+    lin.push("\n**Estrutura da sentença**");
+    for (const x of e.eixos) lin.push(`- **${x.nome}**: ${x.situacao}${x.observacao ? " — " + x.observacao : ""}`);
+  }
+  if (Array.isArray(e.baseLegal) && e.baseLegal.length) {
+    lin.push("\n**Base legal**");
+    for (const b of e.baseLegal) lin.push(`- ${b.dispositivo}: **${b.veredito}**${b.observacao ? " — " + b.observacao : ""}`);
+  }
+  if (e.nota != null) lin.push(`\n**Nota** — ${e.nota}${e.veredito ? ` · ${e.veredito}` : ""}${e.memoriaCalculo ? `\n${e.memoriaCalculo}` : ""}`);
+  if (Array.isArray(e.comoMelhorar) && e.comoMelhorar.length) {
+    lin.push("\n**O que faria diferença na próxima**");
+    for (const c of e.comoMelhorar) lin.push(`- ${c}`);
+  }
+  return lin.join("\n");
+}
+
 export async function gerarPerguntaDiscursiva(cfg, { contexto, texto, tipo }) {
   const ehRedacao = tipo === "redacao";
   // SENTENÇA: a prova prática não dá uma "pergunta", dá um CASO — relatório das peças,
@@ -1191,6 +1227,36 @@ export async function corrigirDiscursiva(cfg, { enunciado, texto, tipo, web, pal
     if (usaWeb) {
       const r = await responderChatWebGemini(cfg, { system: sysSent, user: userSent });
       return { texto: r.texto, fontesWeb: r.fontesWeb, selo: "amarelo" };
+    }
+    // ESPELHO ESTRUTURADO: pede o mesmo conteúdo em JSON, para o app renderizar a tabela
+    // e medir "quantos itens você enfrentou" prova a prova.
+    //
+    // Por que a métrica é essa e não "nota por critério", como o plano dizia: os itens
+    // esperados são de CADA caso — o "item 3" de uma prova não é o "item 3" de outra, e
+    // acompanhar isso ao longo do tempo seria comparar coisas diferentes. O que compara é
+    // a FRAÇÃO de itens enfrentados, que significa o mesmo em qualquer caso.
+    //
+    // Fallback para texto: se o JSON vier quebrado, a correção não pode se perder — ela é
+    // o produto principal da tela.
+    try {
+      const bruto = await chamar(cfg, {
+        system:
+          sysSent +
+          "\n\nRESPONDA EM JSON, sem cercas de código, neste formato exato:\n" +
+          '{"itens":[{"titulo":"...","situacao":"ENFRENTADO|PARCIAL|AUSENTE|EQUIVOCADO","observacao":"..."}],' +
+          '"eixos":[{"nome":"Estrutura","situacao":"Conforme|Inconforme","observacao":"..."}],' +
+          '"baseLegal":[{"dispositivo":"...","veredito":"correto|incorreto|revogado|inexistente","observacao":"..."}],' +
+          '"nota":0,"veredito":"Insuficiente|Regular|Bom|Excelente","memoriaCalculo":"...","comoMelhorar":["..."]}',
+        user: userSent,
+        json: true,
+        temperature: 0.3,
+      });
+      const esp = typeof bruto === "string" ? JSON.parse(bruto) : bruto;
+      if (esp && Array.isArray(esp.itens) && esp.itens.length) {
+        return { texto: espelhoParaTexto(esp), espelho: esp, fontesWeb: [], selo: "amarelo" };
+      }
+    } catch (_) {
+      /* JSON falhou — cai no texto livre, que é o comportamento anterior */
     }
     const ts = await chamar(cfg, { system: sysSent, user: userSent, json: false, temperature: 0.3 });
     return { texto: String(ts).trim(), fontesWeb: [], selo: "amarelo" };

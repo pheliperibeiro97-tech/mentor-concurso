@@ -6899,3 +6899,13 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .cfg-grupo-cab { font-size: var(--fs-2xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .cfg-grupo-cab > b { font-weight: var(--fw-semibold); }
 .rg-pond { margin: 10px 0 0; font-size: var(--fs-xs); color: var(--text-2); }
+
+/* Causa dominante ao lado da disciplina em "Onde você mais erra". Discreta: a lista é
+   ordenada pelo percentual, então a causa é contexto, não protagonista. */
+.fraco-causa { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-2xs); color: var(--muted); margin-left: auto; margin-right: 10px; }
+.fraco-causa .ico { width: 0.85em; height: 0.85em; }
+
+/* Fração de itens esperados enfrentados (sentença). Fica ao lado da nota, com a mesma
+   discrição — é métrica de acompanhamento, não veredito. */
+.cor-itens-tag { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-2xs); font-weight: var(--fw-semibold); color: var(--primary-d); background: var(--primary-soft); border-radius: var(--radius-pill); padding: 2px 10px; }
+[data-tema="escuro"] .cor-itens-tag { color: var(--primary-l); }

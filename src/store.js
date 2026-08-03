@@ -5300,6 +5300,12 @@ export const store = {
         const m = await iaProv.corrigirDiscursiva(state.config, { enunciado, texto, tipo, web, palavras: correcao.palavras });
         correcao.feedbackIA = { texto: m.texto, fontesWeb: m.fontesWeb || [] };
         correcao.comIA = true;
+        // Espelho estruturado (só sentença, e só quando o JSON veio íntegro): guarda os
+        // itens e a fração enfrentada, que é o número comparável entre provas.
+        if (m.espelho) {
+          correcao.espelho = m.espelho;
+          correcao.itensPct = iaProv.itensEnfrentadosPct(m.espelho);
+        }
         correcao.nota = web
           ? "Correção da IA com busca na web (, confira a fonte oficial)."
           : "Correção de mérito pela IA (, confira) + métricas estruturais.";

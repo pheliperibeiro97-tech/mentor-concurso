@@ -17,6 +17,12 @@ let rascunho = { enun: "", texto: "" };
 let feedbackRevelou = false;
 
 const NOTA_CLS = { boa: "nota-boa", média: "nota-media", baixa: "nota-baixa" };
+const ROTULO_TIPO = {
+  discursiva: "Discursiva",
+  redacao: "Redação",
+  "sentenca-civel": "Sentença cível",
+  "sentenca-criminal": "Sentença criminal",
+};
 
 export default function renderCorrecao(root, app) {
   const { store } = app;
@@ -354,7 +360,7 @@ function printRedacoes(st, comTexto = true) {
       const fb = (c.feedbackIA && c.feedbackIA.texto) || c.comentarioIA || "";
       const nota = c.nota != null && c.nota !== "" ? ` · Nota: ${esc(String(c.nota))}` : "";
       return `<div class="print-item">
-        <div class="print-meta">${r.tipo === "redacao" ? "Redação" : "Discursiva"} · ${fmtData(r.data)} · ${c.palavras} palavras${nota}</div>
+        <div class="print-meta">${ROTULO_TIPO[r.tipo] || "Discursiva"} · ${fmtData(r.data)} · ${c.palavras} palavras${nota}${c.itensPct != null ? ` · ${c.itensPct}% dos itens esperados` : ""}</div>
         ${r.enunciado ? `<div><b>Tema:</b> ${esc(r.enunciado)}</div>` : ""}
         ${comTexto && r.texto ? `<div style="margin-top:4px"><b>Resposta:</b> ${esc(r.texto)}</div>` : ""}
         ${fb ? `<div style="margin-top:4px"><b>Correção:</b> ${esc(fb)}</div>` : ""}
@@ -377,7 +383,14 @@ function correcaoHTML(r) {
   return `
     <div class="card correcao-item">
       <div class="cor-head">
-        <span class="mini-tag">${r.tipo === "redacao" ? "Redação" : "Discursiva"}</span>
+        <span class="mini-tag">${ROTULO_TIPO[r.tipo] || "Discursiva"}</span>
+        ${
+          // Único número comparável entre provas de sentença: a fração dos itens
+          // esperados que você enfrentou. A nota 0–10 depende do caso; esta não.
+          c.itensPct != null
+            ? `<span class="cor-itens-tag" data-tip="Dos itens que o espelho cobraria neste caso, você enfrentou ${c.itensPct}% (PARCIAL conta meio). É o número que dá para comparar entre provas — a nota depende de cada caso.">${icone("list-checks")} ${c.itensPct}% dos itens</span>`
+            : ""
+        }
         <span class="cor-nota-tag" data-tip="Nota geral atribuída à resposta.">${seloBadge(c.selo)} ${esc(c.nota)}</span>
         <span class="spacer"></span>
         <span class="muted small">${fmtData(r.data)}</span>

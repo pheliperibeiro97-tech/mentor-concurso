@@ -388,7 +388,11 @@ function abrirAdicionarErro(app) {
 // dado — a regra do plano é que número sem massa crítica vira frase, não estatística.
 const MIN_ERROS_DISC = 6; // abaixo disso a disciplina não entra
 const MIN_CONCENTRACAO = 0.5; // o motivo tem de responder por metade ou mais
-function padroesPorDisciplina(st, todos) {
+// Exportada para o Acompanhamento: lá a lista "Onde você mais erra" mostra a DISCIPLINA,
+// aqui se sabe a CAUSA. Eram duas metades da mesma pergunta em telas que se ignoravam.
+// Reusar a função (em vez de recalcular) garante que os dois lugares nunca divirjam nos
+// limites de amostra e de concentração.
+export function padroesPorDisciplina(st, todos) {
   const discDe = (e) => {
     const t = st.topicos.find((x) => x.id === e.topicoId);
     return t ? t.disciplinaId : e.disciplinaId || null;
