@@ -705,6 +705,7 @@ function altsCorrecaoHTML(q, formato, it, ordem) {
 function renderResultado(root, app, st, formato) {
   const ss = SS[formato];
   const r = ss.sim.resultado;
+  const { store } = app;
 
   // Correção estilo Cebraspe (desconto): só faz sentido em Certo/Errado.
   const cebraspeAtivo = formato === "ce" && st.config && st.config.correcaoCebraspe === true;
@@ -753,6 +754,58 @@ function renderResultado(root, app, st, formato) {
   // Fase 3: erradas desta prova (CTA "Refazer as N erradas" + comentário do Mentor).
   const erradasIds = r.itens.filter((it) => it.respondida && !it.acertou).map((it) => it.q.id);
 
+  // VEREDITO PELA REGRA DO EDITAL, quando o usuário tiver definido grupos e mínimos.
+  // Diferença importante em relação ao painel do Acompanhamento: LÁ o app INFERE sua
+  // habilidade a partir de tentativas espalhadas por meses, e por isso exige amostra
+  // mínima. AQUI ele afirma um FATO sobre esta prova — "neste simulado você ficou
+  // abaixo no Bloco III" é verdade mesmo com poucas questões do bloco, porque não é
+  // previsão, é o resultado. Por isso a redação fala do simulado, nunca do futuro.
+  const vereditoHTML = (() => {
+    const grupoDaDisc = new Map(st.disciplinas.map((d) => [d.id, d.grupo || null]));
+    const grupoDoTopico = new Map(st.topicos.map((t) => [t.id, grupoDaDisc.get(t.disciplinaId) || null]));
+    const acc = new Map();
+    for (const it of r.itens) {
+      const g = grupoDoTopico.get(it.q.topicoId);
+      if (!g) continue;
+      if (!acc.has(g)) acc.set(g, { grupo: g, acertos: 0, total: 0 });
+      const x = acc.get(g);
+      x.total += 1;
+      if (it.acertou) x.acertos += 1;
+    }
+    if (!acc.size) return "";
+    const regra = (st.concurso && st.concurso.regra) || {};
+    const grupos = [...acc.values()]
+      .map((x) => {
+        const p = Math.round((x.acertos / x.total) * 100);
+        const min = store.minimoDoGrupo(x.grupo);
+        return { ...x, pct: p, min, abaixo: min != null && p < min };
+      })
+      .sort((a, b) => a.grupo.localeCompare(b.grupo));
+    if (!grupos.some((g) => g.min != null) && regra.minGeral == null) return "";
+    const reprovados = grupos.filter((g) => g.abaixo);
+    const geralAbaixo = regra.minGeral != null && aproveitamento < regra.minGeral;
+    const passou = !reprovados.length && !geralAbaixo;
+    const frase = reprovados.length
+      ? `Por esta prova, você <b>não passaria</b>: ${reprovados.map((g) => esc(g.grupo)).join(", ")} ${reprovados.length === 1 ? "ficou" : "ficaram"} abaixo do mínimo.`
+      : geralAbaixo
+      ? `Todos os grupos atingiram o mínimo, mas a média (${aproveitamento}%) ficou abaixo dos ${regra.minGeral}% exigidos.`
+      : `Por esta prova, você <b>passaria</b>: todos os grupos atingiram o mínimo${regra.minGeral != null ? ` e a média (${aproveitamento}%) alcançou os ${regra.minGeral}%` : ""}.`;
+    const linhas = grupos
+      .map(
+        (g) => `<li class="rg-linha ${g.min == null ? "" : g.abaixo ? "rg-abaixo" : "rg-ok"}">
+          <span class="rg-nome">${esc(g.grupo)}</span>
+          <span class="rg-num">${g.pct}%</span>
+          <span class="rg-det">${g.acertos}/${g.total}${g.min != null ? ` · <span class="rg-alvo">mín. ${g.min}%</span>` : ""}</span>
+        </li>`
+      )
+      .join("");
+    return `<section class="card risco-grupo sim-veredito${passou ? "" : " rg-alerta"}">
+      <h3>${icone(passou ? "circle-check" : "triangle-alert")} Pela regra do seu edital</h3>
+      <p class="rg-veredito">${frase}</p>
+      <ul class="rg-lista">${linhas}</ul>
+    </section>`;
+  })();
+
   // Toggle de correção com desconto (somente formato C/E).
   const toggleCebraspeHTML =
     formato === "ce"
@@ -779,6 +832,8 @@ function renderResultado(root, app, st, formato) {
         <button class="btn btn-ghost" data-action="ir-erros">Ver Caderno de Erros</button>
       </div>
     </section>
+
+    ${vereditoHTML}
 
     ${app.store.iaDisponivel() ? `<section class="card card-ia sim-mentor">
       <div class="plano-h"><h2 class="mentor-sec-t"><span class="orb orb-sm" aria-hidden="true"></span> O que este simulado diz sobre você</h2></div>
