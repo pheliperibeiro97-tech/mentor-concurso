@@ -9,7 +9,14 @@
 // REGRA DE OURO: PDFs e imagens (binários) NUNCA entram no arquivo de sync — só os dados e o
 // TEXTO extraído. E ao aplicar o que vem da nuvem, os binários LOCAIS são preservados.
 
-import { store } from "./store.js";
+import { store, SYNC_PAUSADO_MULTIPERFIL, MOTIVO_SYNC_PAUSADO } from "./store.js";
+
+// Trava da Fase 0a do multi-perfil: ver SYNC_PAUSADO_MULTIPERFIL em store.js.
+function travadoPeloMultiPerfil(silencioso) {
+  if (!SYNC_PAUSADO_MULTIPERFIL) return null;
+  if (!silencioso) throw new Error(MOTIVO_SYNC_PAUSADO);
+  return { ok: false, motivo: "multi-perfil" };
+}
 
 const NOME_PADRAO = "mentor-concurso-sync.json";
 const IDB_DB = "mentor-sync";
@@ -208,6 +215,7 @@ async function gravarArquivo(handle, obj) {
 
 // Conecta (escolhe/cria o arquivo de sync na pasta da nuvem do usuário) e faz a 1ª sync.
 export async function conectar() {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync()) throw new Error("Este ambiente não suporta a sincronização por arquivo.");
   const handle = await window.showSaveFilePicker({
     suggestedName: NOME_PADRAO,
@@ -223,6 +231,7 @@ export async function conectar() {
 // LER e BAIXAR os dados para este computador. Nunca envia/sobrescreve a nuvem na conexão —
 // é a opção segura para não perder o que está na nuvem.
 export async function conectarBaixando() {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync() || typeof window.showOpenFilePicker !== "function") throw new Error("Este ambiente não suporta a sincronização por arquivo.");
   const [handle] = await window.showOpenFilePicker({
     types: [{ description: "Sincronização do Mentor Concurso", accept: { "application/json": [".json"] } }],
@@ -257,6 +266,7 @@ export function estadoSync() {
 // Núcleo: lê o remoto, decide, e sobe ou baixa (preservando binários locais). Atualiza o
 // status em config.sync. `silencioso` evita erro visível em chamadas automáticas.
 export async function sincronizarAgora({ motivo = "manual", silencioso = false } = {}) {
+  { const t = travadoPeloMultiPerfil(silencioso); if (t) return t; }
   if (!suportaSync()) { if (!silencioso) throw new Error("Ambiente sem suporte a sincronização."); return { ok: false, motivo: "sem-suporte" }; }
   const handle = await idbGet();
   if (!handle) { if (!silencioso) throw new Error("Nenhuma pasta conectada. Clique em Conectar."); return { ok: false, motivo: "sem-handle" }; }
@@ -308,6 +318,7 @@ export async function sincronizarAgora({ motivo = "manual", silencioso = false }
 // Resolve a decisão pendente (quando a sync reduziria os dados). "local" = mantém os deste
 // computador e envia para a nuvem; "nuvem" = baixa e aplica o que está na nuvem (com backup).
 export async function resolverPendencia(escolha) {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync()) return { ok: false };
   const handle = await idbGet();
   if (!handle) return { ok: false };
@@ -336,6 +347,7 @@ function marcarStatus(patch) {
 // Sincronização ao FECHAR o app (desktop: intercepta o fechamento; web: best-effort).
 // No desktop só fecha de fato depois de tentar subir os dados.
 export async function sincronizarAoFechar() {
+  { const t = travadoPeloMultiPerfil(true); if (t) return t; }
   const cfg = store.get().config || {};
   if (!cfg.sync || !cfg.sync.conectado) return;
   try { await sincronizarAgora({ motivo: "fechar", silencioso: true }); } catch (_) {}

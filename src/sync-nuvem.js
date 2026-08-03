@@ -14,7 +14,7 @@
 // A senha fica salva LOCALMENTE (config.syncNuvem) para "digitar uma vez por aparelho" — ela
 // é removida do snapshot antes de cifrar (montarSnapshotSync apaga config.syncNuvem).
 
-import { store } from "./store.js";
+import { store, SYNC_PAUSADO_MULTIPERFIL, MOTIVO_SYNC_PAUSADO } from "./store.js";
 import {
   montarSnapshotSync,
   aplicarRemoto,
@@ -24,6 +24,13 @@ import {
   dispositivoId,
   guardarBackupConflito,
 } from "./sync.js";
+
+// Trava da Fase 0a do multi-perfil: ver SYNC_PAUSADO_MULTIPERFIL em store.js.
+function travadoPeloMultiPerfil(silencioso) {
+  if (!SYNC_PAUSADO_MULTIPERFIL) return null;
+  if (!silencioso) throw new Error(MOTIVO_SYNC_PAUSADO);
+  return { ok: false, motivo: "multi-perfil" };
+}
 
 // Endpoint do cofre — Cloudflare Pages Function publicada JUNTO com o app. Na web é a mesma
 // origem; no desktop (Tauri) usa esta URL absoluta. Pode ser sobrescrito por
@@ -159,6 +166,7 @@ function fraseAtual() {
 // Conecta este aparelho ao cofre: valida a senha contra o que já existe na nuvem (se houver)
 // e faz a 1ª sincronização. Se o cofre estiver vazio, sobe o estado local.
 export async function conectarNuvem(frase, { endpoint } = {}) {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a sincronização na nuvem.");
   frase = (frase || "").trim();
   if (frase.length < 6) throw new Error("Escolha uma senha com pelo menos 6 caracteres (fácil de você lembrar).");
@@ -179,6 +187,7 @@ export async function conectarNuvem(frase, { endpoint } = {}) {
 // SEM newest-wins — a intenção é claramente "trazer o que está na nuvem para cá". Valida a
 // senha decifrando; erra se o cofre não existe (senha errada ou nunca sincronizou).
 export async function restaurarDaNuvem(frase, { endpoint } = {}) {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a restauração segura.");
   frase = (frase || "").trim();
   if (frase.length < 6) throw new Error("A senha tem pelo menos 6 caracteres.");
@@ -201,6 +210,7 @@ export async function desconectarNuvem() {
 
 // Núcleo: baixa o remoto (decifra), decide newest-wins com guarda anti-perda, e sobe/baixa.
 export async function sincronizarNuvem({ motivo = "manual", silencioso = false } = {}) {
+  { const t = travadoPeloMultiPerfil(silencioso); if (t) return t; }
   if (!suportaSyncNuvem()) { if (!silencioso) throw new Error("Ambiente sem suporte à nuvem."); return { ok: false, motivo: "sem-suporte" }; }
   const frase = fraseAtual();
   if (!frase) { if (!silencioso) throw new Error("Sem senha configurada. Conecte-se primeiro."); return { ok: false, motivo: "sem-senha" }; }
@@ -255,6 +265,7 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
 // Resolve a decisão pendente (quando a sync reduziria os dados). "local" = mantém os deste
 // aparelho e envia; "nuvem" = baixa e aplica o que está na nuvem (com backup).
 export async function resolverPendenciaNuvem(escolha) {
+  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSyncNuvem()) return { ok: false };
   const frase = fraseAtual();
   if (!frase) return { ok: false };
@@ -279,6 +290,7 @@ export async function resolverPendenciaNuvem(escolha) {
 
 // Sincronização ao FECHAR (best-effort). Chamada pelo main.js junto do sync de arquivo.
 export async function sincronizarNuvemAoFechar() {
+  { const t = travadoPeloMultiPerfil(true); if (t) return t; }
   if (!estadoSyncNuvem().conectado) return;
   try { await sincronizarNuvem({ motivo: "fechar", silencioso: true }); } catch (_) {}
 }
@@ -328,6 +340,7 @@ async function autoSync(motivo, { piso = AUTO_MIN_INTERVALO_MS } = {}) {
 
 // Liga os gatilhos automáticos (uma única vez) e já faz a sincronização de abertura.
 export function iniciarSyncNuvemAuto() {
+  { const t = travadoPeloMultiPerfil(true); if (t) return t; }
   if (autoLigado || !suportaSyncNuvem()) return;
   autoLigado = true;
   autoModificadoVisto = store.get().modificadoEm || "";

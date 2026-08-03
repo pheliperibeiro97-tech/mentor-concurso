@@ -645,8 +645,137 @@ function separarObservacao(linha) {
   return { titulo: s.slice(0, i).trim(), observacao: s.slice(i + 2).trim() };
 }
 
+// ---------------------------------------------------------------------------
+// MULTI-PERFIL — Fase 0a: os dados de ESTUDO passam a morar dentro de perfis[].
+//
+// Um perfil = um concurso (o `concurso` já embute cargo+banca) com todo o pacote de
+// estudo dele. O `config` continua GLOBAL nesta fase — dividir o config mexe no
+// `setConfig`, que reatribui por spread e destruiria os acessores abaixo (fase 0b).
+//
+// Como o resto do arquivo (505 acessos a `state.<coleção>`) continua funcionando sem
+// reescrita: instalamos acessores NÃO-ENUMERÁVEIS em `state` que roteiam para o perfil
+// ativo. Não sendo enumeráveis, `JSON.stringify(state)` os ignora — o que é salvo é o
+// formato novo, limpo, com as coleções só dentro de `perfis[]`.
+// ---------------------------------------------------------------------------
+
+// O que fica no TOPO. Todo o resto pertence ao perfil — é uma REGRA, não uma lista de
+// coleções, então chaves criadas depois (por backfill ou por telas novas) caem no perfil
+// sozinhas, sem ninguém precisar lembrar de declará-las aqui.
+const GLOBAL_TOP = new Set([
+  "meta", "config", "bancas", "lembretes", "indicacoes", "modificadoEm", "perfis", "perfilAtivo",
+]);
+
+// Sincronização PARADA durante a implantação do multi-perfil (sai na Fase 2, quando cada
+// perfil ganha o seu cofre). O motor de sync opera sobre as coleções no TOPO do estado;
+// com elas dentro de perfis[] ele (a) rejeitaria o formato ao restaurar, (b) deixaria os
+// PDFs subirem — a limpeza de binários só varre o topo — e (c) perderia a guarda
+// anti-perda, porque peso() contaria quase zero e "encolheria" nunca dispararia.
+// Fica parada de forma DECLARADA, dita na tela de Configurações: sync que parece ligado e
+// não está é pior do que sync desligado.
+export const SYNC_PAUSADO_MULTIPERFIL = true;
+export const MOTIVO_SYNC_PAUSADO =
+  "A sincronização está pausada enquanto o multi-perfil é implantado. Seus dados seguem salvos neste aparelho.";
+
+function nomeDoPerfil(st) {
+  const c = st && st.concurso;
+  if (!c) return "Meu concurso";
+  return [c.cargo, c.orgao || c.banca].filter(Boolean).join(" · ") || c.nome || "Meu concurso";
+}
+
+// Converte o formato plano (coleções no topo) no formato multi-perfil. Idempotente:
+// estado que já tem perfis volta inalterado. Roda também sobre backup/nuvem importados.
+function migrarParaPerfis(st) {
+  if (!st || typeof st !== "object") return st;
+  if (Array.isArray(st.perfis) && st.perfis.length) return st;
+  const perfil = { id: uid("perf"), nome: nomeDoPerfil(st) };
+  const topo = {};
+  for (const [k, v] of Object.entries(st)) {
+    if (k === "perfis" || k === "perfilAtivo") continue; // lixo de migração pela metade
+    (GLOBAL_TOP.has(k) ? topo : perfil)[k] = v;
+  }
+  topo.perfis = [perfil];
+  topo.perfilAtivo = perfil.id;
+  return topo;
+}
+
+function perfilAtivo() {
+  const ps = state.perfis;
+  if (!Array.isArray(ps) || !ps.length) return null;
+  return ps.find((p) => p.id === state.perfilAtivo) || ps[0];
+}
+
+// Instala/reinstala os acessores do perfil ativo. Chamar depois de QUALQUER troca do
+// objeto `state` (init, importarBackup, resetTudo) ou do perfil ativo — sem isso o
+// `state.disciplinas` do resto do arquivo devolve undefined.
+function definirAcessor(chave) {
+  Object.defineProperty(state, chave, {
+    get() {
+      const alvo = perfilAtivo();
+      return alvo ? alvo[chave] : undefined;
+    },
+    set(v) {
+      const alvo = perfilAtivo();
+      if (alvo) alvo[chave] = v;
+    },
+    enumerable: false, // <- é isto que mantém a serialização no formato novo
+    configurable: true,
+  });
+}
+
+function instalarAcessores() {
+  const p = perfilAtivo();
+  if (!p) return;
+  for (const chave of Object.keys(p)) {
+    if (chave === "id" || chave === "nome") continue;
+    if (GLOBAL_TOP.has(chave)) continue; // nunca sombrear config/meta/…
+    definirAcessor(chave);
+  }
+}
+
+// Recolhe "órfãs": chaves que caíram no TOPO como propriedade comum em vez de irem para
+// o perfil. Acontece quando algo escreve numa coleção que ainda não tinha acessor —
+// `state.chatHistorico = []` num estado que nunca teve chat, por exemplo. Sem isto a
+// chave ficaria enumerável no topo e seria persistida fora do perfil.
+//
+// É a MESMA regra da migração (não-global ⇒ do perfil), aplicada continuamente. Por isso
+// o `commit` a chama: qualquer coleção futura passa a ser por-perfil sozinha, sem
+// ninguém precisar declará-la.
+function recolherOrfas() {
+  const p = perfilAtivo();
+  if (!p) return;
+  for (const chave of Object.keys(state)) {
+    if (GLOBAL_TOP.has(chave)) continue;
+    const d = Object.getOwnPropertyDescriptor(state, chave);
+    if (!d || d.get) continue; // já é acessor
+    p[chave] = state[chave];
+    delete state[chave];
+    definirAcessor(chave);
+  }
+}
+
+// Tira o conteúdo protegido de UMA fatia de perfil (usada pelo backup "sem material").
+// Mantém os metadados do material e os derivados de estudo; remove binário, texto,
+// páginas, o índice semântico e o conteúdo dos resumos COMPILADOS (verbatim da apostila).
+export function limparMaterialDaFatia(fatia) {
+  if (!fatia || typeof fatia !== "object") return fatia;
+  fatia.documentos = (fatia.documentos || []).map((d) => ({
+    ...d,
+    pdfData: null,
+    imgData: null,
+    texto: "",
+    paginas: null,
+    conteudoRemovido: true, // marca que o conteúdo foi retirado deste backup
+  }));
+  fatia.embeddings = { modelo: "", itens: [], fontes: {} };
+  fatia.resumos = (fatia.resumos || []).map((r) =>
+    r && r.origem && r.origem.tipo === "compilado" ? { ...r, conteudoHTML: "", conteudoRemovido: true } : r
+  );
+  return fatia;
+}
+
 const listeners = new Set();
-let state = defaultState();
+let state = migrarParaPerfis(defaultState());
+instalarAcessores(); // app zerado (sem estado salvo) já nasce com as coleções roteadas
 let saveTimer = null;
 let emitAgendado = false;
 // Lote de geração atual: quando um handler abre um lote (iniciarLoteGeracao), TODO flashcard/questão
@@ -681,6 +810,7 @@ function persist() {
 // mudança de dados — senão a máquina pareceria sempre a mais nova e nunca baixaria).
 function commit(opts) {
   if (!opts || !opts.semCarimbo) state.modificadoEm = new Date().toISOString();
+  recolherOrfas(); // nenhuma coleção escapa para o topo entre a escrita e o save
   persist();
   agendarEmit();
 }
@@ -690,12 +820,31 @@ export const store = {
   async init() {
     const carregado = await loadState();
     if (carregado && typeof carregado === "object") {
-      state = { ...defaultState(), ...carregado };
-      // Garante campos novos em estados antigos.
-      const base = defaultState();
-      for (const k of Object.keys(base)) {
-        if (state[k] === undefined) state[k] = base[k];
+      // ORDEM IMPORTA (multi-perfil): migrar ANTES de qualquer merge com o default.
+      // O merge repõe as coleções vazias do defaultState() no TOPO; se ele viesse
+      // primeiro, os backfills abaixo normalizariam o topo vazio em vez do perfil, e a
+      // migração ainda veria `disciplinas: []` e gravaria vazio por cima dos dados.
+      const migrado = migrarParaPerfis(carregado);
+      const base = migrarParaPerfis(defaultState());
+      const baseTopo = {};
+      for (const k of Object.keys(base)) if (k !== "perfis" && k !== "perfilAtivo") baseTopo[k] = base[k];
+      state = { ...baseTopo, ...migrado };
+      // Garante campos GLOBAIS novos em estados antigos.
+      for (const k of Object.keys(baseTopo)) {
+        if (state[k] === undefined) state[k] = baseTopo[k];
       }
+      // Garante coleções novas DENTRO do perfil (o equivalente por-perfil do backfill
+      // acima): perfil salvo por uma versão anterior não conhece a coleção nova.
+      const alvo = perfilAtivo();
+      const perfilBase = base.perfis[0];
+      if (alvo) {
+        for (const k of Object.keys(perfilBase)) {
+          if (k !== "id" && k !== "nome" && alvo[k] === undefined) alvo[k] = perfilBase[k];
+        }
+      }
+      // Acessores ANTES dos backfills — daqui para baixo `state.topicos` e companhia
+      // precisam enxergar o perfil ativo, não o topo.
+      instalarAcessores();
       // Backfill de campos NOVOS de config em estados salvos antigos (o merge raso
       // acima substitui config inteiro). Garante iaModelo, botoesOcultos, metas etc.
       state.config = { ...base.config, ...state.config };
@@ -7726,30 +7875,21 @@ export const store = {
   snapshotExport(comMaterial = true) {
     if (comMaterial) return state;
     const clone = JSON.parse(JSON.stringify(state));
-    clone.documentos = (clone.documentos || []).map((d) => ({
-      ...d,
-      pdfData: null,
-      imgData: null,
-      texto: "",
-      paginas: null,
-      conteudoRemovido: true, // marca que o conteúdo foi retirado deste backup
-    }));
-    clone.embeddings = { modelo: "", itens: [], fontes: {} };
-    // Resumos COMPILADOS são texto verbatim do material → tira o conteúdo (mantém os
-    // resumos escritos por você e os gerados por IA, que são derivados).
-    clone.resumos = (clone.resumos || []).map((r) =>
-      r && r.origem && r.origem.tipo === "compilado"
-        ? { ...r, conteudoHTML: "", conteudoRemovido: true }
-        : r
-    );
+    // Multi-perfil: material e resumos vivem DENTRO de cada perfil. Limpar só o topo
+    // deixaria as apostilas passarem no backup — por isso a limpeza é por perfil, e em
+    // TODOS eles (o backup leva o app inteiro, não só o perfil ativo).
+    for (const p of clone.perfis || []) limparMaterialDaFatia(p);
     return clone;
   },
 
   // Importa um backup JSON (substitui TODOS os dados). Valida minimamente e
   // reaplica os backfills de normalização (via init).
   async importarBackup(obj) {
-    if (!obj || typeof obj !== "object" || !obj.meta || !Array.isArray(obj.topicos))
-      throw new Error("Arquivo inválido — não parece um backup do Mentor Concurso.");
+    // Aceita os DOIS formatos: o plano (coleções no topo, backups antigos e cofres já na
+    // nuvem) e o multi-perfil (perfis[]). A conversão de um para o outro é do init.
+    const pareceBackup =
+      obj && typeof obj === "object" && obj.meta && (Array.isArray(obj.topicos) || Array.isArray(obj.perfis));
+    if (!pareceBackup) throw new Error("Arquivo inválido — não parece um backup do Mentor Concurso.");
     await saveState(obj);
     await this.init(); // recarrega e normaliza (backfills)
     commit();
@@ -7770,7 +7910,8 @@ export const store = {
     commit();
   },
   async resetTudo() {
-    state = defaultState();
+    state = migrarParaPerfis(defaultState());
+    instalarAcessores(); // `state` é outro objeto: sem isto, state.disciplinas some
     await resetState();
     commit();
   },

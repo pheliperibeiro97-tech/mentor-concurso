@@ -11,6 +11,7 @@ import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
 import { suportaSync, conectar as syncConectar, conectarBaixando as syncConectarBaixar, sincronizarAgora, desconectar as syncDesconectar, ultimoBackupConflito, resolverPendencia } from "../sync.js";
 import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem } from "../sync-nuvem.js";
+import { SYNC_PAUSADO_MULTIPERFIL } from "../store.js";
 
 // "há X" curto para o status de sincronização.
 function haQuanto(iso) {
@@ -433,7 +434,14 @@ export default function renderConfig(root, app) {
       <h3>${icone("smartphone")} Sincronização <span class="muted small">(celular e computadores)</span></h3>
       <p class="muted small">Use uma <b>senha</b> e tenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>.</p>
       ${
-        nuvemSuporta
+        SYNC_PAUSADO_MULTIPERFIL
+          ? `<div class="sync-status" data-tip="O motor de sincronização ainda lê os dados no formato antigo. Ligá-lo agora enviaria os PDFs e desligaria a proteção contra perda de dados.">
+              <span>${icone("pause")} Pausada</span>
+              <span class="sync-status-sep">·</span>
+              <span class="muted">multi-perfil em implantação</span>
+            </div>
+            <p class="muted small u-m-0">Volta quando cada perfil tiver o seu próprio cofre. Seus dados seguem salvos neste aparelho.</p>`
+          : nuvemSuporta
           ? `<div class="sync-status ${sn.ultimoResultado === "erro" ? "erro" : sn.conectado ? "ok" : ""}">
               <span>${sn.conectado ? `Conectado ${icone("lock")}` : "Não conectado"}</span>
               ${sn.conectado ? `<span class="sync-status-sep">·</span><span>${nuvemStatus}</span>` : ""}
@@ -479,11 +487,19 @@ export default function renderConfig(root, app) {
           dizer "este ambiente não suporta". */ ""}
     ${!syncSuporta ? "" : `<section class="card">
       <details class="ed-ajuda">
-        <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)</summary>
+        <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)${
+          SYNC_PAUSADO_MULTIPERFIL ? ` <span class="chip-sm">${icone("pause")} pausado</span>` : ""
+        }</summary>
         <div class="ed-ajuda-corpo">
           <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
       ${
-        syncSuporta
+        SYNC_PAUSADO_MULTIPERFIL
+          ? `<div class="sync-status" data-tip="Mesmo motivo da sincronização por senha: o formato dos dados mudou e o motor ainda não acompanha.">
+              <span>${icone("pause")} Pausado</span>
+              <span class="sync-status-sep">·</span>
+              <span class="muted">multi-perfil em implantação</span>
+            </div>`
+          : syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">
               <span>${sy.conectado ? `Conectado a <b>${esc(sy.nomeArquivo || "arquivo de sync")}</b>` : "Não conectado"}</span>
               <span class="sync-status-sep">·</span>
