@@ -475,8 +475,46 @@ Os acessores do config são instalados **pela lista**, não pelas chaves present
 
 ### O que falta
 
-- **Fase 1 — seletor de perfil** (a UI; hoje o app tem 1 perfil e nenhuma forma de criar o 2º).
 - **Fase 2 — sync por perfil**, quando a sincronização volta a ser ligada.
+
+---
+
+## L) FASE 1 — IMPLEMENTADA (2026-08-03) · o seletor
+
+O nome do concurso que já estava no topo virou o **seletor**: abre a lista de concursos (o
+ativo com ✓ e as contagens), mais "Novo concurso", "Renomear este" e "Remover este" (só com
+2+). Reusa `.doc-mais`/`.doc-mais-pop`, o menu que o app já tinha.
+
+**No store:** `perfis()`, `perfilAtivoId()`, `trocarPerfil()`, `criarPerfil()`,
+`renomearPerfil()`, `removerPerfil()`. Trocar **reinstala os acessores** — os perfis não têm
+as mesmas chaves. Remover confirma e nunca deixa o app sem perfil.
+
+**Guarda do cronômetro** (pedida no plano): trocar com ele rodando avisa antes, porque o tempo
+em andamento seria contado para o concurso errado.
+
+### Dois defeitos que só apareceram com o app aberto
+
+1. **O usuário ficava preso no concurso novo.** Perfil recém-criado não tem `concurso`, então
+   cai no onboarding — que é tela cheia, **sem topbar e sem seletor**. Não havia como voltar ao
+   anterior se tivesse criado por engano. O passo 1 ganhou "Voltar para \<outro\>" e
+   "Descartar", e o texto se adapta (não diz mais "Bem-vindo ao Mentor Concurso" para quem já
+   usa o app).
+2. **O concurso ativo parecia indisponível.** Ele é `disabled` no menu (não há para onde ir
+   clicando nele) e o `:disabled` padrão o deixava a 40% de opacidade — mais apagado que os
+   outros, invertendo a hierarquia. Agora é o destaque (cor primária + ✓).
+
+Também ajustados na revisão visual: o nome do concurso era **cortado** na borda do menu (o
+popover padrão tem 204px e nome de concurso é longo) e o alinhamento do popover, que nasce à
+direita no padrão e precisava nascer sob o nome — os dois exigiram seletor de dupla classe,
+porque as regras de `.doc-mais-pop` vêm depois no arquivo e venciam por ordem.
+
+### Verificação
+
+Com dois concursos reais: o novo nasce **vazio** (0 questões, 0 tópicos, sem data de prova)
+enquanto o outro mantém **28 questões, 5 tópicos e a data de 13/12** — e tema, indicações e
+lembretes seguem compartilhados. Voltar para o primeiro traz tudo de volta, inclusive os "132
+dias p/ prova" no topo. 17 telas sem erro, seletor sobrevive a toda navegação, lint do CSS sem
+aviso novo, conferido nos dois temas.
 
 ### Quando isto chega ao app que o usuário usa (decidido em 2026-08-03)
 
