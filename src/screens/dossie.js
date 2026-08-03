@@ -23,13 +23,20 @@ let dossieEscondido = new Set(); // seções que o usuário tirou do dossiê (vo
 
 // Visão COMPACTA de todo o edital: uma linha por tópico, com 4 pontos de estado.
 //
-// Existe por dois motivos, e o segundo é o grave:
-//   1. densidade — o modo de cards funciona com dezenas de tópicos; um edital real de
-//      magistratura tem ~1.755, e 1.755 cards não se lê.
-//   2. DESEMPENHO — dossieResumoHTML chama store.dossie() UMA VEZ POR TÓPICO, e cada
-//      chamada faz 9 varreduras completas do estado mais um `questoesIds.includes()`
-//      dentro de um filter (O(questões × tentativas)). Isso é O(n²) e trava a tela num
-//      edital grande. Aqui os índices são montados em UMA passada por coleção.
+// MEDIDO com o edital oficial do 192º (21 disciplinas, 1.735 tópicos) — a versão
+// anterior deste comentário exagerava o diagnóstico e foi corrigida:
+//
+//   1. DENSIDADE DE DOM — este é o gargalo real. Trocar para os cards com 1.735 tópicos
+//      leva ~2.650ms contra ~757ms do compacto (3,5×). Não trava, mas 2,6s para trocar
+//      de aba é inaceitável. E 1.735 cards não se leem de todo jeito.
+//   2. O(n²) do store.dossie() — real, porém MENOR do que eu havia afirmado. Cada
+//      chamada faz 9 varreduras do estado mais um `questoesIds.includes()` dentro de um
+//      filter. Medido: 0,012ms/tópico com o acervo atual (≈21ms no total). Simulado com
+//      acervo grande: ~254ms (2 mil questões / 5 mil tentativas) e ~854ms (5 mil / 15
+//      mil). Cresce mal, mas não é o que causa os 2,6s.
+//
+// Aqui os índices são montados em UMA passada por coleção, o que resolve (2) de graça e
+// permite a linha enxuta que resolve (1).
 export function dossieCompactoHTML(store) {
   const st = store.get();
   const indice = (arr, chave) => {
