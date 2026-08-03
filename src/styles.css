@@ -1458,7 +1458,14 @@ body.onboarding #crono-fab { display: none !important; }
    GROSSEIRO (pega o iPad em paisagem, que é largo mas é dedo). O emulador reporta
    ponteiro fino, então só a de largura é verificável aqui; a outra vale no aparelho. */
 @media (max-width: 560px), (pointer: coarse) {
-  .chip-trib, .chip-escopo, .chip-sel { min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+  /* 34px, não 40: a 40 com fonte de 12.8px o padding vertical passa de 13px e a pílula
+     fica GORDA — o texto flutua no meio do vazio. A fonte sobe junto para a proporção
+     texto/altura continuar a mesma do desktop. Alvo confortável sem inchaço. */
+  .chip-trib, .chip-escopo, .chip-sel { min-height: 34px; font-size: var(--fs-sm); }
+  /* E o botão do mesmo painel acompanha: um controle de AÇÃO menor que um de
+     classificação opcional inverte a hierarquia. Só aqui — mexer em .btn-sm global
+     mudaria o app inteiro. */
+  .analise-erro .btn-sm { min-height: 34px; }
 }
 .trib-custom { min-width: 150px; }
 .cat-picker { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
