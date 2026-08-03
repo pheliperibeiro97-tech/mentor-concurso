@@ -676,6 +676,27 @@ export const SYNC_PAUSADO_MULTIPERFIL = true;
 export const MOTIVO_SYNC_PAUSADO =
   "A sincronização está pausada enquanto o multi-perfil é implantado. Seus dados seguem salvos neste aparelho.";
 
+// Fase 0b: o que do CONFIG pertence ao concurso, e não ao aparelho/pessoa.
+// Fica global o que segue você em qualquer concurso (tema, IA, notificações, pomodoro,
+// leitura, paleta, navegação, disponibilidade de vida — diasFolga/diasFeriado —, apelidos
+// de leis, backup por arquivo). Vem para cá o que muda quando o concurso muda.
+const CONFIG_PERFIL = new Set([
+  "dataProva",
+  // dispDiariaMin é ESPELHO de metaDiariaMin (screens/config.js: patch.dispDiariaMin =
+  // patch.metaDiariaMin). O plano o listava como global ("disponibilidade de vida"), mas
+  // deixá-lo global faria a disponibilidade de um perfil valer para o outro até o próximo
+  // salvamento. Anda com a meta.
+  "metaDiariaMin", "metaSemanalMin", "metaMensalMin", "dispDiariaMin",
+  "metasLeitura", "ultimaLeitura", // meta e progresso de leitura (o "leitura", que é fonte/tamanho, fica global)
+  "niveisDisciplina", "disciplinasAdiadas", "atencaoAdiada",
+  "bancasPreferidas", "baseEstudo", "retaFinal",
+  "atalhos", // apontam para disciplina/tópico/dossiê DESTE concurso
+  // mentorPlanoVisto é comparado com mentorUltimaAnalise para dizer "há plano novo".
+  // Separar as duas faria o carimbo de um perfil ser comparado com o "visto" do outro.
+  "mentorPlano", "mentorUltimaAnalise", "mentorPlanoVisto",
+  "syncNuvem", // cada perfil terá o seu cofre/senha (fase 2)
+]);
+
 function nomeDoPerfil(st) {
   const c = st && st.concurso;
   if (!c) return "Meu concurso";
@@ -686,7 +707,10 @@ function nomeDoPerfil(st) {
 // estado que já tem perfis volta inalterado. Roda também sobre backup/nuvem importados.
 function migrarParaPerfis(st) {
   if (!st || typeof st !== "object") return st;
-  if (Array.isArray(st.perfis) && st.perfis.length) return st;
+  // Já tem perfis: as coleções não precisam migrar, mas o CONFIG sim — um estado salvo
+  // por uma versão anterior (0a, ou 0b com a lista menor) ainda guarda chaves de perfil
+  // no config global. Sem esta passagem elas ficariam órfãs.
+  if (Array.isArray(st.perfis) && st.perfis.length) return migrarConfigDoPerfil(st);
   const perfil = { id: uid("perf"), nome: nomeDoPerfil(st) };
   const topo = {};
   for (const [k, v] of Object.entries(st)) {
@@ -695,7 +719,25 @@ function migrarParaPerfis(st) {
   }
   topo.perfis = [perfil];
   topo.perfilAtivo = perfil.id;
-  return topo;
+  return migrarConfigDoPerfil(topo);
+}
+
+// Fase 0b: tira do config global as chaves que são do concurso e as guarda em
+// perfil.config. Idempotente — o que já saiu do config global não volta a ser procurado.
+// Só o perfil ATIVO herda o config de antes; perfil criado depois nasce do default.
+function migrarConfigDoPerfil(st) {
+  const ps = st && st.perfis;
+  if (!Array.isArray(ps) || !ps.length) return st;
+  for (const p of ps) if (!p.config || typeof p.config !== "object") p.config = {};
+  const ativo = ps.find((p) => p.id === st.perfilAtivo) || ps[0];
+  const cfg = st.config || {};
+  for (const k of CONFIG_PERFIL) {
+    if (k in cfg) {
+      if (!(k in ativo.config)) ativo.config[k] = cfg[k];
+      delete cfg[k];
+    }
+  }
+  return st;
 }
 
 function perfilAtivo() {
@@ -727,8 +769,44 @@ function instalarAcessores() {
   if (!p) return;
   for (const chave of Object.keys(p)) {
     if (chave === "id" || chave === "nome") continue;
-    if (GLOBAL_TOP.has(chave)) continue; // nunca sombrear config/meta/…
+    if (GLOBAL_TOP.has(chave)) continue; // nunca sombrear config/meta/… (config é tratado abaixo)
     definirAcessor(chave);
+  }
+  instalarAcessoresConfig();
+}
+
+// Os mesmos acessores, um nível abaixo: `state.config.dataProva` roteia para o config do
+// perfil ativo, enquanto `state.config.tema` continua sendo o global de verdade.
+// Instalados pela LISTA (não pelas chaves presentes) para que uma chave que ainda não
+// existe — mentorPlano nasce só quando o Mentor gera um plano — já nasça no perfil certo.
+function instalarAcessoresConfig() {
+  const p = perfilAtivo();
+  if (!p || !state.config) return;
+  if (!p.config || typeof p.config !== "object") p.config = {};
+  for (const chave of CONFIG_PERFIL) {
+    // Um valor CRU no config global sombrearia o acessor, então tem de sair — mas
+    // salvando-o no perfil antes. Apagar direto perderia o dado de quem chegasse aqui
+    // com a chave ainda no global (estado salvo por uma versão anterior).
+    const d = Object.getOwnPropertyDescriptor(state.config, chave);
+    if (d && !d.get) {
+      if (p.config[chave] === undefined) p.config[chave] = state.config[chave];
+      delete state.config[chave];
+    }
+    Object.defineProperty(state.config, chave, {
+      get() {
+        const alvo = perfilAtivo();
+        return alvo && alvo.config ? alvo.config[chave] : undefined;
+      },
+      set(v) {
+        const alvo = perfilAtivo();
+        if (alvo) {
+          if (!alvo.config) alvo.config = {};
+          alvo.config[chave] = v;
+        }
+      },
+      enumerable: false, // some da serialização do config global — mora em perfis[].config
+      configurable: true,
+    });
   }
 }
 
@@ -845,9 +923,17 @@ export const store = {
       // Acessores ANTES dos backfills — daqui para baixo `state.topicos` e companhia
       // precisam enxergar o perfil ativo, não o topo.
       instalarAcessores();
-      // Backfill de campos NOVOS de config em estados salvos antigos (o merge raso
-      // acima substitui config inteiro). Garante iaModelo, botoesOcultos, metas etc.
-      state.config = { ...base.config, ...state.config };
+      // Backfill de campos NOVOS de config em estados salvos antigos. Preenche o que
+      // falta em vez de reatribuir: `state.config = {...}` destruiria os acessores
+      // por-perfil instalados logo acima (mesma razão do setConfig).
+      for (const [k, v] of Object.entries(base.config)) {
+        if (state.config[k] === undefined) state.config[k] = v;
+      }
+      // Chaves por-perfil que o default guarda no perfil, não no config global.
+      const cfgBase = (base.perfis[0] && base.perfis[0].config) || {};
+      for (const [k, v] of Object.entries(cfgBase)) {
+        if (state.config[k] === undefined) state.config[k] = v;
+      }
       // backfill nas indicações (modo meta + disciplina derivada do tópico)
       state.indicacoes.forEach((i) => {
         if (i.modo === undefined) i.modo = "meta";
@@ -7805,7 +7891,11 @@ export const store = {
 
   // ---------- configurações ----------
   setConfig(patch) {
-    state.config = { ...state.config, ...patch };
+    // MUTAÇÃO, não reatribuição. `state.config = {...}` copiaria só as chaves enumeráveis
+    // e destruiria os acessores por-perfil — metas, data da prova e o plano do Mentor
+    // sumiriam em silêncio. Object.assign passa pelos setters, então cada chave vai para
+    // o seu lugar (global ou perfil ativo).
+    Object.assign(state.config, patch);
     commit();
   },
   // Atualiza só os metadados de sincronização (config.sync) SEM carimbar modificadoEm —
