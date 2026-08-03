@@ -213,6 +213,17 @@ export const GUIA = [
         <li><b>Paleta de comando</b> em qualquer tela (no computador, Ctrl+K ou Cmd+K no Mac a abre; no celular, toque na barra de busca no topo): vá direto a uma tela/atalho (offline) ou digite uma pergunta/ação que ela repassa ao Mentor.</li>
       </ul>` },
 
+  { id: "perfis", grupo: "Recursos que atravessam as telas", titulo: "Vários concursos (trocar de concurso)", html: `
+      <p>O app guarda <b>mais de um concurso</b>. Cada um tem o <b>seu próprio</b> edital, materiais, questões, flashcards, resumos, mapas, sessões, histórico, metas e data da prova — nada se mistura entre eles.</p>
+      <ul>
+        <li><b>Onde trocar</b> — no <b>nome do concurso</b>, no alto da tela. No celular ele fica no topo do menu lateral (botão "Mais"). O menu lista os concursos, com o atual marcado, e traz <b>Novo concurso</b>, <b>Renomear este</b> e <b>Remover este</b>.</li>
+        <li><b>O que é compartilhado</b> (vale em todos): tema, chave e provedor de IA, notificações, pomodoro e som, cores da marcação, barra lateral, dias de folga e feriado, apelidos de leis, lembretes e as bancas cadastradas.</li>
+        <li><b>O que é de cada concurso</b>: tudo o que é estudo, mais metas, data da prova, diagnóstico por disciplina, disciplinas adiadas, bancas preferidas, atalhos e o plano do Mentor.</li>
+        <li><b>Criar um novo</b> não mexe no atual: o novo nasce vazio e pede o concurso/banca, como no primeiro uso. Se criou sem querer, a própria tela oferece voltar ao anterior ou descartar.</li>
+        <li><b>Remover</b> apaga o edital, os materiais e todo o histórico <b>daquele</b> concurso — os outros não são afetados. Não dá para desfazer, e o app nunca fica sem nenhum concurso.</li>
+        <li><b>Cronômetro rodando</b> ao trocar? O app avisa antes: o tempo em andamento seria contado para o concurso errado.</li>
+      </ul>` },
+
   { id: "sincronizacao", grupo: "Recursos que atravessam as telas", titulo: "Como tudo se sincroniza", html: `
       <p>Os módulos conversam entre si:</p>
       <ul>
@@ -246,6 +257,8 @@ export const GUIA = [
       <p>Opcional e <b>gratuita</b>: mantenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>, por uma <b>senha</b>. Fica em <b>Configurações → Dados &amp; concurso → Sincronização — celular e computadores</b>.</p>
       <ul>
         <li><b>Como ligar</b>: escolha uma <b>senha</b> (uma frase fácil de lembrar) e digite-a <b>uma vez em cada aparelho</b>. A partir daí sincroniza sozinho — <b>ao abrir</b> e <b>ao fechar</b> — e há o botão <b>Sincronizar agora</b>.</li>
+        <li><b>É por concurso</b>: cada concurso tem o <b>seu próprio cofre e a sua senha</b>, e a tela mostra qual você está conectando. Para levar um concurso a outro aparelho, use a senha <b>dele</b> lá.</li>
+        <li><b>Trazer um concurso de outro aparelho</b>: em <b>Restaurar da nuvem</b>, se o app já estiver em uso aqui, o Mentor <b>cria um concurso</b> a partir do cofre em vez de substituir o que existe — nada do que está neste aparelho se perde.</li>
         <li><b>Privacidade</b>: a senha <b>cifra</b> tudo de ponta a ponta; nem nós nem o serviço de nuvem conseguem ler. A senha <b>não sai do aparelho</b> e <b>não tem recuperação</b> — se esquecer, escolha outra (cada aparelho mantém a cópia local).</li>
         <li><b>PDFs</b>: os arquivos originais <b>ficam em cada aparelho</b> (não sobem); o <b>texto extraído</b> sincroniza normalmente, então o material segue legível e pesquisável.</li>
         <li><b>Conflito</b>: vence o <b>mais recente</b>. Se um aparelho quase vazio fosse apagar um cheio, o app <b>para e pergunta</b> antes, guardando uma cópia de segurança.</li>
