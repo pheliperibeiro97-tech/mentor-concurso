@@ -6760,7 +6760,7 @@ export const store = {
   // percentuais diferentes por bloco (o clássico "30% nas básicas e 50% nas específicas"),
   // e um mínimo único não representaria esses — mas exigir preencher grupo a grupo
   // atrapalharia quem tem regra uniforme (a Res. 75, p.ex., é 30% em todos).
-  setRegraAprovacao({ minGrupo, minGeral, minPorGrupo, minAmostra }) {
+  setRegraAprovacao({ minGrupo, minGeral, minPorGrupo, minAmostra, pesoPorGrupo }) {
     if (!state.concurso) return;
     const lim = (v) => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.min(100, Number(v) || 0)));
     const atual = state.concurso.regra || {};
@@ -6772,10 +6772,22 @@ export const store = {
         else mapa[g] = n;
       }
     }
+    // PESO ≠ MÍNIMO: o mínimo elimina, o peso muda quanto o grupo vale na nota final.
+    // Alguns editais têm os dois. Vazio ou 1 = sem peso especial (não guardamos, para o
+    // app saber que não há ponderação e não poluir a tela com "peso 1" em toda linha).
+    const pesos = { ...(atual.pesoPorGrupo || {}) };
+    if (pesoPorGrupo && typeof pesoPorGrupo === "object") {
+      for (const [g, v] of Object.entries(pesoPorGrupo)) {
+        const n = v === "" || v === null || v === undefined ? null : Math.max(0, Number(v) || 0);
+        if (n === null || n === 1) delete pesos[g];
+        else pesos[g] = n;
+      }
+    }
     state.concurso.regra = {
       minGrupo: minGrupo === undefined ? (atual.minGrupo ?? null) : lim(minGrupo),
       minGeral: minGeral === undefined ? (atual.minGeral ?? null) : lim(minGeral),
       minPorGrupo: mapa,
+      pesoPorGrupo: pesos,
       // Quantas questões um grupo precisa ter para o painel dar veredito. 30 é só o
       // default; quem quiser ouvir mais cedo (e errar mais) ou mais tarde (e errar
       // menos) ajusta. Estava fixo no código — decisão que não era minha.
@@ -6793,6 +6805,11 @@ export const store = {
     const r = (state.concurso && state.concurso.regra) || {};
     const esp = r.minPorGrupo && r.minPorGrupo[nome];
     return esp === undefined || esp === null ? (r.minGrupo ?? null) : esp;
+  },
+  pesoDoGrupo(nome) {
+    const r = (state.concurso && state.concurso.regra) || {};
+    const p = r.pesoPorGrupo && r.pesoPorGrupo[nome];
+    return p === undefined || p === null ? 1 : p;
   },
   gruposDisciplinas() {
     return [...new Set(state.disciplinas.map((d) => d.grupo).filter(Boolean))].sort();
@@ -6829,6 +6846,7 @@ export const store = {
           ...r,
           pct,
           min,
+          peso: this.pesoDoGrupo(r.grupo),
           suficiente,
           faltam: Math.max(0, MIN_AMOSTRA - r.total),
           abaixo: suficiente && min != null && pct != null && pct < min,
@@ -6839,11 +6857,24 @@ export const store = {
       .sort((a, b) => a.grupo.localeCompare(b.grupo));
     const geralPct = gTotal ? Math.round((gAcertos / gTotal) * 100) : null;
     const geralSuficiente = gTotal >= MIN_AMOSTRA;
+    // MÉDIA PONDERADA — só faz sentido quando há peso diferente de 1 em algum grupo, e
+    // só entram grupos COM amostra suficiente (senão a ponderação carrega o ruído dos
+    // grupos ainda não medidos e devolve uma nota final inventada).
+    const temPeso = grupos.some((g) => g.peso !== 1);
+    const comDado = grupos.filter((g) => g.suficiente && g.pct !== null);
+    const somaPesos = comDado.reduce((a, g) => a + g.peso, 0);
+    const ponderada =
+      temPeso && somaPesos > 0 ? Math.round(comDado.reduce((a, g) => a + g.pct * g.peso, 0) / somaPesos) : null;
     return {
       grupos,
       regra,
       minAmostra: MIN_AMOSTRA,
       geral: { acertos: gAcertos, total: gTotal, pct: geralPct, suficiente: geralSuficiente },
+      temPeso,
+      ponderada,
+      // ponderada incompleta = há grupo com peso mas ainda sem amostra; a nota estimada
+      // ainda vai mudar, e a tela precisa dizer isso em vez de exibir número redondo.
+      ponderadaParcial: temPeso && comDado.length < grupos.length,
       geralAbaixo: geralSuficiente && regra.minGeral != null && geralPct != null && geralPct < regra.minGeral,
       // Sem DATA DE PROVA a regra é referência de um certame passado, não a regra do seu.
       // O painel muda de tom por causa disto: pré-edital ele informa, não sentencia.

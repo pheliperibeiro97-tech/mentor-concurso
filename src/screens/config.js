@@ -395,15 +395,22 @@ export default function renderConfig(root, app) {
                  <p class="muted small u-m-0 u-mt-8 u-mb-12">O nome do grupo é livre — "Bloco I", "Eixo 2", o que o seu edital usar. Disciplinas sem grupo ficam de fora do cálculo.</p>
                  ${
                    store.gruposDisciplinas().length
-                     ? `<p class="u-mb-4"><b>Mínimo de cada grupo</b> <span class="muted small">(opcional — em branco usa o padrão)</span></p>
-                        <div class="cfg-grupos">${store
-                          .gruposDisciplinas()
-                          .map(
-                            (g) => `<label class="cfg-grupo-linha"><span>${esc(g)}</span>
-                              <input type="number" min="0" max="100" id="cfg-mg-${esc(g).replace(/\W/g, "_")}" data-min-grupo="${esc(g)}"
-                                placeholder="${regra.minGrupo ?? "%"}" value="${(regra.minPorGrupo && regra.minPorGrupo[g]) ?? ""}" /></label>`
-                          )
-                          .join("")}</div>`
+                     ? `<p class="u-mb-4"><b>Por grupo</b> <span class="muted small">(opcional — mínimo em branco usa o padrão; peso em branco vale 1)</span></p>
+                        <div class="cfg-grupos cfg-grupos-num">
+                          <div class="cfg-grupo-linha cfg-grupo-cab"><span></span><b>Mínimo</b><b>Peso</b></div>
+                          ${store
+                            .gruposDisciplinas()
+                            .map((g) => {
+                              const k = esc(g).replace(/\W/g, "_");
+                              return `<div class="cfg-grupo-linha"><span>${esc(g)}</span>
+                              <input type="number" min="0" max="100" id="cfg-mg-${k}" data-min-grupo="${esc(g)}"
+                                placeholder="${regra.minGrupo ?? "%"}" value="${(regra.minPorGrupo && regra.minPorGrupo[g]) ?? ""}" />
+                              <input type="number" min="0" step="0.5" id="cfg-pg-${k}" data-peso-grupo="${esc(g)}"
+                                placeholder="1" value="${(regra.pesoPorGrupo && regra.pesoPorGrupo[g]) ?? ""}" /></div>`;
+                            })
+                            .join("")}
+                        </div>
+                        <p class="muted small u-m-0 u-mt-8">O <b>mínimo</b> elimina; o <b>peso</b> muda quanto o grupo vale na nota final. São coisas diferentes, e alguns editais têm as duas.</p>`
                      : ""
                  }`
               : `<p class="muted small u-m-0">Monte o edital primeiro para atribuir os grupos.</p>`
@@ -871,12 +878,17 @@ export default function renderConfig(root, app) {
     root.querySelectorAll("[data-min-grupo]").forEach((el) => {
       porGrupo[el.getAttribute("data-min-grupo")] = el.value;
     });
+    const pesos = {};
+    root.querySelectorAll("[data-peso-grupo]").forEach((el) => {
+      pesos[el.getAttribute("data-peso-grupo")] = el.value;
+    });
     salvarPreservandoFoco(() => {
       store.setRegraAprovacao({
         minGrupo: g.value,
         minGeral: root.querySelector("#cfg-min-geral")?.value,
         minAmostra: root.querySelector("#cfg-min-amostra")?.value,
         minPorGrupo: porGrupo,
+        pesoPorGrupo: pesos,
       });
       toast("Salvo.");
     });
@@ -884,7 +896,7 @@ export default function renderConfig(root, app) {
   root.querySelector("#cfg-regra-det")?.addEventListener("toggle", (e) => { regraAberta = e.target.open; });
   const salvarRegraDeb = debounce(salvarRegra, 600);
   root
-    .querySelectorAll("#cfg-min-grupo, #cfg-min-geral, #cfg-min-amostra, [data-min-grupo]")
+    .querySelectorAll("#cfg-min-grupo, #cfg-min-geral, #cfg-min-amostra, [data-min-grupo], [data-peso-grupo]")
     .forEach((el) => el.addEventListener("input", salvarRegraDeb));
   root.querySelectorAll("[data-grupo-disc]").forEach((el) => {
     el.addEventListener(

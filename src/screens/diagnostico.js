@@ -175,10 +175,13 @@ function riscoGrupoHTML(d) {
       }
       // o mínimo é o DAQUELE grupo (pode diferir entre grupos), não um único global
       const alvo = g.min != null ? ` · <span class="rg-alvo">mín. ${g.min}%</span>` : "";
+      // peso só aparece quando ALGUM grupo tem peso ≠ 1; senão seria "peso 1" em toda
+      // linha, que é enfeite
+      const peso = d.temPeso ? ` · <span class="rg-alvo">peso ${g.peso}</span>` : "";
       return `<li class="rg-linha ${g.abaixo ? "rg-abaixo" : "rg-ok"}">
         <span class="rg-nome">${esc(g.grupo)}</span>
         <span class="rg-num">${g.pct}%</span>
-        <span class="rg-det">${g.acertos}/${g.total}${alvo}</span>
+        <span class="rg-det">${g.acertos}/${g.total}${alvo}${peso}</span>
       </li>`;
     })
     .join("");
@@ -203,6 +206,14 @@ function riscoGrupoHTML(d) {
   const ressalva = semAmostra.length && !d.grupos.every((g) => !g.suficiente)
     ? ` <span class="muted">${semAmostra.length === 1 ? "Um grupo ainda não tem" : `${semAmostra.length} grupos ainda não têm`} questões suficientes para medir.</span>`
     : "";
+  // Média ponderada: só com peso definido. "Parcial" quando algum grupo ainda não tem
+  // amostra — a nota estimada vai mudar, e omitir isso seria vender precisão que não há.
+  const pond =
+    d.ponderada != null
+      ? `<p class="rg-pond">Nota ponderada pelos pesos: <b>${d.ponderada}%</b>${
+          d.ponderadaParcial ? ` <span class="muted">— parcial, só com os grupos já medidos</span>` : ""
+        }</p>`
+      : "";
   // Pré-edital a regra é referência de um certame passado — informa, não sentencia.
   const nota = d.referencia
     ? `<p class="rg-nota">${icone("circle-help")} Sem data de prova cadastrada: estes mínimos valem como <b>referência</b>, não como a regra do seu certame.</p>`
@@ -214,6 +225,7 @@ function riscoGrupoHTML(d) {
     <h3>${icone(alerta ? "triangle-alert" : "target")} Desempenho por grupo de matérias</h3>
     <p class="rg-veredito">${frase}${ressalva}</p>
     <ul class="rg-lista">${linhas}</ul>
+    ${pond}
     ${nota}
   </section>`;
 }

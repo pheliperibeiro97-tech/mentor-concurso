@@ -6885,3 +6885,10 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .cfg-grupo-linha { display: flex; align-items: center; gap: 10px; font-size: var(--fs-xs); }
 .cfg-grupo-linha > span { flex: 1; color: var(--text-2); }
 .cfg-grupo-linha > input { width: 9rem; flex-shrink: 0; }
+
+/* Grade Grupo | Mínimo | Peso na Config, e a linha da nota ponderada no painel. */
+.cfg-grupos-num .cfg-grupo-linha { display: grid; grid-template-columns: 1fr 5.5rem 5.5rem; gap: 10px; }
+.cfg-grupos-num .cfg-grupo-linha > input { width: 100%; }
+.cfg-grupo-cab { font-size: var(--fs-2xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.cfg-grupo-cab > b { font-weight: var(--fw-semibold); }
+.rg-pond { margin: 10px 0 0; font-size: var(--fs-xs); color: var(--text-2); }
