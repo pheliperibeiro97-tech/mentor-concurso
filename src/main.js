@@ -4,7 +4,7 @@
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { store } from "./store.js";
-import { toast, plural } from "./ui.js";
+import { toast, plural, confirmar, pedirTexto } from "./ui.js";
 import { esc, fmtMMSS } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
 import { abrirPaleta } from "./paleta.js";
@@ -306,11 +306,54 @@ function heyInfo(store) {
   const hora = new Date().getHours();
   const saud = hora < 5 ? "Boa madrugada" : hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
   const dataFmt = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-  const cargo = st.concurso && st.concurso.cargo ? st.concurso.cargo : "";
+  // O cargo saiu daqui e virou o SELETOR DE PERFIL (perfilSeletorHTML): este bloco é
+  // reescrito pelo watcher da virada do dia, o que fecharia o menu aberto e destruiria
+  // os listeners dele.
   return {
     chave: `${saud}|${dataFmt}`,
-    html: `${esc(saud)} · <b>${esc(dataFmt)}</b>${cargo ? ` · <span class="tb-cargo">${esc(cargo)}</span>` : ""}`,
+    html: `${esc(saud)} · <b>${esc(dataFmt)}</b>`,
   };
+}
+
+// Seletor de perfil (= concurso) no topo. Reusa o padrão de menu do app (.doc-mais +
+// .doc-mais-pop), então herda posicionamento, foco de teclado e as duas paletas.
+// Com um só perfil ele continua sendo o nome do concurso — só que clicável, revelando
+// "Novo concurso" quando o usuário quiser um segundo.
+function perfilSeletorHTML(store) {
+  const perfis = store.perfis ? store.perfis() : [];
+  if (!perfis.length) return "";
+  const atual = perfis.find((p) => p.ativo) || perfis[0];
+  const rotulo = atual.cargo || atual.nome;
+  const item = (p) => {
+    const detalhe = [p.topicos ? `${p.topicos} tópicos` : "", p.questoes ? `${p.questoes} questões` : ""]
+      .filter(Boolean)
+      .join(" · ");
+    return `<button class="menu-item" data-perfil-ir="${esc(p.id)}"${p.ativo ? " disabled" : ""}>
+      <span class="menu-ico">${p.ativo ? icone("check") : ""}</span>
+      <span class="tb-perfil-nome">
+        <span class="tb-perfil-rot">${esc(p.nome)}</span>
+        ${detalhe ? `<span class="muted small">${esc(detalhe)}</span>` : ""}
+      </span>
+    </button>`;
+  };
+  return `
+    <details class="doc-mais tb-perfil">
+      <summary class="tb-cargo" data-tip="${perfis.length > 1 ? "Trocar de concurso" : "Seus concursos"}" aria-label="Perfil: ${esc(atual.nome)}">
+        ${esc(rotulo)} ${icone("chevron-down")}
+      </summary>
+      <div class="doc-mais-pop tb-perfil-pop">
+        <div class="menu-rotulo">${perfis.length > 1 ? "Concursos" : "Concurso"}</div>
+        ${perfis.map(item).join("")}
+        <div class="menu-sep"></div>
+        <button class="menu-item" data-perfil-novo><span class="menu-ico">${icone("plus")}</span> Novo concurso</button>
+        <button class="menu-item" data-perfil-renomear><span class="menu-ico">${icone("pencil-line")}</span> Renomear este</button>
+        ${
+          perfis.length > 1
+            ? `<button class="menu-item menu-item-danger" data-perfil-remover><span class="menu-ico">${icone("trash-2")}</span> Remover este</button>`
+            : ""
+        }
+      </div>
+    </details>`;
 }
 
 function topbarHTML(store) {
@@ -338,6 +381,7 @@ function topbarHTML(store) {
     <header class="topbar">
       <div class="topbar-inner">
         <div class="tb-hey" data-hey="${esc(hey.chave)}">${hey.html}</div>
+        ${perfilSeletorHTML(store)}
         <div class="tb-sp"></div>
         ${provaChip}
         ${streakChip}
@@ -620,6 +664,54 @@ function render(preservarScroll = true) {
   root.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => app.navigate(b.getAttribute("data-nav"))));
   // Toggle de tema no topbar (move a função que estava só em Configurações).
   root.querySelector("[data-toggle-tema]")?.addEventListener("click", () => store.setConfig({ tema: store.get().config.tema === "escuro" ? "claro" : "escuro" }));
+
+  // ----- Seletor de perfil (concurso) -----
+  // Trocar de perfil troca TODO o estudo à vista. Se houver cronômetro rodando, o tempo
+  // seria contado para o concurso errado — então avisamos antes em vez de trocar calado.
+  const trocarDePerfil = async (id) => {
+    if (cronoSnapshot().running) {
+      const ok = await confirmar(
+        "O cronômetro está rodando. Trocando de concurso agora, o tempo em andamento não será registrado neste. Trocar mesmo assim?"
+      );
+      if (!ok) return;
+    }
+    if (store.trocarPerfil(id)) {
+      app.navigate("hoje");
+      toast("Concurso trocado.");
+    }
+  };
+  root.querySelectorAll("[data-perfil-ir]").forEach((b) =>
+    b.addEventListener("click", () => trocarDePerfil(b.getAttribute("data-perfil-ir")))
+  );
+  root.querySelector("[data-perfil-novo]")?.addEventListener("click", async () => {
+    const nome = await pedirTexto(
+      "Novo concurso — ele começa vazio, com edital, materiais e histórico próprios. O concurso atual fica intacto.",
+      { placeholder: "ex.: Juiz Substituto · TJSP", rotuloOk: "Criar" }
+    );
+    if (!nome) return;
+    store.criarPerfil(nome);
+    app.navigate("hoje");
+    toast("Concurso criado. Monte o edital para começar.");
+  });
+  root.querySelector("[data-perfil-renomear]")?.addEventListener("click", async () => {
+    const atual = store.perfis().find((p) => p.ativo);
+    if (!atual) return;
+    const nome = await pedirTexto("Renomear concurso:", { valor: atual.nome });
+    if (!nome) return;
+    store.renomearPerfil(atual.id, nome);
+    app.refresh();
+  });
+  root.querySelector("[data-perfil-remover]")?.addEventListener("click", async () => {
+    const atual = store.perfis().find((p) => p.ativo);
+    if (!atual) return;
+    const ok = await confirmar(
+      `Remover "${atual.nome}" apaga o edital, os materiais, as questões, os flashcards e todo o histórico DESTE concurso. Os outros não são afetados, mas esta ação é irreversível.`
+    );
+    if (!ok) return;
+    store.removerPerfil(atual.id);
+    app.navigate("hoje");
+    toast("Concurso removido.");
+  });
 
   // Gaveta do celular: o botão "Mais" declara o estado (aria-expanded) e o Esc fecha —
   // antes só o toque no fundo escuro ou num destino fechava, e leitor de tela não sabia

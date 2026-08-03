@@ -1,7 +1,7 @@
 // Onboarding (assistente curto, 3 etapas): concurso → prova/ritmo (opcional) →
 // Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
 // em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
-import { bindActions, toast, pedirTexto } from "../ui.js";
+import { bindActions, toast, pedirTexto, confirmar } from "../ui.js";
 import { esc, todayISO, daysBetween } from "../util.js";
 import { restaurarDaNuvem, suportaSyncNuvem } from "../sync-nuvem.js";
 import { icone } from "../icones.js";
@@ -41,6 +41,9 @@ export default function renderOnboarding(root, app) {
 
   // Robustez: sem concurso, sempre começa no passo 1.
   if (!st.concurso) passo = 1;
+
+  // Multi-perfil: existe outro concurso para onde voltar? (define a saída do passo 1)
+  const outroPerfil = (store.perfis ? store.perfis() : []).find((p) => !p.ativo) || null;
 
   const hm = (base) => {
     const h = Math.max(0, parseInt(root.querySelector(`#${base}-h`)?.value, 10) || 0);
@@ -191,9 +194,24 @@ export default function renderOnboarding(root, app) {
   if (passo === 1) {
     root.innerHTML = `
       <div class="ob-card">
+        ${
+          // Multi-perfil: um concurso RECÉM-CRIADO cai aqui, e o onboarding é tela cheia,
+          // sem topbar nem seletor. Sem esta saída o usuário fica preso no perfil novo,
+          // sem como voltar ao anterior se criou por engano.
+          outroPerfil
+            ? `<div class="ob-voltar">
+                <button type="button" class="lnk ob-voltar-alvo" data-action="ob-voltar" data-tip="Sai daqui sem perder nada — este concurso fica vazio, para configurar depois.">${icone("arrow-left")} Voltar para <b>${esc(outroPerfil.nome)}</b></button>
+                <button type="button" class="lnk muted small ob-voltar-descartar" data-action="ob-descartar">Descartar</button>
+              </div>`
+            : ""
+        }
         <div class="ob-logo">${icone("library")}</div>
-        <h1>Bem-vindo ao Mentor Concurso</h1>
-        <p class="ob-lead"><b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova.</p>
+        <h1>${outroPerfil ? "Novo concurso" : "Bem-vindo ao Mentor Concurso"}</h1>
+        <p class="ob-lead">${
+          outroPerfil
+            ? "Este concurso começa vazio: <b>edital, materiais, questões e histórico próprios</b>. O que você já tem no outro fica intacto."
+            : "<b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova."
+        }</p>
         <p class="ob-steps" style="justify-content:center; display:flex">São só 3 passos rápidos. Comece informando o concurso.</p>
         <div class="ob-tema">
           <span class="ob-tema-label">Aparência</span>
@@ -226,6 +244,24 @@ export default function renderOnboarding(root, app) {
       </div>`;
 
     bindActions(root, {
+      // Saídas do concurso recém-criado (multi-perfil): voltar para o outro deixando este
+      // vazio para configurar depois, ou descartá-lo de vez.
+      "ob-voltar": () => {
+        if (!outroPerfil) return;
+        store.trocarPerfil(outroPerfil.id);
+        passo = 1; // o próximo concurso novo recomeça do zero
+        app.navigate("hoje");
+      },
+      "ob-descartar": async () => {
+        if (!outroPerfil) return;
+        const atual = store.perfis().find((p) => p.ativo);
+        if (!atual) return;
+        if (!(await confirmar(`Descartar "${atual.nome}"? Ele está vazio — nada do outro concurso é afetado.`))) return;
+        store.removerPerfil(atual.id);
+        passo = 1;
+        app.navigate("hoje");
+        toast("Concurso descartado.");
+      },
       "set-tema": (el) => {
         temaOb = el.getAttribute("data-tema") === "escuro" ? "escuro" : "claro";
         // aplica ao vivo sem re-render (preserva o que já foi digitado)

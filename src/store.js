@@ -1041,6 +1041,70 @@ export const store = {
   isOnboarded() {
     return !!state.meta.onboarded && !!state.concurso;
   },
+
+  // ---------- perfis (multi-concurso) ----------
+  // Um perfil = um concurso com todo o pacote de estudo dele. O nome é derivado do
+  // concurso quando o usuário não escolhe um.
+  perfis() {
+    return (state.perfis || []).map((p) => ({
+      id: p.id,
+      nome: p.nome || nomeDoPerfil(p),
+      ativo: p.id === state.perfilAtivo,
+      cargo: (p.concurso && p.concurso.cargo) || "",
+      banca: (p.concurso && p.concurso.banca) || "",
+      // números para a UI mostrar o que há dentro de cada perfil antes de trocar
+      topicos: (p.topicos || []).length,
+      questoes: (p.questoes || []).length,
+      flashcards: (p.flashcards || []).length,
+    }));
+  },
+  perfilAtivoId() {
+    return state.perfilAtivo || null;
+  },
+  trocarPerfil(id) {
+    if (!id || id === state.perfilAtivo) return false;
+    if (!(state.perfis || []).some((p) => p.id === id)) return false;
+    state.perfilAtivo = id;
+    // Obrigatório: os perfis não têm as mesmas chaves (um pode ter chatHistorico e o
+    // outro não), então os acessores precisam ser refeitos para o perfil que entra.
+    instalarAcessores();
+    commit();
+    return true;
+  },
+  // Cria um perfil VAZIO (nasce do default, sem herdar nada do atual) e troca para ele.
+  // O onboarding cuida de preencher concurso/edital — é a mesma porta de entrada do
+  // primeiro uso, reaproveitada.
+  criarPerfil(nome) {
+    const base = migrarParaPerfis(defaultState());
+    const novo = base.perfis[0];
+    novo.id = uid("perf");
+    novo.nome = (nome || "").trim() || "Novo concurso";
+    state.perfis = [...(state.perfis || []), novo];
+    state.perfilAtivo = novo.id;
+    instalarAcessores();
+    commit();
+    return novo.id;
+  },
+  renomearPerfil(id, nome) {
+    const p = (state.perfis || []).find((x) => x.id === id);
+    if (!p) return false;
+    p.nome = (nome || "").trim() || p.nome;
+    commit();
+    return true;
+  },
+  // Remover é irreversível e leva junto TODO o estudo daquele concurso — a tela confirma
+  // antes. O último perfil não pode ser removido (o app ficaria sem estado).
+  removerPerfil(id) {
+    const ps = state.perfis || [];
+    if (ps.length < 2) return false;
+    const i = ps.findIndex((p) => p.id === id);
+    if (i < 0) return false;
+    ps.splice(i, 1);
+    if (state.perfilAtivo === id) state.perfilAtivo = ps[0].id;
+    instalarAcessores();
+    commit();
+    return true;
+  },
   // True quando há um provedor de IA online conectado (Gemini com chave, ou Claude local).
   // As funções GERATIVAS (gerar questões/flashcards por texto, comentar erro,
   // correção de mérito, resposta do chat) só funcionam quando isto é verdadeiro.
