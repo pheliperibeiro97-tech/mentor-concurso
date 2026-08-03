@@ -693,15 +693,12 @@ function render(preservarScroll = true) {
   root.querySelectorAll("[data-perfil-ir]").forEach((b) =>
     b.addEventListener("click", () => trocarDePerfil(b.getAttribute("data-perfil-ir")))
   );
-  root.querySelectorAll("[data-perfil-novo]").forEach((b) => b.addEventListener("click", async () => {
-    const nome = await pedirTexto(
-      "Novo concurso — ele começa vazio, com edital, materiais e histórico próprios. O concurso atual fica intacto.",
-      { placeholder: "ex.: Juiz Substituto · TJSP", rotuloOk: "Criar" }
-    );
-    if (!nome) return;
-    store.criarPerfil(nome);
+  root.querySelectorAll("[data-perfil-novo]").forEach((b) => b.addEventListener("click", () => {
+    // Sem pedir nome aqui: quem pergunta "qual concurso você vai prestar?" é o onboarding,
+    // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
+    // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
+    store.criarPerfil();
     app.navigate("hoje");
-    toast("Concurso criado. Monte o edital para começar.");
   }));
   root.querySelectorAll("[data-perfil-renomear]").forEach((b) => b.addEventListener("click", async () => {
     const atual = store.perfis().find((p) => p.ativo);

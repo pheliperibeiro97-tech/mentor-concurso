@@ -1134,7 +1134,10 @@ export const store = {
     const base = migrarParaPerfis(defaultState());
     const novo = base.perfis[0];
     novo.id = uid("perf");
-    novo.nome = (nome || "").trim() || "Novo concurso";
+    // Nome VAZIO por padrão: `perfis()` deriva o rótulo do concurso (nomeDoPerfil), então
+    // assim que o onboarding gravar cargo/banca o seletor já mostra o nome certo. Só quem
+    // usa "Renomear" fixa um nome próprio.
+    novo.nome = (nome || "").trim();
     state.perfis = [...(state.perfis || []), novo];
     state.perfilAtivo = novo.id;
     instalarAcessores();
