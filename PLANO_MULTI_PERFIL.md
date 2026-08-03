@@ -89,10 +89,12 @@ Fazer a **Fase 0 em duas sub-etapas** para isolar a parte perigosa (o `config`):
 
 ## Verificação da migração (obrigatória)
 
-Comparar contagens **antes e depois** (baseline do estado real em 2026-07-06):
-**2 disciplinas · 6 tópicos · 15 questões · 50 tentativas · 8 sessões · 20 flashcards ·
-2 missões · 2 mapas mentais · 0 documentos · 6 lembretes.** Concurso: "Analista Judiciário · TJSP"
-(banca VUNESP). Qualquer divergência = abortar e corrigir.
+Comparar contagens **antes e depois**. O baseline vigente é o de **2026-08-03**
+(`dev/baseline-multi-perfil.json`, ferramenta `dev/baseline-estado.py` — ver seção H).
+Qualquer divergência = abortar e corrigir.
+
+~~Baseline de 2026-07-06: 2 disciplinas · 6 tópicos · 15 questões · 50 tentativas · 8 sessões ·
+20 flashcards · 2 missões · 2 mapas · 0 documentos · 6 lembretes~~ — **obsoleto**, o estado mudou.
 
 ## Riscos & mitigação
 
@@ -161,9 +163,8 @@ Se um dia for blob inteiro, esses três precisam somar/tratar através de `perfi
 `sidebarColapsada` → **global**; `sync`/`syncNuvem` → conforme (A/B); demais chaves do redesign
 → a regra por-whitelist já captura (aresta 2), só confirmar o lado.
 
-### F) Baseline de verificação DESATUALIZADO
-Os números do plano (2 disc · 6 tóp · 15 questões…) são do estado de 2026-07-06. **Refazer o
-baseline com o estado real atual** imediatamente antes de migrar (contar e comparar depois).
+### F) Baseline de verificação DESATUALIZADO — ✅ REFEITO em 2026-08-03 (ver seção H)
+Os números do plano (2 disc · 6 tóp · 15 questões…) eram do estado de 2026-07-06.
 
 ### G) Sem impacto (só registrar)
 - **Access** (portão): é por **e-mail**, no nível da URL — não enxerga perfis. Multi-perfil não
@@ -195,3 +196,237 @@ baseline com o estado real atual** imediatamente antes de migrar (contar e compa
 perfil" já exige o sync ciente de perfil). Se quiser entregar antes só o isolamento local
 (0a+0b+seletor sem sync-por-perfil), o sync fica temporariamente **desligado no multi-perfil**
 até a Fase 2 — evita sincronizar o formato aninhado por engano.
+
+---
+
+## H) PASSO 1 EXECUTADO — backup + baseline (2026-08-03)
+
+Branch `feat/multi-perfil`, tirada de `main` limpa. Código de antes marcado na tag
+**`refugio-pre-multi-perfil`** (v0.6.5 + fases A/B/C da magistratura).
+
+**Backup dos dados** em `../\_BACKUP_dados_pre-multi-perfil_2026-08-03/` (fora do repo, com
+`LEIA-ME.md` e instruções de restauração): cópia do SQLite conferida por SHA256 com o app
+fechado, mais o `state.json` extraído. Contêm `config.iaKey` em texto plano — não subir.
+
+**Ferramenta:** `dev/baseline-estado.py` tira o retrato e depois confere. Grava só forma e
+tamanho (strings viram tamanho+hash), nunca valores — por isso o retrato é commitável.
+Ela **achata o formato multi-perfil de volta ao plano** antes de contar, então o retrato de
+antes e o de depois são comparáveis:
+
+```bash
+python -X utf8 dev/baseline-estado.py --comparar dev/baseline-multi-perfil.json   # exit 1 se divergir
+```
+
+Já validada contra ensaios de 0a e 0b feitos sobre o estado real (ambos "OK") e contra uma
+migração que come 1 flashcard de propósito (acusou `flashcards: 12 -> 11`). Isto é, a
+verificação foi testada **antes** de ser necessária.
+
+**Baseline 2026-08-03** (`dev/baseline-multi-perfil.json`) — 31 chaves no topo, 45 no config,
+442 itens somados nas listas do topo:
+
+| indicações | flashcards | documentos | questões | tentativas | resumos | mapas | revisões | lembretes | errosManuais |
+|---|---|---|---|---|---|---|---|---|---|
+| 416 | 12 | 3 | 3 | 2 | 2 | 1 | 1 | 1 | 1 |
+
+Zerados: disciplinas, tópicos, sessões, simulados, missões, provas, aulas, redações, rotinas,
+marcações, revisoesFeitas, revisoesTopico, chatHistorico, bancas. **O peso do estado (2,4 MB)
+é material e indicações, não estudo** — a migração 0a mexe justamente onde há dados.
+
+### Chaves reais que o plano ainda não classifica (decidir antes da 0a/0b)
+
+A regra por whitelist manda todas para o perfil por omissão. Três delas merecem decisão
+consciente, porque "por omissão" pode ser a resposta errada:
+
+| Chave | Onde | Pela regra cai em | Observação |
+|---|---|---|---|
+| `infoFeed` | topo | perfil | Feed de informativos é conteúdo geral, não do concurso — candidato a **global**, junto com `indicacoes`/`bancas`. Por-perfil, cada perfil rebusca o mesmo feed. |
+| `chatHistorico` | topo | perfil | Hoje vazio. Conversa com o Mentor é sobre *aquele* concurso → perfil parece certo, mas confirmar. |
+| `revisoes` · `documentos` | topo | perfil | Coerente com o plano (material e revisões são do concurso). Só não estavam listados. |
+| `metasLeitura` · `ultimaLeitura` | config | — | Meta e progresso de leitura → **por-perfil** na 0b (`leitura`, que é fonte/tamanho/tema, continua global). |
+| `diasFeriado` | config | — | **Global**, junto com `diasFolga`/`dispDiariaMin` (disponibilidade de vida). |
+| `nomesLeis` | config | — | Apelidos de leis servem qualquer concurso → **global**. |
+| `mentorAutoSemanal` · `checkinVistoData` | config | — | Preferências de comportamento → **global** (`mentorPlano`/`mentorUltimaAnalise` seguem por-perfil). |
+
+`mentorPlano` e `mentorUltimaAnalise` (aresta 2) **não existem no estado atual** — só nascem
+quando o Mentor gera um plano. A migração por REGRA cobre isso; só não dá para testá-las com
+este estado.
+
+---
+
+## I) REVISÃO PRÁTICA (2026-08-03) — plano confrontado com o código e com o app rodando
+
+Feita antes de escrever qualquer linha da 0a: leitura do código de hoje (o plano é de julho e o
+`store.js` passou de ~5.900 para **7.782 linhas**) e execução das funções reais contra o formato
+novo. Três arestas novas apareceram, uma delas grave.
+
+### I.1 O que ficou MAIS FÁCIL do que o plano supunha
+
+O estado é bem encapsulado: dos **608** acessos diretos a `state.<coleção>`, **505 estão dentro do
+próprio `store.js`**. Fora dele são só **22**, em três arquivos (`ciclo.js` 15, `ia.js` 6,
+`viz.js` 1). Os getters não-enumeráveis continuam sendo a técnica certa e o raio de mudança é
+pequeno — o "~centenas de `state.X` espalhados" que o plano temia não se confirmou.
+
+### I.2 Aresta 1 confirmada, e ela tem duas irmãs
+
+`setConfig` segue reatribuindo por spread, agora em **`store.js:7658`** (o plano cita 5797).
+O plano não lista as duas vizinhas, que fazem o mesmo em sub-objetos do config:
+`setSyncMeta` (**:7665**) e `setSyncNuvemMeta` (**:7673**). Como a 0b leva `syncNuvem` para
+dentro do perfil, **as três mudam juntas** — não só o `setConfig`.
+
+### I.3 ARESTA NOVA — a ordem do `init()` está invertida no plano
+
+`store.js:691-701` faz, nesta ordem: `state = { ...defaultState(), ...carregado }` → repõe toda
+chave `undefined` a partir do default → backfills sobre `state.indicacoes`, `state.topicos`,
+`state.sessoes`.
+
+No formato novo o `carregado` **não tem** as coleções no topo. Então o passo 2 as **repõe vazias**
+vindas do `defaultState()`, e os backfills passam a normalizar o lugar errado (o topo vazio, não o
+perfil). Pior: uma migração que rode depois disso vê `disciplinas: []` no topo e pode gravar vazio
+por cima do perfil.
+
+O plano manda "merge/backfills → migrar → instalar acessores". **A ordem correta é:**
+`carregado` → **migrar** (por REGRA) → merge com o default só no TOPO → **instalar acessores** →
+**só então** os backfills (que agora enxergam o perfil ativo através dos getters).
+
+### I.4 ARESTA NOVA — `importarBackup` rejeita o formato novo, e ele é gargalo do sync
+
+`store.js:7751` valida `Array.isArray(obj.topicos)`. No formato multi-perfil isso é `undefined` →
+lança *"Arquivo inválido — não parece um backup do Mentor Concurso."* **Verificado rodando a
+validação real: formato de hoje ACEITO, multi-perfil REJEITADO.**
+
+Não é só o botão de importar: `sync-nuvem.js` chama `store.importarBackup` em **três** pontos
+(:191, :234, :275) — `restaurarDaNuvem` inclusive. Ou seja, a restauração da nuvem morre com erro
+assim que a 0a rodar. Falha barulhenta, o que é bom; mas é bloqueante.
+
+### I.5 ARESTA NOVA E GRAVE — o sync passaria a subir os PDFs para a nuvem
+
+`montarSnapshotSync` (`sync.js:137`) tira os binários com
+`snap.documentos = (snap.documentos||[]).map(d => ({...d, pdfData: null, imgData: null}))` — e isso
+só varre o **topo**. Com os documentos dentro de `perfis[]`, a limpeza não alcança nada.
+
+Medido com o estado de teste e 2 PDFs de 500 KB:
+
+| | tamanho do upload | PDFs no pacote |
+|---|---|---|
+| formato de hoje | **48 KB** | 0 |
+| multi-perfil (0a) | **1.024 KB** | **2** |
+
+Contraria a decisão de projeto de que **PDF não sai da máquina** e estoura o orçamento do cofre.
+
+### I.6 A guarda anti-perda do sync desliga sozinha
+
+`peso()` também só conta coleções do topo. Medido: **65 → 2** no formato novo (os 2 são as
+indicações, que ficam globais). E `encolheria(2, 0)` devolve **false** — isto é, a proteção que
+impede "máquina zerada sobrescreve máquina cheia" **para de disparar**, sem avisar. Somado a
+`aplicarRemoto` (`sync.js:164`), que lê `localState.documentos` do topo para preservar os PDFs
+locais e passaria a ler vazio.
+
+### I.7 Consequência para o sequenciamento: a Fase 2 deixa de ser opcional
+
+O plano dizia que dava para entregar 0a+0b+seletor e deixar o sync para depois. Na prática, a 0a
+sozinha produz: restauração da nuvem quebrada (I.4), PDFs vazando no upload (I.5) e guarda
+anti-perda desligada (I.6). Então, ou a **Fase 2 vem junto**, ou o sync precisa ser
+**desligado de forma explícita e visível** enquanto o multi-perfil estiver ativo — não por
+omissão.
+
+### I.8 Verificação deixou de ser cega
+
+O estado do desktop tinha 14 coleções zeradas: comparar "0 antes, 0 depois" não prova nada. O
+app foi aberto no navegador de teste (IndexedDB próprio, **sem cofre conectado** — confirmado:
+`config.sync` e `config.syncNuvem` vazios) e as 11 coleções ainda vazias foram povoadas com
+lançamentos fictícios na forma exata que o `store.js` cria, com vínculos para ids reais.
+
+O app consumiu os dados pela lógica de verdade: Acompanhamento calculou **60% de aproveitamento**
+(6 acertos em 10 tentativas), a taxa de conclusão de revisões apareceu e a rotina fictícia entrou
+na agenda de segunda. Baseline em **`dev/baseline-navegador-teste.json`**: **24 coleções não
+vazias, 109 itens, nenhuma zerada**. Os ensaios de 0a e 0b sobre ele passam ("nada sumiu").
+
+**É neste ambiente que a 0a deve ser exercitada primeiro** — dados reais em forma, sem risco para
+o SQLite do desktop e sem nuvem conectada.
+
+### I.9 DECISÕES TOMADAS (2026-08-03)
+
+- **`infoFeed` → POR PERFIL.** Um perfil de magistratura acompanha informativos que um perfil de
+  escrevente não precisa ver. (Contraria a sugestão de deixar global; decisão do usuário.)
+- **`chatHistorico` → POR PERFIL** (a regra por whitelist já leva; a conversa é sobre aquele
+  concurso). Nenhuma chave nova vai para o global.
+- **Sync: DESLIGADO explicitamente enquanto o multi-perfil estiver ativo.** Entrega-se
+  0a+0b+seletor primeiro; a Fase 2 vem depois. O desligamento tem de ser **visível no card de
+  Sincronização em Configurações** ("indisponível durante o multi-perfil"), nunca silencioso —
+  senão o usuário acha que está sincronizando e não está.
+
+### I.10 Sequenciamento revisado
+
+1. **0a** — migração por REGRA com a ordem do `init()` corrigida (I.3); `importarBackup` aceitando
+   os dois formatos (I.4); sync travado com aviso visível (I.7). Exercitar no navegador de teste e
+   conferir contra `baseline-navegador-teste.json`.
+2. **0b** — as **três** funções de config (I.2), não só `setConfig`.
+3. **Fase 1** — seletor. Guarda do cronômetro rodando ao trocar (o estado de teste tem um
+   cronômetro ativo, dá para exercitar).
+4. **Fase 2** — sync por perfil: `montarSnapshotSync` fatia o perfil (resolve I.5 e I.6 de uma
+   vez), `aplicarRemoto` aplica dentro do perfil, `restaurarDaNuvem` cria perfil. Só aqui o sync
+   volta a ser ligado.
+
+---
+
+## J) FASE 0a — IMPLEMENTADA (2026-08-03) · branch `feat/multi-perfil`
+
+Dados de estudo dentro de `perfis[]`; **`config` segue global** (é o que mantém o risco baixo:
+as três funções que fazem spread nele só entram na 0b).
+
+### O que mudou
+
+**`src/store.js`**
+- `GLOBAL_TOP` (8 chaves) + `migrarParaPerfis()` — migração por REGRA, idempotente, também sobre
+  estado vindo de backup. O perfil nasce nomeado pelo concurso ("Escrevente Técnico Judiciário ·
+  Vunesp").
+- `definirAcessor()` / `instalarAcessores()` — getters/setters **não-enumeráveis** para cada
+  coleção do perfil ativo. É isso que mantém os 505 `state.<coleção>` do arquivo funcionando sem
+  reescrita, e que faz `JSON.stringify(state)` gravar já no formato novo.
+- `recolherOrfas()` — chamada pelo `commit()`. Se algo escrever numa coleção que ainda não tem
+  acessor (`state.chatHistorico = []` num estado que nunca teve chat), a chave cairia no TOPO como
+  propriedade comum e seria persistida fora do perfil. A função aplica a mesma regra
+  continuamente, então **coleção futura vira por-perfil sozinha**, sem ninguém declarar nada.
+- `init()` reordenado conforme I.3: migrar → merge só do topo → completar coleções novas no perfil
+  → **instalar acessores** → backfills.
+- `importarBackup()` aceita os dois formatos (I.4). `resetTudo()` reinstala os acessores.
+- `snapshotExport()` — **corrigido um risco que a I.5 não tinha previsto**: o backup
+  "compartilhável" limpava `clone.documentos` no topo, então no formato novo ele **deixaria passar
+  as apostilas com marca-d'água/CPF**. A limpeza virou `limparMaterialDaFatia()`, aplicada a
+  **todos** os perfis.
+
+**`src/sync.js` · `src/sync-nuvem.js`** — `SYNC_PAUSADO_MULTIPERFIL` trava as **11** entradas de
+sincronização (6 na nuvem, 5 no backup por arquivo), no padrão de retorno que elas já usavam
+(`{ok:false, motivo}` no silencioso, erro no manual).
+
+**`src/screens/config.js`** — a pausa é dita na tela: pill `Pausada · multi-perfil em implantação`
+no card de Sincronização, com `data-tip` explicando o porquê técnico, e chip `pausado` no *summary*
+do backup por arquivo (senão o aviso ficaria escondido dentro do `<details>` fechado).
+
+### Verificação executada (navegador de teste, estado de 109 itens)
+
+| Prova | Resultado |
+|---|---|
+| Formato persistido | 8 chaves globais no topo · 26 coleções no perfil |
+| Contagens após migrar | **109 itens, nenhuma perda** (só `modificadoEm` muda) |
+| Telas | **17 rotas, 0 quebradas, 0 erros de console** |
+| Escrita (avaliar flashcard) | gravou em `perfis[0].revisoes` (4 → 5); **nada no topo** |
+| Órfãs no topo | **nenhuma**, depois de todos os testes |
+| Backup antigo (formato plano) importado pela UI | **aceito e migrado**; estado idêntico ao baseline |
+
+Ciclo redondo: plano → migra → usa → escreve → exporta → importa backup antigo → migra de novo →
+**bate com o baseline**, com a única diferença sendo o carimbo `modificadoEm`.
+
+### Achados durante o teste (não são regressão da 0a)
+
+- **`screens/correcao.js:427` não é defensivo:** `c.criterios.map(...)` quebra a tela inteira se a
+  correção não tiver `criterios`. Descoberto porque o lançamento fictício de redação foi criado
+  incompleto — mas uma redação corrompida ou vinda de versão antiga derruba a tela do mesmo jeito.
+  Vale um `(c.criterios || [])`.
+- **Copy desatualizado:** o card Concurso ainda diz *"Multi-concurso e modo fusão chegam na v3"*.
+
+### O que falta antes de considerar a 0a fechada
+
+- Rodar no **desktop** (SQLite). A migração acontece na primeira abertura; o backup de 2026-08-03
+  é a volta. Conferir com `--comparar dev/baseline-multi-perfil.json`.
+- 0b, seletor e Fase 2 seguem pendentes.
