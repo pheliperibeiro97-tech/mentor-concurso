@@ -370,7 +370,12 @@ function printRedacoes(st, comTexto = true) {
 }
 
 function correcaoHTML(r) {
-  const c = r.correcao;
+  // A correção pode faltar ou vir pela metade: redação salva por uma versão antiga,
+  // importada de outro aparelho, ou cuja correção foi interrompida no meio. Sem estas
+  // guardas, um único campo ausente derruba a TELA INTEIRA (e não só aquele cartão).
+  const c = r.correcao || {};
+  const criterios = Array.isArray(c.criterios) ? c.criterios : [];
+  const temMetricas = [c.palavras, c.paragrafos, c.frases].some((n) => typeof n === "number");
   const fb = c.feedbackIA;
   const fontes =
     fb && fb.fontesWeb && fb.fontesWeb.length
@@ -391,7 +396,7 @@ function correcaoHTML(r) {
             ? `<span class="cor-itens-tag" data-tip="Dos itens que o espelho cobraria neste caso, você enfrentou ${c.itensPct}% (PARCIAL conta meio). É o número que dá para comparar entre provas — a nota depende de cada caso.">${icone("list-checks")} ${c.itensPct}% dos itens</span>`
             : ""
         }
-        <span class="cor-nota-tag" data-tip="Nota geral atribuída à resposta.">${seloBadge(c.selo)} ${esc(c.nota)}</span>
+        ${c.nota ? `<span class="cor-nota-tag" data-tip="Nota geral atribuída à resposta.">${seloBadge(c.selo)} ${esc(c.nota)}</span>` : ""}
         <span class="spacer"></span>
         <span class="muted small">${fmtData(r.data)}</span>
         ${r.texto && fbTxt ? `<button class="lnk cor-comparar-btn" data-action="cor-comparar" data-tip-pos="cima-dir" data-tip="Ver sua resposta e a correção lado a lado (toque de novo para empilhar).">${icone("arrow-left-right")} Comparar</button>` : ""}
@@ -408,7 +413,7 @@ function correcaoHTML(r) {
       <div class="cor-corpo">
       ${
         r.texto
-          ? `<details class="cor-resposta"><summary>${icone("file-text")} Sua resposta (${c.palavras} palavra${c.palavras === 1 ? "" : "s"})</summary><div class="cor-resposta-txt">${esc(r.texto)}</div></details>`
+          ? `<details class="cor-resposta"><summary>${icone("file-text")} Sua resposta${typeof c.palavras === "number" ? ` (${c.palavras} palavra${c.palavras === 1 ? "" : "s"})` : ""}</summary><div class="cor-resposta-txt">${esc(r.texto)}</div></details>`
           : ""
       }
       ${
@@ -420,10 +425,10 @@ function correcaoHTML(r) {
           : ""
       }
       </div>
-      <details class="cor-metricas">
-        <summary>${c.palavras} palavras · ${plural(c.paragrafos, "parágrafo", "parágrafos")} · ${plural(c.frases, "frase", "frases")} · ver métricas</summary>
+      ${!temMetricas && !criterios.length ? "" : `<details class="cor-metricas">
+        <summary>${temMetricas ? `${c.palavras || 0} palavras · ${plural(c.paragrafos || 0, "parágrafo", "parágrafos")} · ${plural(c.frases || 0, "frase", "frases")} · ` : ""}ver métricas</summary>
         <div class="cor-criterios">
-          ${c.criterios
+          ${criterios
             .map(
               (cr) => `
             <div class="criterio">
@@ -436,6 +441,6 @@ function correcaoHTML(r) {
             )
             .join("")}
         </div>
-      </details>
+      </details>`}
     </div>`;
 }
