@@ -277,7 +277,12 @@ function navHTML() {
         <div class="brand-logo"><img src="/brand-logo.png" alt="Mentor Concurso" /></div>
         <div class="brand-txt">
           <div class="brand-nome">Mentor Concurso</div>
-          <div class="brand-sub">${esc(c ? c.cargo : "")}</div>
+          ${
+            // No celular a topbar é reservada à barra de comando, então o seletor aparece
+            // aqui — onde o cargo já era mostrado. No desktop este fica oculto (o do topo
+            // vale), porque a barra lateral pode estar recolhida.
+            perfilSeletorHTML(store, "lateral") || `<div class="brand-sub">${esc(c ? c.cargo : "")}</div>`
+          }
         </div>
         <button class="sidebar-toggle" data-toggle-sidebar title="Recolher / expandir o menu" aria-label="Recolher ou expandir o menu">${icone("chevrons-left")}</button>
       </div>
@@ -319,7 +324,12 @@ function heyInfo(store) {
 // .doc-mais-pop), então herda posicionamento, foco de teclado e as duas paletas.
 // Com um só perfil ele continua sendo o nome do concurso — só que clicável, revelando
 // "Novo concurso" quando o usuário quiser um segundo.
-function perfilSeletorHTML(store) {
+// `onde`: "topo" (topbar, desktop) ou "lateral" (cabeçalho da barra lateral, celular).
+// Dois lugares porque nenhum sozinho serve sempre: no celular a topbar é reservada à barra
+// de comando, e no desktop a barra lateral pode estar RECOLHIDA (só ícones), o que
+// esconderia o seletor. Cada um aparece na largura em que funciona; os handlers são
+// plurais e cobrem os dois.
+function perfilSeletorHTML(store, onde = "topo") {
   const perfis = store.perfis ? store.perfis() : [];
   if (!perfis.length) return "";
   const atual = perfis.find((p) => p.ativo) || perfis[0];
@@ -337,9 +347,9 @@ function perfilSeletorHTML(store) {
     </button>`;
   };
   return `
-    <details class="doc-mais tb-perfil">
+    <details class="doc-mais tb-perfil tb-perfil--${onde}">
       <summary class="tb-cargo" data-tip="${perfis.length > 1 ? "Trocar de concurso" : "Seus concursos"}" aria-label="Perfil: ${esc(atual.nome)}">
-        ${esc(rotulo)} ${icone("chevron-down")}
+        <span class="tb-perfil-atual">${esc(rotulo)}</span>${icone("chevron-down")}
       </summary>
       <div class="doc-mais-pop tb-perfil-pop">
         <div class="menu-rotulo">${perfis.length > 1 ? "Concursos" : "Concurso"}</div>
@@ -381,7 +391,7 @@ function topbarHTML(store) {
     <header class="topbar">
       <div class="topbar-inner">
         <div class="tb-hey" data-hey="${esc(hey.chave)}">${hey.html}</div>
-        ${perfilSeletorHTML(store)}
+        ${perfilSeletorHTML(store, "topo")}
         <div class="tb-sp"></div>
         ${provaChip}
         ${streakChip}
@@ -683,7 +693,7 @@ function render(preservarScroll = true) {
   root.querySelectorAll("[data-perfil-ir]").forEach((b) =>
     b.addEventListener("click", () => trocarDePerfil(b.getAttribute("data-perfil-ir")))
   );
-  root.querySelector("[data-perfil-novo]")?.addEventListener("click", async () => {
+  root.querySelectorAll("[data-perfil-novo]").forEach((b) => b.addEventListener("click", async () => {
     const nome = await pedirTexto(
       "Novo concurso — ele começa vazio, com edital, materiais e histórico próprios. O concurso atual fica intacto.",
       { placeholder: "ex.: Juiz Substituto · TJSP", rotuloOk: "Criar" }
@@ -692,16 +702,16 @@ function render(preservarScroll = true) {
     store.criarPerfil(nome);
     app.navigate("hoje");
     toast("Concurso criado. Monte o edital para começar.");
-  });
-  root.querySelector("[data-perfil-renomear]")?.addEventListener("click", async () => {
+  }));
+  root.querySelectorAll("[data-perfil-renomear]").forEach((b) => b.addEventListener("click", async () => {
     const atual = store.perfis().find((p) => p.ativo);
     if (!atual) return;
     const nome = await pedirTexto("Renomear concurso:", { valor: atual.nome });
     if (!nome) return;
     store.renomearPerfil(atual.id, nome);
     app.refresh();
-  });
-  root.querySelector("[data-perfil-remover]")?.addEventListener("click", async () => {
+  }));
+  root.querySelectorAll("[data-perfil-remover]").forEach((b) => b.addEventListener("click", async () => {
     const atual = store.perfis().find((p) => p.ativo);
     if (!atual) return;
     const ok = await confirmar(
@@ -711,7 +721,7 @@ function render(preservarScroll = true) {
     store.removerPerfil(atual.id);
     app.navigate("hoje");
     toast("Concurso removido.");
-  });
+  }));
 
   // Gaveta do celular: o botão "Mais" declara o estado (aria-expanded) e o Esc fecha —
   // antes só o toque no fundo escuro ou num destino fechava, e leitor de tela não sabia

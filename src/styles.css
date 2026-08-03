@@ -480,7 +480,36 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible,
 /* Seletor de perfil (concurso) no topo: reusa .doc-mais/.doc-mais-pop. Só ajusta o que o
    contexto do topbar exige — o popover do menu padrão alinha à direita (nasceu em cartões
    alinhados à direita) e aqui precisa nascer sob o nome, à esquerda. */
-.tb-perfil > summary { display: inline-flex; align-items: center; gap: 4px; font-weight: inherit; }
+/* Aparece em DOIS lugares, um por vez: no topo (desktop) e no cabeçalho da barra lateral
+   (celular). Nenhum sozinho serve sempre — no celular a topbar é reservada à barra de
+   comando; no desktop a barra lateral pode estar recolhida (só ícones), o que esconderia
+   o seletor. Dupla classe porque as regras de .doc-mais vêm DEPOIS neste arquivo. */
+.doc-mais.tb-perfil { display: block; }
+.doc-mais.tb-perfil--lateral { display: none; }
+@media (max-width: 900px) {
+  .doc-mais.tb-perfil--topo { display: none; }
+  .doc-mais.tb-perfil--lateral { display: block; }
+}
+.doc-mais.tb-perfil > summary { display: flex; align-items: center; gap: 4px; min-width: 0;
+  font-size: var(--fs-xs); font-weight: var(--fw-regular); color: var(--text-2); padding: 2px 4px; }
+.tb-perfil-atual { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-mais.tb-perfil > summary .ico { flex: none; }
+/* No dedo, 18px de altura não é alvo — a diretriz do projeto é ~40px. E no drawer o menu
+   tem de caber na largura da tela, não na do padrão de desktop. */
+@media (pointer: coarse), (max-width: 640px) {
+  .doc-mais.tb-perfil > summary { padding-top: 12px; padding-bottom: 12px; }
+}
+/* Abaixo de 560px o app vira todo menu numa folha `position: fixed` ancorada embaixo. Esse
+   padrão NÃO serve aqui: o seletor mora na barra lateral, que no celular é um drawer
+   deslocado por transform — e transform cria contexto de contenção, então o `fixed` passa a
+   se medir pelo drawer (deslocado), não pela viewport, e a folha ia parar fora da tela.
+   Aqui o menu volta a ser ancorado ao gatilho, com largura que cabe no drawer. */
+@media (max-width: 560px) {
+  .doc-mais-pop.tb-perfil-pop {
+    position: absolute; left: 0; right: auto; top: calc(100% + 6px); bottom: auto;
+    width: 224px; min-width: 0; max-width: none; max-height: 60dvh;
+  }
+}
 .tb-perfil > summary .ico { width: 14px; height: 14px; opacity: .7; }
 .tb-perfil[open] > summary .ico { transform: rotate(180deg); }
 /* Nome de concurso é longo por natureza ("Escrevente Técnico Judiciário · Vunesp"): o
