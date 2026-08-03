@@ -19,7 +19,12 @@ import { esc } from "./util.js";
 // Usos: causa do erro (fase B) e qualquer classificação curta que venha depois.
 // Não é formulário: sem "salvar", sem obrigatoriedade. Quem não responde, segue.
 // ---------------------------------------------------------------------------
-export function chipsEscolha({ rotulo = "", opcoes = [], valor = "", acao = "chip-escolha", nome = "" } = {}) {
+export function chipsEscolha({ rotulo = "", opcoes = [], valor = "", acao = "chip-escolha", nome = "", dados = {} } = {}) {
+  // `dados` vira data-* em CADA chip (ex.: { t: tentativaId }), para o handler saber a
+  // que registro a escolha pertence sem precisar de closure.
+  const extras = Object.entries(dados)
+    .map(([k, v]) => ` data-${k}="${esc(String(v))}"`)
+    .join("");
   const itens = opcoes
     .map((o) => {
       const v = typeof o === "string" ? o : o.valor;
@@ -29,7 +34,7 @@ export function chipsEscolha({ rotulo = "", opcoes = [], valor = "", acao = "chi
       // (escopo de estudo) já usam. Um chip novo aqui seria o terceiro dialeto do mesmo
       // botão — exatamente o que esta fase existe para impedir.
       return `<button type="button" class="chip-sel${on ? " on" : ""}" data-action="${esc(acao)}"
-        data-valor="${esc(v)}" aria-pressed="${on}">${on ? icone("check") : ""}${esc(t)}</button>`;
+        data-valor="${esc(v)}"${extras} aria-pressed="${on}">${on ? icone("check") : ""}${esc(t)}</button>`;
     })
     .join("");
   const rot = rotulo ? `<span class="chips-rotulo">${esc(rotulo)}</span>` : "";

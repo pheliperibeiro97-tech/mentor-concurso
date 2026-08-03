@@ -3144,7 +3144,15 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
   border-left: 3px solid var(--danger); border-radius: var(--radius-sm); }
 .analise-erro-titulo { font-size: var(--fs-2xs); font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--muted); margin-bottom: 10px; }
-.analise-erro-motivo { margin: 0 0 4px; }
+/* O motivo virou linha de chips (1 toque) no lugar do select; a margem que era do
+   label passa para a linha de chips dentro do painel de análise. */
+.analise-erro .chips-rapidos { margin: 0 0 10px; }
+/* O chip vive sobre --surface-2 aqui (fundo do painel de análise), e não sobre o cartão.
+   No CLARO isso já funciona: branco (--surface) sobre cinza = relevo. No ESCURO inverte —
+   --surface (#141d31) é MAIS ESCURO que --surface-2 (#1c2842), e o chip lia como buraco em
+   vez de botão. Sobe um degrau só no escuro. Medido, não estimado. */
+[data-tema="escuro"] .analise-erro .chip-sel { background: var(--surface-3); }
+[data-tema="escuro"] .analise-erro .chip-sel:hover { background: var(--surface-2); }
 .questao-rodape { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
 
