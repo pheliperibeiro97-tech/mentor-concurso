@@ -478,10 +478,12 @@ Os acessores do config são instalados **pela lista**, não pelas chaves present
 
 ---
 
-## M) FASE 2 — IMPLEMENTADA (2026-08-03) · sync por perfil · **PLANO CONCLUÍDO**
+## M) FASE 2 — IMPLEMENTADA (2026-08-03) · sincronização · **PLANO CONCLUÍDO**
 
-Cada concurso com o seu cofre e a sua senha. A trava da 0a foi removida: a sincronização
-está religada.
+> ⚠️ **REVISTO no mesmo dia (seção N): o cofre passou a ser da CONTA, não do concurso.**
+> O texto abaixo descreve a primeira versão, mantida para registro do caminho.
+
+A trava da 0a foi removida: a sincronização está religada.
 
 **O que manteve isto pequeno:** o que sobe é a **fatia plana** do perfil — as coleções voltam
 ao topo, no formato de antes do multi-perfil. Então `peso()`, `decidir()` e `aplicarRemoto()`
@@ -578,3 +580,53 @@ Estado de hoje, para não haver surpresa:
   branch em que o repositório estiver. Abrir o app por ele durante o trabalho no multi-perfil usa
   a versão incompleta e migra o IndexedDB daquele navegador. Enquanto a implantação não fechar:
   abrir pelo `.exe`, ou deixar o repositório na `main` ao fim da sessão.
+
+
+---
+
+## N) REVISÃO DO MODELO DE COFRE (2026-08-03) — por CONTA, não por concurso
+
+Decidido depois de o usuário perguntar: *"o cofre então vai ser por concursos? Não deveria
+ser por conta, aí apareceriam todas?"* — e a pergunta estava certa.
+
+**Por que o modelo por concurso não se sustentou.** A decisão de 13/07 (seção A) foi tomada
+por um motivo técnico: a fatia plana por perfil evitava reescrever `peso()`,
+`montarSnapshotSync` e `aplicarRemoto`. Era uma escolha sobre custo de implementação, não
+sobre o que é melhor de usar. Com o motor já pronto, o custo de mudar virou pequeno — e os
+números do plano grátis do Cloudflare (o que usamos) pesam contra ele:
+
+| | Cofre por concurso | Cofre por conta |
+|---|---|---|
+| Escritas por ciclo de sync (limite 1.000/dia) | **uma por concurso** | uma |
+| Conteúdo compartilhado (indicações, bancas, lembretes — 456 KB) | **duplicado em cada cofre** | uma vez |
+| 6 concursos, medido | ~6 × 700 KB ≈ **4 MB** | **717 KB** |
+| Senhas a lembrar | uma por concurso | **uma** |
+
+O que se perde: levar ou compartilhar **um** concurso isolado para outro aparelho. Cenário
+que o usuário nunca teve.
+
+**No motor:** o snapshot volta a ser o app inteiro, limpando os binários de **cada** concurso
+(varrer só o topo deixaria os PDFs passarem); `peso()` soma através de `perfis[]`, senão a
+guarda anti-perda contaria quase zero; `aplicarRemoto` devolve o estado completo preservando
+os PDFs locais de todos os concursos; a senha volta ao config global, com migração para quem
+já a tinha por perfil. `restaurarDaNuvem` volta a trazer tudo — "criar concurso a partir do
+cofre" deixa de fazer sentido. `fatiaSync`/`aplicarFatia` foram removidas.
+
+## O) ONBOARDING ENXUTO NO CONCURSO NOVO (2026-08-03)
+
+Também a partir de uma pergunta: *"é interessante realmente abrir o onboarding ao criar um
+novo concurso?"*. Não inteiro. Dos quatro passos, **tema e IA são globais** — repeti-los é
+ruído, e mexer no tema ali muda para todos os concursos.
+
+O concurso adicional passa por **concurso → prova e ritmo → montar plano**. Somem as
+boas-vindas, o tema, a IA, o "restaurar da nuvem" (que agora traz todos os concursos e não
+cabe dentro de "criar um") e o rodapé sobre tema/IA.
+
+**Aresta encontrada:** o roteador decide pelo `isOnboarded()`, que usa `meta.onboarded` —
+**global**. Sem uma marca de fluxo em curso, gravar o concurso do perfil novo já fazia o app
+considerar tudo pronto e sair no meio, pulando prova/ritmo e plano. Resolvido com
+`iniciarFluxoNovoConcurso()`/`onboardingEmCurso()`.
+
+**Também corrigido:** criar um concurso pedia o nome no menu **e** no onboarding, e as duas
+respostas coexistiam (relatado pelo usuário: perfil "teste" com cargo "TESTE2"). O menu
+passou a criar direto; o rótulo é derivado do concurso.
