@@ -477,6 +477,62 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible,
 .tb-hey { font-size: var(--fs-sm); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .tb-hey b { color: var(--text); font-weight: var(--fw-medium); }
 .tb-cargo { color: var(--text-2); }
+/* Seletor de perfil (concurso) no topo: reusa .doc-mais/.doc-mais-pop. Só ajusta o que o
+   contexto do topbar exige — o popover do menu padrão alinha à direita (nasceu em cartões
+   alinhados à direita) e aqui precisa nascer sob o nome, à esquerda. */
+/* Aparece em DOIS lugares, um por vez: no topo (desktop) e no cabeçalho da barra lateral
+   (celular). Nenhum sozinho serve sempre — no celular a topbar é reservada à barra de
+   comando; no desktop a barra lateral pode estar recolhida (só ícones), o que esconderia
+   o seletor. Dupla classe porque as regras de .doc-mais vêm DEPOIS neste arquivo. */
+.doc-mais.tb-perfil { display: block; }
+.doc-mais.tb-perfil--lateral { display: none; }
+@media (max-width: 900px) {
+  .doc-mais.tb-perfil--topo { display: none; }
+  .doc-mais.tb-perfil--lateral { display: block; }
+}
+.doc-mais.tb-perfil > summary { display: flex; align-items: center; gap: 4px; min-width: 0;
+  font-size: var(--fs-xs); font-weight: var(--fw-regular); color: var(--text-2); padding: 2px 4px; }
+.tb-perfil-atual { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-mais.tb-perfil > summary .ico { flex: none; }
+/* No dedo, 18px de altura não é alvo — a diretriz do projeto é ~40px. E no drawer o menu
+   tem de caber na largura da tela, não na do padrão de desktop. */
+@media (pointer: coarse), (max-width: 640px) {
+  .doc-mais.tb-perfil > summary { padding-top: 12px; padding-bottom: 12px; }
+}
+/* Abaixo de 560px o app vira todo menu numa folha `position: fixed` ancorada embaixo. Esse
+   padrão NÃO serve aqui: o seletor mora na barra lateral, que no celular é um drawer
+   deslocado por transform — e transform cria contexto de contenção, então o `fixed` passa a
+   se medir pelo drawer (deslocado), não pela viewport, e a folha ia parar fora da tela.
+   Aqui o menu volta a ser ancorado ao gatilho, com largura que cabe no drawer. */
+@media (max-width: 560px) {
+  .doc-mais-pop.tb-perfil-pop {
+    position: absolute; left: 0; right: auto; top: calc(100% + 6px); bottom: auto;
+    width: 224px; min-width: 0; max-width: none; max-height: 60dvh;
+  }
+}
+.tb-perfil > summary .ico { width: 14px; height: 14px; opacity: .7; }
+.tb-perfil[open] > summary .ico { transform: rotate(180deg); }
+/* Nome de concurso é longo por natureza ("Escrevente Técnico Judiciário · Vunesp"): o
+   menu precisa de mais largura que o padrão de 204px e o nome trunca em vez de ser
+   cortado na borda. */
+/* Dupla classe de propósito: as regras de .doc-mais-pop vêm DEPOIS desta no arquivo e,
+   com a mesma especificidade, venceriam o alinhamento e a largura. */
+.doc-mais-pop.tb-perfil-pop { left: 0; right: auto; min-width: 264px; max-width: min(340px, 84vw); }
+.tb-perfil-pop .menu-item { min-width: 0; }
+/* O concurso ATIVO é `disabled` (não há para onde ir clicando nele), mas o :disabled
+   padrão o deixa a 40% de opacidade — o item atual ficava mais apagado que os outros,
+   invertendo a hierarquia. Aqui ele é o destaque: cor primária e o ✓. */
+.doc-mais-pop.tb-perfil-pop .menu-item:disabled { opacity: 1; color: var(--primary-d); font-weight: var(--fw-medium); }
+.tb-perfil-nome { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.3; min-width: 0; flex: 1; }
+.tb-perfil-rot { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Saída do onboarding quando ele é um concurso NOVO (e não o primeiro uso do app).
+   O nome do outro concurso pode ser longo, então ele trunca em vez de empilhar os dois
+   links — e "Descartar" fica discreto: o peso da ação destrutiva está na confirmação. */
+.ob-voltar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  margin-bottom: 14px; font-size: var(--fs-sm); }
+.ob-voltar-alvo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-voltar-descartar { flex-shrink: 0; }
+.ob-voltar-descartar:hover { color: var(--danger); }
 .tb-sp { flex: 1; }
 /* Altura/raio/fonte casados com .tb-crono e .cmdbar ao lado (mesmo enquadramento). */
 .tb-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border-radius: 8px;

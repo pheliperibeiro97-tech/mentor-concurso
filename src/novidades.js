@@ -8,6 +8,19 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.7.0",
+    data: "agosto/2026",
+    titulo: "Vários concursos no mesmo app",
+    itens: [
+      "Agora dá para estudar para MAIS DE UM concurso no mesmo app. Cada concurso guarda o seu próprio edital, materiais, questões, flashcards, histórico, metas e data da prova — nada se mistura.",
+      "Para trocar, clique no nome do concurso no alto da tela (no celular, ele fica no topo do menu lateral). Ali também estão 'Novo concurso', 'Renomear' e 'Remover'.",
+      "O que é seu e não do concurso continua valendo em todos: tema, chave da IA, notificações, pomodoro, dias de folga, lembretes e as bancas cadastradas.",
+      "Criar um concurso novo não mexe no que você já tem: ele nasce vazio e o atual fica intacto. Se criar por engano, dá para voltar ou descartar na mesma tela.",
+      "Sincronização: cada concurso tem o seu próprio cofre e a sua própria senha. Ao restaurar da nuvem num aparelho que já está em uso, o Mentor CRIA um concurso a partir do cofre em vez de substituir o que está aqui.",
+      "Seus dados atuais viram automaticamente o seu primeiro concurso, sem que você precise fazer nada.",
+    ],
+  },
+  {
     v: "0.6.4",
     data: "julho/2026",
     titulo: "Estude no celular + sincronização por senha",

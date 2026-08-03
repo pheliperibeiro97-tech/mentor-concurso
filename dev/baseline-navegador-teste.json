@@ -1,0 +1,385 @@
+{
+  "gerado_em": "2026-08-03T17:34:37",
+  "origem": "json:estado-navegador-povoado.json",
+  "formato": "plano",
+  "perfil_ativo": null,
+  "perfis": 0,
+  "totais": {
+    "chaves_topo": 30,
+    "chaves_config": 44,
+    "itens_em_listas_do_topo": 109
+  },
+  "topo": {
+    "aulas": {
+      "t": "lista",
+      "n": 2
+    },
+    "bancas": {
+      "t": "lista",
+      "n": 1
+    },
+    "chatHistorico": {
+      "t": "lista",
+      "n": 12
+    },
+    "concurso": {
+      "t": "obj",
+      "n": 4,
+      "k": {
+        "ano": {
+          "t": "str",
+          "n": 4,
+          "h": "158a323a"
+        },
+        "banca": {
+          "t": "str",
+          "n": 6,
+          "h": "f91d5f81"
+        },
+        "cargo": {
+          "t": "str",
+          "n": 29,
+          "h": "228d4a2e"
+        },
+        "nome": {
+          "t": "str",
+          "n": 36,
+          "h": "b3985229"
+        }
+      }
+    },
+    "config": {
+      "t": "obj",
+      "n": 44,
+      "k": {
+        "atalhos": {
+          "t": "lista",
+          "n": 1
+        },
+        "atencaoAdiada": {
+          "t": "obj",
+          "n": 0
+        },
+        "bancasPreferidas": {
+          "t": "lista",
+          "n": 2
+        },
+        "baseEstudo": {
+          "t": "str",
+          "n": 6,
+          "h": "3832b022"
+        },
+        "botoesOcultos": {
+          "t": "lista",
+          "n": 0
+        },
+        "checkinVistoData": {
+          "t": "null"
+        },
+        "dataProva": {
+          "t": "str",
+          "n": 10,
+          "h": "473ff37b"
+        },
+        "descartarPdfAposImport": {
+          "t": "bool",
+          "v": false
+        },
+        "diasFeriado": {
+          "t": "lista",
+          "n": 0
+        },
+        "diasFolga": {
+          "t": "lista",
+          "n": 0
+        },
+        "disciplinasAdiadas": {
+          "t": "lista",
+          "n": 0
+        },
+        "dispDiariaMin": {
+          "t": "int",
+          "v": 180
+        },
+        "dossieOcultas": {
+          "t": "lista",
+          "n": 0
+        },
+        "dossieOrdem": {
+          "t": "lista",
+          "n": 0
+        },
+        "histPeriodo": {
+          "t": "int",
+          "v": 14
+        },
+        "iaKey": {
+          "t": "str",
+          "n": 53,
+          "h": "695a0612"
+        },
+        "iaKeyReserva": {
+          "t": "str",
+          "n": 0,
+          "h": "e3b0c442"
+        },
+        "iaModelo": {
+          "t": "str",
+          "n": 21,
+          "h": "0c0cf0da"
+        },
+        "iaProvider": {
+          "t": "str",
+          "n": 6,
+          "h": "5d724362"
+        },
+        "leitura": {
+          "t": "obj",
+          "n": 5
+        },
+        "materialAgrupamento": {
+          "t": "str",
+          "n": 10,
+          "h": "7d60df0b"
+        },
+        "materialAvisoAceito": {
+          "t": "bool",
+          "v": true
+        },
+        "mentorPlano": {
+          "t": "obj",
+          "n": 4
+        },
+        "mentorPlanoVisto": {
+          "t": "str",
+          "n": 24,
+          "h": "ced2653f"
+        },
+        "mentorUltimaAnalise": {
+          "t": "str",
+          "n": 24,
+          "h": "ced2653f"
+        },
+        "metaDiariaMin": {
+          "t": "int",
+          "v": 120
+        },
+        "metaMensalMin": {
+          "t": "int",
+          "v": 3000
+        },
+        "metaSemanalMin": {
+          "t": "int",
+          "v": 700
+        },
+        "metasLeitura": {
+          "t": "obj",
+          "n": 2
+        },
+        "niveisDisciplina": {
+          "t": "obj",
+          "n": 0
+        },
+        "nomesLeis": {
+          "t": "obj",
+          "n": 0
+        },
+        "notificacoes": {
+          "t": "obj",
+          "n": 6
+        },
+        "ordemNav": {
+          "t": "lista",
+          "n": 0
+        },
+        "paletaMarcacao": {
+          "t": "str",
+          "n": 6,
+          "h": "a8060375"
+        },
+        "perfBom": {
+          "t": "int",
+          "v": 80
+        },
+        "perfRuim": {
+          "t": "int",
+          "v": 60
+        },
+        "pomodoroFoco": {
+          "t": "int",
+          "v": 25
+        },
+        "pomodoroPausa": {
+          "t": "int",
+          "v": 5
+        },
+        "retaFinal": {
+          "t": "bool",
+          "v": false
+        },
+        "revisaoTopicoAuto": {
+          "t": "bool",
+          "v": true
+        },
+        "sidebarColapsada": {
+          "t": "bool",
+          "v": false
+        },
+        "somAlarme": {
+          "t": "str",
+          "n": 5,
+          "h": "5f4a3012"
+        },
+        "tema": {
+          "t": "str",
+          "n": 6,
+          "h": "ee30e71f"
+        },
+        "ultimaLeitura": {
+          "t": "obj",
+          "n": 0
+        }
+      }
+    },
+    "disciplinas": {
+      "t": "lista",
+      "n": 3
+    },
+    "documentos": {
+      "t": "lista",
+      "n": 2
+    },
+    "editalOficial": {
+      "t": "obj",
+      "n": 2,
+      "k": {
+        "conferidoEm": {
+          "t": "null"
+        },
+        "itens": {
+          "t": "lista",
+          "n": 0
+        }
+      }
+    },
+    "embeddings": {
+      "t": "obj",
+      "n": 3,
+      "k": {
+        "fontes": {
+          "t": "obj",
+          "n": 0
+        },
+        "itens": {
+          "t": "lista",
+          "n": 0
+        },
+        "modelo": {
+          "t": "str",
+          "n": 0,
+          "h": "e3b0c442"
+        }
+      }
+    },
+    "errosManuais": {
+      "t": "lista",
+      "n": 2
+    },
+    "flashcards": {
+      "t": "lista",
+      "n": 12
+    },
+    "indicacoes": {
+      "t": "lista",
+      "n": 2
+    },
+    "lembretes": {
+      "t": "lista",
+      "n": 1
+    },
+    "mapasMentais": {
+      "t": "lista",
+      "n": 1
+    },
+    "marcacoes": {
+      "t": "lista",
+      "n": 2
+    },
+    "meta": {
+      "t": "obj",
+      "n": 3,
+      "k": {
+        "criadoEm": {
+          "t": "str",
+          "n": 24,
+          "h": "de4c92ab"
+        },
+        "onboarded": {
+          "t": "bool",
+          "v": true
+        },
+        "versao": {
+          "t": "int",
+          "v": 1
+        }
+      }
+    },
+    "missoes": {
+      "t": "lista",
+      "n": 3
+    },
+    "modificadoEm": {
+      "t": "str",
+      "n": 24,
+      "h": "9d48d209"
+    },
+    "provas": {
+      "t": "lista",
+      "n": 1
+    },
+    "questoes": {
+      "t": "lista",
+      "n": 28
+    },
+    "redacoes": {
+      "t": "lista",
+      "n": 1
+    },
+    "resumos": {
+      "t": "lista",
+      "n": 1
+    },
+    "revisoes": {
+      "t": "lista",
+      "n": 4
+    },
+    "revisoesFeitas": {
+      "t": "lista",
+      "n": 3
+    },
+    "revisoesTopico": {
+      "t": "lista",
+      "n": 1
+    },
+    "rotinas": {
+      "t": "lista",
+      "n": 2
+    },
+    "sessoes": {
+      "t": "lista",
+      "n": 8
+    },
+    "simulados": {
+      "t": "lista",
+      "n": 2
+    },
+    "tentativas": {
+      "t": "lista",
+      "n": 10
+    },
+    "topicos": {
+      "t": "lista",
+      "n": 5
+    }
+  }
+}

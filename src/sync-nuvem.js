@@ -25,6 +25,7 @@ import {
   guardarBackupConflito,
 } from "./sync.js";
 
+
 // Endpoint do cofre — Cloudflare Pages Function publicada JUNTO com o app. Na web é a mesma
 // origem; no desktop (Tauri) usa esta URL absoluta. Pode ser sobrescrito por
 // config.syncNuvem.endpoint (campo avançado).
@@ -187,7 +188,15 @@ export async function restaurarDaNuvem(frase, { endpoint } = {}) {
   const envRemoto = await baixarEnvelope(id);
   if (!envRemoto) { marcar({ frase: "", conectado: false }); const e = new Error("Não há dados na nuvem para essa senha."); e.code = "COFRE_VAZIO"; throw e; }
   const remoto = await decifrar(frase, envRemoto); // lança SENHA_ERRADA se a senha não bate
-  const merged = aplicarRemoto(store.get(), remoto);
+  // Multi-perfil: restaurar NÃO substitui mais o app inteiro.
+  //  • aparelho novo (perfil ativo ainda sem concurso) → preenche o próprio perfil ativo;
+  //  • app já em uso → CRIA um concurso novo a partir do cofre e troca para ele, deixando
+  //    os que já existem intactos. É o "entrar com outra conta sem perder o que tenho".
+  const precisaCriar = !!store.get().concurso;
+  const alvoId = precisaCriar
+    ? store.criarPerfil((remoto._perfil && remoto._perfil.nome) || "Concurso da nuvem")
+    : store.perfilAtivoId();
+  const merged = store.aplicarFatia(aplicarRemoto(store.get(), remoto, alvoId), alvoId);
   await store.importarBackup(merged);
   const agora = new Date().toISOString();
   marcar({ conectado: true, cofre: id.slice(0, 8), ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, erro: "" });
@@ -230,7 +239,7 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
 
     if (acao === "baixar") {
       await guardarBackupConflito(localSnap);
-      const merged = aplicarRemoto(state, remoto);
+      const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
       await store.importarBackup(merged);
       marcar({ sincronizando: false, ultimaSync: agora, baseEm: remoto._sync.atualizadoEm, ultimoResultado: "baixou", pendente: null, erro: "" });
       return { ok: true, acao: "baixou" };
@@ -271,7 +280,7 @@ export async function resolverPendenciaNuvem(escolha) {
   const remoto = envRemoto ? await decifrar(frase, envRemoto) : null;
   if (!remoto) return { ok: false };
   await guardarBackupConflito(localSnap);
-  const merged = aplicarRemoto(state, remoto);
+  const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
   await store.importarBackup(merged);
   marcar({ ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };
