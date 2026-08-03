@@ -5248,8 +5248,14 @@ export const store = {
       }
     } else if (fonte === "topico") {
       contexto = nomeContexto(state, alvo);
+    } else if (fonte === "aleatorio") {
+      // ALEATÓRIO DE VERDADE, e ainda assim dentro do SEU edital quando ele existe:
+      // sortear um tópico cadastrado é mais útil que pedir "qualquer coisa" à IA, que
+      // devolveria o assunto mais óbvio da matéria toda vez. Sem edital, cai no geral.
+      const cands = state.topicos;
+      contexto = cands.length ? nomeContexto(state, cands[Math.floor(Math.random() * cands.length)].id) : "geral";
     } else {
-      contexto = (alvo || "").trim() || "geral"; // tema livre digitado
+      contexto = (alvo || "").trim() || "geral"; // tema/matéria digitado
     }
     const r = await iaProv.gerarPerguntaDiscursiva(state.config, { contexto, texto, tipo });
     return r.enunciado;

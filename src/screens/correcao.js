@@ -26,7 +26,7 @@ export default function renderCorrecao(root, app) {
   const ehSentenca = tipo === "sentenca-civel" || tipo === "sentenca-criminal";
 
   root.innerHTML = `
-    ${header("Discursiva e redação", "Pratique com correção no nível de um examinador de banca.", botaoImprimir())}
+    ${header("Escrita", "Discursiva, redação e sentença — com correção no nível de um examinador de banca.", botaoImprimir())}
 
     <div class="card correcao-form is-protagonista">
       <div class="form-row u-flex-12 u-wrap u-mb-8">
@@ -52,20 +52,25 @@ export default function renderCorrecao(root, app) {
 
       <div class="cor-tema-head">
         <label for="cor-enun" class="u-m-0">${ehSentenca ? "Caso concreto (peças do processo)" : "Pergunta / tema"}</label>
-        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="${ehSentenca ? "A IA monta um caso completo, com as peças e as teses a enfrentar." : "A IA cria um tema a partir de um tópico, de um material ou de um tema livre."}">${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}</button>
+        <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="${ehSentenca ? "A IA monta um caso completo, com as peças e as teses a enfrentar." : "A IA cria um tema a partir de um tópico, de um material, de um tema que você digitar ou aleatório."}">${
+          rascunho.enun.trim()
+            ? `${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}`
+            : `${icone("x")} Fechar gerador`
+        }</button>
       </div>
       <textarea id="cor-enun" rows="${ehSentenca ? 8 : 3}" placeholder="${ehSentenca ? "Cole aqui o caso da prova (ou peça à IA para criar um)…" : "Escreva aqui o tema/enunciado…"}" class="u-mb-16">${esc(rascunho.enun)}</textarea>
-      <div id="ia-gen-box" class="ia-gen-box" hidden>
+      <div id="ia-gen-box" class="ia-gen-box"${rascunho.enun.trim() ? " hidden" : ""}>
         <div class="form-row u-items-end">
           <label>De onde
             <select id="gen-fonte">
               <option value="topico" ${genFonte === "topico" ? "selected" : ""}>Tópico do edital</option>
               <option value="material" ${genFonte === "material" ? "selected" : ""}>Material</option>
-              <option value="livre" ${genFonte === "livre" ? "selected" : ""}>Tema livre</option>
+              <option value="livre" ${genFonte === "livre" ? "selected" : ""}>${ehSentenca ? "Matéria que eu digitar" : "Tema livre"}</option>
+              <option value="aleatorio" ${genFonte === "aleatorio" ? "selected" : ""}>Aleatório</option>
             </select>
           </label>
-          <label class="u-grow">Assunto <span id="gen-alvo-wrap">${alvoControl(genFonte, st)}</span></label>
-          <button class="btn btn-ia u-mb-12" data-action="gerar-pergunta">Gerar tema</button>
+          <label class="u-grow">${ehSentenca ? "Matéria" : "Assunto"} <span id="gen-alvo-wrap">${alvoControl(genFonte, st, ehSentenca)}</span></label>
+          <button class="btn btn-ia u-mb-12" data-action="gerar-pergunta">${ehSentenca ? "Gerar caso" : "Gerar tema"}</button>
         </div>
       </div>
 
@@ -155,7 +160,7 @@ export default function renderCorrecao(root, app) {
   });
   root.querySelector("#gen-fonte").addEventListener("change", (e) => {
     genFonte = e.target.value;
-    root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st);
+    root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st, ehSentenca);
   });
 
   // Stream do feedback mais recente (o "digitando" do Mentor) na 1ª pintura por sessão:
@@ -184,7 +189,7 @@ export default function renderCorrecao(root, app) {
         { key: "texto", label: "Texto da resposta", opcoes: [{ v: "com", rot: "Com o texto da resposta" }, { v: "sem", rot: "Sem o texto (só tema, nota e correção)" }], def: "com" },
       ]);
       if (!op) return;
-      imprimir("Discursiva e redação — Mentor Concurso", printRedacoes(st, op.texto === "com"));
+      imprimir("Escrita — Mentor Concurso", printRedacoes(st, op.texto === "com"));
     },
     "toggle-gen": (el) => {
       const box = root.querySelector("#ia-gen-box");
@@ -208,18 +213,33 @@ export default function renderCorrecao(root, app) {
       toast("Cronômetro em 4 h — o tempo real de uma sentença no TJSP.");
     },
     "gerar-pergunta": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Gerar pergunta discursiva");
+      if (!store.iaDisponivel()) return avisoIA(app, ehSentenca ? "Gerar caso de sentença" : "Gerar pergunta discursiva");
+      // A caixa nasce ABERTA com o campo vazio (é quando se gera). Se o usuário chegou
+      // aqui pelo CTA do estado vazio com a caixa fechada, abre antes de gerar — gerar
+      // com um seletor que ninguém viu é o que fazia a coisa parecer sorteio.
+      const box = root.querySelector("#ia-gen-box");
+      if (box && box.hasAttribute("hidden")) {
+        box.removeAttribute("hidden");
+        const bt = root.querySelector('[data-action="toggle-gen"]');
+        if (bt) bt.innerHTML = `${icone("x")} Fechar gerador`;
+        box.scrollIntoView({ block: "nearest" });
+        return toast("Escolha de onde vem o tema e toque em gerar.");
+      }
       const fonte = root.querySelector("#gen-fonte").value;
       const alvoEl = root.querySelector("#gen-alvo");
-      const alvo = alvoEl ? alvoEl.value : "";
+      const alvo = alvoEl && alvoEl.value !== undefined ? alvoEl.value : "";
       if ((fonte === "topico" || fonte === "material") && !alvo) return toast("Escolha o assunto.", "erro");
-      if (fonte === "livre" && !alvo.trim()) return toast("Digite um tema livre.", "erro");
-      const enun = await comOcupado(() => store.gerarPerguntaDiscursiva({ fonte, alvo, tipo }), { botao: el, msg: "Gerando pergunta com a IA…" });
+      if (fonte === "livre" && !alvo.trim())
+        return toast(ehSentenca ? "Digite a matéria do caso." : "Digite um tema livre.", "erro");
+      const enun = await comOcupado(() => store.gerarPerguntaDiscursiva({ fonte, alvo, tipo }), {
+        botao: el,
+        msg: ehSentenca ? "Montando o caso com a IA…" : "Gerando pergunta com a IA…",
+      });
       if (enun == null) return;
       root.querySelector("#cor-enun").value = enun;
       rascunho.enun = enun;
       textoEl.focus();
-      toast("Pergunta gerada. Agora escreva sua resposta.");
+      toast(ehSentenca ? "Caso montado. Agora escreva a sentença." : "Pergunta gerada. Agora escreva sua resposta.");
     },
     corrigir: async (el) => {
       const texto = textoEl.value.trim();
@@ -269,7 +289,13 @@ export default function renderCorrecao(root, app) {
 }
 
 // Controle de "assunto" conforme a fonte: select de tópicos/materiais, ou texto livre.
-function alvoControl(fonte, st) {
+function alvoControl(fonte, st, ehSentenca = false) {
+  // ALEATÓRIO é escolha, não acidente: sem campo de assunto, e a própria opção diz o
+  // que vai acontecer. Antes o aleatório era o efeito de um seletor escondido com o
+  // primeiro item da lista — parecia sorteio e não era.
+  if (fonte === "aleatorio") {
+    return `<span class="muted small" id="gen-alvo-vazio">${ehSentenca ? "A IA escolhe a matéria do caso." : "A IA escolhe o assunto."}</span>`;
+  }
   if (fonte === "material") {
     const ops = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");
     return `<select id="gen-alvo">${ops || `<option value="">(importe um material primeiro)</option>`}</select>`;
@@ -283,7 +309,12 @@ function alvoControl(fonte, st) {
       .join("");
     return `<select id="gen-alvo">${ops || `<option value="">(cadastre o edital primeiro)</option>`}</select>`;
   }
-  return `<input id="gen-alvo" type="text" placeholder="Ex.: princípio da insignificância" />`;
+  // Em sentença, "matéria livre" é o caminho natural: digitar "usucapião" ou "tráfico de
+  // drogas" é mais direto que caçar na lista do edital — e evita o absurdo de gerar uma
+  // sentença cível a partir de "Português · Concordância verbal".
+  return `<input id="gen-alvo" type="text" placeholder="${
+    ehSentenca ? "Ex.: usucapião, locação, tráfico de drogas" : "Ex.: princípio da insignificância"
+  }" />`;
 }
 
 function printRedacoes(st, comTexto = true) {
