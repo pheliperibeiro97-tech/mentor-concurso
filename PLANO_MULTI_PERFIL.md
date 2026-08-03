@@ -429,4 +429,52 @@ Ciclo redondo: plano → migra → usa → escreve → exporta → importa backu
 
 - Rodar no **desktop** (SQLite). A migração acontece na primeira abertura; o backup de 2026-08-03
   é a volta. Conferir com `--comparar dev/baseline-multi-perfil.json`.
-- 0b, seletor e Fase 2 seguem pendentes.
+
+---
+
+## K) FASE 0b — IMPLEMENTADA (2026-08-03)
+
+O config passa a ter dois lados. **Por-perfil:** `dataProva`, as três metas + `dispDiariaMin`,
+`metasLeitura`, `ultimaLeitura`, `niveisDisciplina`, `disciplinasAdiadas`, `atencaoAdiada`,
+`bancasPreferidas`, `baseEstudo`, `retaFinal`, `atalhos`, `mentorPlano`, `mentorUltimaAnalise`,
+`mentorPlanoVisto`, `syncNuvem`. **Global:** tema, IA, notificações, pomodoro, `leitura` (fonte e
+tamanho), paleta, navegação, `diasFolga`/`diasFeriado`, `nomesLeis`, `sync` (backup por arquivo).
+
+**A aresta 1 do plano, resolvida:** `setConfig` virou `Object.assign(state.config, patch)` — o
+spread anterior copiaria só as chaves enumeráveis e destruiria os acessores, fazendo metas e data
+da prova sumirem em silêncio. O backfill de config no `init()` tinha o mesmo defeito e foi
+reescrito para preencher em vez de reatribuir.
+
+Os acessores do config são instalados **pela lista**, não pelas chaves presentes: assim
+`mentorPlano`, que só nasce quando o Mentor gera um plano, já nasce no perfil certo (é a resposta
+à aresta 2 no nível do config).
+
+### Três achados que só a execução revelou
+
+1. **Um bug meu, de perda de dado.** `migrarParaPerfis` retornava cedo em estado já migrado, então
+   a divisão do config nunca rodava; e `instalarAcessoresConfig` apagava o valor cru para instalar
+   o acessor. Resultado: chave por-perfil que chegasse ainda no config global era **apagada** em
+   vez de movida — aconteceu com `mentorPlanoVisto`. Corrigido nas duas pontas (migração de config
+   sempre roda, e o valor cru é salvo no perfil antes de sair do global).
+2. **`mentorPlanoVisto` tinha de ser por-perfil.** É comparado com `mentorUltimaAnalise` para dizer
+   "há plano novo"; separados, o carimbo de um perfil seria comparado com o "visto" do outro.
+3. **`dispDiariaMin` também.** O plano o listava como global ("disponibilidade de vida"), mas
+   `screens/config.js` faz `patch.dispDiariaMin = patch.metaDiariaMin` a cada salvamento — é
+   espelho da meta, que é por-perfil. Global, a disponibilidade de um perfil valeria para o outro.
+
+### Verificação
+
+| Prova | Resultado |
+|---|---|
+| Chaves de config | **44 antes, 44 depois** (27 globais + 17 no perfil), nenhuma perdida |
+| Gravar data da prova pela tela | caiu em `perfis[0].config`, **não vazou** para o global |
+| Globais após `Object.assign` | tema, pomodoro, provedor de IA e notificações intactos |
+| Efeito na UI | topbar recalculou **"132 dias p/ prova"** a partir da data lida do perfil |
+| Telas | 17 rotas, 0 erros (só `correcao`, pelo bug pré-existente dos `criterios`) |
+| Visual | conferido nos dois temas: sem mudança de layout, dados corretos nos campos |
+
+### O que falta
+
+- **Fase 1 — seletor de perfil** (a UI; hoje o app tem 1 perfil e nenhuma forma de criar o 2º).
+- **Fase 2 — sync por perfil**, quando a sincronização volta a ser ligada.
+- Rodar 0a+0b no **desktop** (SQLite), com o backup de 2026-08-03 como volta.
