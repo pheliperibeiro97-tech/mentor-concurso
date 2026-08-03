@@ -97,6 +97,7 @@ import skipForward from "lucide-static/icons/skip-forward.svg?raw";
 import camera from "lucide-static/icons/camera.svg?raw";
 import ban from "lucide-static/icons/ban.svg?raw";
 import circleX from "lucide-static/icons/circle-x.svg?raw";
+import circleCheck from "lucide-static/icons/circle-check.svg?raw";
 import bandage from "lucide-static/icons/bandage.svg?raw";
 import maximize2 from "lucide-static/icons/maximize-2.svg?raw";
 // Cross-cutting (chat, store, marcação, main)
@@ -242,6 +243,7 @@ const MAPA = {
   camera,
   ban,
   "circle-x": circleX,
+  "circle-check": circleCheck,
   bandage,
   "maximize-2": maximize2,
   send,

@@ -18,6 +18,10 @@ export const SELO = {
   // Gerado com BUSCA NA WEB ligada: existe fonte, mas é página da internet — não o seu
   // material nem texto oficial. Continua pedindo conferência, e por isso o "confira" fica.
   web: { icone: "globe", rotulo: "Fonte na web · confira" },
+  // ESTADO FINAL de qualquer selo que pedia conferência: o usuário olhou e validou. Existe
+  // porque selo que nunca sai vira papel de parede — se tudo fica amarelo para sempre,
+  // ninguém enxerga amarelo. Só o usuário limpa, nunca o app.
+  conferido: { icone: "circle-check", rotulo: "Conferido por você" },
 };
 
 // ---------- 1. Separar edital em disciplinas e tópicos ----------

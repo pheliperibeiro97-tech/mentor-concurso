@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Galeria — Vocabulário visual (Fase A)</title>
+  <link rel="stylesheet" href="/src/styles.css" />
+  <style>
+    /* Só do andaime da galeria — não vai para o app (este arquivo não é entrada de build). */
+    .gal-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 0; min-height: 100vh; }
+    .gal-col { background: var(--bg); color: var(--text); padding: 24px 28px; }
+    .gal-col + .gal-col { border-left: 1px solid var(--border); }
+    .gal-tema { font-size: var(--fs-2xs); letter-spacing: .08em; text-transform: uppercase;
+      color: var(--muted); margin-bottom: 20px; }
+    .gal-sec { margin-bottom: 28px; }
+    .gal-sec > h2 { font-size: var(--fs-sm); margin: 0 0 4px; color: var(--text); }
+    .gal-sec > p { font-size: var(--fs-2xs); color: var(--muted); margin: 0 0 12px; max-width: 46ch; }
+    .gal-linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    @media (max-width: 900px) { .gal-wrap { grid-template-columns: 1fr; } .gal-col + .gal-col { border-left: 0; border-top: 1px solid var(--border); } }
+  </style>
+</head>
+<body>
+  <div class="gal-wrap">
+    <div class="gal-col" data-tema="claro" id="claro"></div>
+    <div class="gal-col" data-tema="escuro" id="escuro"></div>
+  </div>
+
+  <script type="module">
+    import { chipsEscolha, contadorConferir, blocoConferencia, gradeEstados } from "/src/componentes.js";
+    import { seloBadge } from "/src/ui.js";
+
+    const CAUSAS = [
+      { valor: "nao-sabia", rotulo: "Não sabia" },
+      { valor: "li-mal", rotulo: "Li mal o enunciado" },
+      { valor: "confundi", rotulo: "Confundi com parecido" },
+      { valor: "desatualizado", rotulo: "Conteúdo desatualizado" },
+      { valor: "chute", rotulo: "Chutei" },
+    ];
+    const ETAPAS = [
+      { chave: "li", rotulo: "Li" },
+      { chave: "questao", rotulo: "Respondi questão" },
+      { chave: "cartao", rotulo: "Virou cartão" },
+      { chave: "revisei", rotulo: "Revisei" },
+    ];
+    const TOPICOS = [
+      { nome: "39. Usucapião", estados: [true, true, true, true] },
+      { nome: "39. Registro de Imóveis: noções gerais", estados: [true, true, false, false] },
+      { nome: "40. Direito de vizinhança", estados: [true, false, false, false] },
+      { nome: "41. Condomínio edilício", estados: [false, false, false, false] },
+      { nome: "44. Marco legal das garantias (Lei nº 14.711/23)", estados: [false, false, false, false] },
+    ];
+
+    const secao = (titulo, nota, html) =>
+      `<section class="gal-sec"><h2>${titulo}</h2><p>${nota}</p>${html}</section>`;
+
+    const conteudo = () => [
+      secao("1 · Chips de escolha rápida",
+        "Classificação de 1 toque, sempre pulável. Na fase B: a causa do erro.",
+        chipsEscolha({ rotulo: "Por que errou?", opcoes: CAUSAS, nome: "Causa do erro" }) +
+        `<div class="u-mt-12"></div>` +
+        chipsEscolha({ rotulo: "Por que errou?", opcoes: CAUSAS, valor: "li-mal", nome: "Causa do erro respondida" })),
+
+      secao("2 · Selo com estado + contador",
+        "O selo amarelo já existia. O que entra é o estado final «conferido» — selo que nunca sai vira papel de parede.",
+        `<div class="gal-linha">${seloBadge("verde", { titulo: "Manual de Direito Civil" })}${seloBadge("amarelo")}${seloBadge("oficial", { titulo: "192º TJSP" })}</div>
+         <div class="gal-linha">${seloBadge("semfonte")}${seloBadge("web")}${seloBadge("conferido")}</div>
+         <div class="gal-linha">${contadorConferir(7)}</div>`),
+
+      secao("3 · Bloco de conferência inline",
+        "O portão: tranca a entrada na revisão espaçada, não a criação do cartão. Com fonte à vista, conferir custa um toque.",
+        blocoConferencia({
+          afirmacao: "O prazo para impugnação ao cumprimento de sentença é de 15 dias úteis, contados da intimação.",
+          fonte: "CPC, art. 525",
+          trecho: "Transcorrido o prazo previsto no art. 523 sem o pagamento voluntário, inicia-se o prazo de 15 (quinze) dias para que o executado, independentemente de penhora ou nova intimação, apresente, nos próprios autos, sua impugnação.",
+        }) +
+        `<div class="u-mt-12"></div>` +
+        blocoConferencia({
+          afirmacao: "A Súmula 7 do STJ impede o reexame de prova em recurso especial.",
+          acaoPrefixo: "conf2",
+        })),
+
+      secao("4 · Grade de estados",
+        "Um ponto por etapa, uma linha por tópico. O valor está no que fica apagado: linha vazia tem de gritar.",
+        gradeEstados({ itens: TOPICOS, etapas: ETAPAS, acao: "abrir-topico" })),
+    ].join("");
+
+    for (const id of ["claro", "escuro"]) {
+      const col = document.getElementById(id);
+      col.innerHTML = `<div class="gal-tema">tema ${id}</div>` + conteudo();
+    }
+  </script>
+</body>
+</html>
