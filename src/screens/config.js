@@ -378,10 +378,11 @@ export default function renderConfig(root, app) {
         <div class="ed-ajuda-corpo">
           <p class="u-mt-0">Muitos concursos reprovam por <b>piso em um grupo</b>, não pela média — dá para ter média boa e ser eliminado por ficar abaixo do mínimo num bloco só. Preencha se o seu edital tiver essa regra; deixe em branco se não tiver.</p>
           <div class="form-row">
-            <label class="u-w-120">Mínimo por grupo <input id="cfg-min-grupo" type="number" min="0" max="100" placeholder="%" value="${regra.minGrupo ?? ""}" /></label>
+            <label class="u-w-120">Mínimo padrão <input id="cfg-min-grupo" type="number" min="0" max="100" placeholder="%" value="${regra.minGrupo ?? ""}" /></label>
             <label class="u-w-120">Mínimo geral <input id="cfg-min-geral" type="number" min="0" max="100" placeholder="%" value="${regra.minGeral ?? ""}" /></label>
+            <label class="u-w-120" data-tip="Quantas questões um grupo precisa ter para o app dar veredito. Abaixo disso ele só informa quanto falta para medir. Menor = fala antes e erra mais.">Medir a partir de <input id="cfg-min-amostra" type="number" min="1" placeholder="30" value="${regra.minAmostra ?? ""}" /></label>
           </div>
-          <p class="muted small u-mb-8">Ex.: no 192º do TJSP são <b>30%</b> em cada bloco e <b>60%</b> de média.</p>
+          <p class="muted small u-mb-8">Ex.: no 192º do TJSP são <b>30%</b> em cada bloco e <b>60%</b> de média. Se o seu edital pedir percentuais <b>diferentes por grupo</b>, use os campos abaixo.</p>
           ${
             st.disciplinas.length
               ? `<p class="u-mb-4"><b>A que grupo pertence cada disciplina</b></p>
@@ -391,7 +392,20 @@ export default function renderConfig(root, app) {
                        <input type="text" id="cfg-grupo-${d.id}" data-grupo-disc="${d.id}" value="${esc(d.grupo || "")}" placeholder="sem grupo" /></label>`
                    )
                    .join("")}</div>
-                 <p class="muted small u-m-0 u-mt-8">O nome do grupo é livre — "Bloco I", "Eixo 2", o que o seu edital usar. Disciplinas sem grupo ficam de fora do cálculo.</p>`
+                 <p class="muted small u-m-0 u-mt-8 u-mb-12">O nome do grupo é livre — "Bloco I", "Eixo 2", o que o seu edital usar. Disciplinas sem grupo ficam de fora do cálculo.</p>
+                 ${
+                   store.gruposDisciplinas().length
+                     ? `<p class="u-mb-4"><b>Mínimo de cada grupo</b> <span class="muted small">(opcional — em branco usa o padrão)</span></p>
+                        <div class="cfg-grupos">${store
+                          .gruposDisciplinas()
+                          .map(
+                            (g) => `<label class="cfg-grupo-linha"><span>${esc(g)}</span>
+                              <input type="number" min="0" max="100" id="cfg-mg-${esc(g).replace(/\W/g, "_")}" data-min-grupo="${esc(g)}"
+                                placeholder="${regra.minGrupo ?? "%"}" value="${(regra.minPorGrupo && regra.minPorGrupo[g]) ?? ""}" /></label>`
+                          )
+                          .join("")}</div>`
+                     : ""
+                 }`
               : `<p class="muted small u-m-0">Monte o edital primeiro para atribuir os grupos.</p>`
           }
         </div>
@@ -851,17 +865,27 @@ export default function renderConfig(root, app) {
   const salvarRegra = () => {
     const g = root.querySelector("#cfg-min-grupo");
     if (!g) return; // a tela mudou antes do debounce disparar
+    // O mapa vai INTEIRO: campo esvaziado precisa chegar como "" para o store apagar a
+    // exceção daquele grupo e ele voltar a seguir o padrão.
+    const porGrupo = {};
+    root.querySelectorAll("[data-min-grupo]").forEach((el) => {
+      porGrupo[el.getAttribute("data-min-grupo")] = el.value;
+    });
     salvarPreservandoFoco(() => {
       store.setRegraAprovacao({
         minGrupo: g.value,
         minGeral: root.querySelector("#cfg-min-geral")?.value,
+        minAmostra: root.querySelector("#cfg-min-amostra")?.value,
+        minPorGrupo: porGrupo,
       });
       toast("Salvo.");
     });
   };
   root.querySelector("#cfg-regra-det")?.addEventListener("toggle", (e) => { regraAberta = e.target.open; });
   const salvarRegraDeb = debounce(salvarRegra, 600);
-  root.querySelectorAll("#cfg-min-grupo, #cfg-min-geral").forEach((el) => el.addEventListener("input", salvarRegraDeb));
+  root
+    .querySelectorAll("#cfg-min-grupo, #cfg-min-geral, #cfg-min-amostra, [data-min-grupo]")
+    .forEach((el) => el.addEventListener("input", salvarRegraDeb));
   root.querySelectorAll("[data-grupo-disc]").forEach((el) => {
     el.addEventListener(
       "input",

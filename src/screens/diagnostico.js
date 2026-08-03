@@ -173,7 +173,8 @@ function riscoGrupoHTML(d) {
           <span class="rg-det">${g.total} de ${d.minAmostra} questões · faltam ${g.faltam} para medir</span>
         </li>`;
       }
-      const alvo = d.regra.minGrupo != null ? ` · <span class="rg-alvo">mín. ${d.regra.minGrupo}%</span>` : "";
+      // o mínimo é o DAQUELE grupo (pode diferir entre grupos), não um único global
+      const alvo = g.min != null ? ` · <span class="rg-alvo">mín. ${g.min}%</span>` : "";
       return `<li class="rg-linha ${g.abaixo ? "rg-abaixo" : "rg-ok"}">
         <span class="rg-nome">${esc(g.grupo)}</span>
         <span class="rg-num">${g.pct}%</span>

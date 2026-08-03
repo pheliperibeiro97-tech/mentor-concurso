@@ -6756,11 +6756,43 @@ export const store = {
     else delete d.grupo;
     commit();
   },
-  setRegraAprovacao({ minGrupo, minGeral }) {
+  // `minGrupo` é o PADRÃO; `minPorGrupo` sobrescreve por grupo. Muitos editais exigem
+  // percentuais diferentes por bloco (o clássico "30% nas básicas e 50% nas específicas"),
+  // e um mínimo único não representaria esses — mas exigir preencher grupo a grupo
+  // atrapalharia quem tem regra uniforme (a Res. 75, p.ex., é 30% em todos).
+  setRegraAprovacao({ minGrupo, minGeral, minPorGrupo, minAmostra }) {
     if (!state.concurso) return;
     const lim = (v) => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.min(100, Number(v) || 0)));
-    state.concurso.regra = { minGrupo: lim(minGrupo), minGeral: lim(minGeral) };
+    const atual = state.concurso.regra || {};
+    const mapa = { ...(atual.minPorGrupo || {}) };
+    if (minPorGrupo && typeof minPorGrupo === "object") {
+      for (const [g, v] of Object.entries(minPorGrupo)) {
+        const n = lim(v);
+        if (n === null) delete mapa[g];
+        else mapa[g] = n;
+      }
+    }
+    state.concurso.regra = {
+      minGrupo: minGrupo === undefined ? (atual.minGrupo ?? null) : lim(minGrupo),
+      minGeral: minGeral === undefined ? (atual.minGeral ?? null) : lim(minGeral),
+      minPorGrupo: mapa,
+      // Quantas questões um grupo precisa ter para o painel dar veredito. 30 é só o
+      // default; quem quiser ouvir mais cedo (e errar mais) ou mais tarde (e errar
+      // menos) ajusta. Estava fixo no código — decisão que não era minha.
+      minAmostra:
+        minAmostra === undefined
+          ? (atual.minAmostra ?? null)
+          : minAmostra === "" || minAmostra === null
+          ? null
+          : Math.max(1, Number(minAmostra) || 1),
+    };
     commit();
+  },
+  // Mínimo que vale para um grupo: o dele, se houver; senão o padrão.
+  minimoDoGrupo(nome) {
+    const r = (state.concurso && state.concurso.regra) || {};
+    const esp = r.minPorGrupo && r.minPorGrupo[nome];
+    return esp === undefined || esp === null ? (r.minGrupo ?? null) : esp;
   },
   gruposDisciplinas() {
     return [...new Set(state.disciplinas.map((d) => d.grupo).filter(Boolean))].sort();
@@ -6787,19 +6819,21 @@ export const store = {
     // dizer "abaixo do mínimo" com 3 questões é a mesma falsa precisão que o app combate
     // no conteúdo gerado por IA. Abaixo do piso o grupo aparece, mas SEM veredito: o que
     // ele informa é quantas questões faltam para poder medir, que já é instrução útil.
-    const MIN_AMOSTRA = 30;
+    const MIN_AMOSTRA = regra.minAmostra ?? 30;
     const grupos = [...acc.values()]
       .map((r) => {
         const pct = r.total ? Math.round((r.acertos / r.total) * 100) : null;
         const suficiente = r.total >= MIN_AMOSTRA;
+        const min = this.minimoDoGrupo(r.grupo); // o do grupo, ou o padrão
         return {
           ...r,
           pct,
+          min,
           suficiente,
           faltam: Math.max(0, MIN_AMOSTRA - r.total),
-          abaixo: suficiente && regra.minGrupo != null && pct != null && pct < regra.minGrupo,
+          abaixo: suficiente && min != null && pct != null && pct < min,
           // distância em pontos percentuais até o mínimo (o número acionável)
-          gap: suficiente && regra.minGrupo != null && pct != null ? regra.minGrupo - pct : null,
+          gap: suficiente && min != null && pct != null ? min - pct : null,
         };
       })
       .sort((a, b) => a.grupo.localeCompare(b.grupo));
@@ -6814,8 +6848,11 @@ export const store = {
       // Sem DATA DE PROVA a regra é referência de um certame passado, não a regra do seu.
       // O painel muda de tom por causa disto: pré-edital ele informa, não sentencia.
       referencia: !state.config.dataProva,
-      // Sem grupo definido não há veredito nenhum a dar.
-      configurado: grupos.length > 0 && (regra.minGrupo != null || regra.minGeral != null),
+      // Sem grupo definido não há veredito nenhum a dar. Basta UM mínimo em qualquer
+      // lugar (padrão, específico de grupo ou geral) para o painel ter o que dizer.
+      configurado:
+        grupos.length > 0 &&
+        (regra.minGrupo != null || regra.minGeral != null || grupos.some((g) => g.min != null)),
     };
   },
 
