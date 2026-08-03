@@ -1,7 +1,10 @@
 # Plano — Multi-perfil (multi-concurso)
 
-> **Status:** APROVADO, adiado para uma versão futura (a pedido do usuário em 2026-07-06).
-> Não implementar até retomar. Groundwork de análise já feito; falta escrever o núcleo.
+> **Status:** ✅ **IMPLEMENTADO em 2026-08-03** na branch `feat/multi-perfil` — fases 0a, 0b, 1 e 2.
+> Falta só validar no desktop e o teste de sync entre dois aparelhos antes de publicar (seção M).
+> O histórico abaixo é mantido: as seções A–G são o plano original, H–M o que a execução mostrou.
+>
+> ~~APROVADO, adiado para uma versão futura (a pedido do usuário em 2026-07-06).~~
 > **REVISADO 2026-07-13** para o contexto atual (sync por senha, web/PWA, Access, restaurar
 > da nuvem): ver seção "ATUALIZAÇÃO 2026-07-13" no fim. Decisão-chave travada: **sync POR PERFIL**
 > (cada perfil = seu cofre/senha). Sequenciamento atualizado logo abaixo.
@@ -473,9 +476,55 @@ Os acessores do config são instalados **pela lista**, não pelas chaves present
 | Telas | 17 rotas, 0 erros (só `correcao`, pelo bug pré-existente dos `criterios`) |
 | Visual | conferido nos dois temas: sem mudança de layout, dados corretos nos campos |
 
-### O que falta
+---
 
-- **Fase 2 — sync por perfil**, quando a sincronização volta a ser ligada.
+## M) FASE 2 — IMPLEMENTADA (2026-08-03) · sync por perfil · **PLANO CONCLUÍDO**
+
+Cada concurso com o seu cofre e a sua senha. A trava da 0a foi removida: a sincronização
+está religada.
+
+**O que manteve isto pequeno:** o que sobe é a **fatia plana** do perfil — as coleções voltam
+ao topo, no formato de antes do multi-perfil. Então `peso()`, `decidir()` e `aplicarRemoto()`
+seguem operando sobre um objeto plano, **sem reescrita**, e os cofres criados por versões
+anteriores continuam válidos.
+
+- `store.fatiaSync(perfilId)` — coleções do perfil + globais + config plano (global mesclado
+  com o do perfil) + `_perfil` para identificar de quem é a fatia.
+- `store.aplicarFatia(fatia, perfilId)` — caminho de volta: devolve o estado completo com a
+  fatia **dentro do perfil certo**, os outros intactos. Recoloca a senha local (que nunca sobe).
+- Ambos reusam `GLOBAL_TOP`/`CONFIG_PERFIL` — não há uma segunda definição de "o que é global"
+  para sair de sincronia com a primeira.
+
+**As três arestas da seção I, medidas de novo com o código novo:**
+
+| | antes (I.5/I.6) | agora |
+|---|---|---|
+| Upload | 1.024 KB **com 2 PDFs** | **54 KB, nenhum PDF** |
+| `peso()` do snapshot | 2 (guarda desligada) | **87** (guarda ativa) |
+| Binários locais no `aplicarRemoto` | não encontrados | preservados |
+
+**`restaurarDaNuvem` deixou de substituir o app inteiro** (item C da revisão de 13/07): em
+aparelho novo preenche o perfil ativo, que ainda não tem concurso; com o app em uso, **cria um
+concurso** a partir do cofre e troca para ele.
+
+**Na tela:** o card diz **qual concurso** está sendo conectado — sem isso dá para conectar o
+errado sem perceber. E o card Concurso parou de prometer "Multi-concurso e modo fusão chegam na
+v3": passou a apontar para o seletor.
+
+### Verificação e limite
+
+Roundtrip completo: uma questão nova vinda da nuvem entrou no perfil certo (28 → 29) com o
+**outro concurso intacto**, config voltando dividido sem vazar para o global, sem lixo de sync no
+estado. 17 telas sem erro, dois temas.
+
+**Não exercitado:** o transporte de rede (conectar/subir/baixar contra o Worker), que depende do
+endpoint. O que foi testado é o motor. Vale um teste real de dois aparelhos antes de publicar.
+
+### O que falta para publicar
+
+- Rodar 0a+0b no **desktop** (SQLite) — com o backup de 2026-08-03 como volta.
+- Teste de sync real entre dois aparelhos.
+- Só então empacotar e publicar (ver a seção acima sobre publicar apenas quando estiver inteiro).
 
 ---
 
