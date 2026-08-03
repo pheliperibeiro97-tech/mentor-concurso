@@ -5255,11 +5255,34 @@ export const store = {
       texto = String(alvo || "");
       contexto = "a instrução do candidato abaixo";
     } else if (fonte === "aleatorio") {
-      // ALEATÓRIO DE VERDADE, e ainda assim dentro do SEU edital quando ele existe:
-      // sortear um tópico cadastrado é mais útil que pedir "qualquer coisa" à IA, que
-      // devolveria o assunto mais óbvio da matéria toda vez. Sem edital, cai no geral.
-      const cands = state.topicos;
-      contexto = cands.length ? nomeContexto(state, cands[Math.floor(Math.random() * cands.length)].id) : "geral";
+      // ALEATÓRIO DE VERDADE: sorteio UNIFORME sobre tudo que você tem — tópicos do
+      // edital E materiais importados, no mesmo bolo. Sem peso por relevância, por
+      // lacuna ou por incidência.
+      //
+      // Optei por união proporcional em vez de "50% tópico / 50% material": com 1.700
+      // tópicos e 3 materiais, o meio a meio faria os 3 materiais aparecerem em metade
+      // dos sorteios — um viés forte, silencioso e não pedido. Quem quiser que material
+      // apareça mais escolhe "Material" na origem; aí é preferência, não sorteio.
+      //
+      // Sortear dentro do SEU acervo é melhor que pedir "qualquer coisa" à IA, que
+      // devolveria o assunto mais óbvio da matéria toda vez. Sem acervo, cai no geral.
+      const cands = [
+        ...state.topicos.map((t) => ({ tipo: "topico", id: t.id })),
+        ...state.documentos.map((d) => ({ tipo: "doc", id: d.id })),
+      ];
+      if (!cands.length) {
+        contexto = "geral";
+      } else {
+        const escolhido = cands[Math.floor(Math.random() * cands.length)];
+        if (escolhido.tipo === "doc") {
+          const d = state.documentos.find((x) => x.id === escolhido.id);
+          // material sorteado entra como CONTEÚDO, igual à origem "Material" — o caso
+          // sai ancorado no que você importou, não só no nome do arquivo.
+          if (d) { texto = d.texto; contexto = nomeContexto(state, d.topicoId); }
+        } else {
+          contexto = nomeContexto(state, escolhido.id);
+        }
+      }
     } else {
       contexto = (alvo || "").trim() || "geral"; // tema/matéria digitado
     }

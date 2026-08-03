@@ -314,7 +314,10 @@ function alvoControl(fonte, st, ehSentenca = false) {
   // que vai acontecer. Antes o aleatório era o efeito de um seletor escondido com o
   // primeiro item da lista — parecia sorteio e não era.
   if (fonte === "aleatorio") {
-    return `<span class="muted small" id="gen-alvo-vazio">${ehSentenca ? "A IA escolhe a matéria do caso." : "A IA escolhe o assunto."}</span>`;
+    const nT = st.topicos.length;
+    const nD = st.documentos.length;
+    const onde = nT || nD ? `entre ${plural(nT, "tópico", "tópicos")} e ${plural(nD, "material", "materiais")}` : "sem edital nem material — a IA escolhe livremente";
+    return `<span class="muted small" id="gen-alvo-vazio" data-tip="Sorteio uniforme: todo tópico e todo material têm a mesma chance. Sem peso por relevância ou por lacuna.">Sorteia ${onde}.</span>`;
   }
   // "O que eu escrevi acima": o campo do enunciado vira o BRIEFING. Antes, escrever ali
   // e mandar gerar jogava fora o que você tinha escrito — o gerador nunca lia o campo.
