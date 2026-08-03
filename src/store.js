@@ -665,17 +665,6 @@ const GLOBAL_TOP = new Set([
   "meta", "config", "bancas", "lembretes", "indicacoes", "modificadoEm", "perfis", "perfilAtivo",
 ]);
 
-// Sincronização PARADA durante a implantação do multi-perfil (sai na Fase 2, quando cada
-// perfil ganha o seu cofre). O motor de sync opera sobre as coleções no TOPO do estado;
-// com elas dentro de perfis[] ele (a) rejeitaria o formato ao restaurar, (b) deixaria os
-// PDFs subirem — a limpeza de binários só varre o topo — e (c) perderia a guarda
-// anti-perda, porque peso() contaria quase zero e "encolheria" nunca dispararia.
-// Fica parada de forma DECLARADA, dita na tela de Configurações: sync que parece ligado e
-// não está é pior do que sync desligado.
-export const SYNC_PAUSADO_MULTIPERFIL = true;
-export const MOTIVO_SYNC_PAUSADO =
-  "A sincronização está pausada enquanto o multi-perfil é implantado. Seus dados seguem salvos neste aparelho.";
-
 // Fase 0b: o que do CONFIG pertence ao concurso, e não ao aparelho/pessoa.
 // Fica global o que segue você em qualquer concurso (tema, IA, notificações, pomodoro,
 // leitura, paleta, navegação, disponibilidade de vida — diasFolga/diasFeriado —, apelidos
@@ -1040,6 +1029,73 @@ export const store = {
   },
   isOnboarded() {
     return !!state.meta.onboarded && !!state.concurso;
+  },
+
+  // ---------- sincronização por perfil (fase 2) ----------
+  // Cada perfil tem o SEU cofre. A fatia enviada é o estado no formato PLANO — o mesmo de
+  // antes do multi-perfil — porque assim (a) peso()/decidir()/aplicarRemoto continuam
+  // operando sobre um objeto plano, sem reescrita, e (b) cofres criados por versões
+  // anteriores continuam válidos.
+  //
+  // Vai junto o que é global (bancas, lembretes, indicações, config global): são poucos e
+  // fazem parte do que o usuário espera reencontrar no outro aparelho. Como normalmente só
+  // um perfil está conectado por máquina, não há corrida entre perfis pelo global.
+  fatiaSync(perfilId) {
+    const p = perfilId ? (state.perfis || []).find((x) => x.id === perfilId) : perfilAtivo();
+    if (!p) return null;
+    const fatia = {};
+    for (const k of GLOBAL_TOP) {
+      if (k === "perfis" || k === "perfilAtivo" || k === "config") continue;
+      if (state[k] !== undefined) fatia[k] = state[k];
+    }
+    for (const [k, v] of Object.entries(p)) {
+      if (k === "id" || k === "nome" || k === "config") continue;
+      fatia[k] = v;
+    }
+    // O spread pega só as chaves enumeráveis do config (as globais); as do perfil vêm de
+    // p.config. Resultado: o config plano de antes.
+    fatia.config = { ...state.config, ...(p.config || {}) };
+    fatia._perfil = { id: p.id, nome: p.nome }; // diz ao outro lado a que concurso isto pertence
+    return JSON.parse(JSON.stringify(fatia));
+  },
+
+  // Caminho inverso: pega uma fatia plana (vinda da nuvem, já mesclada) e devolve o ESTADO
+  // COMPLETO com ela aplicada DENTRO do perfil alvo — os outros perfis ficam intactos.
+  // Reusa as mesmas regras da migração (GLOBAL_TOP / CONFIG_PERFIL), então não há uma
+  // segunda definição de "o que é global" para sair de sincronia com a primeira.
+  aplicarFatia(fatia, perfilId) {
+    if (!fatia || typeof fatia !== "object") return JSON.parse(JSON.stringify(state));
+    const alvoId = perfilId || (fatia._perfil && fatia._perfil.id) || state.perfilAtivo;
+    const raiz = JSON.parse(JSON.stringify(state)); // não-enumeráveis somem: sai o formato novo
+    const perfis = raiz.perfis || [];
+    let i = perfis.findIndex((p) => p.id === alvoId);
+    if (i < 0) i = perfis.findIndex((p) => p.id === raiz.perfilAtivo);
+    if (i < 0) return raiz;
+    const antigo = perfis[i];
+    const novo = { id: antigo.id, nome: (fatia._perfil && fatia._perfil.nome) || antigo.nome };
+    for (const [k, v] of Object.entries(fatia)) {
+      if (k === "_perfil" || k === "_sync" || k === "config") continue;
+      if (GLOBAL_TOP.has(k)) raiz[k] = v;
+      else novo[k] = v;
+    }
+    const cfgPerfil = {};
+    for (const [k, v] of Object.entries(fatia.config || {})) {
+      if (CONFIG_PERFIL.has(k)) cfgPerfil[k] = v;
+      else raiz.config[k] = v;
+    }
+    // A senha/cofre é LOCAL de cada aparelho e nunca sobe — o remoto não a traz, então ela
+    // seria perdida se não fosse recolocada aqui.
+    if (antigo.config && antigo.config.syncNuvem) cfgPerfil.syncNuvem = antigo.config.syncNuvem;
+    novo.config = cfgPerfil;
+    perfis[i] = novo;
+    return raiz;
+  },
+
+  // Perfis com cofre configurado (o boot sincroniza cada um deles).
+  perfisConectados() {
+    return (state.perfis || [])
+      .filter((p) => p.config && p.config.syncNuvem && p.config.syncNuvem.conectado && p.config.syncNuvem.frase)
+      .map((p) => ({ id: p.id, nome: p.nome }));
   },
 
   // ---------- perfis (multi-concurso) ----------

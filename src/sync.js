@@ -9,14 +9,8 @@
 // REGRA DE OURO: PDFs e imagens (binários) NUNCA entram no arquivo de sync — só os dados e o
 // TEXTO extraído. E ao aplicar o que vem da nuvem, os binários LOCAIS são preservados.
 
-import { store, SYNC_PAUSADO_MULTIPERFIL, MOTIVO_SYNC_PAUSADO } from "./store.js";
+import { store } from "./store.js";
 
-// Trava da Fase 0a do multi-perfil: ver SYNC_PAUSADO_MULTIPERFIL em store.js.
-function travadoPeloMultiPerfil(silencioso) {
-  if (!SYNC_PAUSADO_MULTIPERFIL) return null;
-  if (!silencioso) throw new Error(MOTIVO_SYNC_PAUSADO);
-  return { ok: false, motivo: "multi-perfil" };
-}
 
 const NOME_PADRAO = "mentor-concurso-sync.json";
 const IDB_DB = "mentor-sync";
@@ -139,8 +133,12 @@ export function encolheria(de, para) {
 
 // Snapshot para a nuvem: clona o estado e REMOVE os binários (pdfData/imgData) de cada
 // material, mantendo texto/páginas/embeddings. Carimba metadados de sync no topo.
-export function montarSnapshotSync(state, dispositivo) {
-  const snap = JSON.parse(JSON.stringify(state));
+export function montarSnapshotSync(state, dispositivo, perfilId) {
+  // Multi-perfil: o que sobe é a FATIA PLANA do perfil (as coleções voltam ao topo), não o
+  // estado aninhado. Sem isto a limpeza de binários abaixo não alcançaria os documentos
+  // (que passam a morar dentro de perfis[]) e os PDFs subiriam junto.
+  const base = Array.isArray(state && state.perfis) && store.fatiaSync ? store.fatiaSync(perfilId) : state;
+  const snap = JSON.parse(JSON.stringify(base || state));
   snap.documentos = (snap.documentos || []).map((d) => ({ ...d, pdfData: null, imgData: null }));
   // config.sync / config.syncNuvem são metadados LOCAIS de cada máquina (handle, dispositivo,
   // base, status e — no da nuvem — a SENHA local). Nunca sincronizam.
@@ -162,13 +160,21 @@ export function montarSnapshotSync(state, dispositivo) {
 
 // Aplica o estado REMOTO sobre o LOCAL preservando os binários locais (os PDFs/imagens
 // ficam só na máquina de quem importou; o sync nunca os carrega nem os apaga).
-export function aplicarRemoto(localState, remoto) {
+// Devolve uma fatia PLANA (mesclada). Quem chama converte de volta ao estado completo com
+// store.aplicarFatia(), que a coloca dentro do perfil certo.
+export function aplicarRemoto(localState, remoto, perfilId) {
+  // Multi-perfil: os documentos locais (de onde saem os binários preservados abaixo) moram
+  // dentro do perfil. Sem achatar, binPorId ficaria vazio e os PDFs locais seriam perdidos.
+  const local =
+    Array.isArray(localState && localState.perfis) && store.fatiaSync
+      ? store.fatiaSync(perfilId) || localState
+      : localState;
   const novo = JSON.parse(JSON.stringify(remoto));
   // Adota o carimbo do remoto como "última modificação" local, para não re-subir em seguida.
   novo.modificadoEm = (remoto._sync && remoto._sync.atualizadoEm) || novo.modificadoEm || new Date().toISOString();
   delete novo._sync;
   const binPorId = {};
-  for (const d of localState.documentos || []) binPorId[d.id] = { pdfData: d.pdfData || null, imgData: d.imgData || null };
+  for (const d of local.documentos || []) binPorId[d.id] = { pdfData: d.pdfData || null, imgData: d.imgData || null };
   novo.documentos = (novo.documentos || []).map((d) => {
     const bin = binPorId[d.id];
     return bin ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData } : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null };
@@ -176,8 +182,8 @@ export function aplicarRemoto(localState, remoto) {
   // Preserva os metadados de sync LOCAIS (cada máquina tem os seus, incl. a senha da nuvem);
   // o remoto não os traz (foram removidos no snapshot).
   novo.config = { ...(novo.config || {}) };
-  novo.config.sync = (localState.config && localState.config.sync) || novo.config.sync;
-  novo.config.syncNuvem = (localState.config && localState.config.syncNuvem) || novo.config.syncNuvem;
+  novo.config.sync = (local.config && local.config.sync) || novo.config.sync;
+  novo.config.syncNuvem = (local.config && local.config.syncNuvem) || novo.config.syncNuvem;
   return novo;
 }
 
@@ -215,7 +221,6 @@ async function gravarArquivo(handle, obj) {
 
 // Conecta (escolhe/cria o arquivo de sync na pasta da nuvem do usuário) e faz a 1ª sync.
 export async function conectar() {
-  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync()) throw new Error("Este ambiente não suporta a sincronização por arquivo.");
   const handle = await window.showSaveFilePicker({
     suggestedName: NOME_PADRAO,
@@ -231,7 +236,6 @@ export async function conectar() {
 // LER e BAIXAR os dados para este computador. Nunca envia/sobrescreve a nuvem na conexão —
 // é a opção segura para não perder o que está na nuvem.
 export async function conectarBaixando() {
-  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync() || typeof window.showOpenFilePicker !== "function") throw new Error("Este ambiente não suporta a sincronização por arquivo.");
   const [handle] = await window.showOpenFilePicker({
     types: [{ description: "Sincronização do Mentor Concurso", accept: { "application/json": [".json"] } }],
@@ -248,7 +252,7 @@ export async function conectarBaixando() {
     return { ok: true, acao: "vazio" };
   }
   await guardarBackupConflito(montarSnapshotSync(state, dispositivoId())); // backup do que houver aqui
-  const merged = aplicarRemoto(state, remoto);
+  const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
   await store.importarBackup(merged);
   marcarStatus({ conectado: true, nomeArquivo: handle.name, ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };
@@ -266,7 +270,6 @@ export function estadoSync() {
 // Núcleo: lê o remoto, decide, e sobe ou baixa (preservando binários locais). Atualiza o
 // status em config.sync. `silencioso` evita erro visível em chamadas automáticas.
 export async function sincronizarAgora({ motivo = "manual", silencioso = false } = {}) {
-  { const t = travadoPeloMultiPerfil(silencioso); if (t) return t; }
   if (!suportaSync()) { if (!silencioso) throw new Error("Ambiente sem suporte a sincronização."); return { ok: false, motivo: "sem-suporte" }; }
   const handle = await idbGet();
   if (!handle) { if (!silencioso) throw new Error("Nenhuma pasta conectada. Clique em Conectar."); return { ok: false, motivo: "sem-handle" }; }
@@ -295,7 +298,7 @@ export async function sincronizarAgora({ motivo = "manual", silencioso = false }
 
     if (acao === "baixar") {
       await guardarBackupConflito(localSnap); // SEMPRE guarda o que será sobrescrito
-      const merged = aplicarRemoto(state, remoto); // aplica preservando binários e config.sync locais
+      const merged = store.aplicarFatia(aplicarRemoto(state, remoto)); // aplica preservando binários e config.sync locais
       await store.importarBackup(merged);
       marcarStatus({ sincronizando: false, ultimaSync: agora, baseEm: remoto._sync.atualizadoEm, ultimoResultado: "baixou", pendente: null, erro: "" });
       return { ok: true, acao: "baixou" };
@@ -318,7 +321,6 @@ export async function sincronizarAgora({ motivo = "manual", silencioso = false }
 // Resolve a decisão pendente (quando a sync reduziria os dados). "local" = mantém os deste
 // computador e envia para a nuvem; "nuvem" = baixa e aplica o que está na nuvem (com backup).
 export async function resolverPendencia(escolha) {
-  { const t = travadoPeloMultiPerfil(false); if (t) return t; }
   if (!suportaSync()) return { ok: false };
   const handle = await idbGet();
   if (!handle) return { ok: false };
@@ -334,7 +336,7 @@ export async function resolverPendencia(escolha) {
   const remoto = await lerArquivo(handle);
   if (!remoto) return { ok: false };
   await guardarBackupConflito(localSnap);
-  const merged = aplicarRemoto(state, remoto);
+  const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
   await store.importarBackup(merged);
   marcarStatus({ ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };
@@ -347,7 +349,6 @@ function marcarStatus(patch) {
 // Sincronização ao FECHAR o app (desktop: intercepta o fechamento; web: best-effort).
 // No desktop só fecha de fato depois de tentar subir os dados.
 export async function sincronizarAoFechar() {
-  { const t = travadoPeloMultiPerfil(true); if (t) return t; }
   const cfg = store.get().config || {};
   if (!cfg.sync || !cfg.sync.conectado) return;
   try { await sincronizarAgora({ motivo: "fechar", silencioso: true }); } catch (_) {}

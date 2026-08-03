@@ -11,7 +11,6 @@ import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
 import { suportaSync, conectar as syncConectar, conectarBaixando as syncConectarBaixar, sincronizarAgora, desconectar as syncDesconectar, ultimoBackupConflito, resolverPendencia } from "../sync.js";
 import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem } from "../sync-nuvem.js";
-import { SYNC_PAUSADO_MULTIPERFIL } from "../store.js";
 
 // "há X" curto para o status de sincronização.
 function haQuanto(iso) {
@@ -70,6 +69,8 @@ export default function renderConfig(root, app) {
     : "Ainda não sincronizado";
   // Sincronização NA NUVEM por senha (funciona no celular e em qualquer navegador).
   const sn = cfg.syncNuvem || {};
+  // Multi-perfil: o cofre é do concurso ATIVO — a tela diz qual, para não conectar o errado.
+  const perfilSync = (store.perfis ? store.perfis() : []).find((p) => p.ativo) || null;
   const nuvemSuporta = suportaSyncNuvem();
   const nuvemStatus = sn.pendente
     ? `${icone("triangle-alert")} Decisão necessária`
@@ -372,7 +373,7 @@ export default function renderConfig(root, app) {
         <label class="u-grow-2">Cargo <input id="cfg-cargo" type="text" value="${esc(c ? c.cargo : "")}" /></label>
         <label class="u-grow">Banca <input id="cfg-banca" type="text" value="${esc(c ? c.banca : "")}" /></label>
       </div>
-      <p class="muted small">Multi-concurso e modo fusão chegam na v3.</p>
+      <p class="muted small">Aqui é o concurso <b>ativo</b>. Para ter mais de um, use o seletor no topo da tela — cada concurso guarda o seu próprio edital, materiais, questões e histórico.</p>
 
       <details class="ed-ajuda u-mt-12" id="cfg-regra-det" ${regraAberta ? "open" : ""}>
         <summary>Regra de aprovação (grupos de matérias)</summary>
@@ -432,16 +433,18 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("smartphone")} Sincronização <span class="muted small">(celular e computadores)</span></h3>
-      <p class="muted small">Use uma <b>senha</b> e tenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>.</p>
+      <p class="muted small">
+        Use uma <b>senha</b> e tenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>.
+        ${
+          // Multi-perfil: cada concurso tem o SEU cofre e a SUA senha. Dizer qual está sendo
+          // configurado evita conectar o concurso errado sem perceber.
+          perfilSync
+            ? `<br>Você está conectando o concurso <b>${esc(perfilSync.nome)}</b> — cada concurso tem o seu próprio cofre.`
+            : ""
+        }
+      </p>
       ${
-        SYNC_PAUSADO_MULTIPERFIL
-          ? `<div class="sync-status" data-tip="O motor de sincronização ainda lê os dados no formato antigo. Ligá-lo agora enviaria os PDFs e desligaria a proteção contra perda de dados.">
-              <span>${icone("pause")} Pausada</span>
-              <span class="sync-status-sep">·</span>
-              <span class="muted">multi-perfil em implantação</span>
-            </div>
-            <p class="muted small u-m-0">Volta quando cada perfil tiver o seu próprio cofre. Seus dados seguem salvos neste aparelho.</p>`
-          : nuvemSuporta
+        nuvemSuporta
           ? `<div class="sync-status ${sn.ultimoResultado === "erro" ? "erro" : sn.conectado ? "ok" : ""}">
               <span>${sn.conectado ? `Conectado ${icone("lock")}` : "Não conectado"}</span>
               ${sn.conectado ? `<span class="sync-status-sep">·</span><span>${nuvemStatus}</span>` : ""}
@@ -487,19 +490,13 @@ export default function renderConfig(root, app) {
           dizer "este ambiente não suporta". */ ""}
     ${!syncSuporta ? "" : `<section class="card">
       <details class="ed-ajuda">
-        <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)${
-          SYNC_PAUSADO_MULTIPERFIL ? ` <span class="chip-sm">${icone("pause")} pausado</span>` : ""
-        }</summary>
+        <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)</summary>
         <div class="ed-ajuda-corpo">
-          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
+          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.${
+            perfilSync ? ` Grava o concurso <b>${esc(perfilSync.nome)}</b> — um arquivo por concurso.` : ""
+          }</p>
       ${
-        SYNC_PAUSADO_MULTIPERFIL
-          ? `<div class="sync-status" data-tip="Mesmo motivo da sincronização por senha: o formato dos dados mudou e o motor ainda não acompanha.">
-              <span>${icone("pause")} Pausado</span>
-              <span class="sync-status-sep">·</span>
-              <span class="muted">multi-perfil em implantação</span>
-            </div>`
-          : syncSuporta
+        syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">
               <span>${sy.conectado ? `Conectado a <b>${esc(sy.nomeArquivo || "arquivo de sync")}</b>` : "Não conectado"}</span>
               <span class="sync-status-sep">·</span>
