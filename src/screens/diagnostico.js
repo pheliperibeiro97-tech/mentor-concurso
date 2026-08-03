@@ -161,33 +161,59 @@ function sessPainelHTML(st) {
 // Sem isso não há veredito a dar, e um painel vazio seria só ocupação de tela.
 function riscoGrupoHTML(d) {
   if (!d.configurado) return "";
-  const emRisco = d.grupos.filter((g) => g.abaixo);
-  const semDados = d.grupos.filter((g) => g.pct === null);
+  const abaixo = d.grupos.filter((g) => g.abaixo);
+  const semAmostra = d.grupos.filter((g) => !g.suficiente);
   const linhas = d.grupos
     .map((g) => {
-      const cls = g.pct === null ? "" : g.abaixo ? " rg-abaixo" : " rg-ok";
+      // Sem amostra o grupo não recebe cor de veredito — ele informa o que falta medir.
+      if (!g.suficiente) {
+        return `<li class="rg-linha rg-medindo">
+          <span class="rg-nome">${esc(g.grupo)}</span>
+          <span class="rg-num rg-num-fraco">${g.pct === null ? "—" : g.pct + "%"}</span>
+          <span class="rg-det">${g.total} de ${d.minAmostra} questões · faltam ${g.faltam} para medir</span>
+        </li>`;
+      }
       const alvo = d.regra.minGrupo != null ? ` · <span class="rg-alvo">mín. ${d.regra.minGrupo}%</span>` : "";
-      return `<li class="rg-linha${cls}">
+      return `<li class="rg-linha ${g.abaixo ? "rg-abaixo" : "rg-ok"}">
         <span class="rg-nome">${esc(g.grupo)}</span>
-        <span class="rg-num">${g.pct === null ? "—" : g.pct + "%"}</span>
+        <span class="rg-num">${g.pct}%</span>
         <span class="rg-det">${g.acertos}/${g.total}${alvo}</span>
       </li>`;
     })
     .join("");
-  const veredito = emRisco.length
-    ? `<b>Você seria eliminado</b> por ${emRisco.length === 1 ? "um grupo abaixo do mínimo" : `${emRisco.length} grupos abaixo do mínimo`}: ${emRisco
-        .map((g) => esc(g.grupo))
-        .join(", ")}.`
-    : d.geralAbaixo
-    ? `Nenhum grupo abaixo do mínimo, mas a <b>média geral</b> (${d.geral.pct}%) está abaixo dos ${d.regra.minGeral}% exigidos.`
-    : `Nenhum grupo abaixo do mínimo${d.regra.minGeral != null ? ` e a média geral (${d.geral.pct}%) atende aos ${d.regra.minGeral}%` : ""}.`;
-  const ressalva = semDados.length
-    ? ` <span class="muted">${semDados.length === 1 ? "Um grupo ainda" : `${semDados.length} grupos ainda`} sem questões respondidas — sem dado não há veredito.</span>`
+
+  // DISTÂNCIA, não sentença. A prova é no futuro e este número existe justamente porque
+  // muda: "você seria eliminado" afirma um fato sobre um evento que ainda não aconteceu,
+  // e transforma diagnóstico em ameaça — que produz evitação, não estudo.
+  let frase;
+  if (abaixo.length) {
+    const pior = [...abaixo].sort((a, b) => b.gap - a.gap)[0];
+    frase =
+      abaixo.length === 1
+        ? `<b>${esc(pior.grupo)}</b> está <b>${pior.gap} ${pior.gap === 1 ? "ponto" : "pontos"}</b> abaixo do mínimo. É o que decide a aprovação antes da média.`
+        : `${abaixo.length} grupos estão abaixo do mínimo. O mais distante é <b>${esc(pior.grupo)}</b>, a <b>${pior.gap} pontos</b> — comece por ele.`;
+  } else if (d.geralAbaixo) {
+    frase = `Nenhum grupo abaixo do mínimo, mas a média geral (${d.geral.pct}%) ainda não alcança os ${d.regra.minGeral}%.`;
+  } else if (d.grupos.every((g) => !g.suficiente)) {
+    frase = `Ainda sem questões suficientes para medir os grupos.`;
+  } else {
+    frase = `Nenhum grupo abaixo do mínimo${d.regra.minGeral != null && d.geral.suficiente ? ` e a média geral (${d.geral.pct}%) atende aos ${d.regra.minGeral}%` : ""}.`;
+  }
+  const ressalva = semAmostra.length && !d.grupos.every((g) => !g.suficiente)
+    ? ` <span class="muted">${semAmostra.length === 1 ? "Um grupo ainda não tem" : `${semAmostra.length} grupos ainda não têm`} questões suficientes para medir.</span>`
     : "";
-  return `<section class="card risco-grupo${emRisco.length ? " rg-alerta" : ""}">
-    <h3>${icone(emRisco.length ? "triangle-alert" : "target")} Risco por grupo de matérias</h3>
-    <p class="rg-veredito">${veredito}${ressalva}</p>
+  // Pré-edital a regra é referência de um certame passado — informa, não sentencia.
+  const nota = d.referencia
+    ? `<p class="rg-nota">${icone("circle-help")} Sem data de prova cadastrada: estes mínimos valem como <b>referência</b>, não como a regra do seu certame.</p>`
+    : "";
+  // O vermelho só acende quando há veredito de verdade: amostra suficiente E grupo
+  // abaixo. Alarme que dispara sempre é desligado, e aí não avisa quando importa.
+  const alerta = abaixo.length > 0;
+  return `<section class="card risco-grupo${alerta ? " rg-alerta" : ""}">
+    <h3>${icone(alerta ? "triangle-alert" : "target")} Desempenho por grupo de matérias</h3>
+    <p class="rg-veredito">${frase}${ressalva}</p>
     <ul class="rg-lista">${linhas}</ul>
+    ${nota}
   </section>`;
 }
 

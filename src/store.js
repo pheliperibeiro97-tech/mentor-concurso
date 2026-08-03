@@ -6783,18 +6783,37 @@ export const store = {
       r.total++;
       if (t.acertou) r.acertos++;
     }
+    // AMOSTRA MÍNIMA. Percentual sobre 3 questões não é a sua habilidade, é ruído — e
+    // dizer "abaixo do mínimo" com 3 questões é a mesma falsa precisão que o app combate
+    // no conteúdo gerado por IA. Abaixo do piso o grupo aparece, mas SEM veredito: o que
+    // ele informa é quantas questões faltam para poder medir, que já é instrução útil.
+    const MIN_AMOSTRA = 30;
     const grupos = [...acc.values()]
       .map((r) => {
         const pct = r.total ? Math.round((r.acertos / r.total) * 100) : null;
-        return { ...r, pct, abaixo: regra.minGrupo != null && pct != null && pct < regra.minGrupo };
+        const suficiente = r.total >= MIN_AMOSTRA;
+        return {
+          ...r,
+          pct,
+          suficiente,
+          faltam: Math.max(0, MIN_AMOSTRA - r.total),
+          abaixo: suficiente && regra.minGrupo != null && pct != null && pct < regra.minGrupo,
+          // distância em pontos percentuais até o mínimo (o número acionável)
+          gap: suficiente && regra.minGrupo != null && pct != null ? regra.minGrupo - pct : null,
+        };
       })
       .sort((a, b) => a.grupo.localeCompare(b.grupo));
     const geralPct = gTotal ? Math.round((gAcertos / gTotal) * 100) : null;
+    const geralSuficiente = gTotal >= MIN_AMOSTRA;
     return {
       grupos,
       regra,
-      geral: { acertos: gAcertos, total: gTotal, pct: geralPct },
-      geralAbaixo: regra.minGeral != null && geralPct != null && geralPct < regra.minGeral,
+      minAmostra: MIN_AMOSTRA,
+      geral: { acertos: gAcertos, total: gTotal, pct: geralPct, suficiente: geralSuficiente },
+      geralAbaixo: geralSuficiente && regra.minGeral != null && geralPct != null && geralPct < regra.minGeral,
+      // Sem DATA DE PROVA a regra é referência de um certame passado, não a regra do seu.
+      // O painel muda de tom por causa disto: pré-edital ele informa, não sentencia.
+      referencia: !state.config.dataProva,
       // Sem grupo definido não há veredito nenhum a dar.
       configurado: grupos.length > 0 && (regra.minGrupo != null || regra.minGeral != null),
     };

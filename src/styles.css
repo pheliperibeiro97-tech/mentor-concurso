@@ -1450,6 +1450,16 @@ body.onboarding #crono-fab { display: none !important; }
 .chip-trib:hover, .chip-sel:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
 .chip-trib.on, .chip-escopo.on, .chip-sel.on { background: color-mix(in srgb, var(--primary) 14%, transparent); border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); color: var(--primary); font-weight: var(--fw-medium); }
 .chip-sel .ico { width: 0.9em; height: 0.9em; }
+/* Alvo de toque: no desktop 25px de altura é fino e elegante; no dedo é pequeno demais
+   (a diretriz é ~44px). Isto NÃO é dívida nova — .chip-trib e .chip-escopo sempre foram
+   assim; o motivo do erro só levou o problema para uma tela de uso pesado no celular.
+   Corrige as três de uma vez, e só onde o ponteiro é grosseiro. */
+/* Duas condições: a LARGURA (convenção do projeto — breakpoint 560) e o PONTEIRO
+   GROSSEIRO (pega o iPad em paisagem, que é largo mas é dedo). O emulador reporta
+   ponteiro fino, então só a de largura é verificável aqui; a outra vale no aparelho. */
+@media (max-width: 560px), (pointer: coarse) {
+  .chip-trib, .chip-escopo, .chip-sel { min-height: 40px; padding-top: 8px; padding-bottom: 8px; }
+}
 .trib-custom { min-width: 150px; }
 .cat-picker { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 /* ===== Lei Seca / Jurisprudência v4 — Estudar (lançador) ===== */
