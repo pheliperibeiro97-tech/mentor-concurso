@@ -16,7 +16,7 @@ export const NOVIDADES = [
       "Para trocar, clique no nome do concurso no alto da tela (no celular, ele fica no topo do menu lateral). Ali também estão 'Novo concurso', 'Renomear' e 'Remover'.",
       "O que é seu e não do concurso continua valendo em todos: tema, chave da IA, notificações, pomodoro, dias de folga, lembretes e as bancas cadastradas.",
       "Criar um concurso novo não mexe no que você já tem: ele nasce vazio e o atual fica intacto. Se criar por engano, dá para voltar ou descartar na mesma tela.",
-      "Sincronização: cada concurso tem o seu próprio cofre e a sua própria senha. Ao restaurar da nuvem num aparelho que já está em uso, o Mentor CRIA um concurso a partir do cofre em vez de substituir o que está aqui.",
+      "A sincronização continua com UMA senha só: o aparelho onde você digitá-la recebe todos os seus concursos de uma vez.",
       "Seus dados atuais viram automaticamente o seu primeiro concurso, sem que você precise fazer nada.",
     ],
   },

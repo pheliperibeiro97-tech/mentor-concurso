@@ -69,8 +69,6 @@ export default function renderConfig(root, app) {
     : "Ainda não sincronizado";
   // Sincronização NA NUVEM por senha (funciona no celular e em qualquer navegador).
   const sn = cfg.syncNuvem || {};
-  // Multi-perfil: o cofre é do concurso ATIVO — a tela diz qual, para não conectar o errado.
-  const perfilSync = (store.perfis ? store.perfis() : []).find((p) => p.ativo) || null;
   const nuvemSuporta = suportaSyncNuvem();
   const nuvemStatus = sn.pendente
     ? `${icone("triangle-alert")} Decisão necessária`
@@ -436,10 +434,10 @@ export default function renderConfig(root, app) {
       <p class="muted small">
         Use uma <b>senha</b> e tenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>.
         ${
-          // Multi-perfil: cada concurso tem o SEU cofre e a SUA senha. Dizer qual está sendo
-          // configurado evita conectar o concurso errado sem perceber.
-          perfilSync
-            ? `<br>Você está conectando o concurso <b>${esc(perfilSync.nome)}</b> — cada concurso tem o seu próprio cofre.`
+          // Uma senha para a conta inteira: o aparelho que a digitar recebe TODOS os
+          // concursos. Dizer isso evita a dúvida de "preciso repetir para cada concurso?".
+          (store.perfis ? store.perfis().length : 1) > 1
+            ? "<br>Uma senha só: o aparelho que a digitar recebe <b>todos os seus concursos</b>."
             : ""
         }
       </p>
@@ -492,9 +490,7 @@ export default function renderConfig(root, app) {
       <details class="ed-ajuda">
         <summary>${icone("refresh-cw")} Backup extra por arquivo (opcional · Drive/OneDrive · desktop)</summary>
         <div class="ed-ajuda-corpo">
-          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.${
-            perfilSync ? ` Grava o concurso <b>${esc(perfilSync.nome)}</b> — um arquivo por concurso.` : ""
-          }</p>
+          <p class="muted small u-mt-8">Além da sincronização por senha, você pode guardar uma cópia dos seus dados num arquivo dentro da sua própria nuvem (Google Drive ou OneDrive), no computador. O app grava ali os dados e o <b>texto</b> dos materiais (os <b>PDFs ficam só nesta máquina</b>); nada passa por servidor nosso.</p>
       ${
         syncSuporta
           ? `<div class="sync-status ${sy.ultimoResultado === "erro" ? "erro" : sy.conectado ? "ok" : ""}">

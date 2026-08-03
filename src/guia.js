@@ -257,8 +257,7 @@ export const GUIA = [
       <p>Opcional e <b>gratuita</b>: mantenha os mesmos dados no <b>celular</b> e nos <b>computadores</b>, por uma <b>senha</b>. Fica em <b>Configurações → Dados &amp; concurso → Sincronização — celular e computadores</b>.</p>
       <ul>
         <li><b>Como ligar</b>: escolha uma <b>senha</b> (uma frase fácil de lembrar) e digite-a <b>uma vez em cada aparelho</b>. A partir daí sincroniza sozinho — <b>ao abrir</b> e <b>ao fechar</b> — e há o botão <b>Sincronizar agora</b>.</li>
-        <li><b>É por concurso</b>: cada concurso tem o <b>seu próprio cofre e a sua senha</b>, e a tela mostra qual você está conectando. Para levar um concurso a outro aparelho, use a senha <b>dele</b> lá.</li>
-        <li><b>Trazer um concurso de outro aparelho</b>: em <b>Restaurar da nuvem</b>, se o app já estiver em uso aqui, o Mentor <b>cria um concurso</b> a partir do cofre em vez de substituir o que existe — nada do que está neste aparelho se perde.</li>
+        <li><b>Uma senha para tudo</b>: o cofre é da sua conta, não de um concurso. O aparelho onde você digitar a senha recebe <b>todos os seus concursos</b> — não precisa repetir a cada um.</li>
         <li><b>Privacidade</b>: a senha <b>cifra</b> tudo de ponta a ponta; nem nós nem o serviço de nuvem conseguem ler. A senha <b>não sai do aparelho</b> e <b>não tem recuperação</b> — se esquecer, escolha outra (cada aparelho mantém a cópia local).</li>
         <li><b>PDFs</b>: os arquivos originais <b>ficam em cada aparelho</b> (não sobem); o <b>texto extraído</b> sincroniza normalmente, então o material segue legível e pesquisável.</li>
         <li><b>Conflito</b>: vence o <b>mais recente</b>. Se um aparelho quase vazio fosse apagar um cheio, o app <b>para e pergunta</b> antes, guardando uma cópia de segurança.</li>

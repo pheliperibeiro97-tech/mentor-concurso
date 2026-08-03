@@ -10,13 +10,23 @@ import { AREAS, resumoArea } from "../areas.js";
 import { arquivoParaBase64 } from "../pdf.js";
 
 let passo = 1; // 1..4 | "montando" | "pronto"
+// Concurso ADICIONAL: o roteador decide pelo isOnboarded(), que usa meta.onboarded — e esse
+// é global. Sem esta marca, gravar o concurso do perfil novo já fazia o app considerar tudo
+// pronto e sair do fluxo, pulando "prova e ritmo" e "montar plano".
+let fluxoNovoConcurso = false;
+export function iniciarFluxoNovoConcurso() { passo = 1; fluxoNovoConcurso = true; }
+export function onboardingEmCurso() { return fluxoNovoConcurso; }
+function encerrarFluxoNovoConcurso() { fluxoNovoConcurso = false; }
 let temaOb = null; // tema escolhido no onboarding (persistido ao avançar do passo 1)
 let planoResultado = null; // { origem, disciplinas, topicos } — alimenta a tela "Plano pronto"
 let montandoDe = "area"; // "area" | "edital" — muda o texto da tela de loading
 
 // Indicador de etapas (done / atual / futura). "Montar plano" é o passo que ENTREGA o plano.
-function steps(atual) {
+function steps(atual, enxuto) {
   const it = (n, txt) => `<span class="${n < atual ? "done" : n === atual ? "atual" : ""}">${n}. ${txt}</span>`;
+  // Concurso ADICIONAL não passa pela IA (é global, já configurada): o passo some do
+  // indicador, senão ele prometeria uma etapa que nunca vem.
+  if (enxuto) return `<div class="ob-steps">${it(1, "Concurso")} › ${it(2, "Prova e ritmo")} › ${it(4, "Montar plano")}</div>`;
   return `<div class="ob-steps">${it(1, "Concurso")} › ${it(2, "Prova e ritmo")} › ${it(3, "IA")} › ${it(4, "Montar plano")}</div>`;
 }
 
@@ -53,6 +63,7 @@ export default function renderOnboarding(root, app) {
 
   // Finaliza o onboarding e abre a tela "Por onde começar?".
   const irComecar = () => {
+    encerrarFluxoNovoConcurso();
     store.finalizarOnboarding();
     app.navigate("comecar");
   };
@@ -150,7 +161,7 @@ export default function renderOnboarding(root, app) {
       : `<button class="btn btn-ghost" data-action="importar-edital" data-tip="Conecte o Gemini (passo anterior) para o Mentor ler o PDF automaticamente">${icone("upload")} Importar edital (PDF)</button>`;
     root.innerHTML = `
       <div class="ob-card ob-wide">
-        ${steps(4)}
+        ${steps(4, !!outroPerfil)}
         <h1>Montar seu plano</h1>
         <p class="ob-lead">Escolha sua <b>área</b> e o Mentor já cria as matérias e os tópicos base para você começar hoje. Prefere seu edital exato? Importe o PDF. Sem pressa? Comece do zero — tudo é editável depois.</p>
         <div class="tile-grid ob-areas">
@@ -173,7 +184,7 @@ export default function renderOnboarding(root, app) {
         </div>
       </div>`;
     bindActions(root, {
-      voltar: () => { passo = 3; app.refresh(); },
+      voltar: () => { passo = outroPerfil ? 2 : 3; app.refresh(); },
       area: (el) => montarPlano("area", el.getAttribute("data-area")),
       "importar-edital": () => {
         store.finalizarOnboarding();
@@ -213,13 +224,13 @@ export default function renderOnboarding(root, app) {
             : "<b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova."
         }</p>
         <p class="ob-steps" style="justify-content:center; display:flex">São só 3 passos rápidos. Comece informando o concurso.</p>
-        <div class="ob-tema">
+        ${outroPerfil ? "" : `<div class="ob-tema">
           <span class="ob-tema-label">Aparência</span>
           <div class="tema-opcoes">
             <button type="button" class="tema-opt ${(temaOb ?? cfg.tema) !== "escuro" ? "on" : ""}" data-action="set-tema" data-tema="claro"><span class="tema-amostra tema-amostra-claro"></span><span>Claro</span></button>
             <button type="button" class="tema-opt ${(temaOb ?? cfg.tema) === "escuro" ? "on" : ""}" data-action="set-tema" data-tema="escuro"><span class="tema-amostra tema-amostra-escuro"></span><span>Escuro</span></button>
           </div>
-        </div>
+        </div>`}
         <div class="ob-form">
           <label>Qual concurso você vai prestar? <span class="ob-tag-req">obrigatório</span>
             <input id="ob-cargo" type="text" value="${esc(st.concurso ? st.concurso.cargo : "")}" placeholder="Ex.: Escrevente Técnico Judiciário · TJSP" />
@@ -236,11 +247,13 @@ export default function renderOnboarding(root, app) {
           // Sem Web Crypto (endereço http:// que não seja localhost, ex.: abrir pelo IP da
           // rede no celular) a restauração não roda — e antes a linha simplesmente sumia,
           // dando a impressão de que o app não sabe trazer os dados de outro aparelho.
-          suportaSyncNuvem()
+          outroPerfil
+            ? "" // restaurar traz TODOS os concursos do cofre: não cabe em "criar um concurso"
+            : suportaSyncNuvem()
             ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="restaurar-nuvem">Restaurar meus dados da nuvem</button></p>`
             : `<p class="ob-jatenho muted">Para trazer os dados de outro aparelho, abra o Mentor por um endereço <b>https://</b> (a sincronização segura exige conexão protegida).</p>`
         }
-        <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>
+        ${outroPerfil ? "" : `<p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>`}
       </div>`;
 
     bindActions(root, {
@@ -248,6 +261,7 @@ export default function renderOnboarding(root, app) {
       // vazio para configurar depois, ou descartá-lo de vez.
       "ob-voltar": () => {
         if (!outroPerfil) return;
+        encerrarFluxoNovoConcurso();
         store.trocarPerfil(outroPerfil.id);
         passo = 1; // o próximo concurso novo recomeça do zero
         app.navigate("hoje");
@@ -257,6 +271,7 @@ export default function renderOnboarding(root, app) {
         const atual = store.perfis().find((p) => p.ativo);
         if (!atual) return;
         if (!(await confirmar(`Descartar "${atual.nome}"? Ele está vazio — nada do outro concurso é afetado.`))) return;
+        encerrarFluxoNovoConcurso();
         store.removerPerfil(atual.id);
         passo = 1;
         app.navigate("hoje");
@@ -303,7 +318,7 @@ export default function renderOnboarding(root, app) {
   if (passo === 2) {
     root.innerHTML = `
       <div class="ob-card ob-wide">
-        ${steps(2)}
+        ${steps(2, !!outroPerfil)}
         <h1>Prova e ritmo de estudo <span class="ob-tag-opt">opcional</span></h1>
         <p class="ob-lead">Tem data da prova ou uma meta de horas em mente? Informe e o app acompanha seu ritmo. Sem pressa: deixe em branco e ajuste quando quiser em Configurações.</p>
         <div class="ob-form">
@@ -337,7 +352,7 @@ export default function renderOnboarding(root, app) {
 
     bindActions(root, {
       voltar: () => { passo = 1; app.refresh(); },
-      pular: () => { passo = 3; app.refresh(); },
+      pular: () => { passo = outroPerfil ? 4 : 3; app.refresh(); },
       salvar: () => {
         const metaPre = root.querySelector("#ob-meta-pre").checked;
         store.setConfig({
@@ -348,7 +363,7 @@ export default function renderOnboarding(root, app) {
           // Disponibilidade diária = meta diária (mesmo conceito); alimenta o Mentor.
           dispDiariaMin: metaPre ? 0 : hm("ob-meta-dia"),
         });
-        passo = 3;
+        passo = outroPerfil ? 4 : 3;
         app.refresh();
       },
     });
@@ -373,7 +388,7 @@ export default function renderOnboarding(root, app) {
   const inativa = ["offline", "claude-cli"].includes(prov);
   root.innerHTML = `
     <div class="ob-card ob-wide">
-      ${steps(3)}
+      ${steps(3, !!outroPerfil)}
       <h1>Mentor IA <span class="ob-tag-opt">opcional</span></h1>
       <p class="ob-lead">Com a IA (chave grátis do Gemini), o Mentor gera questões, corrige redações e conversa com você. Conecte agora ou depois.</p>
       <p class="small ob-ia-status">Status: ${iaDisponivel(cfg) ? '<b style="color:var(--success)">IA conectada</b> ' : '<b>Offline</b> — a IA é opcional; conecte agora ou depois em Configurações.'}</p>

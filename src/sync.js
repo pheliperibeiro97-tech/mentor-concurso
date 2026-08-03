@@ -122,7 +122,10 @@ export function dispositivoId() {
 const COLECOES_PESO = ["flashcards", "questoes", "resumos", "missoes", "revisoesTopico", "indicacoes", "documentos", "topicos", "disciplinas", "mapasMentais", "redacoes", "sessoes", "revisoes", "tentativas", "errosManuais", "marcacoes"];
 export function peso(snap) {
   if (!snap) return 0;
-  return COLECOES_PESO.reduce((n, k) => n + (Array.isArray(snap[k]) ? snap[k].length : 0), 0);
+  const conta = (o) => (o ? COLECOES_PESO.reduce((n, k) => n + (Array.isArray(o[k]) ? o[k].length : 0), 0) : 0);
+  // Multi-concurso: as coleções moram dentro de perfis[]. Contar só o topo daria quase
+  // zero e a guarda anti-perda nunca dispararia — uma máquina vazia sobrescreveria a cheia.
+  return conta(snap) + (snap.perfis || []).reduce((n, p) => n + conta(p), 0);
 }
 // Encolheria = o lado de origem tem um conjunto relevante (≥8 itens) e o destino ficaria com
 // menos da METADE disso. Pega o caso clássico do "máquina zerada sobrescreve a cheia".
@@ -133,13 +136,18 @@ export function encolheria(de, para) {
 
 // Snapshot para a nuvem: clona o estado e REMOVE os binários (pdfData/imgData) de cada
 // material, mantendo texto/páginas/embeddings. Carimba metadados de sync no topo.
-export function montarSnapshotSync(state, dispositivo, perfilId) {
-  // Multi-perfil: o que sobe é a FATIA PLANA do perfil (as coleções voltam ao topo), não o
-  // estado aninhado. Sem isto a limpeza de binários abaixo não alcançaria os documentos
-  // (que passam a morar dentro de perfis[]) e os PDFs subiriam junto.
-  const base = Array.isArray(state && state.perfis) && store.fatiaSync ? store.fatiaSync(perfilId) : state;
-  const snap = JSON.parse(JSON.stringify(base || state));
-  snap.documentos = (snap.documentos || []).map((d) => ({ ...d, pdfData: null, imgData: null }));
+export function montarSnapshotSync(state, dispositivo) {
+  // O cofre é da CONTA: sobe o app inteiro, com TODOS os concursos. Uma senha, um cofre —
+  // o aparelho que a digitar recebe tudo. (Um cofre por concurso gastaria uma escrita por
+  // concurso a cada sincronização e subiria o conteúdo compartilhado repetido.)
+  const snap = JSON.parse(JSON.stringify(state));
+  // Binários NUNCA sobem, e eles moram dentro de cada concurso — varrer só o topo deixaria
+  // os PDFs passarem.
+  const semBinarios = (o) => {
+    if (o && Array.isArray(o.documentos)) o.documentos = o.documentos.map((d) => ({ ...d, pdfData: null, imgData: null }));
+  };
+  semBinarios(snap);
+  (snap.perfis || []).forEach(semBinarios);
   // config.sync / config.syncNuvem são metadados LOCAIS de cada máquina (handle, dispositivo,
   // base, status e — no da nuvem — a SENHA local). Nunca sincronizam.
   if (snap.config && (snap.config.sync || snap.config.syncNuvem)) {
@@ -160,30 +168,35 @@ export function montarSnapshotSync(state, dispositivo, perfilId) {
 
 // Aplica o estado REMOTO sobre o LOCAL preservando os binários locais (os PDFs/imagens
 // ficam só na máquina de quem importou; o sync nunca os carrega nem os apaga).
-// Devolve uma fatia PLANA (mesclada). Quem chama converte de volta ao estado completo com
-// store.aplicarFatia(), que a coloca dentro do perfil certo.
-export function aplicarRemoto(localState, remoto, perfilId) {
-  // Multi-perfil: os documentos locais (de onde saem os binários preservados abaixo) moram
-  // dentro do perfil. Sem achatar, binPorId ficaria vazio e os PDFs locais seriam perdidos.
-  const local =
-    Array.isArray(localState && localState.perfis) && store.fatiaSync
-      ? store.fatiaSync(perfilId) || localState
-      : localState;
+// Devolve o ESTADO COMPLETO (com todos os concursos) pronto para importarBackup.
+export function aplicarRemoto(localState, remoto) {
   const novo = JSON.parse(JSON.stringify(remoto));
   // Adota o carimbo do remoto como "última modificação" local, para não re-subir em seguida.
   novo.modificadoEm = (remoto._sync && remoto._sync.atualizadoEm) || novo.modificadoEm || new Date().toISOString();
   delete novo._sync;
+  // Os PDFs/imagens ficam só na máquina que importou. Os ids de documento são únicos entre
+  // concursos, então um índice só resolve — e ele varre topo E perfis, dos dois lados,
+  // porque o remoto pode vir no formato antigo (plano) e o local no novo.
   const binPorId = {};
-  for (const d of local.documentos || []) binPorId[d.id] = { pdfData: d.pdfData || null, imgData: d.imgData || null };
-  novo.documentos = (novo.documentos || []).map((d) => {
-    const bin = binPorId[d.id];
-    return bin ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData } : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null };
-  });
+  const coletar = (o) => {
+    for (const d of (o && o.documentos) || []) binPorId[d.id] = { pdfData: d.pdfData || null, imgData: d.imgData || null };
+  };
+  coletar(localState);
+  (localState.perfis || []).forEach(coletar);
+  const devolver = (o) => {
+    if (!o || !Array.isArray(o.documentos)) return;
+    o.documentos = o.documentos.map((d) => {
+      const bin = binPorId[d.id];
+      return bin ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData } : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null };
+    });
+  };
+  devolver(novo);
+  (novo.perfis || []).forEach(devolver);
   // Preserva os metadados de sync LOCAIS (cada máquina tem os seus, incl. a senha da nuvem);
   // o remoto não os traz (foram removidos no snapshot).
   novo.config = { ...(novo.config || {}) };
-  novo.config.sync = (local.config && local.config.sync) || novo.config.sync;
-  novo.config.syncNuvem = (local.config && local.config.syncNuvem) || novo.config.syncNuvem;
+  novo.config.sync = (localState.config && localState.config.sync) || novo.config.sync;
+  novo.config.syncNuvem = (localState.config && localState.config.syncNuvem) || novo.config.syncNuvem;
   return novo;
 }
 
@@ -252,7 +265,7 @@ export async function conectarBaixando() {
     return { ok: true, acao: "vazio" };
   }
   await guardarBackupConflito(montarSnapshotSync(state, dispositivoId())); // backup do que houver aqui
-  const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
+  const merged = aplicarRemoto(state, remoto);
   await store.importarBackup(merged);
   marcarStatus({ conectado: true, nomeArquivo: handle.name, ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };
@@ -298,7 +311,7 @@ export async function sincronizarAgora({ motivo = "manual", silencioso = false }
 
     if (acao === "baixar") {
       await guardarBackupConflito(localSnap); // SEMPRE guarda o que será sobrescrito
-      const merged = store.aplicarFatia(aplicarRemoto(state, remoto)); // aplica preservando binários e config.sync locais
+      const merged = aplicarRemoto(state, remoto); // aplica preservando binários e config.sync locais
       await store.importarBackup(merged);
       marcarStatus({ sincronizando: false, ultimaSync: agora, baseEm: remoto._sync.atualizadoEm, ultimoResultado: "baixou", pendente: null, erro: "" });
       return { ok: true, acao: "baixou" };
@@ -336,7 +349,7 @@ export async function resolverPendencia(escolha) {
   const remoto = await lerArquivo(handle);
   if (!remoto) return { ok: false };
   await guardarBackupConflito(localSnap);
-  const merged = store.aplicarFatia(aplicarRemoto(state, remoto));
+  const merged = aplicarRemoto(state, remoto);
   await store.importarBackup(merged);
   marcarStatus({ ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };

@@ -25,7 +25,7 @@ import { montarOrbs, setOrbsOffline } from "./orb.js";
 
 iniciarCapturaErros(); // captura erros não tratados desde o início (para o relatório de diagnóstico)
 
-import renderOnboarding from "./screens/onboarding.js";
+import renderOnboarding, { iniciarFluxoNovoConcurso, onboardingEmCurso } from "./screens/onboarding.js";
 import renderEdital from "./screens/edital.js";
 import renderHoje from "./screens/hoje.js";
 import renderPratica, { renderPraticaCE } from "./screens/pratica.js";
@@ -624,9 +624,10 @@ function render(preservarScroll = true) {
   document.body.classList.toggle("nav-rail", !store.get().config.navFixa);
 
   // No onboarding não há app ainda: esconde o cronômetro flutuante (o chat já some via JS).
-  document.body.classList.toggle("onboarding", !store.isOnboarded());
-  atualizarChatVisibilidade(store.isOnboarded());
-  if (!store.isOnboarded()) {
+  const noOnboarding = !store.isOnboarded() || onboardingEmCurso();
+  document.body.classList.toggle("onboarding", noOnboarding);
+  atualizarChatVisibilidade(!noOnboarding);
+  if (noOnboarding) {
     cleanupAtual = renderOnboardingFull(root);
     return;
   }
@@ -698,6 +699,7 @@ function render(preservarScroll = true) {
     // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
     // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
     store.criarPerfil();
+    iniciarFluxoNovoConcurso(); // o fluxo do concurso novo tem começo e fim próprios
     app.navigate("hoje");
   }));
   root.querySelectorAll("[data-perfil-renomear]").forEach((b) => b.addEventListener("click", async () => {
