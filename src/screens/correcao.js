@@ -8,7 +8,7 @@ import { icone } from "../icones.js";
 import { setModo as setModoCrono, setTarget as setTargetCrono, iniciar as iniciarCrono } from "../cronometro.js";
 
 let tipo = "discursiva";
-let genFonte = "topico";
+let genFonte = null; // null = automático pelo contexto (ver fonteEfetiva)
 // Rascunho persistente: tema e resposta sobrevivem a qualquer app.refresh() (sync,
 // ação em outra tela) — antes as textareas voltavam VAZIAS e apagavam a dissertação
 // em progresso. Limpo após correção bem-sucedida.
@@ -24,6 +24,11 @@ export default function renderCorrecao(root, app) {
   const iaOn = store.iaDisponivel();
   const contaPalavras = (s) => (s.trim() ? s.trim().split(/\s+/).length : 0);
   const ehSentenca = tipo === "sentenca-civel" || tipo === "sentenca-criminal";
+  // `genFonte === null` = usuário ainda não escolheu; o app decide pelo contexto. Havendo
+  // texto no campo, o padrão é partir DELE (foi o que a pessoa escreveu). Assim que ela
+  // escolhe outra origem, a escolha manda e o automático não volta a interferir.
+  const temBrief = Boolean(rascunho.enun.trim());
+  const fonteEfetiva = genFonte || (temBrief ? "escrito" : "topico");
 
   root.innerHTML = `
     ${header("Escrita", "Discursiva, redação e sentença — com correção no nível de um examinador de banca.", botaoImprimir())}
@@ -53,8 +58,11 @@ export default function renderCorrecao(root, app) {
       <div class="cor-tema-head">
         <label for="cor-enun" class="u-m-0">${ehSentenca ? "Caso concreto (peças do processo)" : "Pergunta / tema"}</label>
         <button class="btn btn-ghost btn-sm" data-action="toggle-gen" data-tip="${ehSentenca ? "A IA monta um caso completo, com as peças e as teses a enfrentar." : "A IA cria um tema a partir de um tópico, de um material, de um tema que você digitar ou aleatório."}">${
-          rascunho.enun.trim()
-            ? `${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}`
+          // Com texto no campo, o rótulo anuncia que a IA parte DELE — senão a opção
+          // "O que eu escrevi acima" ficaria escondida atrás de um botão que promete
+          // "criar", palavra que sugere jogar fora o que já está escrito.
+          temBrief
+            ? `${icone("sparkles")} Gerar a partir do que escrevi`
             : `${icone("x")} Fechar gerador`
         }</button>
       </div>
@@ -63,13 +71,20 @@ export default function renderCorrecao(root, app) {
         <div class="form-row u-items-end">
           <label>De onde
             <select id="gen-fonte">
-              <option value="topico" ${genFonte === "topico" ? "selected" : ""}>Tópico do edital</option>
-              <option value="material" ${genFonte === "material" ? "selected" : ""}>Material</option>
-              <option value="livre" ${genFonte === "livre" ? "selected" : ""}>${ehSentenca ? "Matéria que eu digitar" : "Tema livre"}</option>
-              <option value="aleatorio" ${genFonte === "aleatorio" ? "selected" : ""}>Aleatório</option>
+              ${
+                // Só aparece quando há texto no campo — e aí é o padrão, porque quem
+                // escreveu quer partir dali, não de um seletor.
+                temBrief
+                  ? `<option value="escrito" ${fonteEfetiva === "escrito" ? "selected" : ""}>O que eu escrevi acima</option>`
+                  : ""
+              }
+              <option value="topico" ${fonteEfetiva === "topico" ? "selected" : ""}>Tópico do edital</option>
+              <option value="material" ${fonteEfetiva === "material" ? "selected" : ""}>Material</option>
+              <option value="livre" ${fonteEfetiva === "livre" ? "selected" : ""}>${ehSentenca ? "Matéria que eu digitar" : "Tema livre"}</option>
+              <option value="aleatorio" ${fonteEfetiva === "aleatorio" ? "selected" : ""}>Aleatório</option>
             </select>
           </label>
-          <label class="u-grow">${ehSentenca ? "Matéria" : "Assunto"} <span id="gen-alvo-wrap">${alvoControl(genFonte, st, ehSentenca)}</span></label>
+          <label class="u-grow">${ehSentenca ? "Matéria" : "Assunto"} <span id="gen-alvo-wrap">${alvoControl(fonteEfetiva, st, ehSentenca)}</span></label>
           <button class="btn btn-ia u-mb-12" data-action="gerar-pergunta">${ehSentenca ? "Gerar caso" : "Gerar tema"}</button>
         </div>
       </div>
@@ -159,7 +174,7 @@ export default function renderCorrecao(root, app) {
     app.refresh();
   });
   root.querySelector("#gen-fonte").addEventListener("change", (e) => {
-    genFonte = e.target.value;
+    genFonte = e.target.value; // escolha explícita: o automático para de interferir
     root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st, ehSentenca);
   });
 
@@ -199,6 +214,8 @@ export default function renderCorrecao(root, app) {
       // innerHTML preserva o ícone (textContent apagava o sparkles ao alternar).
       el.innerHTML = oculto
         ? `${icone("x")} Fechar gerador`
+        : temBrief
+        ? `${icone("sparkles")} Gerar a partir do que escrevi`
         : `${icone("sparkles")} ${ehSentenca ? "Criar caso com IA" : "Criar tema com IA"}`;
     },
     // Cronômetro no tempo da prova real: 4 h por sentença (TJSP). Reusa o relógio
@@ -227,10 +244,13 @@ export default function renderCorrecao(root, app) {
       }
       const fonte = root.querySelector("#gen-fonte").value;
       const alvoEl = root.querySelector("#gen-alvo");
-      const alvo = alvoEl && alvoEl.value !== undefined ? alvoEl.value : "";
+      let alvo = alvoEl && alvoEl.value !== undefined ? alvoEl.value : "";
+      // "O que eu escrevi acima": o próprio campo é o briefing.
+      if (fonte === "escrito") alvo = root.querySelector("#cor-enun").value.trim();
       if ((fonte === "topico" || fonte === "material") && !alvo) return toast("Escolha o assunto.", "erro");
       if (fonte === "livre" && !alvo.trim())
         return toast(ehSentenca ? "Digite a matéria do caso." : "Digite um tema livre.", "erro");
+      if (fonte === "escrito" && !alvo) return toast("Escreva uma instrução no campo acima.", "erro");
       const enun = await comOcupado(() => store.gerarPerguntaDiscursiva({ fonte, alvo, tipo }), {
         botao: el,
         msg: ehSentenca ? "Montando o caso com a IA…" : "Gerando pergunta com a IA…",
@@ -295,6 +315,11 @@ function alvoControl(fonte, st, ehSentenca = false) {
   // primeiro item da lista — parecia sorteio e não era.
   if (fonte === "aleatorio") {
     return `<span class="muted small" id="gen-alvo-vazio">${ehSentenca ? "A IA escolhe a matéria do caso." : "A IA escolhe o assunto."}</span>`;
+  }
+  // "O que eu escrevi acima": o campo do enunciado vira o BRIEFING. Antes, escrever ali
+  // e mandar gerar jogava fora o que você tinha escrito — o gerador nunca lia o campo.
+  if (fonte === "escrito") {
+    return `<span class="muted small" id="gen-alvo-vazio">Usa o texto do campo acima como instrução.</span>`;
   }
   if (fonte === "material") {
     const ops = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");

@@ -5248,6 +5248,12 @@ export const store = {
       }
     } else if (fonte === "topico") {
       contexto = nomeContexto(state, alvo);
+    } else if (fonte === "escrito") {
+      // O texto do campo é o BRIEFING: a IA parte dele em vez de descartá-lo. Vai como
+      // `texto` (o conteúdo em que se basear), não como `contexto` (o assunto), porque
+      // pode ser uma instrução inteira e não só um tema.
+      texto = String(alvo || "");
+      contexto = "a instrução do candidato abaixo";
     } else if (fonte === "aleatorio") {
       // ALEATÓRIO DE VERDADE, e ainda assim dentro do SEU edital quando ele existe:
       // sortear um tópico cadastrado é mais útil que pedir "qualquer coisa" à IA, que
