@@ -6741,6 +6741,65 @@ export const store = {
 
   // Cor estável de uma disciplina (mesma em todo o app: edital, gráficos, tabelas).
   // Derivada por hash do id → não precisa migração nem armazenamento, e não muda se a ordem muda.
+  // ---------- grupos de disciplinas + regra de corte (Fase C) ----------
+  // Muitos concursos grandes reprovam por PISO EM UM GRUPO, não pela média: dá para ter
+  // 70% no geral e ser eliminado por ficar abaixo do mínimo num bloco só. É a forma mais
+  // comum de reprovar em concurso jurídico, e a que o app não enxergava — ele mostrava a
+  // média e passava tranquilidade enquanto o candidato caminhava para o corte.
+  // O grupo é TEXTO LIVRE (não um enum "Bloco I/II/III") para servir a qualquer certame:
+  // blocos da Res. 75, eixos do CNU, áreas de concurso policial.
+  setGrupoDisciplina(id, grupo) {
+    const d = state.disciplinas.find((x) => x.id === id);
+    if (!d) return;
+    const g = (grupo || "").trim();
+    if (g) d.grupo = g;
+    else delete d.grupo;
+    commit();
+  },
+  setRegraAprovacao({ minGrupo, minGeral }) {
+    if (!state.concurso) return;
+    const lim = (v) => (v === null || v === undefined || v === "" ? null : Math.max(0, Math.min(100, Number(v) || 0)));
+    state.concurso.regra = { minGrupo: lim(minGrupo), minGeral: lim(minGeral) };
+    commit();
+  },
+  gruposDisciplinas() {
+    return [...new Set(state.disciplinas.map((d) => d.grupo).filter(Boolean))].sort();
+  },
+  // Aproveitamento por grupo + veredito contra a regra. Uma passada: monta o mapa
+  // tópico→disciplina→grupo e depois varre as tentativas uma única vez.
+  desempenhoPorGrupo() {
+    const regra = (state.concurso && state.concurso.regra) || {};
+    const grupoDaDisc = new Map(state.disciplinas.map((d) => [d.id, d.grupo || null]));
+    const grupoDoTopico = new Map(state.topicos.map((t) => [t.id, grupoDaDisc.get(t.disciplinaId) || null]));
+    const acc = new Map();
+    let gAcertos = 0, gTotal = 0;
+    for (const t of state.tentativas) {
+      gTotal++;
+      if (t.acertou) gAcertos++;
+      const g = grupoDoTopico.get(t.topicoId);
+      if (!g) continue; // questão sem tópico ou disciplina sem grupo não entra no cálculo
+      if (!acc.has(g)) acc.set(g, { grupo: g, acertos: 0, total: 0 });
+      const r = acc.get(g);
+      r.total++;
+      if (t.acertou) r.acertos++;
+    }
+    const grupos = [...acc.values()]
+      .map((r) => {
+        const pct = r.total ? Math.round((r.acertos / r.total) * 100) : null;
+        return { ...r, pct, abaixo: regra.minGrupo != null && pct != null && pct < regra.minGrupo };
+      })
+      .sort((a, b) => a.grupo.localeCompare(b.grupo));
+    const geralPct = gTotal ? Math.round((gAcertos / gTotal) * 100) : null;
+    return {
+      grupos,
+      regra,
+      geral: { acertos: gAcertos, total: gTotal, pct: geralPct },
+      geralAbaixo: regra.minGeral != null && geralPct != null && geralPct < regra.minGeral,
+      // Sem grupo definido não há veredito nenhum a dar.
+      configurado: grupos.length > 0 && (regra.minGrupo != null || regra.minGeral != null),
+    };
+  },
+
   corDisciplina(id) {
     const palette = ["#2563eb", "#7c3aed", "#059669", "#d97706", "#dc2626", "#0891b2", "#db2777", "#65a30d", "#9333ea", "#0d9488", "#ea580c", "#4f46e5"];
     const s = String(id || "");

@@ -6850,3 +6850,28 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .erros-padroes ul { margin: 0; padding-left: 18px; }
 .erros-padroes li { font-size: var(--fs-sm); color: var(--text-2); line-height: 1.55; }
 .erros-padroes li + li { margin-top: 4px; }
+
+/* Risco por grupo (Acompanhamento) + editor de grupos (Config). O alerta usa a cor de
+   perigo só na BORDA e no ícone: pintar o cartão inteiro de vermelho gritaria toda vez
+   que a tela abrisse, e o aviso perderia o efeito em duas semanas. */
+.risco-grupo.rg-alerta { border-left: 3px solid var(--danger); }
+.rg-veredito { font-size: var(--fs-sm); color: var(--text-2); margin: 0 0 10px; line-height: 1.55; }
+.rg-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rg-linha {
+  display: flex; align-items: baseline; gap: 10px; padding: 6px 0;
+  border-bottom: 1px solid var(--border); font-size: var(--fs-xs);
+}
+.rg-linha:last-child { border-bottom: 0; }
+.rg-nome { flex: 1; color: var(--text); font-weight: var(--fw-medium); }
+.rg-num { font-variant-numeric: tabular-nums; font-weight: var(--fw-semibold); color: var(--muted); }
+.rg-linha.rg-ok .rg-num { color: var(--success-ink); }
+.rg-linha.rg-abaixo .rg-num { color: var(--danger-ink); }
+.rg-det { font-size: var(--fs-2xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rg-alvo { opacity: 0.8; }
+
+/* max-width: com 21 disciplinas (edital real de magistratura), campo a meia tela de
+   distância do nome é impossível de escanear — o olho perde a linha no caminho. */
+.cfg-grupos { display: flex; flex-direction: column; gap: 6px; max-width: 34rem; }
+.cfg-grupo-linha { display: flex; align-items: center; gap: 10px; font-size: var(--fs-xs); }
+.cfg-grupo-linha > span { flex: 1; color: var(--text-2); }
+.cfg-grupo-linha > input { width: 9rem; flex-shrink: 0; }

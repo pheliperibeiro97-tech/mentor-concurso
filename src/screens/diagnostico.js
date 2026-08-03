@@ -153,6 +153,44 @@ function sessPainelHTML(st) {
     </div>`;
 }
 
+// RISCO POR GRUPO — a forma mais comum de reprovar em concurso grande é o piso de um
+// bloco, não a média. Até aqui o app só mostrava a média, o que TRANQUILIZA quem está
+// caminhando para o corte: 80% em Civil e 10% em Tributário viram "60%, bom caminho".
+//
+// Só aparece se o usuário tiver definido grupos E uma regra (Config → Dados & concurso).
+// Sem isso não há veredito a dar, e um painel vazio seria só ocupação de tela.
+function riscoGrupoHTML(d) {
+  if (!d.configurado) return "";
+  const emRisco = d.grupos.filter((g) => g.abaixo);
+  const semDados = d.grupos.filter((g) => g.pct === null);
+  const linhas = d.grupos
+    .map((g) => {
+      const cls = g.pct === null ? "" : g.abaixo ? " rg-abaixo" : " rg-ok";
+      const alvo = d.regra.minGrupo != null ? ` · <span class="rg-alvo">mín. ${d.regra.minGrupo}%</span>` : "";
+      return `<li class="rg-linha${cls}">
+        <span class="rg-nome">${esc(g.grupo)}</span>
+        <span class="rg-num">${g.pct === null ? "—" : g.pct + "%"}</span>
+        <span class="rg-det">${g.acertos}/${g.total}${alvo}</span>
+      </li>`;
+    })
+    .join("");
+  const veredito = emRisco.length
+    ? `<b>Você seria eliminado</b> por ${emRisco.length === 1 ? "um grupo abaixo do mínimo" : `${emRisco.length} grupos abaixo do mínimo`}: ${emRisco
+        .map((g) => esc(g.grupo))
+        .join(", ")}.`
+    : d.geralAbaixo
+    ? `Nenhum grupo abaixo do mínimo, mas a <b>média geral</b> (${d.geral.pct}%) está abaixo dos ${d.regra.minGeral}% exigidos.`
+    : `Nenhum grupo abaixo do mínimo${d.regra.minGeral != null ? ` e a média geral (${d.geral.pct}%) atende aos ${d.regra.minGeral}%` : ""}.`;
+  const ressalva = semDados.length
+    ? ` <span class="muted">${semDados.length === 1 ? "Um grupo ainda" : `${semDados.length} grupos ainda`} sem questões respondidas — sem dado não há veredito.</span>`
+    : "";
+  return `<section class="card risco-grupo${emRisco.length ? " rg-alerta" : ""}">
+    <h3>${icone(emRisco.length ? "triangle-alert" : "target")} Risco por grupo de matérias</h3>
+    <p class="rg-veredito">${veredito}${ressalva}</p>
+    <ul class="rg-lista">${linhas}</ul>
+  </section>`;
+}
+
 export default function renderDiagnostico(root, app) {
   const { store } = app;
   const st = store.get();
@@ -222,6 +260,8 @@ export default function renderDiagnostico(root, app) {
           })
         : ""
     }
+
+    ${riscoGrupoHTML(store.desempenhoPorGrupo())}
 
     <!-- 1) VISÃO GERAL (o "num relance"): KPIs primeiro. -->
     <section class="scorecard stagger" data-print="kpis" data-print-label="Indicadores (cobertura, aproveitamento, prova)">
