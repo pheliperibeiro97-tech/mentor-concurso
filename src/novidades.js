@@ -8,6 +8,18 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.7.1",
+    data: "agosto/2026",
+    titulo: "Senha de sincronização mais fácil de resgatar",
+    itens: [
+      "Esqueceu a senha de sincronização? Num aparelho que já está conectado, Configurações → Dados agora tem o botão VER SENHA: ele mostra a senha guardada ali, para você usar nos outros aparelhos.",
+      "Ao conectar, dá para guardar uma DICA da senha. Ela fica só naquele aparelho e reaparece quando você for reconectar — inclusive depois de desconectar, que é quando a senha é apagada.",
+      "Um link 'Não sei a minha senha' explica o que fazer sem ela: ver a senha num aparelho conectado, trazer tudo por Backup completo + Importar (que não pede senha) ou começar um cofre novo com o que já está no aparelho.",
+      "Quem já usa o Mentor em outro aparelho não passa mais pelo formulário de primeira vez: a tela inicial agora pergunta se é a sua primeira vez ou se você já tem conta — e nesse caso pede só a senha.",
+      "O 'Backup extra por arquivo' (Google Drive/OneDrive) foi removido: ficava conectado falhando em silêncio e a sincronização por senha já cobre celular e computadores. Para uma cópia à parte, use Backup completo em Configurações → Dados.",
+    ],
+  },
+  {
     v: "0.7.0",
     data: "agosto/2026",
     titulo: "Vários concursos no mesmo app",
