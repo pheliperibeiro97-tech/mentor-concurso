@@ -69,6 +69,7 @@ export default function renderConfig(root, app) {
     : "Ainda não sincronizado";
   // Sincronização NA NUVEM por senha (funciona no celular e em qualquer navegador).
   const sn = cfg.syncNuvem || {};
+  const listaPerfis = store.perfis ? store.perfis() : [];
   const nuvemSuporta = suportaSyncNuvem();
   const nuvemStatus = sn.pendente
     ? `${icone("triangle-alert")} Decisão necessária`
@@ -436,7 +437,7 @@ export default function renderConfig(root, app) {
         ${
           // Uma senha para a conta inteira: o aparelho que a digitar recebe TODOS os
           // concursos. Dizer isso evita a dúvida de "preciso repetir para cada concurso?".
-          (store.perfis ? store.perfis().length : 1) > 1
+          listaPerfis.length > 1
             ? "<br>Uma senha só: o aparelho que a digitar recebe <b>todos os seus concursos</b>."
             : ""
         }
@@ -453,10 +454,24 @@ export default function renderConfig(root, app) {
                     <button class="btn btn-primary btn-sm" data-action="nuvem-agora" ${sn.sincronizando ? "disabled" : ""} data-tip="Envia ou baixa as alterações agora (o mais recente vence).">${icone("refresh-cw")} Sincronizar agora</button>
                     <button class="btn btn-ghost btn-sm" data-action="nuvem-desconectar" data-tip="Para de sincronizar neste aparelho e esquece a senha daqui (os dados locais continuam).">Desconectar</button>
                   </div>`
-                : `<div class="form-linha u-mt-8">
+                : `${
+                     // A dica fica GUARDADA NESTE APARELHO e sobrevive ao desconectar — é o
+                     // que resta quando você volta a conectar meses depois e não lembra a
+                     // frase. (Ela não pode ficar na nuvem: o endereço do cofre é derivado
+                     // da própria senha, então buscá-la lá exigiria já saber a senha.)
+                     sn.dica
+                       ? `<p class="sync-dica small u-m-0 u-mb-8">${icone("lightbulb")} Sua dica: <b>${esc(sn.dica)}</b></p>`
+                       : ""
+                   }
+                   <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-frase">Senha</label>
                      <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
                    </div>
+                   <div class="form-linha u-mt-8">
+                     <label class="small" for="nuvem-dica">Dica <span class="muted">(opcional)</span></label>
+                     <input id="nuvem-dica" type="text" class="input" autocomplete="off" maxlength="80" value="${esc(sn.dica || "")}" placeholder="algo que lembre a frase — não escreva a senha aqui" />
+                   </div>
+                   <p class="muted small u-m-0 u-mt-8">A dica fica <b>neste aparelho</b> e aparece aqui quando você voltar a conectar. Ela não vai para a nuvem nem para os outros aparelhos.</p>
                    <div class="form-acoes u-mt-8">
                      <button class="btn btn-primary btn-sm" data-action="nuvem-conectar">${icone("lock")} Conectar</button>
                    </div>`
@@ -542,6 +557,13 @@ export default function renderConfig(root, app) {
     <section class="card">
       <h3>${icone("database")} Dados</h3>
       <p class="muted small">Armazenamento: <b>${esc(backendName())}</b></p>
+      ${
+        // Multi-concurso: estes números são do concurso ATIVO. Sem dizer isso, a seção
+        // "Dados" parece mostrar o total do app e engana quem tem mais de um.
+        listaPerfis.length > 1
+          ? `<p class="muted small u-m-0">No concurso <b>${esc((listaPerfis.find((p) => p.ativo) || {}).nome || "")}</b> — os outros ${listaPerfis.length - 1} têm os seus próprios:</p>`
+          : ""
+      }
       <div class="dados-stats">
         <span><span class="num">${st.disciplinas.length}</span> disciplinas</span>
         <span><span class="num">${st.topicos.length}</span> tópicos</span>
@@ -556,7 +578,7 @@ export default function renderConfig(root, app) {
           <input id="cfg-import" type="file" accept=".json,application/json" hidden />
         </label>
       </div>
-      <p class="muted small"><b>Backup completo</b> inclui seus materiais (com o conteúdo) e fica só no seu dispositivo. <b>Backup compartilhável</b> tira o conteúdo dos materiais (que podem ser protegidos por direito autoral), mantendo o que é seu (questões, flashcards, resumos, marcações). Importar <b>substitui todos os dados atuais</b>.</p>
+      <p class="muted small"><b>Backup completo</b> inclui seus materiais (com o conteúdo) e fica só no seu dispositivo. <b>Backup compartilhável</b> tira o conteúdo dos materiais (que podem ser protegidos por direito autoral), mantendo o que é seu (questões, flashcards, resumos, marcações). Importar <b>substitui todos os dados atuais</b>, de todos os concursos.</p>
       <label class="inline small" style="display:flex; width:fit-content; gap:8px; margin-top:10px; font-weight:400">
         <input id="cfg-descartar-pdf" type="checkbox" ${cfg.descartarPdfAposImport ? "checked" : ""} />
         <span>Ao importar material, <b>descartar o PDF original</b> após extrair o texto (economiza espaço e não guarda a cópia do arquivo; mantém o texto. Você perde o visualizador de PDF e o OCR posterior). Não se aplica a páginas que ainda precisam de OCR.</span>
@@ -564,7 +586,11 @@ export default function renderConfig(root, app) {
 
       <div class="cfg-zona-risco">
         <span class="cfg-zona-risco-tag">${icone("triangle-alert")} Zona de risco</span>
-        <p class="muted small u-m-0 u-mt-8 u-mb-12">Esta ação é <b>irreversível</b> e apaga concurso, tópicos, questões, flashcards e materiais. Faça um backup antes.</p>
+        <p class="muted small u-m-0 u-mt-8 u-mb-12">Esta ação é <b>irreversível</b> e apaga ${
+          listaPerfis.length > 1
+            ? `<b>os seus ${listaPerfis.length} concursos</b> — o edital, os tópicos, as questões, os flashcards e os materiais de cada um`
+            : "concurso, tópicos, questões, flashcards e materiais"
+        }. Faça um backup antes.</p>
         <button class="btn btn-danger btn-sm" data-action="reset" data-tip="Apaga TODOS os dados e reinicia o onboarding. Não há como desfazer.">${icone("trash-2")} Apagar tudo e recomeçar</button>
       </div>
     </section>
@@ -686,10 +712,12 @@ export default function renderConfig(root, app) {
     "nuvem-conectar": async () => {
       const frase = (root.querySelector("#nuvem-frase")?.value || "").trim();
       const endpoint = (root.querySelector("#nuvem-endpoint")?.value || "").trim();
+      const dica = (root.querySelector("#nuvem-dica")?.value || "").trim();
       if (!frase) return toast("Digite a sua senha de sincronização.", "erro");
+      if (dica && dica.toLowerCase() === frase.toLowerCase()) return toast("A dica não pode ser a própria senha.", "erro");
       toast("Conectando…");
       try {
-        const r = await conectarNuvem(frase, { endpoint });
+        const r = await conectarNuvem(frase, { endpoint, dica });
         toast(r.acao === "baixou" ? "Conectado — dados baixados da nuvem." : r.acao === "subiu" ? "Conectado — dados enviados para a nuvem." : "Conectado e sincronizado.", "ok");
       } catch (e) { toast("Não foi possível conectar: " + e.message, "erro"); }
       app.refresh();

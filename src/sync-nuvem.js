@@ -159,12 +159,12 @@ function fraseAtual() {
 
 // Conecta este aparelho ao cofre: valida a senha contra o que já existe na nuvem (se houver)
 // e faz a 1ª sincronização. Se o cofre estiver vazio, sobe o estado local.
-export async function conectarNuvem(frase, { endpoint } = {}) {
+export async function conectarNuvem(frase, { endpoint, dica } = {}) {
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a sincronização na nuvem.");
   frase = (frase || "").trim();
   if (frase.length < 6) throw new Error("Escolha uma senha com pelo menos 6 caracteres (fácil de você lembrar).");
   // Grava a senha (e endpoint avançado) localmente ANTES de sincronizar.
-  marcar({ frase, endpoint: (endpoint || "").trim() || undefined });
+  marcar({ frase, endpoint: (endpoint || "").trim() || undefined, ...(dica !== undefined ? { dica: String(dica).slice(0, 80) } : {}) });
   const id = await cofreId(frase);
   const env = await baixarEnvelope(id);
   if (env) {
@@ -179,11 +179,11 @@ export async function conectarNuvem(frase, { endpoint } = {}) {
 // Restauração EXPLÍCITA (aparelho novo trazendo os dados pela senha): baixa e aplica o cofre
 // SEM newest-wins — a intenção é claramente "trazer o que está na nuvem para cá". Valida a
 // senha decifrando; erra se o cofre não existe (senha errada ou nunca sincronizou).
-export async function restaurarDaNuvem(frase, { endpoint } = {}) {
+export async function restaurarDaNuvem(frase, { endpoint, dica } = {}) {
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a restauração segura.");
   frase = (frase || "").trim();
   if (frase.length < 6) throw new Error("A senha tem pelo menos 6 caracteres.");
-  marcar({ frase, endpoint: (endpoint || "").trim() || undefined });
+  marcar({ frase, endpoint: (endpoint || "").trim() || undefined, ...(dica !== undefined ? { dica: String(dica).slice(0, 80) } : {}) });
   const id = await cofreId(frase);
   const envRemoto = await baixarEnvelope(id);
   if (!envRemoto) { marcar({ frase: "", conectado: false }); const e = new Error("Não há dados na nuvem para essa senha."); e.code = "COFRE_VAZIO"; throw e; }
@@ -200,6 +200,8 @@ export async function restaurarDaNuvem(frase, { endpoint } = {}) {
 
 export async function desconectarNuvem() {
   // Limpa também o status para o card não mostrar "Sincronizado há X" depois de desconectar.
+  // A DICA sobrevive de propósito: sem a frase (que é apagada aqui), ela é o que resta para
+  // você lembrar qual senha usou quando voltar a conectar neste aparelho.
   marcar({ conectado: false, frase: "", pendente: null, ultimaSync: null, ultimoResultado: "", baseEm: "", erro: "", cofre: "" });
 }
 
