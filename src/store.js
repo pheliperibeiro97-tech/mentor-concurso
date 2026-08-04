@@ -2904,9 +2904,12 @@ export const store = {
   // Opcional 1: ATUALIZA um material existente com uma nova importação (apostila atualizada),
   // mantendo o MESMO id (questões/flashcards/marcações que apontam para ele continuam válidos) e
   // herdando os tópicos confirmados dos blocos de mesmo título. Re-deriva os vínculos das páginas.
-  atualizarMaterialDeImport(docId, { texto, paginas, pdfData, imgData, estrutura }) {
+  atualizarMaterialDeImport(docId, { texto, paginas, pdfData, imgData, estrutura, titulo }) {
     const d = state.documentos.find((x) => x.id === docId);
     if (!d) return null;
+    // Atualizar por botão permite renomear junto: o cursinho às vezes muda o nome do arquivo
+    // entre as versões, e o material continua sendo o mesmo (mesmo id, mesmos vínculos).
+    if (titulo && titulo.trim() && titulo.trim() !== d.titulo) d.titulo = titulo.trim();
     if (estrutura) this._herdarTopicos(estrutura, d.estrutura);
     if (paginas) d.paginas = paginas;
     if (texto != null) d.texto = texto;

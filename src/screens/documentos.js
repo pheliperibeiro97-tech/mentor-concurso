@@ -700,6 +700,10 @@ export default function renderDocumentos(root, app) {
       else { estruturaEditando.add(id); textoBrutoAberto.delete(id); }
       app.refresh();
     },
+    // Menu "···": "Atualizar material" — traz a versão nova do arquivo PARA ESTE material
+    // (destino explícito, sem depender do casamento por título, que falha justamente quando o
+    // cursinho renomeia o arquivo entre uma versão e outra).
+    "atualizar-doc": (el) => abrirImportarMaterial(app, el.getAttribute("data-id")),
     // Menu "···": abre o material e mostra o TEXTO CORRIDO (alterna com o sumário).
     "menu-texto-corrido": (el) => {
       const id = el.getAttribute("data-id");
@@ -1143,12 +1147,16 @@ function resultadosSemHTML(res) {
     </div>`;
 }
 
-function formHTML(opcoesTopico) {
+// `alvo` = material que está sendo ATUALIZADO (veio de "Atualizar com arquivo novo"). Nesse
+// modo o destino é explícito: não se procura material de mesmo título, então renomear o
+// arquivo no cursinho não cria mais uma cópia solta.
+function formHTML(opcoesTopico, alvo) {
   return `
     <div class="card form-doc">
-      <h3>Adicionar material</h3>
+      <h3>${alvo ? `Atualizar “${esc(alvo.titulo)}”` : "Adicionar material"}</h3>
+      ${alvo ? `<p class="muted small u-mt-0">Traga a versão nova do arquivo. As questões, flashcards e mapas gerados daqui, os tópicos do edital já vinculados e o histórico de estudo <b>continuam valendo</b>; o texto e o sumário são substituídos pelos do arquivo novo.</p>` : ""}
       <div class="form-row">
-        <label class="u-grow-2">Título <input id="doc-titulo" type="text" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
+        <label class="u-grow-2">Título <input id="doc-titulo" type="text" value="${alvo ? esc(alvo.titulo) : ""}" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
         <label class="u-grow">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       </div>
       <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Você também pode arrastar o arquivo para este cartão.">${icone("paperclip")} Selecionar arquivo
@@ -1160,7 +1168,7 @@ function formHTML(opcoesTopico) {
       <p class="muted small">Importe apenas material que você tem direito de usar. O conteúdo fica só neste dispositivo. PDFs protegidos por senha/DRM não são abertos (o app não burla proteções).</p>
       <div class="form-acoes">
         <button class="btn btn-ghost" data-action="cancelar-form">Cancelar</button>
-        <button class="btn btn-primary" data-action="add-doc">Salvar na base</button>
+        <button class="btn btn-primary" data-action="add-doc">${alvo ? "Atualizar material" : "Salvar na base"}</button>
       </div>
     </div>`;
 }
@@ -1171,14 +1179,15 @@ function formHTML(opcoesTopico) {
 // então NÃO uso o render-loop completo; uso abrirJanela + estado local `pend`.
 // Os pendentes (pdf/img/paginas/estrutura) vivem em `pend` (não nos globais), p/ não
 // interferir nos handlers inline de estrutura dos materiais JÁ SALVOS.
-function abrirImportarMaterial(app) {
+function abrirImportarMaterial(app, alvoId = null) {
   const { store } = app;
   const st0 = store.get();
+  const alvo = alvoId ? st0.documentos.find((d) => d.id === alvoId) || null : null;
   const opcoesTopico = st0.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st0, t))}</option>`).join("");
   const pend = { pdf: null, img: null, paginas: null, estrutura: null };
   abrirJanela({
-    titulo: "Adicionar material",
-    corpoHTML: formHTML(opcoesTopico),
+    titulo: alvo ? "Atualizar material" : "Adicionar material",
+    corpoHTML: formHTML(opcoesTopico, alvo),
     aoMontar: (overlay, fechar) => {
       const corpo = overlay.querySelector(".mm-corpo");
       const reEstrutura = () => { const c = corpo.querySelector("#doc-estrutura"); if (c) c.innerHTML = pend.estrutura ? estruturaResumoHTML(pend.estrutura, store) : ""; };
@@ -1294,6 +1303,17 @@ function abrirImportarMaterial(app) {
             store.setConfig({ materialAvisoAceito: true });
           }
           if (pend.estrutura) lerEstruturaDoDOM(corpo, pend.estrutura);
+          // Veio de "Atualizar com arquivo novo": o destino já é conhecido, não se pergunta
+          // nem se procura por título — é justamente o caso em que o cursinho renomeia o
+          // arquivo e o casamento por nome falharia, criando uma cópia solta em silêncio.
+          if (alvo) {
+            store.atualizarMaterialDeImport(alvo.id, { titulo, texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
+            store.indexarFonteAuto(alvo.id);
+            toast("Material atualizado. Questões, flashcards e vínculos preservados.", "ok");
+            fechar();
+            app.refresh();
+            return;
+          }
           const existente = (pend.pdf || pend.img) ? store.acharDocPorTitulo(titulo) : null;
           if (existente) {
             const ok = await confirmar(`Já existe um material chamado "${titulo}". Atualizar ele com esta importação (mantém as questões/flashcards/marcações e os tópicos já confirmados)? Escolha Cancelar para criar um novo.`);
@@ -1400,7 +1420,6 @@ function docHTML(store, st, d, busca) {
           ${topicosDoc.map((t) => { const pg = d.topicoPaginas && d.topicoPaginas[t.id]; return `<span class="tag-topico">${esc(nomeTopico(st, t))}${pg ? ` <span class="tag-pag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span>`; }).join("")}
           ${pend ? `<span class="tag-ocr">${icone("hourglass")} ${pend} pág. p/ OCR</span>` : ""}
           ${d.binarioDescartado ? `<span class="muted small" data-tip="O PDF original foi descartado; o texto extraído foi mantido." data-tip-pos="cima-dir">${icone("file-text")} PDF descartado</span>` : ""}
-          <button class="lnk doc-acao-primaria" data-action="abrir" data-id="${d.id}">${aberto ? `${icone("chevron-down")} ocultar texto` : `${icone("chevron-right")} ver texto extraído`}</button>
           ${
             (d.texto || "").trim()
               ? `<details class="doc-mais doc-gerar-menu">
@@ -1419,6 +1438,7 @@ function docHTML(store, st, d, busca) {
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este material.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
               <div class="menu-rotulo">Ler e ver</div>
+              <button class="menu-item" data-action="abrir" data-id="${d.id}" data-tip="Abre o material no cartão: o sumário navegável (ou o texto corrido, se você trocar a visão)." data-tip-pos="cima-esq"><span class="menu-ico">${icone(aberto ? "chevron-down" : "chevron-right")}</span> ${aberto ? "Ocultar texto" : "Ver texto extraído"}</button>
               ${store.temPdfDoc(d) ? `<button class="menu-item" data-action="ler-pdf" data-id="${d.id}" data-tip="Abre o PDF original no leitor interno (zoom e navegação por página)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Abrir PDF</button>` : ""}
               ${(d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Mostra o texto completo extraído, em vez do sumário. É o que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Texto corrido"}</button>` : ""}
               ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Refaz UMA página com a Visão (tabela/organograma cujo texto saiu fora de ordem, ou página escaneada)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Reprocessar página (Visão)</button>` : ""}
@@ -1433,6 +1453,8 @@ function docHTML(store, st, d, busca) {
               }
               <button class="menu-item" data-action="editar-topicos" data-id="${d.id}" data-tip="Escolher quais tópicos do edital este material cobre (dentro do painel, a IA pode sugerir)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("link")}</span> Vincular ao edital</button>
               <div class="menu-sep"></div>
+              <div class="menu-rotulo">Arquivo</div>
+              <button class="menu-item" data-action="atualizar-doc" data-id="${d.id}" data-tip="Traga a versão nova do arquivo. Questões, flashcards, mapas, vínculos com o edital e histórico continuam valendo; o texto e o sumário são substituídos." data-tip-pos="cima-esq"><span class="menu-ico">${icone("refresh-cw")}</span> Atualizar material</button>
               ${store.podeVincularArquivo() && d.caminhoOriginal ? `<button class="menu-item" data-action="abrir-original" data-id="${d.id}" data-tip="Abre o arquivo original na pasta onde ele está, no programa padrão do sistema." data-tip-pos="cima-esq"><span class="menu-ico">${icone("external-link")}</span> Abrir original</button>` : ""}
               ${store.podeVincularArquivo() ? `<button class="menu-item" data-action="vincular-original" data-id="${d.id}" data-tip="Aponta para o arquivo onde ele já está (OneDrive, pasta do cursinho). O app guarda só o caminho, não outra cópia — dá para descartar o PDF interno sem perder o acesso." data-tip-pos="cima-esq"><span class="menu-ico">${icone("paperclip")}</span> ${d.caminhoOriginal ? "Trocar arquivo vinculado" : "Vincular arquivo original"}</button>` : ""}
               ${store.temPdfDoc(d) ? `<button class="menu-item menu-item-danger" data-action="descartar-pdf" data-id="${d.id}" data-tip="Apaga só o arquivo PDF para liberar espaço; o texto extraído e o sumário permanecem." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Descartar PDF original</button>` : ""}
