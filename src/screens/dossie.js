@@ -414,7 +414,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
       const tipo = el.getAttribute("data-tipo");
       const id = el.getAttribute("data-id");
       const fonte = el.getAttribute("data-fonte");
-      if (tipo === "documento") app.navigate("documentos", { focoDocId: id, marcarId: id });
+      if (tipo === "documento") app.navigate("documentos", { focoDocId: id }); // material não grifa mais
       else if (tipo === "resumo") app.navigate("resumos", { focoResumoId: id, marcarId: id });
       else app.navigate(fonte === "Jurisprudência" ? "jurisprudencia" : "leiseca", { focoIndicacaoId: id, marcarId: id });
     },

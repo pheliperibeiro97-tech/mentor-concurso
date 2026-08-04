@@ -32,7 +32,8 @@ import {
 const ENDPOINT_PADRAO = "https://mentor-concurso.pages.dev";
 
 const PBKDF2_ITER = 210000; // OWASP 2023 p/ PBKDF2-HMAC-SHA256
-const ENVELOPE_VER = 1;
+// v1 = JSON cifrado direto (formato original, ainda LIDO). v2 = JSON + gzip + cifra.
+const ENVELOPE_VER = 2;
 
 // ---- Ambiente --------------------------------------------------------------
 // Precisa de Web Crypto (subtle) + fetch. Presente em todo navegador moderno e no WebView2.
@@ -83,18 +84,43 @@ async function derivarChave(frase, saltBytes) {
     ["encrypt", "decrypt"]
   );
 }
+// ---- compressão ------------------------------------------------------------
+// O estado é JSON de texto jurídico, altamente redundante: medido, o snapshot real encolhe
+// ~4x com gzip. Como o cofre tem teto duro de 24 MB (o Worker devolve 413 acima disso) e o
+// corpo ainda vira base64 (+33%), comprimir é o que decide se a biblioteca de materiais
+// cabe. `CompressionStream` é nativo no Chromium/WebView2 e nos Workers.
+const temCompressao = typeof CompressionStream === "function" && typeof DecompressionStream === "function";
+async function gzip(bytes) {
+  const fluxo = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(fluxo).arrayBuffer());
+}
+async function gunzip(bytes) {
+  const fluxo = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+  return new Uint8Array(await new Response(fluxo).arrayBuffer());
+}
+
 // Cifra um objeto → envelope { v, salt, iv, ct } (tudo base64). salt/iv são públicos (padrão).
+// v=2 comprime o JSON antes de cifrar; v=1 (formato antigo) continua sendo LIDO.
 async function cifrar(frase, obj) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const chave = await derivarChave(frase, salt);
-  const dados = enc.encode(JSON.stringify(obj));
+  const cru = enc.encode(JSON.stringify(obj));
+  const comprime = temCompressao;
+  const dados = comprime ? await gzip(cru) : cru;
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, chave, dados);
-  return { v: ENVELOPE_VER, salt: bufB64(salt), iv: bufB64(iv), ct: bufB64(ct) };
+  return { v: comprime ? 2 : 1, salt: bufB64(salt), iv: bufB64(iv), ct: bufB64(ct) };
 }
 // Decifra o envelope → objeto. Lança se a senha estiver errada (GCM falha a autenticação).
 async function decifrar(frase, env) {
-  if (!env || env.v !== ENVELOPE_VER || !env.salt || !env.iv || !env.ct) throw new Error("Cofre em formato desconhecido.");
+  if (!env || !env.salt || !env.iv || !env.ct) throw new Error("Cofre em formato desconhecido.");
+  if (env.v !== 1 && env.v !== ENVELOPE_VER) {
+    // Antes isto era um "formato desconhecido" seco. Um cofre gravado por uma versão mais
+    // nova é o caso real, e o que resolve é atualizar ESTE aparelho — vale dizer isso.
+    const e = new Error("Este cofre foi gravado por uma versão mais nova do app. Atualize o Mentor neste aparelho para sincronizar.");
+    e.code = "VERSAO_NOVA";
+    throw e;
+  }
   const chave = await derivarChave(frase, b64Buf(env.salt));
   let plano;
   try {
@@ -104,7 +130,8 @@ async function decifrar(frase, env) {
     e.code = "SENHA_ERRADA";
     throw e;
   }
-  return JSON.parse(dec.decode(plano));
+  const bytes = env.v === 2 ? await gunzip(new Uint8Array(plano)) : new Uint8Array(plano);
+  return JSON.parse(dec.decode(bytes));
 }
 
 // ---- transporte (HTTP contra o Worker) -------------------------------------

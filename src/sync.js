@@ -103,26 +103,53 @@ export function encolheria(de, para) {
   return de >= 8 && para < Math.ceil(de * 0.5);
 }
 
-// Snapshot para a nuvem: clona o estado e REMOVE os binários (pdfData/imgData) de cada
-// material, mantendo texto/páginas/embeddings. Carimba metadados de sync no topo.
+// Chaves de config que são do APARELHO, não da conta: cada máquina escolhe o seu provedor
+// de IA (o Claude Code local só existe no desktop; o celular precisa do Gemini). Enquanto
+// subiam junto, escolher um provedor num aparelho o empurrava para o outro, onde não
+// funcionava — e a chave de API viajava no cofre à toa.
+const CONFIG_LOCAL = ["sync", "syncNuvem", "iaProvider", "iaKey", "iaKeyReserva", "iaModelo"];
+// Caches DERIVÁVEIS que não são dado do usuário e pesam muito no cofre: o índice semântico
+// (768 números por trecho, ~6,4 KB cada, regenerável a partir do próprio material) e o
+// checklist da banca (o edital oficial verbatim, guardado só para conferir cobertura). Já
+// saem do backup compartilhável por `limparMaterialDaFatia`; o snapshot faltava.
+const INDICE_VAZIO = () => ({ modelo: "", itens: [], fontes: {} });
+const CHECKLIST_VAZIO = () => ({ conferidoEm: null, itens: [] });
+
+// Snapshot para a nuvem: clona o estado e REMOVE o que não é dado do usuário — os binários
+// (pdfData/imgData), o índice semântico, o checklist do edital e a config local do aparelho.
+// Mantém texto/páginas. Carimba metadados de sync no topo.
 export function montarSnapshotSync(state, dispositivo) {
   // O cofre é da CONTA: sobe o app inteiro, com TODOS os concursos. Uma senha, um cofre —
   // o aparelho que a digitar recebe tudo. (Um cofre por concurso gastaria uma escrita por
   // concurso a cada sincronização e subiria o conteúdo compartilhado repetido.)
   const snap = JSON.parse(JSON.stringify(state));
-  // Binários NUNCA sobem, e eles moram dentro de cada concurso — varrer só o topo deixaria
-  // os PDFs passarem.
+  // Binários e caches NUNCA sobem, e eles moram dentro de cada concurso — varrer só o topo
+  // deixaria os PDFs e o índice passarem.
   const semBinarios = (o) => {
-    if (o && Array.isArray(o.documentos)) o.documentos = o.documentos.map((d) => ({ ...d, pdfData: null, imgData: null }));
+    if (!o || typeof o !== "object") return;
+    if (Array.isArray(o.documentos)) {
+      o.documentos = o.documentos.map((d) => {
+        // `texto` é o join de `paginas` (recomputarTextoDoc) — a MESMA coisa duas vezes.
+        // Medido no edital do 192º: 158.098 caracteres em `texto` e 158.020 nas páginas
+        // concatenadas, idênticos. Sobe só as páginas; quem recebe reconstrói o `texto` no
+        // backfill do init(). Onde não há páginas (texto colado, imagem), `texto` é o campo
+        // primário e vai inteiro.
+        const temPaginas = Array.isArray(d.paginas) && d.paginas.length > 0;
+        // `temPdf`/`temImg` dizem se ESTE aparelho tem o arquivo — e o arquivo não viaja.
+        // Subir os sinais faria o celular anunciar "Abrir PDF" para algo que não tem.
+        return { ...d, pdfData: null, imgData: null, temPdf: false, temImg: false, ...(temPaginas ? { texto: "" } : {}) };
+      });
+    }
+    if (o.embeddings) o.embeddings = INDICE_VAZIO();
+    if (o.editalOficial) o.editalOficial = CHECKLIST_VAZIO();
   };
   semBinarios(snap);
   (snap.perfis || []).forEach(semBinarios);
-  // config.sync / config.syncNuvem são metadados LOCAIS de cada máquina (handle, dispositivo,
-  // base, status e — no da nuvem — a SENHA local). Nunca sincronizam.
-  if (snap.config && (snap.config.sync || snap.config.syncNuvem)) {
+  // Metadados LOCAIS de cada máquina (handle, dispositivo, base, status, a SENHA da nuvem e
+  // a configuração de IA). Nunca sincronizam.
+  if (snap.config && CONFIG_LOCAL.some((k) => snap.config[k] !== undefined)) {
     snap.config = { ...snap.config };
-    delete snap.config.sync;
-    delete snap.config.syncNuvem;
+    for (const k of CONFIG_LOCAL) delete snap.config[k];
   }
   snap._sync = {
     app: "mentor-concurso",
@@ -148,7 +175,16 @@ export function aplicarRemoto(localState, remoto) {
   // porque o remoto pode vir no formato antigo (plano) e o local no novo.
   const binPorId = {};
   const coletar = (o) => {
-    for (const d of (o && o.documentos) || []) binPorId[d.id] = { pdfData: d.pdfData || null, imgData: d.imgData || null };
+    for (const d of (o && o.documentos) || []) {
+      binPorId[d.id] = {
+        pdfData: d.pdfData || null,
+        imgData: d.imgData || null,
+        // Os binários já moram fora do estado; o que precisa voltar são os SINAIS de que
+        // este aparelho tem o arquivo (o remoto sempre os manda desligados).
+        temPdf: !!(d.temPdf || d.pdfData),
+        temImg: !!(d.temImg || d.imgData),
+      };
+    }
   };
   coletar(localState);
   (localState.perfis || []).forEach(coletar);
@@ -156,16 +192,39 @@ export function aplicarRemoto(localState, remoto) {
     if (!o || !Array.isArray(o.documentos)) return;
     o.documentos = o.documentos.map((d) => {
       const bin = binPorId[d.id];
-      return bin ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData } : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null };
+      return bin
+        ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData, temPdf: bin.temPdf, temImg: bin.temImg }
+        : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null, temPdf: !!d.temPdf, temImg: !!d.temImg };
     });
   };
   devolver(novo);
   (novo.perfis || []).forEach(devolver);
-  // Preserva os metadados de sync LOCAIS (cada máquina tem os seus, incl. a senha da nuvem);
-  // o remoto não os traz (foram removidos no snapshot).
+  // O índice semântico e o checklist do edital também não viajam: o remoto os traz VAZIOS.
+  // Sem devolver os locais, cada sincronização apagaria o índice que este aparelho gastou
+  // cota do Gemini para construir — e a conferência de cobertura já feita.
+  const cachePorPerfil = {};
+  const coletarCache = (o, chave) => {
+    if (!o || typeof o !== "object") return;
+    cachePorPerfil[chave] = { embeddings: o.embeddings, editalOficial: o.editalOficial };
+  };
+  coletarCache(localState, "@topo");
+  (localState.perfis || []).forEach((p) => coletarCache(p, p.id));
+  const devolverCache = (o, chave) => {
+    if (!o || typeof o !== "object") return;
+    const c = cachePorPerfil[chave];
+    // Perfil que só existe no remoto não tem cache local: fica vazio e o aparelho reindexa.
+    if (c && c.embeddings) o.embeddings = c.embeddings;
+    if (c && c.editalOficial) o.editalOficial = c.editalOficial;
+  };
+  devolverCache(novo, "@topo");
+  (novo.perfis || []).forEach((p) => devolverCache(p, p.id));
+  // Preserva os metadados de sync e a config de IA LOCAIS (cada máquina tem os seus, incl. a
+  // senha da nuvem); o remoto não os traz (foram removidos no snapshot).
   novo.config = { ...(novo.config || {}) };
-  novo.config.sync = (localState.config && localState.config.sync) || novo.config.sync;
-  novo.config.syncNuvem = (localState.config && localState.config.syncNuvem) || novo.config.syncNuvem;
+  for (const k of CONFIG_LOCAL) {
+    const local = localState.config && localState.config[k];
+    if (local !== undefined) novo.config[k] = local;
+  }
   return novo;
 }
 

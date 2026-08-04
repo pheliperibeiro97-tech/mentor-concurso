@@ -288,6 +288,17 @@ export function abrirAjudaSenha() {
 }
 
 export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, semTelaCheia = false, aoMontar } = {}) {
+  // Reabrir a MESMA janela (mesmo título) empilhava um segundo .mm-overlay por cima. O de
+  // baixo continuava no DOM capturando os cliques, e os botões da janela visível paravam de
+  // responder — sem nenhum sinal na tela. Janela de título diferente ainda pode empilhar
+  // (há fluxos que abrem uma sobre a outra de propósito).
+  const jaAberta = [...document.querySelectorAll(".mm-overlay")].find(
+    (o) => (o.querySelector(".mm-titulo")?.textContent || "").trim() === String(titulo).trim()
+  );
+  if (jaAberta && titulo) {
+    jaAberta.querySelector(".mm-corpo input:not([type=hidden]), .mm-corpo textarea")?.focus();
+    return { overlay: jaAberta, fechar: () => jaAberta.querySelector(".mm-close")?.click() };
+  }
   const overlay = document.createElement("div");
   overlay.className = "mm-overlay";
   overlay.innerHTML = `
@@ -652,15 +663,18 @@ export function mapaMentalArvoreHTML(arv) {
 //  onRemover()        → habilita "Remover".
 //  onSalvarObs(texto) → salva a observação/comentário do usuário.
 //  acoes: [{label, fn}] → botões extras (ex.: gerar flashcards/questões a partir do mapa).
-export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, acoes, editar } = {}) {
+// `original` = { imgData, pdfData } já carregado de fora do estado (store.binarioMapa).
+// O binário não mora mais no objeto do mapa: quem abre o visualizador é que o busca.
+export function abrirMapaMental(mapa, { onRemover, onSalvarObs, onSalvarArvore, acoes, editar, original } = {}) {
   let arv = mapa.arvore || mapa;
   const lista = Array.isArray(acoes) ? acoes : [];
   // Fase 2 (híbrido): se o mapa foi importado de imagem/PDF, dá para ver o ORIGINAL visual.
-  const temOriginal = !!((mapa.imgData || mapa.pdfData) && !mapa.binarioDescartado);
-  const originalHTML = mapa.imgData
-    ? `<img src="${mapa.imgData}" alt="Mapa original" style="max-width:100%;display:block;margin:0 auto"/>`
-    : mapa.pdfData
-    ? `<iframe src="${mapa.pdfData}" style="width:100%;height:70vh;border:0"></iframe>`
+  const bin = original || { imgData: mapa.imgData, pdfData: mapa.pdfData };
+  const temOriginal = !!((bin.imgData || bin.pdfData) && !mapa.binarioDescartado);
+  const originalHTML = bin.imgData
+    ? `<img src="${bin.imgData}" alt="Mapa original" style="max-width:100%;display:block;margin:0 auto"/>`
+    : bin.pdfData
+    ? `<iframe src="${bin.pdfData}" style="width:100%;height:70vh;border:0"></iframe>`
     : "";
   const overlay = document.createElement("div");
   overlay.className = "mm-overlay";

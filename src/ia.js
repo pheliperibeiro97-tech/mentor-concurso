@@ -44,7 +44,10 @@ export function tituloPt(s) {
   });
 }
 
-export function separarEdital(texto) {
+// `porItem`: cada item NUMERADO do edital vira UM tópico, com a numeração preservada
+// ("(39) Propriedade · Função social · …"). Sem ele (padrão), o item é fatiado frase a
+// frase — bom para edital em texto corrido, ruim para edital numerado.
+export function separarEdital(texto, { porItem = false } = {}) {
   const disciplinas = [];
   let atual = null;
 
@@ -106,9 +109,25 @@ export function separarEdital(texto) {
   // Divide UMA frase por ';' SÓ quando o ';' separa TÓPICOS (formato colado "a; b; c"), e
   // NÃO quando separa SUBTÓPICOS: se a frase tem ':' (introduz subtópicos) ela é mantida
   // inteira; e fragmentos de continuação (listas de artigos "...305; 307; 308") recolam.
+  // Quebra por ';' que está FORA de parênteses. O ';' dentro de um parêntese quase sempre
+  // separa itens de uma citação legal — "(Lei 4.737/1965; LC 64/1990; Lei 9.504/1997)" — e
+  // cortar ali parte a referência no meio.
+  const partirForaDeParenteses = (frase) => {
+    const out = [];
+    let buf = "", nivel = 0;
+    for (const c of frase) {
+      if (c === "(") nivel++;
+      else if (c === ")") nivel = Math.max(0, nivel - 1);
+      if (c === ";" && nivel === 0) { out.push(buf); buf = ""; continue; }
+      buf += c;
+    }
+    out.push(buf);
+    return out.map((s) => s.trim()).filter(Boolean);
+  };
+
   const dividirPontoEVirgula = (frase) => {
     if (frase.includes(":")) return [frase];
-    const segs = frase.split(";").map((s) => s.trim()).filter(Boolean);
+    const segs = partirForaDeParenteses(frase);
     if (segs.length <= 1) return segs;
     const out = [];
     for (const seg of segs) {
@@ -121,10 +140,28 @@ export function separarEdital(texto) {
   const empurraTopicos = (txt) => {
     if (!atual) garanteDisciplina("Geral");
     // 1) quebra por NUMERAÇÃO de tópico ("1." / "1.2)") — NÃO por ';' nem bullets (';' é subtópico).
-    const blocos = txt.split(/\s\d{1,3}(?:\.\d{1,3})?[).]\s+|(?:^|\s)\d{1,3}[).]\s+/);
-    for (let b of blocos) {
-      b = b.replace(/^[0-9]+(?:\.\d+)?[).\-\s]+/, "").trim();
+    // A captura preserva o número: no modo POR ITEM ele volta como prefixo "(N)", porque num
+    // edital de magistratura o item numerado é o PONTO sorteado na prova oral (art. 65 da
+    // Resolução CNJ 75/2009) — perder a numeração custa caro.
+    const partes = txt.split(/(?:^|\s)(\d{1,3}(?:\.\d{1,3})?)[).]\s+/);
+    const blocos = [];
+    for (let i = 0; i < partes.length; i++) {
+      // partes[0] é o trecho antes do 1º número (sem numeração); depois vêm pares (nº, texto).
+      if (i === 0) { if ((partes[0] || "").trim()) blocos.push({ num: "", txt: partes[0] }); continue; }
+      if (i % 2 === 1) blocos.push({ num: partes[i], txt: partes[i + 1] || "" });
+    }
+    for (const bloco of blocos) {
+      let b = String(bloco.txt || "").replace(/^[0-9]+(?:\.\d+)?[).\-\s]+/, "").trim();
       if (b.length < 2) continue;
+      const marca = bloco.num ? `(${bloco.num}) ` : "";
+      // POR ITEM: o item do edital fica inteiro, com a numeração de volta. Sem esta opção,
+      // colar o Anexo I do 192º (401 itens) produzia 1.612 tópicos soltos — "Ausência",
+      // "Validade", "Eficácia" — e a numeração oficial se perdia.
+      if (porItem) {
+        const t = tituloPt(limparRuidoTopico(b.replace(/[.;:]\s*$/, "")));
+        if (t.length >= 2) atual.topicos.push(marca + t);
+        continue;
+      }
       // 2) corta por ". " quando a frase anterior não termina em abreviação/número e a próxima
       //    começa com Maiúscula (tópicos em texto corrido — edital 1).
       const tokens = b.split(/(\.\s+)/); // mantém os ". " como separadores

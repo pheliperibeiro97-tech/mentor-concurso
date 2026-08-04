@@ -542,7 +542,7 @@ export default function renderConfig(root, app) {
           listaPerfis.length > 1
             ? `<b>os seus ${listaPerfis.length} concursos</b> — o edital, os tópicos, as questões, os flashcards e os materiais de cada um`
             : "concurso, tópicos, questões, flashcards e materiais"
-        }. Faça um backup antes.</p>
+        }. Faça um backup antes. A <b>conexão com a IA</b> e o <b>tema</b> são mantidos; a <b>sincronização é desconectada</b> (os outros aparelhos ficam com os dados de agora).</p>
         <button class="btn btn-danger btn-sm" data-action="reset" data-tip="Apaga TODOS os dados e reinicia o onboarding. Não há como desfazer.">${icone("trash-2")} Apagar tudo e recomeçar</button>
       </div>
     </section>
@@ -769,7 +769,19 @@ export default function renderConfig(root, app) {
     "exportar-completo": () => exportarJSON(store.snapshotExport(true), "completo"),
     "exportar-compartilhavel": () => exportarJSON(store.snapshotExport(false), "compartilhavel"),
     reset: async () => {
-      if (await confirmar("Isso apaga TODOS os dados (concurso, tópicos, questões, flashcards). Tem certeza?")) {
+      // O aviso precisa dizer o que NÃO é óbvio: que a sincronização é desconectada (e não
+      // propagada — o cofre e os outros aparelhos ficam com os dados antigos até alguém
+      // reconectar) e que a conexão com a IA e o tema são preservados.
+      const conectado = !!(store.get().config?.syncNuvem?.conectado);
+      const partes = ["Isso apaga TODOS os dados de estudo: concurso, edital, tópicos, materiais, questões e flashcards."];
+      if (conectado) {
+        partes.push(
+          "Este aparelho também SAI da sincronização. O cofre e os outros aparelhos continuam com os dados de agora — para o começo do zero valer neles, reconecte depois com a mesma senha."
+        );
+      }
+      partes.push("A conexão com a IA e o tema são mantidos.");
+      partes.push("Tem certeza?");
+      if (await confirmar(partes.join("\n\n"))) {
         await store.resetTudo();
         toast("Dados apagados. Recomeçando o onboarding.");
       }

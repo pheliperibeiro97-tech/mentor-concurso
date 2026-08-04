@@ -4,8 +4,11 @@ import { abrirMapaMental, toast, avisoIA, pedirNumero, plural, abrirJanela, skel
 import { icone } from "./icones.js";
 
 // Abre um mapa já salvo com as ações completas. opts.editar abre direto no modo de edição.
-export function abrirMapaCompleto(store, app, mapa, opts = {}) {
+export async function abrirMapaCompleto(store, app, mapa, opts = {}) {
+  // O original (imagem/PDF importado) vive fora do estado; busca sob demanda.
+  const original = store.temOriginalMapa(mapa) ? await store.binarioMapa(mapa.id) : null;
   abrirMapaMental(mapa, {
+    original,
     editar: opts.editar,
     onRemover: () => { store.removerMapaMental(mapa.id); toast("Mapa mental removido."); app.refresh(); },
     onSalvarObs: (txt) => store.setObservacaoMapa(mapa.id, txt),

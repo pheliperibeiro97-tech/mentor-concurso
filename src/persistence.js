@@ -20,26 +20,28 @@ async function tauriInvoke(cmd, args) {
 // Guarda o estado JSON inteiro numa única chave. Materiais (PDF/imagem) deixam de estourar a cota.
 const IDB_NAME = "mentor_concurso";
 const IDB_STORE = "kv";
+const IDB_BLOBS = "blobs"; // binários dos materiais, FORA do estado (ver blobs abaixo)
 const IDB_KEY = "state";
 const temIndexedDB = () => typeof indexedDB !== "undefined";
 
 function idbOpen() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
+    const req = indexedDB.open(IDB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      if (!db.objectStoreNames.contains(IDB_BLOBS)) db.createObjectStore(IDB_BLOBS);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
-function idbReq(modo, fn) {
+function idbReq(modo, fn, nomeStore = IDB_STORE) {
   return idbOpen().then(
     (db) =>
       new Promise((resolve, reject) => {
-        const tx = db.transaction(IDB_STORE, modo);
-        const store = tx.objectStore(IDB_STORE);
+        const tx = db.transaction(nomeStore, modo);
+        const store = tx.objectStore(nomeStore);
         let resultado;
         const r = fn(store);
         if (r) r.onsuccess = () => (resultado = r.result);
@@ -110,5 +112,90 @@ export async function resetState() {
     }
   } catch (err) {
     console.error("Falha ao resetar estado:", err);
+  }
+}
+
+// ---- BINÁRIOS dos materiais (PDF/imagem), fora do estado -------------------
+// O estado é uma única string JSON reescrita a cada gravação; com os PDFs dentro dela, uma
+// biblioteca de cursinho (9.026 páginas) daria ~489 MB serializados a CADA mudança —
+// medido: 55,4 KB por página com o PDF contra 4,07 KB sem. Guardar o binário numa chave
+// própria tira 93% do peso do caminho quente e não custa nada em recurso: o visualizador
+// de PDF, o OCR por página e a descrição de figuras continuam funcionando, porque leem o
+// binário sob demanda.
+//
+// Desktop: tabela `kv` do SQLite, chave `blob:<id>` (comandos get_blob/set_blob/del_blob).
+// Navegador: object store `blobs` do mesmo IndexedDB.
+//
+// Se o desktop estiver rodando um binário ANTIGO (sem os comandos), `blobsDisponiveis()`
+// passa a false e o store volta a guardar o binário embutido no estado — funciona como
+// antes, sem perder arquivo, até o app ser atualizado.
+let blobsOk = true;
+export function blobsDisponiveis() {
+  return blobsOk;
+}
+export async function getBlob(id) {
+  if (!id) return null;
+  try {
+    if (isTauri()) {
+      const txt = await tauriInvoke("get_blob", { id: String(id) });
+      return txt ? JSON.parse(txt) : null;
+    }
+    if (temIndexedDB()) return (await idbReq("readonly", (s) => s.get(String(id)), IDB_BLOBS)) || null;
+  } catch (err) {
+    blobsOk = false;
+    console.warn("[blobs] leitura indisponível; o binário fica no estado:", err);
+  }
+  return null;
+}
+export async function setBlob(id, valor) {
+  if (!id) return false;
+  try {
+    if (isTauri()) {
+      await tauriInvoke("set_blob", { id: String(id), json: JSON.stringify(valor || {}) });
+      return true;
+    }
+    if (temIndexedDB()) {
+      await idbReq("readwrite", (s) => s.put(valor || {}, String(id)), IDB_BLOBS);
+      return true;
+    }
+  } catch (err) {
+    blobsOk = false;
+    console.warn("[blobs] gravação indisponível; o binário fica no estado:", err);
+  }
+  return false;
+}
+export async function delBlob(id) {
+  if (!id) return;
+  try {
+    if (isTauri()) await tauriInvoke("del_blob", { id: String(id) });
+    else if (temIndexedDB()) await idbReq("readwrite", (s) => s.delete(String(id)), IDB_BLOBS);
+  } catch (err) {
+    console.warn("[blobs] remoção falhou:", err);
+  }
+}
+
+// ---- Arquivo ORIGINAL do material (só desktop) ------------------------------
+// Vincular em vez de copiar: o material aponta para onde o arquivo já mora (OneDrive, pasta
+// do cursinho). No navegador não existe caminho de arquivo, então `podeVincularArquivo()`
+// devolve false e a UI nem oferece.
+export function podeVincularArquivo() {
+  return isTauri();
+}
+export async function escolherArquivo() {
+  if (!isTauri()) return null;
+  try {
+    return (await tauriInvoke("escolher_arquivo")) || null;
+  } catch (err) {
+    console.warn("[arquivo] seletor indisponível:", err);
+    return null;
+  }
+}
+export async function abrirArquivoNoSistema(caminho) {
+  if (!isTauri() || !caminho) return { ok: false, erro: "Disponível só no aplicativo de computador." };
+  try {
+    await tauriInvoke("abrir_no_sistema", { caminho });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, erro: String(err && err.message ? err.message : err) };
   }
 }

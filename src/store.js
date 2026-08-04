@@ -1,6 +1,6 @@
 // Store central: estado do app + todas as operações de domínio.
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
-import { loadState, saveState, resetState } from "./persistence.js";
+import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema } from "./persistence.js";
 import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
 import * as ciclo from "./ciclo.js";
@@ -134,6 +134,29 @@ function intercalarPorDisciplina(arr) {
 
 // Recalcula o texto pesquisável do documento a partir das páginas (quando houver),
 // na ordem certa. Mantém doc.texto como fonte única para busca/IA/chat.
+// ---- BINÁRIOS dos materiais, fora do estado --------------------------------
+// O estado inteiro é uma string JSON reescrita a cada gravação. Com o PDF embutido, uma
+// biblioteca de cursinho custaria ~489 MB por gravação (55,4 KB/página medidos, contra
+// 4,07 KB sem o binário) — o app engasgaria a cada clique muito antes de encher o disco.
+// O binário passa a viver numa chave própria (persistence.getBlob/setBlob) e o documento
+// guarda só os sinalizadores `temPdf`/`temImg`. Nada se perde: visualizador, OCR por
+// página e descrição de figuras leem o binário sob demanda.
+const cacheBinario = new Map(); // docId -> { pdfData, imgData } (memória, nunca persistido)
+
+// Move o binário para fora do estado. Se o armazenamento de blobs não estiver disponível
+// (desktop rodando um executável antigo, sem os comandos), mantém embutido como antes —
+// melhor um estado gordo que um PDF perdido.
+async function guardarBinarioDoc(doc, pdfData, imgData) {
+  if (!doc || (!pdfData && !imgData)) return;
+  cacheBinario.set(doc.id, { pdfData: pdfData || null, imgData: imgData || null });
+  const ok = await setBlob(doc.id, { pdfData: pdfData || null, imgData: imgData || null });
+  if (!ok) {
+    doc.pdfData = pdfData || null;
+    doc.imgData = imgData || null;
+    commit();
+  }
+}
+
 function recomputarTextoDoc(doc) {
   if (Array.isArray(doc.paginas) && doc.paginas.length) {
     doc.texto = doc.paginas.map((p) => p.texto || "").join("\n\n").trim();
@@ -701,7 +724,12 @@ function migrarParaPerfis(st) {
   // por uma versão anterior (0a, ou 0b com a lista menor) ainda guarda chaves de perfil
   // no config global. Sem esta passagem elas ficariam órfãs.
   if (Array.isArray(st.perfis) && st.perfis.length) return normalizarSyncNuvemGlobal(migrarConfigDoPerfil(st));
-  const perfil = { id: uid("perf"), nome: nomeDoPerfil(st) };
+  // Nome só quando JÁ existe concurso; senão fica vazio para `perfis()` derivar de
+  // nomeDoPerfil() depois. Gravar aqui num estado ainda sem concurso (reset/1ª abertura)
+  // congelava o literal "Meu concurso" no perfil, e o seletor passava a exibi-lo para
+  // sempre — enquanto a topbar mostrava o cargo digitado no onboarding. Dois nomes para a
+  // mesma coisa, lado a lado.
+  const perfil = { id: uid("perf"), nome: st && st.concurso ? nomeDoPerfil(st) : "" };
   const topo = {};
   for (const [k, v] of Object.entries(st)) {
     if (k === "perfis" || k === "perfilAtivo") continue; // lixo de migração pela metade
@@ -928,6 +956,31 @@ export const store = {
       // Acessores ANTES dos backfills — daqui para baixo `state.topicos` e companhia
       // precisam enxergar o perfil ativo, não o topo.
       instalarAcessores();
+      // Solta o rótulo padrão congelado num perfil que JÁ tem concurso: versões anteriores
+      // gravavam o literal "Meu concurso" no `nome` durante a migração (antes de o
+      // onboarding preencher o cargo), e o seletor ficava divergindo da topbar. Vazio faz
+      // `perfis()` derivar o nome do concurso. Não toca em nome escolhido por "Renomear".
+      // Documentos cujo binário ainda está embutido no estado: movidos para fora logo
+      // abaixo, depois que os perfis forem varridos.
+      const migrarBinarioParaFora = [];
+      for (const p of state.perfis || []) {
+        if (p.nome === "Meu concurso" && p.concurso && p.concurso.cargo) p.nome = "";
+        // O snapshot de sincronização sobe as PÁGINAS e omite o `texto` do material (é o
+        // join delas — o mesmo conteúdo duas vezes, metade do peso do material no cofre).
+        // Aqui ele volta, para o que veio da nuvem e para backup importado. Em TODOS os
+        // concursos: os backfills abaixo enxergam só o perfil ativo, e o material dos
+        // outros ficaria sem texto até alguém trocar de concurso.
+        for (const d of p.documentos || []) {
+          if (!d.texto && Array.isArray(d.paginas) && d.paginas.length) recomputarTextoDoc(d);
+          // Sinalizadores do binário: em material antigo eles não existem, e a UI precisa
+          // saber se há PDF sem carregá-lo.
+          if (d.temPdf === undefined) d.temPdf = !!d.pdfData;
+          if (d.temImg === undefined) d.temImg = !!d.imgData;
+          // Migração: tira o binário embutido do estado e o move para a chave própria.
+          // Idempotente — na 2ª abertura já não há nada embutido para mover.
+          if ((d.pdfData || d.imgData) && blobsDisponiveis()) migrarBinarioParaFora.push(d);
+        }
+      }
       // Backfill de campos NOVOS de config em estados salvos antigos. Preenche o que
       // falta em vez de reatribuir: `state.config = {...}` destruiria os acessores
       // por-perfil instalados logo acima (mesma razão do setConfig).
@@ -979,6 +1032,10 @@ export const store = {
         if (m.pdfData === undefined) m.pdfData = null;
         if (m.binarioDescartado === undefined) m.binarioDescartado = false;
         if (m.origem === undefined) m.origem = null;
+        // Mesmos sinais dos materiais: a UI precisa saber que há original sem carregá-lo.
+        if (m.temImg === undefined) m.temImg = !!m.imgData;
+        if (m.temPdf === undefined) m.temPdf = !!m.pdfData;
+        if ((m.imgData || m.pdfData) && blobsDisponiveis()) migrarBinarioParaFora.push(m);
       });
       // backfill do índice semântico
       if (!state.embeddings || typeof state.embeddings !== "object") {
@@ -1033,6 +1090,22 @@ export const store = {
         if (m.categoria === "Geral") m.categoria = "Não definida";
         if (m.categoria === "Material PDF") m.categoria = "Materiais";
       });
+      // Migração dos binários (materiais E mapas) para fora do estado. Roda no fim, depois
+      // de TODOS os backfills terem varrido as duas coleções. Em segundo plano e um a um:
+      // são dezenas de MB por PDF, e travar a abertura do app por causa disso seria pior
+      // que o problema. Enquanto não termina, o binário segue embutido e tudo funciona.
+      if (migrarBinarioParaFora.length) {
+        (async () => {
+          for (const x of migrarBinarioParaFora) {
+            const ok = await setBlob(x.id, { pdfData: x.pdfData || null, imgData: x.imgData || null });
+            if (!ok) break; // armazenamento indisponível: deixa como está
+            cacheBinario.set(x.id, { pdfData: x.pdfData || null, imgData: x.imgData || null });
+            x.pdfData = null;
+            x.imgData = null;
+          }
+          commit({ semCarimbo: true }); // é reorganização interna, não mudança de dados
+        })();
+      }
     }
     return state;
   },
@@ -2050,8 +2123,11 @@ export const store = {
       titulo: (titulo || "").trim() || "Documento",
       texto: texto || "",
       origem: origem || "colado",
-      pdfData: pdfData || null, // data URL do PDF (para leitura/rasterização página a página)
-      imgData: imgData || null, // data URL da imagem, quando o material é uma foto/escaneado
+      // Os binários vivem FORA do estado (ver guardarBinarioDoc); aqui ficam só os sinais.
+      pdfData: null,
+      imgData: null,
+      temPdf: !!pdfData, // data URL do PDF guardada à parte (leitura/rasterização por página)
+      temImg: !!imgData, // idem para foto/escaneado
       paginas: paginas || null, // [{n,texto,vazia,temImagem,ocr}] quando veio de PDF/imagem
       estrutura: estrutura || null, // F1: {origem, aulaTitulo, blocos:[{numero,titulo,tipo,banca,pIni,pFim,...}]}
       selo: "verde",
@@ -2059,6 +2135,7 @@ export const store = {
     };
     recomputarTextoDoc(doc);
     state.documentos.push(doc);
+    guardarBinarioDoc(doc, pdfData, imgData); // assíncrono: o estado não espera o binário
     commit();
     return doc;
   },
@@ -2067,10 +2144,12 @@ export const store = {
   // conteúdo e anexa as descrições ao texto (buscável). Cap p/ não estourar a cota. Roda em background.
   async descreverFigurasDeDoc(docId, max = 30) {
     const d = state.documentos.find((x) => x.id === docId);
-    if (!d || !d.pdfData || !Array.isArray(d.paginas) || !this.iaDisponivel()) return { descritas: 0 };
+    if (!d || !this.temPdfDoc(d) || !Array.isArray(d.paginas) || !this.iaDisponivel()) return { descritas: 0 };
     const figPags = d.paginas.filter((p) => p.temImagem).map((p) => p.n);
     if (!figPags.length) return { descritas: 0 };
-    const imgs = await pdf.rasterizarPaginas(d.pdfData, figPags.slice(0, max), 1.6);
+    const { pdfData } = await this.binarioDoc(docId);
+    if (!pdfData) return { descritas: 0 };
+    const imgs = await pdf.rasterizarPaginas(pdfData, figPags.slice(0, max), 1.6);
     const vistos = new Set();
     const figuras = [];
     for (const im of imgs) {
@@ -2123,7 +2202,7 @@ export const store = {
   async caprichaEstruturaDoc(docId) {
     const d = state.documentos.find((x) => x.id === docId);
     if (!d) return { ok: false };
-    const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: d.pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
+    const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: (await this.binarioDoc(d.id)).pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
     if (!est) return { ok: false };
     d.estrutura = est;
     this.casarEstruturaComEdital(est);
@@ -2201,9 +2280,55 @@ export const store = {
     if (!d) return false;
     d.pdfData = null;
     d.imgData = null;
+    d.temPdf = false;
+    d.temImg = false;
     d.binarioDescartado = true; // marca que HAVIA um binário e foi descartado (≠ material colado)
+    cacheBinario.delete(id);
+    delBlob(id);
     commit();
     return true;
+  },
+  // Binário do material (PDF/imagem), lido sob demanda de fora do estado. Devolve
+  // { pdfData, imgData }. Documento antigo, ainda com o binário embutido, também funciona.
+  async binarioDoc(id) {
+    const d = state.documentos.find((x) => x.id === id);
+    if (!d) return { pdfData: null, imgData: null };
+    if (d.pdfData || d.imgData) return { pdfData: d.pdfData || null, imgData: d.imgData || null };
+    const emCache = cacheBinario.get(id);
+    if (emCache) return emCache;
+    const salvo = (await getBlob(id)) || { pdfData: null, imgData: null };
+    cacheBinario.set(id, salvo);
+    return salvo;
+  },
+  // Atalho síncrono para a UI: "este material TEM binário?" (sem carregá-lo).
+  temBinario(doc) {
+    return !!(doc && (doc.temPdf || doc.temImg || doc.pdfData || doc.imgData));
+  },
+  temPdfDoc(doc) {
+    return !!(doc && (doc.temPdf || doc.pdfData));
+  },
+  // ---- Vínculo com o arquivo ORIGINAL (só desktop) ----
+  // Guarda o CAMINHO, não o arquivo. Serve para reabrir o original depois de descartar o
+  // binário — assim dá para não manter cópia da apostila dentro do app sem perder o acesso.
+  podeVincularArquivo,
+  async vincularArquivoOriginal(docId) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d) return null;
+    const caminho = await escolherArquivo();
+    if (!caminho) return null;
+    d.caminhoOriginal = caminho;
+    commit();
+    return caminho;
+  },
+  desvincularArquivoOriginal(docId) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d) return;
+    d.caminhoOriginal = null;
+    commit();
+  },
+  abrirArquivoOriginal(docId) {
+    const d = state.documentos.find((x) => x.id === docId);
+    return abrirArquivoNoSistema(d && d.caminhoOriginal);
   },
   // Páginas que ainda dependem de OCR/Visão (sem texto e ainda não transcritas).
   paginasPendentes(doc) {
@@ -2329,21 +2454,39 @@ export const store = {
     const filtro = opts.ids ? new Set(opts.ids) : null;
     const alvo = fontes.filter((f) => (!filtro || filtro.has(f.id)) && idx.fontes[f.id] !== f.sig);
     let feitos = 0;
+    // Total de TRECHOS, não de fontes: um material de 79 páginas rende ~200 trechos, e
+    // "1/2 materiais" durante minutos parece travado. O progresso conta trecho a trecho.
+    const totalChunks = alvo.reduce((a, f) => a + chunksDaFonte(f).length, 0);
+    let chunksFeitos = 0;
+    const LOTE = 20; // grava a cada lote: se a cota estourar no meio, o que já foi fica
     for (const f of alvo) {
       const chunks = chunksDaFonte(f);
-      idx.itens = idx.itens.filter((it) => it.fonteId !== f.id); // remove versão antiga
-      if (chunks.length) {
-        const vetores = await iaProv.gerarEmbeddings(state.config, chunks.map((c) => c.texto), "RETRIEVAL_DOCUMENT");
-        chunks.forEach((c, i) => {
-          if (vetores[i] && vetores[i].length) {
-            idx.itens.push({ id: uid("emb"), fonteId: f.id, tipo: f.tipo, titulo: f.titulo, pagina: c.pagina || null, texto: c.texto, vetor: vetores[i] });
+      // Retomada: o que já está no índice para esta fonte (de uma tentativa interrompida)
+      // é reaproveitado — a ordem dos trechos é determinística, então basta seguir do
+      // ponto em que parou. Antes, uma falha no meio jogava fora o lote inteiro e a
+      // tentativa seguinte recomeçava do zero, queimando cota de novo.
+      const jaFeitos = idx.itens.filter((it) => it.fonteId === f.id).length;
+      const pendentes = jaFeitos < chunks.length ? chunks.slice(jaFeitos) : [];
+      if (jaFeitos > chunks.length) { // fonte encolheu: refaz do zero
+        idx.itens = idx.itens.filter((it) => it.fonteId !== f.id);
+      }
+      chunksFeitos += Math.min(jaFeitos, chunks.length);
+      for (let i = 0; i < pendentes.length; i += LOTE) {
+        const lote = pendentes.slice(i, i + LOTE);
+        const vetores = await iaProv.gerarEmbeddings(state.config, lote.map((c) => c.texto), "RETRIEVAL_DOCUMENT");
+        lote.forEach((c, j) => {
+          if (vetores[j] && vetores[j].length) {
+            idx.itens.push({ id: uid("emb"), fonteId: f.id, tipo: f.tipo, titulo: f.titulo, pagina: c.pagina || null, texto: c.texto, vetor: vetores[j] });
           }
         });
+        chunksFeitos += lote.length;
+        if (onProgress) onProgress(chunksFeitos, totalChunks, f.titulo);
+        commit(); // persiste o progresso a cada lote, não só a cada fonte
       }
       idx.fontes[f.id] = f.sig;
       feitos++;
-      if (onProgress) onProgress(feitos, alvo.length, f.titulo);
-      commit(); // persiste o progresso a cada fonte
+      if (onProgress) onProgress(chunksFeitos, totalChunks, f.titulo);
+      commit();
     }
     // Remove do índice fontes que não existem mais.
     const ids = new Set(fontes.map((f) => f.id));
@@ -2737,8 +2880,11 @@ export const store = {
     if (estrutura) this._herdarTopicos(estrutura, d.estrutura);
     if (paginas) d.paginas = paginas;
     if (texto != null) d.texto = texto;
-    if (pdfData) { d.pdfData = pdfData; d.binarioDescartado = false; }
-    if (imgData) d.imgData = imgData;
+    if (pdfData || imgData) {
+      if (pdfData) { d.temPdf = true; d.binarioDescartado = false; }
+      if (imgData) d.temImg = true;
+      guardarBinarioDoc(d, pdfData || null, imgData || null);
+    }
     recomputarTextoDoc(d);
     d.estrutura = estrutura || d.estrutura;
     if (d.estrutura) this.aplicarEstruturaAoMaterial(d.id, d.estrutura); // re-deriva topicoIds + topicoPaginas + commit
@@ -5830,16 +5976,40 @@ export const store = {
       arvore: arvore || { titulo: titulo || "Mapa mental", ramos: [] },
       topicoId: topicoId || null,
       origem: origem || null,
-      imgData: imgData || null, // imagem original importada (visual fiel) — Fase 2 híbrido
-      pdfData: pdfData || null, // PDF original importado
+      // O binário vive FORA do estado (mesma razão dos materiais): o estado inteiro é
+      // reescrito a cada gravação, e uma imagem de mapa embutida entra nessa conta.
+      imgData: null,
+      pdfData: null,
+      temImg: !!imgData,
+      temPdf: !!pdfData,
       binarioDescartado: false, // backup pode descartar o binário p/ economizar espaço
       observacao: "",
       criadoEm: nowISO(),
     };
     if (m.topicoId) { const t = state.topicos.find((x) => x.id === m.topicoId); if (t) m.disciplinaId = t.disciplinaId; }
     state.mapasMentais.push(m);
+    if (imgData || pdfData) {
+      cacheBinario.set(m.id, { pdfData: pdfData || null, imgData: imgData || null });
+      setBlob(m.id, { pdfData: pdfData || null, imgData: imgData || null }).then((ok) => {
+        if (!ok) { m.imgData = imgData || null; m.pdfData = pdfData || null; commit(); }
+      });
+    }
     commit();
     return m;
+  },
+  // Binário original de um MAPA (imagem/PDF importado), lido sob demanda — igual aos materiais.
+  async binarioMapa(id) {
+    const m = state.mapasMentais.find((x) => x.id === id);
+    if (!m) return { pdfData: null, imgData: null };
+    if (m.pdfData || m.imgData) return { pdfData: m.pdfData || null, imgData: m.imgData || null };
+    const emCache = cacheBinario.get(id);
+    if (emCache) return emCache;
+    const salvo = (await getBlob(id)) || { pdfData: null, imgData: null };
+    cacheBinario.set(id, salvo);
+    return salvo;
+  },
+  temOriginalMapa(m) {
+    return !!(m && (m.temImg || m.temPdf || m.imgData || m.pdfData) && !m.binarioDescartado);
   },
   removerMapaMental(id) {
     state.mapasMentais = state.mapasMentais.filter((m) => m.id !== id);
@@ -8071,9 +8241,18 @@ export const store = {
     state.config.botoesOcultos = [...set];
     commit();
   },
+  // Apaga os DADOS DE ESTUDO. Preserva o que é configuração do aparelho e custa a repor:
+  // a conexão com a IA (chave digitada uma vez e esquecida) e o tema. Quem apaga o edital
+  // não está pedindo para desconectar a IA nem para voltar ao tema claro.
   async resetTudo() {
+    const antes = state.config || {};
+    const preservar = {};
+    for (const k of ["iaProvider", "iaKey", "iaKeyReserva", "iaModelo", "tema"]) {
+      if (antes[k] !== undefined && antes[k] !== "") preservar[k] = antes[k];
+    }
     state = migrarParaPerfis(defaultState());
     instalarAcessores(); // `state` é outro objeto: sem isto, state.disciplinas some
+    Object.assign(state.config, preservar);
     await resetState();
     commit();
   },

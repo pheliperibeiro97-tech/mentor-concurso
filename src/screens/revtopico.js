@@ -96,10 +96,12 @@ export default function renderRevTopico(root, app) {
       toast("Revisão automática de tópicos ligada.");
     },
     // Abre o material no PDF na página que o usuário registrou na sessão (sincronia página↔revisão).
-    "abrir-pag-registrada": (el) => {
+    "abrir-pag-registrada": async (el) => {
       const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
       const pag = parseInt(el.getAttribute("data-pag"), 10) || 1;
-      if (d && d.pdfData) abrirVisualizadorPdf(d.pdfData, d.titulo, pag);
+      if (!d || !store.temPdfDoc(d)) return;
+      const { pdfData } = await store.binarioDoc(d.id);
+      if (pdfData) abrirVisualizadorPdf(pdfData, d.titulo, pag);
       else toast("O PDF deste material não está disponível.", "erro");
     },
     revisar: (el) => {
@@ -122,7 +124,7 @@ function reviewHTML(store, topico) {
   const st = store.get();
   const material = store.palavrasParaReler(topico.id);
   // Se a revisão veio da PÁGINA REGISTRADA na sessão, oferece abrir o PDF exatamente naquela página.
-  const abrirPag = material && material.docId && material.pagina && (st.documentos.find((d) => d.id === material.docId) || {}).pdfData
+  const abrirPag = material && material.docId && material.pagina && store.temPdfDoc(st.documentos.find((d) => d.id === material.docId))
     ? `<button class="lnk" data-action="abrir-pag-registrada" data-id="${material.docId}" data-pag="${material.pagina}" data-tip="Abre o material no PDF, na página que você registrou.">${icone("file-text")} abrir na pág. ${material.pagina}</button>`
     : "";
   const conteudo = material

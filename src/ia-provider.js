@@ -2196,9 +2196,23 @@ async function embedUmRaw(cfg, modelo, texto, taskType) {
   return arredondarVetor((data && data.embedding && data.embedding.values) || []);
 }
 
+// Ritmo das chamadas de embedding. 1 trecho = 1 requisição, então um PDF de 79 páginas
+// dispara ~200 chamadas: em rajada (concorrência 4, sem espera) isso estoura o limite por
+// minuto da chave grátis e volta 429 — foi exatamente o que aconteceu ao indexar o edital
+// do 192º. Espaçar as partidas troca velocidade por chegar ao fim.
+export const EMB_RPM = 90; // um pouco abaixo do teto típico da cota gratuita (100/min)
+let embProximaPartida = 0;
+async function aguardarVezEmbedding() {
+  const intervalo = 60000 / EMB_RPM;
+  const agora = Date.now();
+  const partida = Math.max(agora, embProximaPartida);
+  embProximaPartida = partida + intervalo;
+  if (partida > agora) await esperar(partida - agora);
+}
+
 // taskType melhora o resultado: RETRIEVAL_DOCUMENT ao indexar, RETRIEVAL_QUERY na busca.
 // Embute item a item (a API grátis não tem batch síncrono para este modelo), com
-// concorrência limitada. 1 trecho = 1 requisição.
+// concorrência limitada e ritmo controlado. 1 trecho = 1 requisição.
 export async function gerarEmbeddings(cfg, textos, taskType = "RETRIEVAL_DOCUMENT") {
   if (!iaDisponivel(cfg)) {
     const e = new Error("IA não conectada. Conecte o Gemini em Configurações para a busca semântica.");
@@ -2206,11 +2220,28 @@ export async function gerarEmbeddings(cfg, textos, taskType = "RETRIEVAL_DOCUMEN
     throw e;
   }
   if (cfg.iaProvider !== "gemini") {
-    throw new Error("A busca semântica usa embeddings do Google Gemini. Selecione o Gemini em Configurações.");
+    const e = new Error("A busca semântica usa embeddings do Google Gemini. Selecione o Gemini em Configurações.");
+    e.code = "EMB_SEM_GEMINI";
+    throw e;
   }
   const modelo = (cfg.iaEmbModelo || "").trim() || EMB_MODELO;
   const lista = (textos || []).map((t) => corta(String(t || ""), 8000));
-  return mapLimit(lista, 4, (t) => embedUm(cfg, modelo, t, taskType));
+  return mapLimit(lista, 2, async (t) => {
+    await aguardarVezEmbedding();
+    try {
+      return await embedUm(cfg, modelo, t, taskType);
+    } catch (e) {
+      // 429 é cota, não "erro passageiro": quem chama precisa distinguir para avisar direito
+      // (e para parar de insistir, em vez de queimar o resto da cota).
+      if (e && e.status === 429) {
+        const err = new Error("A cota da IA acabou por agora. A indexação para aqui e continua de onde parou quando a cota voltar (costuma ser no próximo minuto, ou no dia seguinte se for o limite diário).");
+        err.code = "COTA";
+        err.status = 429;
+        throw err;
+      }
+      throw e;
+    }
+  });
 }
 
 export async function gerarEmbedding(cfg, texto, taskType = "RETRIEVAL_QUERY") {

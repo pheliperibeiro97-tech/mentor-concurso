@@ -329,11 +329,19 @@ function aulasImportHTML(texto = "") {
 // tópicos editáveis/removíveis (＋ tópico) + remover disciplina. Voltar / descartar / aplicar.
 // Painel de adicionar ao edital (digitar/colar/importar). `texto` preserva o que foi
 // colado ao voltar do preview. Usado dentro da janela modal (abrirAddEdital).
-function addDiscPanelHTML(texto = "") {
+function addDiscPanelHTML(texto = "", porItem = false) {
   return `<div class="card">
     <h3>Adicionar ao edital</h3>
     <p class="muted small u-m-0 u-mb-8">Traga o conteúdo programático — disciplinas e tópicos.</p>
-    <details class="ed-ajuda"><summary>Como o app separa</summary><div class="ed-ajuda-corpo"><p>Uma disciplina por linha (em MAIÚSCULAS ou terminada em ":") e os tópicos nas linhas seguintes ou separados por ";". Também vale digitar só uma disciplina. O app separa disciplinas e tópicos para você revisar antes de aplicar.</p></div></details>
+    <details class="ed-ajuda"><summary>Como o app separa</summary><div class="ed-ajuda-corpo">
+      <p>Uma disciplina por linha (em MAIÚSCULAS ou terminada em ":") e os tópicos nas linhas seguintes. Também vale digitar só uma disciplina. O app separa e mostra tudo para você revisar antes de aplicar.</p>
+      <p><b>Por frase</b> (padrão): cada frase do texto vira um tópico — bom para edital escrito em texto corrido. O corte é no ponto final, respeitando abreviações ("arts. 1º a 12") e o que está entre parênteses.</p>
+      <p><b>Por item do edital</b>: cada item <b>numerado</b> vira UM tópico e o número é preservado ("(39) Propriedade · Função social · …"). Use quando o edital for numerado — em concurso de magistratura o item numerado é o <b>ponto</b> sorteado na prova oral.</p>
+    </div></details>
+    <div class="seg u-mb-8" role="group" aria-label="Como quebrar os tópicos">
+      <button type="button" class="${porItem ? "" : "on"}" data-action="ed-modo" data-modo="frase" data-tip="Cada frase vira um tópico. Bom para edital em texto corrido.">Por frase</button>
+      <button type="button" class="${porItem ? "on" : ""}" data-action="ed-modo" data-modo="item" data-tip="Cada item numerado vira um tópico, com o número preservado. Bom para edital numerado.">Por item do edital</button>
+    </div>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="${dicaArquivo("Importar de um PDF ou .txt.")}">${icone("paperclip")} Importar de arquivo
       <input id="ed-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden />
     </label>
@@ -386,7 +394,7 @@ function editalPreviewHTML(discs) {
 // editável → aplicar) com render-loop próprio (abrirJanelaFluxo).
 function abrirAddEdital(app) {
   const { store } = app;
-  const estado = { preview: null, texto: "" };
+  const estado = { preview: null, texto: "", porItem: false };
   abrirJanelaFluxo({
     titulo: "Adicionar ao edital",
     render: (corpo, { rerender }) => {
@@ -398,7 +406,7 @@ function abrirAddEdital(app) {
           el.addEventListener("input", () => { const d = +el.getAttribute("data-d"); const t = +el.getAttribute("data-t"); if (estado.preview[d] && estado.preview[d].topicos) estado.preview[d].topicos[t] = el.value; }));
         return;
       }
-      corpo.innerHTML = addDiscPanelHTML(estado.texto);
+      corpo.innerHTML = addDiscPanelHTML(estado.texto, estado.porItem);
       const fileInput = corpo.querySelector("#ed-file");
       if (!fileInput) return;
       ligarDropZone(fileInput);
@@ -446,6 +454,12 @@ function abrirAddEdital(app) {
     },
     handlers: ({ rerender, fechar, corpo }) => ({
       "cancelar-add-disc": () => fechar(),
+      // Granularidade da quebra. Guarda o texto já digitado antes de repintar o painel.
+      "ed-modo": (el) => {
+        estado.texto = corpo.querySelector("#ed-texto")?.value ?? estado.texto;
+        estado.porItem = el.getAttribute("data-modo") === "item";
+        rerender();
+      },
       // "Revisar": separa o edital e abre o PREVIEW editável (não grava ainda).
       separar: () => {
         const texto = corpo.querySelector("#ed-texto").value;
@@ -453,7 +467,7 @@ function abrirAddEdital(app) {
         const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
         const estrutura = linhas.length === 1 && !/[;:]/.test(linhas[0])
           ? [{ nome: linhas[0], topicos: [] }]
-          : separarEdital(texto).map((d) => ({ nome: d.nome || "", topicos: [...(d.topicos || [])] }));
+          : separarEdital(texto, { porItem: estado.porItem }).map((d) => ({ nome: d.nome || "", topicos: [...(d.topicos || [])] }));
         const total = estrutura.reduce((a, d) => a + d.topicos.length, 0);
         if (!estrutura.length || (!total && estrutura.every((d) => !d.nome))) return toast("Não consegui identificar disciplinas nem tópicos. Confira o texto.", "erro");
         estado.texto = texto;
@@ -1651,7 +1665,14 @@ function topHTML(store, st, t, n) {
 // Métricas inline de um tópico a partir das sessões: total de questões feitas,
 // % de aproveitamento (null se nenhuma questão) e a última data estudada.
 // Hover-preview de tópico (desktop): mini-card flutuante com os números, sem clicar/navegar.
-let hoverCardEl = null, hoverTimerEd = null;
+let hoverCardEl = null, hoverTimerEd = null, hoverGlobaisLigados = false;
+// O cartão vive FORA do #content (filho do body), então nenhum re-render o alcança: quem o
+// abriu tem de fechá-lo. Clicar no tópico navega e apaga a linha do DOM — o `mouseleave`
+// nunca chega, e o cartão ficava ligado por cima de todas as telas seguintes até recarregar.
+function fecharHoverPreview() {
+  clearTimeout(hoverTimerEd);
+  if (hoverCardEl) hoverCardEl.classList.remove("on");
+}
 function ligarHoverPreview(root, store) {
   if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) return; // só desktop/mouse
   root.querySelectorAll(".ed-top-link[data-id]").forEach((el) => {
@@ -1659,11 +1680,22 @@ function ligarHoverPreview(root, store) {
       clearTimeout(hoverTimerEd);
       hoverTimerEd = setTimeout(() => mostrarHoverTopico(el, store), 350);
     });
-    el.addEventListener("mouseleave", () => { clearTimeout(hoverTimerEd); if (hoverCardEl) hoverCardEl.classList.remove("on"); });
+    el.addEventListener("mouseleave", fecharHoverPreview);
+    el.addEventListener("click", fecharHoverPreview); // navega e destrói a âncora
   });
-  window.addEventListener("scroll", () => { if (hoverCardEl) hoverCardEl.classList.remove("on"); }, { passive: true, once: false });
+  // Globais UMA vez só: `ligarHoverPreview` roda a cada render do Edital, e o listener de
+  // scroll era reempilhado em todos eles (vazamento).
+  if (hoverGlobaisLigados) return;
+  hoverGlobaisLigados = true;
+  window.addEventListener("scroll", fecharHoverPreview, { passive: true });
+  document.addEventListener("pointerdown", fecharHoverPreview, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharHoverPreview(); });
 }
 function mostrarHoverTopico(el, store) {
+  // A espera de 350ms pode terminar DEPOIS de o clique já ter trocado de tela. Numa âncora
+  // solta do DOM o getBoundingClientRect() devolve tudo zero e o cartão ia parar no canto
+  // (8,8), tapando o menu — sem nunca mais receber um mouseleave que o fechasse.
+  if (!el.isConnected) return;
   const st = store.get();
   const id = el.getAttribute("data-id");
   const t = st.topicos.find((x) => x.id === id);

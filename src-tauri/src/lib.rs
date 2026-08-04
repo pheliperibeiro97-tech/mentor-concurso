@@ -44,6 +44,80 @@ fn save_state(json: String, db: State<Db>) -> Result<(), String> {
     Ok(())
 }
 
+// ===== Binários dos materiais (PDF/imagem), FORA do estado =====
+// O estado do app é uma única string JSON reescrita a cada gravação. Com os PDFs dentro
+// dela, uma biblioteca de cursinho (9 mil páginas) daria ~489 MB serializados a cada
+// mudança — medido: 55 KB por página com o PDF contra 4 KB sem. Guardar o binário numa
+// chave própria (`blob:<id>`) tira 93% do peso do caminho quente sem perder o arquivo:
+// o visualizador de PDF, o OCR e a descrição de figuras continuam funcionando.
+#[tauri::command]
+fn get_blob(id: String, db: State<Db>) -> Result<Option<String>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM kv WHERE key = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt
+        .query([format!("blob:{}", id)])
+        .map_err(|e| e.to_string())?;
+    if let Some(row) = rows.next().map_err(|e| e.to_string())? {
+        let value: String = row.get(0).map_err(|e| e.to_string())?;
+        Ok(Some(value))
+    } else {
+        Ok(None)
+    }
+}
+
+#[tauri::command]
+fn set_blob(id: String, json: String, db: State<Db>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO kv (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        [format!("blob:{}", id), json],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn del_blob(id: String, db: State<Db>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM kv WHERE key = ?1", [format!("blob:{}", id)])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ===== Arquivo ORIGINAL do material (vínculo, não cópia) =====
+// Alternativa a guardar o PDF dentro do app: o material aponta para o arquivo onde ele já
+// mora (OneDrive, pasta do cursinho). Some a segunda cópia — inclusive de apostila com
+// marca-d'água — e o original continua a um clique. Só no desktop: no navegador não existe
+// caminho de arquivo.
+#[tauri::command]
+async fn escolher_arquivo(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    match app.dialog().file().blocking_pick_file() {
+        Some(fp) => {
+            let path = fp.into_path().map_err(|e| e.to_string())?;
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        None => Ok(None),
+    }
+}
+
+// Abre o arquivo no aplicativo padrão do sistema. `start` precisa de um título vazio antes
+// do caminho, senão trata o primeiro argumento entre aspas como título da janela.
+#[tauri::command]
+fn abrir_no_sistema(caminho: String) -> Result<(), String> {
+    if !std::path::Path::new(&caminho).exists() {
+        return Err("Arquivo não encontrado neste caminho.".into());
+    }
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", &caminho])
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ===== Licenciamento (anti-repasse, Opção A) =====
 // O ID da máquina identifica de forma estável esta instalação. A licença
 // (chave + validade + assinatura) é guardada na mesma tabela kv, separada do
@@ -226,6 +300,11 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             load_state,
             save_state,
+            get_blob,
+            set_blob,
+            del_blob,
+            escolher_arquivo,
+            abrir_no_sistema,
             get_machine_id,
             get_license,
             set_license,

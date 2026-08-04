@@ -4339,7 +4339,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
   display: flex; align-items: center; justify-content: center; z-index: var(--z-modal); padding: 20px; animation: modal-in 0.16s ease; }
 .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px;
   max-width: 440px; width: 100%; box-shadow: var(--shadow-lg); animation: modal-pop 0.18s cubic-bezier(0.2,0.9,0.3,1.2); }
-.modal-msg { margin: 0 0 18px; line-height: 1.55; }
+/* pre-line: confirmações longas (ex.: a de "apagar tudo") separam os avisos em parágrafos
+   com \n\n; sem isto tudo colapsa num bloco só e ninguém lê até o fim. */
+.modal-msg { margin: 0 0 18px; line-height: 1.55; white-space: pre-line; }
 .modal-acoes { display: flex; gap: 8px; justify-content: flex-end; }
 /* Seletor "qual tipo?" (Questões/Revisar): opções iguais, em lista, com ícone — sem destacar só a 1ª. */
 .modal-lista .escolha-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;

@@ -22,6 +22,8 @@ function arvoreParaHTML(m) {
   const arv = m.arvore || {};
   const ramos = (rs) => (rs && rs.length ? `<ul>${rs.map((r) => `<li>${esc(r.titulo)}${ramos(r.ramos)}</li>`).join("")}</ul>` : "");
   // Mapas importados de arquivo guardam a imagem original — vai junto na impressão.
+  // Na impressão sai só a árvore: a imagem original vive fora do estado e buscá-la aqui
+  // tornaria a montagem do HTML assíncrona. Quem quer o original imprime pelo visualizador.
   const img = m.imgData ? `<div><img src="${m.imgData}" alt="" style="max-width:100%; margin-top:8px" /></div>` : "";
   return `<div class="mm-print-bloco"><h2>${esc(m.titulo || "Mapa mental")}</h2>${ramos(arv.ramos)}${img}</div>`;
 }
@@ -78,7 +80,7 @@ export default function renderMapas(root, app) {
   });
 
   const sub = (m) => (nomeTop(st, m) ? ` <span class="muted small">${esc(nomeTop(st, m))}</span>` : "");
-  const seloOrig = (m) => ((m.imgData || m.pdfData) && !m.binarioDescartado ? ` <span class="muted small" data-tip="Tem a imagem/PDF original (ver dentro do mapa).">${icone("image")} original</span>` : "");
+  const seloOrig = (m) => (store.temOriginalMapa(m) ? ` <span class="muted small" data-tip="Tem a imagem/PDF original (ver dentro do mapa).">${icone("image")} original</span>` : "");
   // Vínculo a tópico como CHIP clicável (mostra o tópico atual, ou "vincular a tópico" se não houver).
   const vincChip = (m) => `<button class="lnk mapa-vinc" data-action="vincular-topico" data-id="${m.id}" data-tip="Vincular ou alterar o tópico deste mapa.">${icone("link")} ${nomeTop(st, m) ? esc(nomeTop(st, m)) : "vincular a tópico"}</button>`;
 

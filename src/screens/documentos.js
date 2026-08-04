@@ -13,7 +13,6 @@ import { extrairPdfPaginas, rasterizarPaginas, rasterizarPaginasStream, arquivoP
 import { extrairTextoArquivo } from "../ia-provider.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
-import { montarMarcacao } from "../marcacao.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
 import { detectarEstrutura } from "../estrutura.js";
 
@@ -90,8 +89,6 @@ function pedirFaixaPaginas(maxPag) {
 let busca = "";
 const filtroTop = { sel: [], aberto: false }; // filtro multi-tópico da lista de materiais
 let abertoId = null;
-let marcarAberto = new Set(); // ids de materiais com a marcação tricromática aberta
-let marcarPagina = {}; // docId -> nº da página selecionada na marcação (quando há páginas)
 let detectDoc = null; // docId com o painel de "detectar tópicos" aberto
 let detectResultado = null; // [{topico, paginas}] detectados
 let detectando = false;
@@ -216,7 +213,7 @@ function estruturaResumoHTML(est, store, docId) {
   const refino = store && store.iaDisponivel()
     ? `<button class="btn btn-ghost btn-sm" data-action="refinar-estrutura-ia"${dAttr} data-tip="A IA casa cada título com o tópico do edital (manda só os títulos).">${icone("sparkles")} Refinar vínculos (IA)</button>`
     : "";
-  const temPdf = docId && st && ((st.documentos || []).find((x) => x.id === docId) || {}).pdfData;
+  const temPdf = docId && st && store.temPdfDoc((st.documentos || []).find((x) => x.id === docId));
   const caprichar = temPdf && store.iaDisponivel()
     ? `<button class="btn btn-ghost btn-sm" data-action="caprichar-estrutura" data-doc="${docId}" data-tip="A IA relê a página do sumário (imagem) e reconstrói os tópicos com fidelidade.">${icone("wand-sparkles")} Refazer tópicos pelo sumário (IA)</button>`
     : "";
@@ -319,7 +316,7 @@ function sumarioNavegavelHTML(d, store) {
     const { b, i } = nd;
     const tn = nomeTop(b.topicoId);
     const tipoTag = b.tipo !== "teoria" ? `<span class="mini-tag">${esc(b.tipo)}${b.banca ? " " + esc(b.banca) : ""}</span>` : "";
-    const verPdf = d.pdfData ? `<button class="lnk" data-action="ler-pdf-pag" data-id="${d.id}" data-pag="${b.pIni}" data-tip="Abrir esta página no PDF">${icone("file-text")} abrir pág. ${b.pIni}</button>` : "";
+    const verPdf = store.temPdfDoc(d) ? `<button class="lnk" data-action="ler-pdf-pag" data-id="${d.id}" data-pag="${b.pIni}" data-tip="Abrir esta página no PDF">${icone("file-text")} abrir pág. ${b.pIni}</button>` : "";
     const ehQuestoes = b.tipo === "questoes" || b.tipo === "lista";
     const gerar = temIA
       ? `<details class="doc-mais sum-gerar-menu">
@@ -355,7 +352,7 @@ function sumarioNavegavelHTML(d, store) {
     : "";
   // Estrutura de método ANTIGO (pré-Vision): oferece refazer pela IA do sumário — resolve materiais
   // importados antes, cujos "tópicos" saíram como números/ruído. Sugere, não executa sozinho.
-  const estruturaAntiga = d.estrutura.origem && d.estrutura.origem !== "ia-sumario" && d.pdfData && store.iaDisponivel()
+  const estruturaAntiga = d.estrutura.origem && d.estrutura.origem !== "ia-sumario" && store.temPdfDoc(d) && store.iaDisponivel()
     ? `<div class="sum-nudge">
          ${icone("wand-sparkles")}
          <span>Este sumário foi montado por um método antigo (por ${esc(rotuloOrigem(d.estrutura.origem))}) e pode ter saído com números/ruído no lugar dos tópicos. Deixe a IA reler o sumário do próprio PDF.</span>
@@ -399,11 +396,8 @@ export default function renderDocumentos(root, app) {
     busca = "";
     abertoId = focoDoc;
   }
-  // Abrir a marcação direto (vindo do dossiê de marcações).
-  if (app.params && app.params.marcarId) {
-    marcarAberto.add(app.params.marcarId);
-    app.params.marcarId = null;
-  }
+  // Material não tem mais marcação; vindo do dossiê, basta focar o item.
+  if (app.params && app.params.marcarId) app.params.marcarId = null;
   const docs = docsFiltrados(store, st);
 
   const opcoesTopico = st.topicos
@@ -486,27 +480,10 @@ export default function renderDocumentos(root, app) {
 
   focarItem(root, focoDoc);
 
-  // Monta a marcação tricromática nos materiais com o painel aberto (texto inteiro OU por página).
-  root.querySelectorAll("[data-mk-host]").forEach((host) => {
-    const id = host.getAttribute("data-mk-host");
-    const d = st.documentos.find((x) => x.id === id);
-    if (!d) return;
-    const pgs = (d.paginas || []).filter((p) => (p.texto || "").trim());
-    if (pgs.length > 1) {
-      const n = marcarPagina[id] || pgs[0].n;
-      const pg = pgs.find((p) => String(p.n) === String(n)) || pgs[0];
-      montarMarcacao(host, { store, alvoTipo: "documento", alvoId: `${id}#${pg.n}`, texto: pg.texto, topicoId: d.topicoId, tituloFonte: `${d.titulo} (pág. ${pg.n})` });
-    } else if ((d.texto || "").trim()) {
-      montarMarcacao(host, { store, alvoTipo: "documento", alvoId: id, texto: d.texto, topicoId: d.topicoId, tituloFonte: d.titulo });
-    }
-  });
-  // Trocar de página na marcação.
-  root.querySelectorAll(".mk-pagina-sel").forEach((sel) =>
-    sel.addEventListener("change", () => {
-      marcarPagina[sel.getAttribute("data-id")] = sel.value;
-      app.refresh();
-    })
-  );
+  // Grifar material saiu daqui: esta tela é para trazer o documento, extrair o texto, gerar
+  // com IA e dividir por tópico. Grifar continua onde importa — na Lei Seca, sobre o artigo
+  // (`marcacao.js` segue intacto, com alvoTipo "indicacao"). As marcações de material que já
+  // existiam ficam guardadas no estado; só não são mais exibidas.
 
   // F5: gera/extrai a partir de UM bloco do sumário (herda tópico + páginas + banca).
   async function gerarDoBloco(el, tipo) {
@@ -582,12 +559,6 @@ export default function renderDocumentos(root, app) {
       abertoId = abertoId === id ? null : id;
       app.refresh();
     },
-    "toggle-marcar": (el) => {
-      const id = el.getAttribute("data-id");
-      if (marcarAberto.has(id)) marcarAberto.delete(id);
-      else marcarAberto.add(id);
-      app.refresh();
-    },
     // F2: refina o casamento bloco→tópico com IA (manda só os títulos). data-id = material salvo;
     // sem data-id = estrutura ainda no formulário de importação (pendingEstrutura).
     "refinar-estrutura-ia": async (el) => {
@@ -630,7 +601,7 @@ export default function renderDocumentos(root, app) {
       const i = el.getAttribute("data-i");
       const pag = parseInt(el.getAttribute("data-pag"), 10);
       const id = el.getAttribute("data-doc");
-      const fonte = id ? (store.get().documentos.find((x) => x.id === id) || {}).pdfData : pendingPdf;
+      const fonte = id ? (await store.binarioDoc(id)).pdfData : pendingPdf;
       const host = root.querySelector(`.estr-thumb-host[data-i="${i}"]`);
       if (!host) return;
       if (host.dataset.aberto === "1") { host.innerHTML = ""; host.dataset.aberto = "0"; return; }
@@ -715,15 +686,28 @@ export default function renderDocumentos(root, app) {
       topicosDocAberto = topicosDocAberto === id ? null : id;
       app.refresh();
     },
-    "ler-pdf": (el) => {
+    "vincular-original": async (el) => {
+      const id = el.getAttribute("data-id");
+      const caminho = await store.vincularArquivoOriginal(id);
+      if (caminho) { toast("Arquivo vinculado. O app guarda só o caminho.", "ok"); app.refresh(); }
+    },
+    "abrir-original": async (el) => {
+      const r = await store.abrirArquivoOriginal(el.getAttribute("data-id"));
+      if (!r.ok) toast(r.erro || "Não consegui abrir o arquivo.", "erro");
+    },
+    "ler-pdf": async (el) => {
       const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
-      if (d && d.pdfData) abrirVisualizadorPdf(d.pdfData, d.titulo);
+      if (!store.temPdfDoc(d)) return;
+      const { pdfData } = await store.binarioDoc(d.id);
+      if (pdfData) abrirVisualizadorPdf(pdfData, d.titulo);
     },
     // F4: abre o PDF já na página inicial do bloco.
-    "ler-pdf-pag": (el) => {
+    "ler-pdf-pag": async (el) => {
       const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
       const pag = parseInt(el.getAttribute("data-pag"), 10) || 1;
-      if (d && d.pdfData) abrirVisualizadorPdf(d.pdfData, d.titulo, pag);
+      if (!store.temPdfDoc(d)) return;
+      const { pdfData } = await store.binarioDoc(d.id);
+      if (pdfData) abrirVisualizadorPdf(pdfData, d.titulo, pag);
       else toast("O PDF deste material foi descartado; não dá para abrir a página.", "erro");
     },
     // F4 — revisão por tópicos: programa a revisão espaçada de UM tópico da seção do sumário.
@@ -888,9 +872,11 @@ export default function renderDocumentos(root, app) {
     // ---- OCR / Visão ----
     "detectar-paginas": async (el) => {
       const d = store.get().documentos.find((x) => x.id === el.getAttribute("data-id"));
-      if (!d || !d.pdfData) return toast("Sem PDF salvo para reanalisar.", "erro");
+      if (!d || !store.temPdfDoc(d)) return toast("Sem PDF salvo para reanalisar.", "erro");
       const paginas = await comOcupado(async () => {
-        const r = await extrairPdfPaginas(d.pdfData);
+        const { pdfData: pdfSalvo } = await store.binarioDoc(d.id);
+        if (!pdfSalvo) return toast("Sem PDF salvo para reanalisar.", "erro");
+        const r = await extrairPdfPaginas(pdfSalvo);
         store.setPaginasDocumento(d.id, r.paginas);
         return r.paginas;
       }, { botao: el, msg: "Analisando páginas…" });
@@ -927,13 +913,17 @@ export default function renderDocumentos(root, app) {
       const fim = toastCarregando("Preparando os materiais para a busca inteligente…");
       try {
         const r = await store.indexarSemantica((feito, total, titulo) =>
-          fim(`Atualizando índice… ${feito}/${total}: ${titulo}`), { ids: pend });
+          fim(`Preparando a busca… ${feito} de ${total} trechos${total ? ` (${Math.round((feito / total) * 100)}%)` : ""} · ${titulo}`), { ids: pend });
         fim();
         toast(`Busca inteligente atualizada (${plural(r.feitos, "material", "materiais")}).`, "ok");
       } catch (e) {
         fim();
         console.error(e);
-        toast("Não consegui atualizar o índice agora. Tente de novo em instantes.", "erro");
+        // Cota estourada não se resolve "em instantes" — e o que já foi indexado ficou
+        // gravado, então dizer isso evita a impressão de que o trabalho se perdeu.
+        if (e && e.code === "COTA") toast(e.message, "erro");
+        else if (e && e.code === "EMB_SEM_GEMINI") toast(e.message, "erro");
+        else toast("Não consegui atualizar o índice agora. Tente de novo em instantes.", "erro");
       }
       app.refresh();
     },
@@ -1050,10 +1040,11 @@ async function processarOcr(app, store, doc, listaN) {
       }
     };
 
-    if (doc.imgData && !doc.pdfData) {
-      if (listaN.includes(1)) await transcrever({ n: 1, dataUrl: doc.imgData }, 0, 1);
-    } else if (doc.pdfData) {
-      await rasterizarPaginasStream(doc.pdfData, listaN, transcrever);
+    const bin = await store.binarioDoc(doc.id);
+    if (bin.imgData && !bin.pdfData) {
+      if (listaN.includes(1)) await transcrever({ n: 1, dataUrl: bin.imgData }, 0, 1);
+    } else if (bin.pdfData) {
+      await rasterizarPaginasStream(bin.pdfData, listaN, transcrever);
     } else {
       fim();
       return toast("Sem PDF/imagem salvos para processar (arquivo grande não foi guardado).", "erro");
@@ -1371,7 +1362,7 @@ function abrirImportarMaterial(app) {
             const fim = toastCarregando("Descrevendo as figuras do material com a IA…");
             store.descreverFigurasDeDoc(doc.id).then((r) => { fim(); if (r && r.descritas) toast(`${plural(r.descritas, "figura descrita", "figuras descritas")} pela IA (já entram na busca).`, "ok"); store.indexarFonteAuto(doc.id); /* o texto ganhou as descrições → reindexa */ }).catch(() => fim());
           }
-          if (store.get().config.descartarPdfAposImport && doc && (doc.pdfData || doc.imgData) && store.paginasPendentes(doc).length === 0 && !temFig) {
+          if (store.get().config.descartarPdfAposImport && doc && store.temBinario(doc) && store.paginasPendentes(doc).length === 0 && !temFig) {
             store.descartarBinarioDoc(doc.id);
           }
           toast("Material adicionado à base.");
@@ -1424,7 +1415,7 @@ function docHTML(store, st, d, busca) {
   const pend = store.paginasPendentes(d).length;
   // Trecho com a palavra buscada em destaque (só quando o match está no conteúdo).
   const trecho = busca && busca.trim().length >= 2 ? trechoBusca(d.texto || "", busca.trim()) : "";
-  const tipo = d.pdfData ? { ic: "file-text", lb: "PDF" } : d.imgData ? { ic: "image", lb: "Imagem" } : { ic: "file-text", lb: "Texto" };
+  const tipo = store.temPdfDoc(d) ? { ic: "file-text", lb: "PDF" } : (d.temImg || d.imgData) ? { ic: "image", lb: "Imagem" } : { ic: "file-text", lb: "Texto" };
   const nPag = (d.paginas || []).length;
   const nTop = d.estrutura && d.estrutura.blocos ? d.estrutura.blocos.length : 0;
   const nFig = (d.figuras || []).length;
@@ -1462,22 +1453,23 @@ function docHTML(store, st, d, busca) {
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este material.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
               <div class="menu-rotulo">Ler e ver</div>
-              ${d.pdfData ? `<button class="menu-item" data-action="ler-pdf" data-id="${d.id}" data-tip="Abre o PDF original no leitor interno (zoom e navegação por página)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Abrir PDF</button>` : ""}
+              ${store.temPdfDoc(d) ? `<button class="menu-item" data-action="ler-pdf" data-id="${d.id}" data-tip="Abre o PDF original no leitor interno (zoom e navegação por página)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Abrir PDF</button>` : ""}
               ${(d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Mostra o texto completo extraído, em vez do sumário. É o que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Texto corrido"}</button>` : ""}
-              ${(d.texto || "").trim() ? `<button class="menu-item" data-action="toggle-marcar" data-id="${d.id}" data-tip="Grifar o texto (palavras-chave, prazos/valores, restritivas). O grifo de palavras-chave vira a fonte da revisão do tópico." data-tip-pos="cima-esq"><span class="menu-ico">${icone("square-pen")}</span> ${marcarAberto.has(d.id) ? "Fechar marcação" : "Marcar / grifar"}</button>` : ""}
               ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Refaz UMA página com a Visão (tabela/organograma cujo texto saiu fora de ordem, ou página escaneada)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Reprocessar página (Visão)</button>` : ""}
               <div class="menu-sep"></div>
               <div class="menu-rotulo">Sumário e edital</div>
               ${
                 d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
                   ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Ver e editar o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Sumário</button>`
-                  : d.pdfData && store.iaDisponivel()
+                  : store.temPdfDoc(d) && store.iaDisponivel()
                     ? `<button class="menu-item" data-action="caprichar-estrutura" data-doc="${d.id}" data-tip="A IA lê a página de sumário do próprio PDF e monta os tópicos do material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("wand-sparkles")}</span> Montar sumário (IA)</button>`
                     : ""
               }
               <button class="menu-item" data-action="editar-topicos" data-id="${d.id}" data-tip="Escolher quais tópicos do edital este material cobre (dentro do painel, a IA pode sugerir)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("link")}</span> Vincular ao edital</button>
               <div class="menu-sep"></div>
-              ${d.pdfData ? `<button class="menu-item menu-item-danger" data-action="descartar-pdf" data-id="${d.id}" data-tip="Apaga só o arquivo PDF para liberar espaço; o texto extraído e o sumário permanecem." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Descartar PDF original</button>` : ""}
+              ${store.podeVincularArquivo() && d.caminhoOriginal ? `<button class="menu-item" data-action="abrir-original" data-id="${d.id}" data-tip="Abre o arquivo original na pasta onde ele está, no programa padrão do sistema." data-tip-pos="cima-esq"><span class="menu-ico">${icone("external-link")}</span> Abrir original</button>` : ""}
+              ${store.podeVincularArquivo() ? `<button class="menu-item" data-action="vincular-original" data-id="${d.id}" data-tip="Aponta para o arquivo onde ele já está (OneDrive, pasta do cursinho). O app guarda só o caminho, não outra cópia — dá para descartar o PDF interno sem perder o acesso." data-tip-pos="cima-esq"><span class="menu-ico">${icone("paperclip")}</span> ${d.caminhoOriginal ? "Trocar arquivo vinculado" : "Vincular arquivo original"}</button>` : ""}
+              ${store.temPdfDoc(d) ? `<button class="menu-item menu-item-danger" data-action="descartar-pdf" data-id="${d.id}" data-tip="Apaga só o arquivo PDF para liberar espaço; o texto extraído e o sumário permanecem." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Descartar PDF original</button>` : ""}
               <button class="menu-item menu-item-danger" data-action="del-doc" data-id="${d.id}"><span class="menu-ico">${icone("x")}</span> Remover material</button>
             </div>
           </details>
@@ -1487,25 +1479,7 @@ function docHTML(store, st, d, busca) {
       ${topicosDocAberto === d.id ? topicosEditorHTML(store, st, d) : ""}
       ${detectDoc === d.id ? detectPainelHTML() : ""}
       ${
-        marcarAberto.has(d.id)
-          ? (() => {
-              const pgs = (d.paginas || []).filter((p) => (p.texto || "").trim());
-              const porPagina = pgs.length > 1;
-              const pageSel = porPagina
-                ? `<label class="inline small u-mb-8">${icone("file-text")} Página:
-                    <select class="mk-pagina-sel" data-id="${d.id}" style="width:auto; margin-left:6px">
-                      ${pgs.map((p) => `<option value="${p.n}" ${String(marcarPagina[d.id] || pgs[0].n) === String(p.n) ? "selected" : ""}>${p.n}${p.temImagem ? " (fig.)" : ""}</option>`).join("")}
-                    </select>
-                    <span class="muted">de ${pgs.length} · grife página por página (vira fonte da revisão)</span>
-                   </label>`
-                : "";
-              return `<div class="doc-marcar">
-                <div class="muted small u-mb-8">${icone("square-pen")} Marcação sobre o <b>texto extraído</b>. Use “Auto” (prazos/restritivas), “IA sugere” e o pincel.</div>
-                ${pageSel}
-                <div class="mk-host" data-mk-host="${d.id}"></div>
-              </div>`;
-            })()
-          : aberto
+        aberto
             ? `${ocrAlertaHTML(store, d)}
                ${ocrAberto.has(d.id) ? ocrManualHTML(store, d) : ""}
                ${
@@ -1619,7 +1593,7 @@ function ocrManualHTML(store, d) {
     return `<div class="ocr-painel"><p class="muted small u-m-0">${icone("search")} Visualizador e Visão por página indisponíveis: o PDF original foi descartado. O texto extraído foi mantido.</p></div>`;
   }
   if (!Array.isArray(d.paginas)) {
-    if (!d.pdfData) return "";
+    if (!store.temPdfDoc(d)) return "";
     return `<div class="ocr-painel">
       <div class="ocr-titulo">${icone("search")} Reconhecimento de imagem (Visão)</div>
       <p class="muted small">Prepare as páginas para reprocessar com Visão as que têm tabela/organograma ou estão escaneadas.</p>

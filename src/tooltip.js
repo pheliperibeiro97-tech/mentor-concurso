@@ -72,6 +72,10 @@ export function esconderTooltip() {
 }
 
 function posicionar(alvo) {
+  // A espera de 300ms pode terminar depois de um re-render ter tirado o alvo do DOM; aí o
+  // getBoundingClientRect() dá tudo zero e o balão gruda num canto (mesmo problema que o
+  // hover-preview do Edital tinha).
+  if (!alvo.isConnected) return esconder();
   const bruto = alvo.getAttribute("data-tip");
   if (!bruto) return esconder();
   // No toque, a dica perde a parte que ensina tecla; se não sobrar nada, nem abre o balão.
