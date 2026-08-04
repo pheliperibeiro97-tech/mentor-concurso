@@ -525,6 +525,11 @@ button:focus-visible, .nav-item:focus-visible, .chip:focus-visible,
 .doc-mais-pop.tb-perfil-pop .menu-item:disabled { opacity: 1; color: var(--primary-d); font-weight: var(--fw-medium); }
 .tb-perfil-nome { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.3; min-width: 0; flex: 1; }
 .tb-perfil-rot { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Senha revelada em Configurações (quem esqueceu e quer ver a que está salva aqui). */
+.senha-revelada { padding: 6px 10px; border-radius: var(--radius-xs); background: var(--surface-2);
+  border: 1px dashed var(--border); font-family: var(--font-mono, monospace); font-size: var(--fs-sm);
+  user-select: all; word-break: break-all; }
+
 /* Primeiro uso: as duas portas (primeira vez × já tenho conta). Mesmo peso visual — quem já
    usa o Mentor não pode ter de procurar a sua opção num link de rodapé. */
 .ob-portas { display: grid; gap: 10px; margin: 18px 0 8px; }
