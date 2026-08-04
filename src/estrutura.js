@@ -84,7 +84,31 @@ export function recortarConteudoProgramatico(texto) {
 // as k listas de itens que recomeçam em "1." e mover cada rótulo para antes da sua lista. O
 // texto resultante fica na ordem natural, e o separador continua o mesmo. Rótulos sobrando no
 // topo (o "ANEXO II", o nome do bloco) ficam onde estão e são descartados por não terem itens.
-const RE_ITEM_NUMERADO = /^(\d{1,3})\.\s*(.*)$/;
+// Número de item = dígitos, ponto e então ESPAÇO ou fim de linha — nunca outro dígito. Sem o
+// `(?!\d)`, a citação legal que abre uma linha de continuação ("5.903/2006, 7.962/2013…") era
+// lida como o item 5; isso reiniciava a contagem e o rótulo da disciplina ia parar antes do
+// item 2 em vez do 1. Consumidor começava em "(2)", e Criança e Penal perdiam itens do começo.
+const RE_ITEM_NUMERADO = /^(\d{1,3})\.(?!\d)\s*(.*)$/;
+// Nem toda disciplina numera com arábico: o Direito Penal e o Processual Penal do 192º usam
+// ROMANO com travessão ("I – Conceito de Direito Penal", "II – CÓDIGO PENAL"). Sem reconhecer
+// essa forma, a página inteira ficava sem nenhum "início de lista", o rótulo não era movido e
+// todo o programa de Penal era absorvido pelo último item da disciplina anterior.
+const RE_ITEM_ROMANO = /^([IVXLCDM]{1,5})\s*[–—-]\s+\S/;
+const VAL_ROMANO = { I: 1, V: 5, X: 10, L: 50, C: 100, D: 500, M: 1000 };
+function numeroDoItem(linha) {
+  const l = (linha || "").trim();
+  const ar = l.match(RE_ITEM_NUMERADO);
+  if (ar) return parseInt(ar[1], 10);
+  const ro = l.match(RE_ITEM_ROMANO);
+  if (!ro) return null;
+  let total = 0;
+  const s = ro[1];
+  for (let i = 0; i < s.length; i++) {
+    const v = VAL_ROMANO[s[i]], prox = VAL_ROMANO[s[i + 1]] || 0;
+    total += v < prox ? -v : v;
+  }
+  return total || null;
+}
 function ehRotuloDisciplina(l) {
   const t = (l || "").trim();
   if (t.length < 8 || t.length > 90) return false;
@@ -107,9 +131,8 @@ export function reordenarRotulosDeEdital(paginas) {
     const inicios = [];
     let anterior = 0;
     for (let i = 0; i < corpo.length; i++) {
-      const m = corpo[i].trim().match(RE_ITEM_NUMERADO);
-      if (!m) continue;
-      const n = parseInt(m[1], 10);
+      const n = numeroDoItem(corpo[i]);
+      if (n == null) continue;
       if (n <= anterior || n === 1) inicios.push(i);
       anterior = n;
     }

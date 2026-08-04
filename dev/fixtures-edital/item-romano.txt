@@ -1,0 +1,30 @@
+# Disciplina numerada em ROMANO com travessão, subitem "1 – Parte Geral" e alíneas — é como o
+# 192º do TJSP escreve Direito Penal e Direito Processual Penal. Duas armadilhas travadas aqui:
+#  (1) a citação legal que abre uma linha de continuação ("5.903/2006, …") NÃO é o item 5 —
+#      antes ela reiniciava a contagem e deslocava o rótulo da disciplina em um item;
+#  (2) sem reconhecer o item romano, a página ficava sem nenhum "início de lista", o rótulo
+#      não era movido e TODO o programa era absorvido pela disciplina anterior (foi assim que
+#      Direito Processual Penal sumiu inteiro do edital importado).
+# esperado: disciplinas=2 nomes=Direito do Consumidor|Direito Penal itens=2|5
+--- pagina 1 ---
+TRIBUNAL DE JUSTIÇA
+EDITAL DE ABERTURA
+1.
+Direitos do consumidor. Disposições gerais. Regulamentação (Decretos nºs 2.181/1997,
+5.903/2006, 7.962/2013 e 11.150/2022).
+2.
+Qualidade de produtos e serviços. Prevenção e reparação dos danos.
+DIREITO DO CONSUMIDOR
+--- pagina 2 ---
+TRIBUNAL DE JUSTIÇA
+EDITAL DE ABERTURA
+I – Conceito de Direito Penal. Princípios Constitucionais Penais. História do Direito
+Penal Brasileiro.
+II – CÓDIGO PENAL (Decreto-lei nº 2.848, de 7 de dezembro de 1940).
+1 – Parte Geral
+a) Da aplicação da lei penal (arts. 1º a 12).
+b) Do crime (arts. 13 a 25).
+DIREITO PENAL
+--- pagina 3 ---
+TRIBUNAL DE JUSTIÇA
+EDITAL DE ABERTURA

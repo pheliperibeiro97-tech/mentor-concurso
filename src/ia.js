@@ -103,11 +103,21 @@ export function separarEdital(texto, { porItem = false } = {}) {
     const letras = l.replace(/[^A-Za-zÀ-ÿ]/g, "");
     return letras.length >= 3 && l === l.toUpperCase() && /[A-ZÀ-Ý]/.test(l);
   };
+  // Item pode ser arábico ("18. Contratos…") ou ROMANO com travessão ("I – Conceito de Direito
+  // Penal…"), que é como o 192º numera Penal e Processual Penal.
+  const abreItem = (l) => /^\d{1,3}\.(\s|$)/.test(l) || /^[IVXLCDM]{1,5}\s*[–—-]\s+\S/.test(l);
+  // A colagem para no próximo item E em qualquer SUBDIVISÃO explícita do edital: alínea
+  // ("a) Da aplicação da lei penal") ou subitem com travessão ("1 – Parte Geral"). Elas são
+  // unidades de estudo e precisam de tópico próprio — coladas, o item II do Direito Penal
+  // virava um único tópico com o Código Penal inteiro dentro, impossível de acompanhar.
+  const abreSubdivisao = (l) => /^[a-z]\)\s/.test(l) || /^\d{1,3}\s*[–—-]\s+\S/.test(l);
   const juntadas = [];
   let acumulando = false;
   for (const l of linhas) {
-    if (/^\d{1,3}\.(\s|$)/.test(l)) { juntadas.push(l.replace(/\.$/, ". ")); acumulando = true; continue; }
-    if (acumulando && !/^\d{1,3}[.)]/.test(l) && !soCaixaAlta(l) && !cabecalhoInline(l)) { juntadas[juntadas.length - 1] += " " + l; continue; }
+    if (abreItem(l)) { juntadas.push(l.replace(/\.$/, ". ")); acumulando = true; continue; }
+    // A parada usa o MESMO teste da abertura: com um `^\d{1,3}[.)]` frouxo, a citação legal
+    // "5.903/2006, …" interrompia a colagem e virava um tópico solto começando em "903/2006".
+    if (acumulando && !abreItem(l) && !/^\d{1,3}\)/.test(l) && !abreSubdivisao(l) && !soCaixaAlta(l) && !cabecalhoInline(l)) { juntadas[juntadas.length - 1] += " " + l; continue; }
     acumulando = false;
     juntadas.push(l);
   }
@@ -182,7 +192,10 @@ export function separarEdital(texto, { porItem = false } = {}) {
       if (i % 2 === 1) blocos.push({ num: partes[i], txt: partes[i + 1] || "" });
     }
     for (const bloco of blocos) {
-      let b = String(bloco.txt || "").replace(/^[0-9]+(?:\.\d+)?[).\-\s]+/, "").trim();
+      // Só descarta o número quando vem colado a uma PONTUAÇÃO de lista ("1.", "1)", "1-"),
+      // que é sobra da própria separação. Um número seguido de espaço e travessão é rótulo de
+      // subitem do edital ("1 – Parte Geral") e tem de continuar aparecendo.
+      let b = String(bloco.txt || "").replace(/^[0-9]+(?:\.\d+)?[).\-]\s*/, "").trim();
       if (b.length < 2) continue;
       const marca = bloco.num ? `(${bloco.num}) ` : "";
       // POR ITEM: o item do edital fica inteiro, com a numeração de volta. Sem esta opção,

@@ -893,5 +893,43 @@ a página no meio e o teste trava num modal que deixou de existir. Aconteceu uma
 4 do onboarding que oferece "Importar edital (PDF)" e cai numa tela vazia; e a arquitetura de
 sincronização (conteúdo fora do snapshot, sync por delta).
 
-Achado novo, pequeno: no onboarding, **"Pular para o fim" não faz nada** enquanto o campo
-obrigatório do concurso está vazio, e não diz por quê — parece um botão quebrado.
+Achado novo, pequeno: no onboarding, com o campo do concurso vazio, "Pular para o fim" e
+"Continuar" **avisam** ("Informe o cargo/concurso.") mas não põem o foco no campo nem o marcam
+como inválido — o aviso passa despercebido em tela grande, onde o toast fica longe do campo.
+
+---
+
+## 10. Depuração do edital do 192º (2026-08-04, pós-v0.8.1)
+
+Revisando as duas pendências acima, a segunda ("a numeração do Anexo I é idiossincrática") não
+era idiossincrasia: eram **dois defeitos reais**, e um deles **fazia uma disciplina inteira
+desaparecer do edital importado**.
+
+**1. Citação legal lida como número de item.** A linha de continuação
+`5.903/2006, 7.962/2013 e 11.150/2022).` era lida como o **item 5**. Isso reiniciava a contagem
+da página, e o rótulo girado da disciplina ia parar antes do item 2 em vez do 1 — o Direito do
+Consumidor começava em "(2)" e o item (1) ficava no Processual Civil. Conserto: número de item
+é dígito + ponto seguido de **espaço ou fim de linha**, nunca de outro dígito (`(?!\d)`).
+
+**2. Item em ALGARISMO ROMANO não era reconhecido.** Direito Penal e Direito Processual Penal
+não numeram com `1.`: usam `I –`, `II –`, `III –`, `IV –`. Como a página não tinha nenhum
+"início de lista", o rótulo não era movido e **todo o programa de Processual Penal era
+absorvido pela disciplina anterior** — a disciplina simplesmente não aparecia na importação.
+Conserto: `numeroDoItem()` entende arábico e romano.
+
+**3. Granularidade das subdivisões.** Colar as linhas de continuação nos itens romanos fez o
+item `II – CÓDIGO PENAL` engolir a Parte Geral, a Parte Especial e as 18 alíneas num tópico só
+— impossível de acompanhar. A colagem passou a parar em qualquer **subdivisão explícita** do
+edital: alínea (`a) Da aplicação da lei penal`) e subitem com travessão (`1 – Parte Geral`).
+Efeito colateral bom: o Direito da Criança, cujo programa são 3 pontos com dezenas de alíneas,
+saiu de 3 tópicos para 43 acompanháveis.
+
+| | v0.8.1 | agora |
+|---|---|---|
+| Disciplinas | 23 | **24** (Processual Penal voltou) |
+| Tópicos | 419 | **485** |
+| Consumidor | começava em "(2)" | começa em (1) |
+| Penal | 7 tópicos (sobras) | 23 |
+| Processual Penal | **ausente** | 18 |
+
+Travado em `dev/fixtures-edital/item-romano.txt`, que reproduz as três armadilhas em miniatura.
