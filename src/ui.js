@@ -269,6 +269,24 @@ function tirarTituloRepetido(overlay, titulo) {
   if (alvo && alvo.textContent.trim() === String(titulo).trim()) alvo.remove();
 }
 
+// "Não sei a minha senha" — UMA explicação, usada tanto em Configurações quanto na tela de
+// entrar do primeiro uso. Em janela (e não num expansível) porque são duas telas diferentes
+// e porque empilhar acordeões no card de sincronização ficava pesado.
+export function abrirAjudaSenha() {
+  abrirJanela({
+    titulo: "Não sei a minha senha",
+    corpoHTML: `
+      <p class="u-mt-0">A senha <b>cifra</b> os seus dados e <b>não é guardada por ninguém</b> — nem por nós, nem pelo serviço de nuvem. Por isso não existe "recuperar senha": sem ela, aquele cofre não abre.</p>
+      <p><b>O que dá para fazer:</b></p>
+      <ul>
+        <li><b>Num aparelho que ainda está conectado</b> — abra <b>Configurações → Dados</b> e use o botão <b>Ver senha</b>. É o caminho mais direto: leia a senha ali e use no outro aparelho.</li>
+        <li><b>Sem nenhum aparelho conectado</b> — traga os dados sem senha: no aparelho que tem os estudos, use <b>Backup completo</b>; leve o arquivo e use <b>Importar backup</b> no outro. Vem tudo, inclusive todos os seus concursos.</li>
+        <li><b>Só quer voltar a sincronizar</b>, e os dados já estão neste aparelho — escolha uma <b>senha nova</b>. Ela cria um cofre novo com o que está aqui; o antigo fica para trás.</li>
+      </ul>
+      <p class="muted small">Dica para a próxima: ao conectar, preencha o campo <b>Dica</b>. Ela fica guardada neste aparelho e aparece na hora de reconectar.</p>`,
+  });
+}
+
 export function abrirJanela({ titulo = "", corpoHTML = "", telaCheia = false, semTelaCheia = false, aoMontar } = {}) {
   const overlay = document.createElement("div");
   overlay.className = "mm-overlay";

@@ -1,5 +1,8 @@
 // Configurações: camada de IA, Pomodoro, concurso e dados.
-import { bindActions, toast, header, confirmar, ligarDropZone, escolher } from "../ui.js";
+// "Ver senha" é estado de MÓDULO, não do DOM: o app re-renderiza a cada mudança do store
+// (inclusive quando uma sincronização termina), e um bloco montado à mão sumia sozinho.
+let senhaVisivel = false;
+import { bindActions, toast, header, confirmar, ligarDropZone, escolher, abrirAjudaSenha } from "../ui.js";
 import { baixarRelatorio, compartilharRelatorio, EMAIL_SUPORTE, APP_VERSION } from "../erro-log.js";
 import { verificarAtualizacao } from "../updater.js";
 import { setEstiloAlarme, tocarAlarmeTeste } from "../cronometro.js";
@@ -440,23 +443,22 @@ export default function renderConfig(root, app) {
               sn.conectado
                 ? `<div class="form-acoes">
                     <button class="btn btn-primary btn-sm" data-action="nuvem-agora" ${sn.sincronizando ? "disabled" : ""} data-tip="Envia ou baixa as alterações agora (o mais recente vence).">${icone("refresh-cw")} Sincronizar agora</button>
+                    ${sn.frase ? `<button class="btn btn-ghost btn-sm" data-action="nuvem-ver-senha" data-tip="Mostra a senha guardada neste aparelho — use-a para conectar os outros.">${icone(senhaVisivel ? "eye-off" : "eye")} ${senhaVisivel ? "Ocultar senha" : "Ver senha"}</button>` : ""}
                     <button class="btn btn-ghost btn-sm" data-action="nuvem-desconectar" data-tip="Para de sincronizar neste aparelho e esquece a senha daqui (os dados locais continuam).">Desconectar</button>
                   </div>
                   ${
                     // A senha fica salva EM CLARO neste aparelho (é assim que ele sincroniza
-                    // sozinho). Mostrá-la é o único jeito real de "recuperá-la" — não existe
-                    // recuperação pelo cofre, porque ninguém guarda a senha em lugar nenhum.
-                    sn.frase
-                      ? `<details class="ed-ajuda u-mt-8">
-                          <summary>${icone("eye")} Esqueci a senha — mostrar a que está salva aqui</summary>
-                          <div class="ed-ajuda-corpo">
-                            <p class="small u-m-0 u-mb-8">Esta é a senha guardada <b>neste aparelho</b>. Use-a para conectar os outros.</p>
-                            <div class="form-acoes">
-                              <code class="senha-revelada">${esc(sn.frase)}</code>
-                              <button class="btn btn-soft btn-sm" data-action="nuvem-copiar-senha">${icone("copy")} Copiar</button>
-                            </div>
+                    // sozinho), então dá para mostrá-la — é o único jeito real de "recuperá-la",
+                    // já que ninguém a guarda em lugar nenhum. Botão, e não acordeão: é uma
+                    // AÇÃO, e o card já tem o "Como funciona" para recolher texto.
+                    sn.frase && senhaVisivel
+                      ? `<div class="u-mt-8">
+                          <div class="form-acoes">
+                            <code class="senha-revelada">${esc(sn.frase)}</code>
+                            <button class="btn btn-soft btn-sm" data-action="nuvem-copiar-senha">${icone("copy")} Copiar</button>
                           </div>
-                        </details>`
+                          <p class="muted small u-m-0 u-mt-8">Esta é a senha guardada neste aparelho — use-a para conectar os outros.</p>
+                        </div>`
                       : ""
                   }`
                 : `${
@@ -477,17 +479,7 @@ export default function renderConfig(root, app) {
                      <input id="nuvem-dica" type="text" class="input" autocomplete="off" maxlength="80" value="${esc(sn.dica || "")}" placeholder="algo que lembre a frase — não escreva a senha aqui" />
                    </div>
                    <p class="muted small u-m-0 u-mt-8">A dica fica <b>neste aparelho</b> e aparece aqui quando você voltar a conectar. Ela não vai para a nuvem nem para os outros aparelhos.</p>
-                   <details class="ed-ajuda u-mt-8">
-                     <summary>${icone("circle-help")} Esqueci a senha — e agora?</summary>
-                     <div class="ed-ajuda-corpo">
-                       <p class="small u-m-0 u-mb-8">A senha <b>cifra</b> os seus dados e <b>não é guardada por ninguém</b> — nem por nós, nem pelo serviço de nuvem. Não existe "recuperar senha": sem ela, aquele cofre não abre. O que dá para fazer:</p>
-                       <ul class="small u-m-0">
-                         <li><b>Num aparelho que ainda está conectado</b>, abra esta mesma tela: há um botão para <b>mostrar a senha salva</b> ali. É o caminho mais direto.</li>
-                         <li><b>Sem nenhum aparelho conectado</b>, traga os dados sem senha: no aparelho que tem os estudos, use <b>Backup completo</b> (aqui embaixo), leve o arquivo e use <b>Importar backup</b> neste. Depois escolha uma senha nova.</li>
-                         <li>Se os dados já estão neste aparelho e você só quer voltar a sincronizar, <b>escolha uma senha nova</b>: ela cria um cofre novo com o que está aqui. O cofre antigo fica para trás.</li>
-                       </ul>
-                     </div>
-                   </details>
+                   <p class="muted small u-m-0 u-mt-8"><button type="button" class="lnk" data-action="ajuda-senha">Não sei a minha senha</button></p>
                    <div class="form-acoes u-mt-8">
                      <button class="btn btn-primary btn-sm" data-action="nuvem-conectar">${icone("lock")} Conectar</button>
                    </div>`
@@ -641,6 +633,8 @@ export default function renderConfig(root, app) {
       } catch (e) { toast("Não foi possível conectar: " + e.message, "erro"); }
       app.refresh();
     },
+    "ajuda-senha": () => abrirAjudaSenha(),
+    "nuvem-ver-senha": () => { senhaVisivel = !senhaVisivel; app.refresh(); },
     "nuvem-copiar-senha": async () => {
       const frase = (store.get().config.syncNuvem || {}).frase || "";
       if (!frase) return;
@@ -656,6 +650,7 @@ export default function renderConfig(root, app) {
       app.refresh();
     },
     "nuvem-desconectar": async () => {
+      senhaVisivel = false;
       const ok = await confirmar("Desconectar a sincronização neste aparelho? A senha será esquecida aqui (os seus dados locais continuam intactos).");
       if (!ok) return;
       await desconectarNuvem(); toast("Sincronização desconectada neste aparelho."); app.refresh();

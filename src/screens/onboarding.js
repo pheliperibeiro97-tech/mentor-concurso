@@ -1,7 +1,7 @@
 // Onboarding (assistente curto, 3 etapas): concurso → prova/ritmo (opcional) →
 // Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
 // em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
-import { bindActions, toast, confirmar } from "../ui.js";
+import { bindActions, toast, confirmar, abrirAjudaSenha } from "../ui.js";
 import { esc, todayISO, daysBetween } from "../util.js";
 import { restaurarDaNuvem, suportaSyncNuvem } from "../sync-nuvem.js";
 import { icone } from "../icones.js";
@@ -260,22 +260,15 @@ export default function renderOnboarding(root, app) {
             <button class="btn btn-primary btn-lg" data-action="ob-entrar">${icone("lock")} Entrar</button>
           </div>
         </div>
-        <details class="ed-ajuda u-mt-12">
-          <summary>${icone("circle-help")} Não sei a minha senha</summary>
-          <div class="ed-ajuda-corpo">
-            <p class="small u-m-0 u-mb-8">Ela <b>cifra</b> os seus dados e não é guardada por ninguém — nem por nós, nem pelo serviço de nuvem. Por isso não existe "recuperar senha". Mas há como trazer os seus estudos assim mesmo:</p>
-            <ul class="small u-m-0">
-              <li><b>No aparelho onde você já usa o Mentor</b>, abra <b>Configurações → Dados</b>: lá há um botão para <b>mostrar a senha salva</b>. Traga-a para cá.</li>
-              <li><b>Sem senha nenhuma</b>: naquele aparelho, use <b>Backup completo</b>, leve o arquivo até aqui e escolha <b>começar do zero</b> — na tela seguinte dá para <b>Importar backup</b>, que traz tudo, inclusive os seus concursos.</li>
-            </ul>
-            <div class="form-acoes u-mt-8">
-              <button type="button" class="btn btn-soft btn-sm" data-action="caminho-novo">Começar do zero</button>
-            </div>
-          </div>
-        </details>
+        <p class="ob-jatenho muted small">
+          <button type="button" class="lnk" data-action="ajuda-senha">Não sei a minha senha</button>
+          &nbsp;·&nbsp;
+          <button type="button" class="lnk" data-action="caminho-novo">Começar do zero</button>
+        </p>
       </div>`;
     bindActions(root, {
       "caminho-voltar": () => { caminho = null; app.refresh(); },
+      "ajuda-senha": () => abrirAjudaSenha(),
       "caminho-novo": () => { caminho = "novo"; passo = 1; app.refresh(); },
       "ob-entrar": async () => {
         const frase = (root.querySelector("#ob-senha")?.value || "").trim();
