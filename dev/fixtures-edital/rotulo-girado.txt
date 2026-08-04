@@ -1,0 +1,28 @@
+# Edital em PDF com o nome da disciplina impresso DE LADO na margem: o extrator joga esses
+# rótulos no fim do bloco da página, depois dos itens que eles encabeçam. Miniatura do layout
+# do 192º Concurso da Magistratura do TJSP (Anexo II), sem copiar o conteúdo do edital.
+# esperado: disciplinas=3 nomes=Sociologia do Direito|Psicologia Judiciária|Ética e Estatuto itens=2|3|1
+--- pagina 1 ---
+TRIBUNAL DE JUSTIÇA
+EDITAL DE ABERTURA
+1.
+Primeiro ponto de sociologia, com o texto quebrado
+em duas linhas pela largura da coluna.
+2.
+Segundo ponto de sociologia.
+1.
+Primeiro ponto de psicologia.
+2.
+Segundo ponto de psicologia.
+3.
+Terceiro ponto de psicologia.
+1.
+Ponto único de ética.
+ANEXO II - CONTEÚDO PROGRAMÁTICO
+NOÇÕES GERAIS DE DIREITO E FORMAÇÃO HUMANÍSTICA
+SOCIOLOGIA DO DIREITO
+PSICOLOGIA JUDICIÁRIA
+ÉTICA E ESTATUTO
+--- pagina 2 ---
+TRIBUNAL DE JUSTIÇA
+EDITAL DE ABERTURA

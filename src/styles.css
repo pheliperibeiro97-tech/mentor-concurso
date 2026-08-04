@@ -3585,6 +3585,9 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-spoiler[open] > summary { margin-bottom: 6px; }
 /* Preview hierárquico (edital/aulas): disciplina/aula com lista de tópicos/assuntos */
 .ed-prev-lista { display: flex; flex-direction: column; gap: 10px; }
+/* Disciplina do lote inteiro (um PDF de cursinho = uma disciplina), acima da lista de aulas */
+.ed-prev-disc-lote { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.ed-prev-disc-lote .prev-inp { font-weight: var(--fw-medium); }
 .ed-prev-disc .prev-inp { font-weight: var(--fw-medium); }
 .ed-prev-tops { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; display: flex; flex-direction: column; gap: 4px; border-left: 2px solid var(--border); }
 .ed-prev-top { display: flex; align-items: center; gap: 6px; }

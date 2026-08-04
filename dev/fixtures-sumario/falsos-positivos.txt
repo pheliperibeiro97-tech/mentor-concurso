@@ -1,0 +1,20 @@
+# Apostila SEM índice legível: o fallback por numeração precisa achar as seções 7.x e
+# DESCARTAR o cabeçalho de questão de prova ("2023 VUNESP...") e a lista dentro do texto.
+# esperado: sumarioPag=0 entradas=0 fallback=3 semFalsos=sim
+--- pagina 1 ---
+7. Direito Penal
+--- pagina 2 ---
+7.1 Princípios Penais
+Conteúdo do capítulo, em prosa corrida e sem numeração de seção.
+--- pagina 3 ---
+2023 VUNESP Tribunal de Justiça do Estado do Rio de Janeiro
+Enunciado da questão comentada aqui.
+São deveres do administrador:
+1 Transparência Ativa
+2 Transparência Passiva
+--- pagina 4 ---
+7.2 Aplicação da Lei Penal
+Conteúdo.
+--- pagina 5 ---
+7.3 Teoria do Crime
+Conteúdo.

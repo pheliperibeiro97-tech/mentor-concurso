@@ -1,0 +1,28 @@
+# Layout B com o índice ocupando DUAS páginas — é o caso do Processual Civil (47 aulas).
+# esperado: sumarioPag=2 entradas=6 primeira=6.1|Da Introdução|4 ultima=6.6|Das Partes|60
+--- pagina 1 ---
+6. Direito Processual Civil
+--- pagina 2 ---
+4
+12
+20
+Índice
+6.1)
+ Da Introdução
+6.2)
+ Da Jurisdição
+6.3)
+ Da Competência
+--- pagina 3 ---
+30
+44
+60
+6.4)
+ Da Ação
+6.5)
+ Do Processo
+6.6)
+ Das Partes
+--- pagina 4 ---
+6.1) Da Introdução
+Conteúdo.

@@ -14,41 +14,7 @@ import { extrairTextoArquivo } from "../ia-provider.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
-import { detectarEstrutura } from "../estrutura.js";
-
-// Limpa RUÍDO de um PDF com texto selecionável (sem IA), POR PÁGINA: remove cabeçalhos/rodapés
-// que se repetem em várias páginas, números de página soltos e "Página X / X de Y". PRESERVA a
-// ESTRUTURA de páginas (mesma quantidade e ordem) — só altera o texto de cada página — para não
-// afetar o vínculo tópico↔página ("págs. 5–8" usa a posição da página, não o número impresso).
-// Determinístico (não usa IA, não inventa). Devolve um NOVO array de páginas.
-function limparRuidoDePaginas(paginas) {
-  const arr = paginas || [];
-  if (arr.length < 2) return arr;
-  const norm = (l) => l.trim().toLowerCase().replace(/\s+/g, " ").replace(/\d+/g, "#"); // ignora números (variam por página)
-  const freq = {};
-  for (const p of arr) {
-    const unicas = new Set((p.texto || "").split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length >= 3).map(norm));
-    for (const k of unicas) freq[k] = (freq[k] || 0) + 1;
-  }
-  const corte = Math.max(2, Math.ceil(arr.length * 0.6)); // repete em ≥60% das páginas = cabeçalho/rodapé
-  const ehRuido = (linha) => {
-    const t = linha.trim();
-    if (!t) return false;
-    if (/^p[áa]g(\.|ina)?\s*\d+(\s*(de|\/)\s*\d+)?$/i.test(t)) return true; // "Página 3", "pág. 3/28"
-    if (/^\d{1,4}$/.test(t)) return true; // número de página solto
-    if (/^\d{1,4}\s*\/\s*\d{1,4}$/.test(t)) return true; // "3/28"
-    // F1 — marca d'água personalizada: linha "rótulo: valor" de dado pessoal, ou dado solto.
-    // Conservador (só rótulo:valor ou CPF/e-mail isolado) → não remove conteúdo em prosa.
-    if (t.length <= 90 && /^(cpf|cnpj|telefone|tel|e-?mail|e_?mail|nome|matr[íi]cula|aluno|assinante|login|usu[áa]rio)\s*[:\-]/i.test(t)) return true;
-    if (/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/.test(t)) return true; // CPF solto na linha
-    if (/^[\w.+-]+@[\w-]+\.[\w.-]{2,}$/.test(t)) return true; // e-mail solto na linha
-    return arr.length >= 3 && t.length <= 80 && (freq[norm(t)] || 0) >= corte;
-  };
-  return arr.map((p) => ({
-    ...p,
-    texto: (p.texto || "").split(/\r?\n/).filter((l) => !ehRuido(l)).join("\n").replace(/\n{3,}/g, "\n\n").trim(),
-  }));
-}
+import { detectarEstrutura, limparRuidoDePaginas } from "../estrutura.js";
 
 // Mini-diálogo de FAIXA DE PÁGINAS (de–até) para gerar/extrair de um trecho por número de página.
 // Devolve { de, ate } (validado, 1..maxPag) ou null se cancelar.

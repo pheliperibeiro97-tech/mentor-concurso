@@ -11,7 +11,7 @@ import * as areas from "./areas.js";
 import { parsearLeiHTML, buscarLeiPlanalto, selecionarArtigos } from "./legis.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
-import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario } from "./estrutura.js";
+import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario, paginasDeSumario } from "./estrutura.js";
 import { buscarNoGuia } from "./guia.js";
 
 function defaultState() {
@@ -2197,6 +2197,36 @@ export const store = {
     if (!topicos || !topicos.length) return null;
     const est = montarEstruturaDeTopicos(topicos, { paginas, numPaginas: total, sumarioPag: sumPag });
     return est && est.blocos.length ? est : null;
+  },
+  // Reserva do caminho determinístico das AULAS do cursinho, para apostila ESCANEADA (sem
+  // camada de texto, onde ler o sumário com pdf.js não devolve nada). Manda só as IMAGENS das
+  // páginas de índice — nunca o PDF inteiro, cujo teto de 14 MB barrava justo as apostilas
+  // grandes, que são a maioria. Devolve [{nome, topicos, disciplina}] como aulasDoSumario.
+  async aulasDoSumarioVisao(source, { disciplina, paginas, numPaginas } = {}) {
+    if (!this.iaDisponivel() || !source) return [];
+    // Sem texto não há como pontuar as páginas: tenta as primeiras, onde o índice sempre está.
+    const achadas = paginasDeSumario(paginas || []).map((p) => p.n);
+    const total = numPaginas || (paginas || []).length || 6;
+    const pgs = (achadas.length ? achadas : [2, 3, 4, 5]).filter((n) => n <= total);
+    if (!pgs.length) return [];
+    let imgs;
+    try { imgs = await pdf.rasterizarPaginas(source, pgs, 2); } catch (_) { return []; }
+    const imagensB64 = (imgs || []).map((im) => (im.dataUrl || "").split(",")[1] || "").filter(Boolean);
+    if (!imagensB64.length) return [];
+    let topicos;
+    try { topicos = await iaProv.estruturarSumarioVisao(state.config, { imagensB64, contexto: `pág. ${pgs.join("/")}` }); }
+    catch (e) { console.error("[aulas-sumario-ia]", e); return []; }
+    const aulas = [];
+    for (const t of topicos || []) {
+      const titulo = (t.titulo || "").trim();
+      if (!titulo) continue;
+      // Nível 1 sem numeração composta é o nome da disciplina, não uma aula.
+      if (t.nivel === 1 && !String(t.numero || "").includes(".")) continue;
+      const sufixo = parseInt(String(t.numero || "").split(".").pop(), 10);
+      const n = Number.isFinite(sufixo) ? sufixo : aulas.length + 1;
+      aulas.push({ nome: `Aula ${String(n).padStart(2, "0")}`, topicos: [titulo], disciplina: disciplina || null, pagina: t.paginaImpressa ?? null });
+    }
+    return aulas;
   },
   // F2 — reestrutura um material JÁ salvo pela IA do sumário e aplica ("caprichar com a IA").
   async caprichaEstruturaDoc(docId) {

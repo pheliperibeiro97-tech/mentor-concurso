@@ -1,0 +1,23 @@
+# Layout B — páginas ANTES, palavra "Índice", código "16.1)" e título na linha seguinte.
+# esperado: sumarioPag=2 entradas=4 primeira=16.1|Considerações Iniciais|3 ultima=16.4|Conceito de Fornecedor|19
+--- pagina 1 ---
+16. Direito do Consumidor
+--- pagina 2 ---
+3
+3
+16
+19
+Índice
+16.1)
+ Considerações Iniciais
+16.2)
+ Disposições Gerais
+16.3)
+ Conceito de Consumidor
+16.4)
+ Conceito de Fornecedor
+16. Direito do Consumidor
+2/162
+--- pagina 3 ---
+16.1) Considerações Iniciais
+Conteúdo.

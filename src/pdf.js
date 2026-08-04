@@ -2,6 +2,7 @@
 // Importação preferencial pela IA (Gemini lê o PDF/imagem direto, com OCR), com fallback local.
 import { extrairTextoArquivo, iaDisponivel } from "./ia-provider.js";
 import { icone } from "./icones.js";
+import { limparRuidoDePaginas, reordenarRotulosDeEdital } from "./estrutura.js";
 
 // File → base64 PURO (sem o prefixo "data:...;base64,").
 export function arquivoParaBase64(file) {
@@ -72,10 +73,13 @@ const LIMIAR_VAZIA = 80;
 const LIMIAR_IMG_FRAC = 0.1;
 const LIMIAR_FUNDO = 0.82; // F1: imagem que cobre ~página inteira = fundo/marca d'água → NÃO é figura de conteúdo
 
-// Extração simples (texto corrido do PDF inteiro). Mantida para compatibilidade.
+// Extração simples: PDF → texto corrido, JÁ SEM o ruído de cabeçalho/rodapé e com os rótulos
+// girados no lugar. A limpeza tem de acontecer aqui, e não só em Materiais: quem importava o
+// edital em PDF recebia "TRIBUNAL DE JUSTIÇA DE SÃO PAULO" repetido em toda página, e o
+// separador de edital lia essa linha como DISCIPLINA.
 export async function extrairPdf(file) {
   const { paginas } = await extrairPdfPaginas(file);
-  return paginas.map((p) => p.texto).join("\n\n").trim();
+  return reordenarRotulosDeEdital(limparRuidoDePaginas(paginas)).map((p) => p.texto).join("\n\n").trim();
 }
 
 // Extração PÁGINA A PÁGINA + detecção de páginas-lacuna.
@@ -183,7 +187,9 @@ function reconstruirLinhas(items) {
   return { texto, linhas };
 }
 
-export async function extrairPdfPaginas(source) {
+// `ate` limita a leitura às N primeiras páginas. Serve para quem só precisa do SUMÁRIO: numa
+// apostila de 1.289 páginas, ler 15 é instantâneo e ler tudo leva minutos.
+export async function extrairPdfPaginas(source, { ate } = {}) {
   const pdfjs = await getPdfjs();
   const pdf = await abrirPdf(source);
   const ehImg = (fn) =>
@@ -193,7 +199,8 @@ export async function extrairPdfPaginas(source) {
     fn === pdfjs.OPS.paintJpegXObject;
   const paginas = [];
   const linhasPorPagina = []; // transitório: {n, linhas:[{texto,fontSize,bold}]} p/ detecção por fonte
-  for (let i = 1; i <= pdf.numPages; i++) {
+  const ultima = ate ? Math.min(ate, pdf.numPages) : pdf.numPages;
+  for (let i = 1; i <= ultima; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
     const { texto, linhas } = reconstruirLinhas(content.items);

@@ -37,8 +37,13 @@ export function tituloPt(s) {
   const letras = str.replace(/[^A-Za-zÀ-ÿ]/g, "");
   if (letras.length < 3 || str !== str.toLocaleUpperCase("pt-BR")) return str; // caixa mista: respeita
   if (!/\s/.test(str) && letras.length <= 5) return str; // sigla curta isolada (TI/RLM/ICMS)
+  // Algarismo ROMANO que NUMERA a seção fica em caixa alta: o edital escreve "IV – LEGISLAÇÃO
+  // PENAL ESPECIAL" e "Iv – …" fica errado. Só o primeiro token, e só quando vem seguido de
+  // travessão — senão "CIVIL" (que é só C-I-V-I-L) viraria "CIVIL" em pleno "Direito Civil".
+  const numeraSecao = /^[IVXLCDM]{1,7}\s*[-–—]/.test(str);
   return str.toLocaleLowerCase("pt-BR").replace(/\S+/g, (w, i) => {
     const bare = w.replace(/[^0-9a-zà-ÿ]/gi, "");
+    if (i === 0 && numeraSecao) return w.toLocaleUpperCase("pt-BR");
     if (i > 0 && PALAVRINHAS.has(bare)) return w;
     return w.charAt(0).toLocaleUpperCase("pt-BR") + w.slice(1);
   });
@@ -58,12 +63,15 @@ export function separarEdital(texto, { porItem = false } = {}) {
     return atual;
   };
 
-  const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  let linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
 
   // Abreviações que NÃO encerram um tópico (evitam corte errado em ". ").
   const ABREV = /(?:art|arts|inc|al|cap|caps|n|nº|lei|dec|del|ec|cf|cc|cpc|clt|stf|stj|tst|res|súm|sum|fig|pág|pag|sec|seç|tit|liv|par|vol|obs)$/i;
 
   const pareceCabecalho = (l) => {
+    // Nome de disciplina não termina em ponto. Sem esta trava, a última linha de um item que
+    // caía em caixa alta ("(LINDB).") abria uma disciplina e sequestrava os itens seguintes.
+    if (/\.\s*$/.test(l)) return false;
     const semNum = l.replace(/^[0-9]+[).\-\s]+/, "");
     const letras = semNum.replace(/[^A-Za-zÀ-ÿ]/g, "");
     const ehCaixaAlta = letras.length >= 3 && semNum === semNum.toUpperCase() && /[A-ZÀ-Ý]/.test(semNum);
@@ -81,6 +89,29 @@ export function separarEdital(texto, { porItem = false } = {}) {
     if (letras.length < 3 || nome !== nome.toUpperCase() || nome.split(/\s+/).length > 7) return null;
     return { nome, resto: m[2] || "" };
   };
+
+  // Edital em PDF quebra o item em várias linhas, e de duas formas: o número sozinho com o
+  // texto abaixo (Anexo II do 192º) e "18. Contratos em geral…" com o texto na mesma linha e a
+  // continuação abaixo (Anexo I). Lido linha a linha, o "1." virava um tópico vazio e CADA
+  // linha do texto virava um tópico solto, sem a numeração oficial — que no modo "por item" é
+  // justamente o que se quer preservar (o item numerado é o ponto sorteado na prova oral).
+  //
+  // Só um rótulo EM CAIXA ALTA interrompe a colagem. Terminar em ":" não basta: no meio de um
+  // item é comum ("…Agentes políticos: identificação. Militares:"), e usar `pareceCabecalho`
+  // aqui fazia essa linha virar disciplina e levar os 32 itens seguintes junto.
+  const soCaixaAlta = (l) => {
+    const letras = l.replace(/[^A-Za-zÀ-ÿ]/g, "");
+    return letras.length >= 3 && l === l.toUpperCase() && /[A-ZÀ-Ý]/.test(l);
+  };
+  const juntadas = [];
+  let acumulando = false;
+  for (const l of linhas) {
+    if (/^\d{1,3}\.(\s|$)/.test(l)) { juntadas.push(l.replace(/\.$/, ". ")); acumulando = true; continue; }
+    if (acumulando && !/^\d{1,3}[.)]/.test(l) && !soCaixaAlta(l) && !cabecalhoInline(l)) { juntadas[juntadas.length - 1] += " " + l; continue; }
+    acumulando = false;
+    juntadas.push(l);
+  }
+  linhas = juntadas.map((l) => l.replace(/\s{2,}/g, " ").trim());
 
   // Remove ruído que costuma sobrar em editais escaneados (links "Disponível em:",
   // URLs soltas, marcadores residuais) do texto de um tópico, sem mexer no conteúdo útil.

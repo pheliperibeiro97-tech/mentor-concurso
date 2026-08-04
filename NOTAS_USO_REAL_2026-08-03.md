@@ -200,10 +200,13 @@ com atritos:
 - **O nome da aula recebe os assuntos colados no fim**: "Aula 01 - Apresentação do Curso -
   Apresentação do curso". Fica redundante e alonga a lista. Talvez o nome devesse ficar só
   com o que veio antes do `":"`.
-- **A disciplina da aula é inferida só pelos tópicos vinculados.** As 8 aulas que não
-  casaram com nenhum tópico foram para um grupo "Sem disciplina", mesmo tendo
-  "Direito Ambiental" escrito no nome. Ideia: usar o nome da aula como pista de disciplina
-  quando não houver vínculo, ou deixar o usuário atribuir a disciplina no preview.
+- ~~**A disciplina da aula é inferida só pelos tópicos vinculados.**~~ **Erro meu, não do
+  app.** O importador aceita um cabeçalho `DISCIPLINA: Nome` (`edital.js`, usado em
+  `store.js: importarAulasCursinho`), que é exatamente a saída para quando nenhum assunto
+  casa com tópico. As 8 aulas que foram para "Sem disciplina" foram culpa de eu ter posto a
+  disciplina no *nome* da aula em vez de usar o cabeçalho. **Resolvido na v0.8.1:** ao ler a
+  apostila, a disciplina vem do nome do arquivo (`10. Direito Ambiental.pdf`) e aparece num
+  campo editável no topo do preview, valendo para o lote inteiro.
 - **Casamento por nome é literal demais.** "Política Nacional de Segurança de Barragens",
   "Mineração e Meio Ambiente", "Energia e Meio Ambiente", "Mudanças Climáticas" não
   casaram — mas nesses casos o certo *é* não casar, porque não estão no Anexo I do 192º.
@@ -769,3 +772,126 @@ Snapshot (16 checks) ✅ · cofre v2 com ida e volta ✅ · Materiais sem grifo 
 ✅ · reset preservando IA e tema ✅ · mapa com binário fora do estado ✅ · material real de 365
 páginas: `pdfDataNoEstado: null`, `pdfCarregaSobDemanda: true`, **4,07 KB/página**, 17,5 ms
 por gravação, projeção de **36 MB** para a biblioteca.
+
+---
+
+## 9. Distribuição — fazer o app funcionar sem o Claude Code (2026-08-04, v0.8.1)
+
+O problema que faltava não era de armazenamento, era de **distribuição**: ao cadastrar o
+edital do 192º e as aulas do cursinho, boa parte do trabalho aconteceu **fora do app** (eu
+escrevi scripts em Python para ler os sumários e o conteúdo programático). Num computador de
+terceiro não haverá ninguém fazendo isso. Testado o caminho do usuário comum — importar o PDF
+pelo botão normal, sem preparo — o resultado saía errado.
+
+Princípio adotado: **o caminho determinístico (sem IA, sem chave, sem cota, offline) tem de
+dar conta sozinho; a IA é refinamento, não requisito.**
+
+### Como isso foi medido
+
+Novo `dev/teste-sumarios.mjs`: roda as funções puras de `estrutura.js` e `ia.js` contra os
+textos extraídos das **24 apostilas reais** do cursinho e contra fixtures commitáveis
+(miniaturas dos layouts, sem copiar material protegido). Sem navegador e sem IA.
+
+```
+node dev/teste-sumarios.mjs                  # fixtures (rápido, roda em CI)
+node dev/teste-sumarios.mjs --reais <pasta>  # .txt extraídos das apostilas de verdade
+```
+
+⚠️ **Erro de método que quase passou:** medi primeiro contra `.txt` gerados pelo extrator de
+PDF em Python que uso fora do app. Deu **24/24 correto** — e a tela do app mostrava
+`Aula 01 — 3`. Os dois extratores entregam o índice de duas colunas de formas diferentes: o
+pdf.js dá `10.1 3` (código e página na MESMA linha) e o pdfminer quebra em duas. O parser
+tratava o `3` como título da aula. **A medição só vale contra o texto do próprio app**: os
+`.txt` de referência passaram a ser gerados chamando `extrairPdfPaginas` dentro do navegador,
+e o aviso está no cabeçalho do teste. A fixture `formato-c-pdfjs.txt` trava esse layout.
+
+### O que estava quebrado, e o resultado
+
+| # | Falha | Antes | Depois |
+|---|---|---|---|
+| A1 | Página de sumário só era achada pela palavra "Índice" | 16/24 apostilas | **24/24** |
+| A2/A3 | Só 2 dos 4 layouts de índice eram entendidos | — | 4 de 4 |
+| A4 | Índice de 2+ páginas: lia só a primeira | Proc. Civil 24 de 47 | **47 de 47** |
+| A5 | Falsos positivos no fallback por numeração | 7 lixos em 19 blocos | **0** |
+| A6 | Blocos devolvidos fora da ordem do documento | `10.7` antes de `6` | em ordem |
+| B1 | Aulas por PDF barradas pelo teto de 14 MB | apostilas têm 13–33 MB | **sem teto** |
+| B2 | Sem IA não havia caminho nenhum | — | **423 aulas, 0 chamadas de IA** |
+| C | Edital em PDF sem limpeza | cabeçalho virava disciplina | limpo |
+| D | Caminho por IA morria calado | mesma causa de A1 | reativado |
+
+Medição final das 24 apostilas: **sumário encontrado 24/24 · entradas coerentes 24/24 ·
+423 aulas com disciplina preenchida, sem IA**.
+
+### As correções
+
+- **`estrutura.js`** — sumário reconhecido pela **forma** (coluna de códigos, pontilhados,
+  pares código+página, série de entradas da mesma família em ordem), não pela palavra; índice
+  de várias páginas lido inteiro e sem repetir código; quatro layouts de índice, incluindo o
+  `10.1 3` do pdf.js; poda de falso positivo (ano de prova, item de lista, código fora da
+  família dominante); `aulasDoSumario()` e `disciplinaDoNomeDeArquivo()` novos;
+  `limparRuidoDePaginas()` mudou-se para cá (era privada de Materiais) e ganhou companhia:
+  `reordenarRotulosDeEdital()` e `recortarConteudoProgramatico()`.
+- **`pdf.js`** — `extrairPdfPaginas(f, { ate })` para ler só as primeiras páginas (numa
+  apostila de 1.289 páginas, ler 20 é instantâneo); `extrairPdf` agora limpa o ruído e
+  reordena os rótulos antes de devolver o texto.
+- **`edital.js`** — os dois importadores de aula tentam **primeiro** o sumário por pdf.js e só
+  depois a IA; o preview ganhou o campo **"Disciplina destas aulas"** (um só, para o lote).
+- **`store.js`** — `aulasDoSumarioVisao()`: reserva para apostila **escaneada**, que manda só
+  a **imagem** da página do índice, nunca o PDF inteiro.
+- **`ia.js`** — `separarEdital` cola o número do item ao seu texto (o PDF quebra em linhas
+  soltas, nas duas formas: número sozinho e "18. Contratos em geral…") e recusa como
+  disciplina uma linha terminada em ponto (era assim que `(LINDB).` virava disciplina e
+  sequestrava 17 itens); algarismo romano que numera seção não vira "Iv".
+
+### O edital inteiro × o conteúdo programático
+
+O usuário importa o **PDF do edital inteiro** — 79 páginas de vagas, inscrição, recursos,
+cronograma e modelos de declaração. Sem recortar, o 192º saía com **96 "disciplinas"**, das
+quais 73 eram seções administrativas ("1. Das Vagas", "Evento Datas", "Declaração").
+
+`recortarConteudoProgramatico` corta do primeiro anexo de conteúdo programático até o
+primeiro anexo que não é de conteúdo (o cronograma). Só casa o marcador quando ele é um
+**título de linha inteira** ("ANEXO II - CONTEÚDO PROGRAMÁTICO", "DO CONTEÚDO PROGRAMÁTICO"),
+nunca uma menção no meio de uma cláusula. Resultado: **96 → 23 disciplinas**, que são
+exatamente as do edital (13 do Anexo I + Observações Finais + as 8 humanísticas do Anexo II +
+Direitos Humanos do Anexo III), com 435 itens numerados. Sem marcador (o usuário colou só o
+programa), o texto passa intacto.
+
+### O rótulo girado do edital
+
+O caso mais difícil e o mais específico do TJSP: o nome da disciplina é impresso **de lado**
+(girado 90°) na margem. O extrator não sabe da rotação e joga esses rótulos **no fim** do
+bloco da página, depois dos itens que eles encabeçam. Lido de cima para baixo, os itens iam
+para a disciplina errada.
+
+`reordenarRotulosDeEdital` casa os últimos *k* rótulos com as *k* listas de itens que
+recomeçam em "1." na mesma página e move cada rótulo para antes da sua lista — conserta a
+**entrada**, e o separador continua o mesmo. Anexo II do 192º: de **5 disciplinas erradas**
+(uma chamada `(LINDB).`) para as **8 corretas, na ordem, com a contagem de itens do edital
+impresso** (5, 4, 6, 7, 8, 4, 5, 6). Verificado que não altera **nenhuma** das 191 páginas
+das apostilas — só dispara no layout que o exige.
+
+### Verificação no navegador, perfil NOVO e IA DESLIGADA
+
+Percorrido o caminho do usuário comum de ponta a ponta (onboarding de verdade, chave de IA
+vazia, nenhum preparo de arquivo por fora):
+
+| Passo | Resultado |
+|---|---|
+| Edital do 192º em PDF (79 págs) → "Adicionar ao edital" | **23 disciplinas e 419 tópicos** em 6 s, com a numeração oficial `(1)`, `(2)`… preservada |
+| `10. Direito Ambiental.pdf` → "Plano do cursinho" | **12 aulas** em 4 s, títulos certos, disciplina "Direito Ambiental" preenchida |
+| `6. Direito Processual Civil.pdf` (33 MB, índice em 2 págs) → "Plano do cursinho" | **47 aulas** em 6 s — o caso mais difícil |
+| `10. Direito Ambiental.pdf` → Materiais | **12 blocos**, todos com página, em ordem, cobrindo p.3–365 sem buraco (`origem: "indice"`) |
+| `6. Direito Processual Civil.pdf` → Materiais | **47 blocos**, em ordem, p.36–1289, nenhum sem página |
+
+Detalhe de método: **não edite os fontes com a verificação rodando** — o HMR do Vite recarrega
+a página no meio e o teste trava num modal que deixou de existir. Aconteceu uma vez aqui.
+
+### O que continua no backlog
+
+"Vincular ao edital" sem busca com 401 tópicos; autovínculo do PDF por palavra solta; o passo
+4 do onboarding que oferece "Importar edital (PDF)" e cai numa tela vazia; e a arquitetura de
+sincronização (conteúdo fora do snapshot, sync por delta).
+
+Achado novo, pequeno: no onboarding, **"Pular para o fim" não faz nada** enquanto o campo
+obrigatório do concurso está vazio, e não diz por quê — parece um botão quebrado.

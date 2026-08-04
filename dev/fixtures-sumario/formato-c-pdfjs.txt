@@ -1,0 +1,23 @@
+# Layout que o PDF.JS entrega para o índice de duas colunas das apostilas: código e PÁGINA na
+# MESMA linha, e os títulos num bloco depois, com pontilhado. (O extrator do Python quebra em
+# duas linhas — por isso medir contra ele escondia o defeito: o número da página virava o
+# título da aula, e a lista saía "Aula 01 — 3".) Sem a palavra "Índice" na página.
+# esperado: sumarioPag=2 entradas=4 primeira=10.1|Considerações Iniciais|3 ultima=10.4|Código Florestal|64
+--- pagina 1 ---
+Prof. ECJ e OAB
+10 Direito Ambiental
+Direto ao Ponto: Magistratura
+--- pagina 2 ---
+10.1 3
+10.2 4
+10.3 36
+10.4 64
+Considerações Iniciais ....................................................................................................
+O Meio Ambiente na Constituição Federal de 1988 ...................................................
+Princípios Ambientais .....................................................................................................
+Código Florestal ...............................................................................................................
+10. Direito Ambiental
+Direto ao Ponto: Magistratura 2/365
+--- pagina 3 ---
+10.1 Considerações Iniciais
+Queridos alunos, este é o corpo do material.

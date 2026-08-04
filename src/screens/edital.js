@@ -5,7 +5,8 @@ import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 import { separarEdital } from "../ia.js";
-import { lerArquivoTexto, ligarImportArquivo, arquivoParaBase64 } from "../pdf.js";
+import { lerArquivoTexto, ligarImportArquivo, arquivoParaBase64, extrairPdfPaginas } from "../pdf.js";
+import { aulasDoSumario, disciplinaDoNomeDeArquivo, recortarConteudoProgramatico } from "../estrutura.js";
 import { renderDossieDetalhe, dossieResumoHTML, dossieCompactoHTML, renderDossieDisciplina } from "./dossie.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos } from "./questoes-filtro.js";
 
@@ -410,7 +411,19 @@ function abrirAddEdital(app) {
       const fileInput = corpo.querySelector("#ed-file");
       if (!fileInput) return;
       ligarDropZone(fileInput);
-      const preencheCaixa = (texto) => { const ta = corpo.querySelector("#ed-texto"); if (ta) ta.value = texto || ""; estado.texto = texto || ""; };
+      // O usuário traz o PDF do edital INTEIRO — vagas, inscrição, recursos, cronograma. Só o
+      // conteúdo programático interessa aqui: sem recortar, o edital do 192º produzia 96
+      // "disciplinas", das quais 73 eram seções administrativas. Recorta e avisa.
+      const preencheCaixa = (texto, { recortar = false } = {}) => {
+        let t = texto || "";
+        if (recortar) {
+          const r = recortarConteudoProgramatico(t);
+          if (r.recortado) { t = r.texto; toast("Fiquei só com o conteúdo programático do edital.", "ok"); }
+        }
+        const ta = corpo.querySelector("#ed-texto");
+        if (ta) ta.value = t;
+        estado.texto = t;
+      };
       fileInput.addEventListener("change", async (e) => {
         const f = e.target.files && e.target.files[0];
         if (!f) return;
@@ -435,7 +448,7 @@ function abrirAddEdital(app) {
           const fim2 = toastCarregando("Extraindo o texto do PDF…");
           try {
             const texto = await lerArquivoTexto(f, null, "");
-            preencheCaixa(texto);
+            preencheCaixa(texto, { recortar: ehPdf });
             if (texto && texto.trim()) toast("Texto extraído. Use «Revisar» para conferir.", "ok");
             else toast("Não consegui ler o edital agora. Tente de novo em instantes ou cole o texto.", "erro");
           } catch (_) { toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
@@ -445,7 +458,7 @@ function abrirAddEdital(app) {
         const fim = toastCarregando("Lendo o arquivo…");
         try {
           const texto = await lerArquivoTexto(f, cfg, "");
-          preencheCaixa(texto);
+          preencheCaixa(texto, { recortar: ehPdf });
           if (texto && texto.trim()) toast("Texto carregado. Use «Revisar» para conferir.");
           else toast(ehPdf ? "PDF escaneado (imagem): conecte a IA (Gemini) em Configurações para extrair com OCR, ou cole o texto." : "Sem texto reconhecido. Cole manualmente.", "erro");
         } catch (err) { try { console.error(err); } catch (_) {} toast("Não consegui ler o arquivo. Cole o texto.", "erro"); }
@@ -528,11 +541,25 @@ function abrirAddEdital(app) {
   });
 }
 
+// Disciplina do lote, quando todas as aulas vieram do mesmo arquivo (é o caso do cursinho:
+// um PDF por disciplina). Um campo só, no topo, em vez de repetir a mesma coisa em 47 cards.
+// Importa porque é o que liga a aula à disciplina quando os assuntos não casam com tópicos.
+function aulasDisciplinaHTML(aulas) {
+  const nomes = new Set((aulas || []).map((a) => (a.disciplina || "").trim()));
+  if (nomes.size !== 1) return "";
+  const disc = [...nomes][0];
+  return `<label class="ed-prev-disc-lote">
+    <span class="muted small">Disciplina destas aulas</span>
+    <input class="prev-inp aula-disc-lote" value="${esc(disc)}" placeholder="Ex.: Direito Ambiental" />
+  </label>`;
+}
+
 // Preview EDITÁVEL das aulas do cursinho: cada aula é um card com nome + assuntos editáveis.
 function aulasPreviewHTML(aulas) {
   return `<div class="card cursinho-card">
     <div class="plano-h"><h2>Revisar ${plural(aulas.length, "aula", "aulas")} antes de montar o plano</h2></div>
     <p class="muted small u-m-0 u-mb-12">Edite o nome da aula e os assuntos; remova (✕) o que não quiser. Os assuntos serão ligados aos seus tópicos pelo nome (＋ sinônimos).</p>
+    ${aulasDisciplinaHTML(aulas)}
     <div class="ed-prev-lista">
       ${aulas
         .map((a, ai) => {
@@ -592,6 +619,7 @@ function abrirAdicionarAulas(app, modoInicial = "acrescentar") {
         corpo.innerHTML = aulasPreviewHTML(estado.preview);
         corpo.querySelectorAll(".aula-nome").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); if (estado.preview[a]) estado.preview[a].nome = el.value; }));
         corpo.querySelectorAll(".aula-top").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); const t = +el.getAttribute("data-t"); if (estado.preview[a] && estado.preview[a].topicos) estado.preview[a].topicos[t] = el.value; }));
+        corpo.querySelector(".aula-disc-lote")?.addEventListener("input", (ev) => estado.preview.forEach((a) => (a.disciplina = ev.target.value.trim() || null)));
         return;
       }
       if (estado.diff) { corpo.innerHTML = aulasDiffHTML(estado.diff); return; }
@@ -603,6 +631,20 @@ function abrirAdicionarAulas(app, modoInicial = "acrescentar") {
         const f = e.target.files && e.target.files[0]; if (!f) return;
         const cfg = store.get().config;
         const ehPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
+        // Acrescentar lê a apostila direto: primeiro o sumário por pdf.js (offline, sem cota,
+        // sem teto de tamanho), e só depois a IA. Atualizar continua sendo por texto.
+        if (estado.modo === "acrescentar" && ehPdf) {
+          const fim = toastCarregando("Lendo o sumário da apostila…");
+          let aulas = [];
+          try {
+            const { paginas, numPaginas } = await extrairPdfPaginas(f, { ate: 20 });
+            const disciplina = disciplinaDoNomeDeArquivo(f.name);
+            aulas = aulasDoSumario(paginas, { disciplina, numPaginas });
+            if (aulas.length < 2 && store.iaDisponivel()) aulas = await store.aulasDoSumarioVisao(f, { disciplina, paginas, numPaginas });
+          } catch (err) { try { console.error(err); } catch (_) {} }
+          finally { fim(); }
+          if (aulas.length >= 2) { estado.preview = aulas; toast(`${plural(aulas.length, "aula lida", "aulas lidas")} do sumário. Revise e monte o plano.`, "ok"); rerender(); return; }
+        }
         // Acrescentar aceita a leitura rica por IA do PDF (aulas + assuntos direto); atualizar só texto.
         if (estado.modo === "acrescentar" && store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024) {
           const fim = toastCarregando("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
@@ -1225,6 +1267,32 @@ export default function renderEdital(root, app) {
       const ehPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name || "");
       const comIA = store.iaDisponivel() && cfg.iaProvider === "gemini" && ehPdf && f.size <= 14 * 1024 * 1024;
       const preenche = (texto) => { const ta = root.querySelector("#aulas-texto"); if (ta) ta.value = texto || ""; aulasTextoSalvo = texto || ""; };
+
+      // PDF: tenta PRIMEIRO o caminho determinístico (lê o sumário da apostila com pdf.js).
+      // Vem antes da IA de propósito: funciona offline, sem chave, sem cota, e sem o teto de
+      // 14 MB que justamente barrava as apostilas de cursinho (13 a 33 MB). A IA fica como
+      // reserva para quando o PDF é escaneado (sem camada de texto) ou o sumário não é lido.
+      if (ehPdf) {
+        const fim = toastCarregando("Lendo o sumário da apostila…");
+        let aulas = [];
+        try {
+          // 20 páginas bastam: o índice de apostila fica logo depois da capa.
+          const { paginas, numPaginas } = await extrairPdfPaginas(f, { ate: 20 });
+          const disciplina = disciplinaDoNomeDeArquivo(f.name);
+          aulas = aulasDoSumario(paginas, { disciplina, numPaginas });
+          // Apostila escaneada (sem camada de texto): a IA lê a IMAGEM do índice.
+          if (aulas.length < 2 && store.iaDisponivel()) aulas = await store.aulasDoSumarioVisao(f, { disciplina, paginas, numPaginas });
+        } catch (err) { try { console.error(err); } catch (_) {} }
+        finally { fim(); }
+        if (aulas.length >= 2) {
+          aulasPreview = aulas;
+          aulasImportAberto = false;
+          toast(`${plural(aulas.length, "aula lida", "aulas lidas")} do sumário. Revise e monte o plano.`, "ok");
+          app.refresh();
+          return;
+        }
+      }
+
       if (comIA) {
         const fim = toastCarregando("Lendo o plano do cursinho com a IA… (pode levar 1–2 min)");
         try {
@@ -1315,6 +1383,9 @@ export default function renderEdital(root, app) {
       if (aulasPreview && aulasPreview[a] && aulasPreview[a].topicos) aulasPreview[a].topicos[t] = el.value;
     })
   );
+  root.querySelector(".aula-disc-lote")?.addEventListener("input", (ev) => {
+    if (aulasPreview) aulasPreview.forEach((a) => (a.disciplina = ev.target.value.trim() || null));
+  });
 
   bindActions(root, {
     "compatibilizar-aulas-ia": async () => {

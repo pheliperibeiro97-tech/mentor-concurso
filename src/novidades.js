@@ -8,6 +8,30 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.1",
+    data: "agosto/2026",
+    titulo: "O app lê a apostila e o edital sozinho",
+    itens: [
+      "Importar a apostila do cursinho em 'Plano do cursinho' agora traz as aulas direto do SUMÁRIO do PDF, sem IA e sem limite de tamanho — antes o recurso era pulado justamente nas apostilas grandes, que são a maioria. Uma apostila de 1.289 páginas com 47 aulas leva alguns segundos.",
+      "A disciplina das aulas vem preenchida a partir do nome do arquivo ('10. Direito Ambiental.pdf'), num campo editável acima da lista que vale para todas as aulas do lote.",
+      "Materiais: a estrutura por tópicos passou a ser encontrada mesmo quando a página do índice não escreve a palavra 'Índice' (acontecia em um terço das apostilas), e os tópicos aparecem na ordem do documento.",
+      "Edital em PDF: o app fica só com o CONTEÚDO PROGRAMÁTICO e ignora vagas, inscrição, recursos e cronograma. O cabeçalho repetido em toda página não vira mais disciplina, e o nome da disciplina impresso de lado na margem passa a ficar no lugar certo.",
+      "Quando a apostila é escaneada (sem texto), a IA é chamada só com a IMAGEM da página do índice, em vez do PDF inteiro.",
+    ],
+  },
+  {
+    v: "0.8.0",
+    data: "agosto/2026",
+    titulo: "Espaço: a biblioteca de materiais agora cabe",
+    itens: [
+      "O PDF original deixou de ficar dentro dos dados do app: fica guardado à parte e é carregado só quando você abre o material. Uma biblioteca que ocupava 489 MB passou a ocupar 36 MB, e salvar ficou quase 4× mais rápido.",
+      "A sincronização passou a mandar os dados comprimidos: o mesmo material ocupa cerca de um terço no cofre da nuvem.",
+      "No computador, dá para VINCULAR o arquivo original em vez de guardar uma cópia: o app abre o PDF na pasta onde ele já está.",
+      "Restaurar o app não apaga mais a chave da IA nem o tema, e a chave da IA passou a ser de cada aparelho (não viaja mais na sincronização).",
+      "O grifo em Materiais foi removido (a tela serve para importar, extrair e gerar); grifar continua na Lei Seca.",
+    ],
+  },
+  {
     v: "0.7.1",
     data: "agosto/2026",
     titulo: "Senha de sincronização mais fácil de resgatar",
