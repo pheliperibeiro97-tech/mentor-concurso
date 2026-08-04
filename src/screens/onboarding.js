@@ -1,7 +1,7 @@
 // Onboarding (assistente curto, 3 etapas): concurso → prova/ritmo (opcional) →
 // Mentor IA (opcional). Conclui abrindo direto no Edital. Tudo é editável depois
 // em Configurações — só o concurso é obrigatório; o núcleo funciona offline.
-import { bindActions, toast, pedirTexto, confirmar } from "../ui.js";
+import { bindActions, toast, confirmar } from "../ui.js";
 import { esc, todayISO, daysBetween } from "../util.js";
 import { restaurarDaNuvem, suportaSyncNuvem } from "../sync-nuvem.js";
 import { icone } from "../icones.js";
@@ -14,6 +14,10 @@ let passo = 1; // 1..4 | "montando" | "pronto"
 // é global. Sem esta marca, gravar o concurso do perfil novo já fazia o app considerar tudo
 // pronto e sair do fluxo, pulando "prova e ritmo" e "montar plano".
 let fluxoNovoConcurso = false;
+// Primeiro uso: quem JÁ TEM conta não precisa responder nada sobre concurso, prova, tema ou
+// IA — isso tudo vem do cofre. Então o app pergunta antes de qual caso se trata, em vez de
+// mandar todo mundo pelo formulário e deixar "restaurar" como um link no fim.
+let caminho = null; // null = ainda não escolheu | "novo" | "entrar"
 export function iniciarFluxoNovoConcurso() { passo = 1; fluxoNovoConcurso = true; }
 export function onboardingEmCurso() { return fluxoNovoConcurso; }
 function encerrarFluxoNovoConcurso() { fluxoNovoConcurso = false; }
@@ -201,6 +205,86 @@ export default function renderOnboarding(root, app) {
     return;
   }
 
+  // -------- PASSO 0: já tem conta ou é a primeira vez? --------
+  // Não aparece para concurso ADICIONAL (aí a resposta já é conhecida: é um concurso novo
+  // dentro de uma conta que já existe).
+  if (!outroPerfil && !st.concurso && !caminho) {
+    const podeEntrar = suportaSyncNuvem();
+    root.innerHTML = `
+      <div class="ob-card">
+        <div class="ob-logo">${icone("library")}</div>
+        <h1>Bem-vindo ao Mentor Concurso</h1>
+        <p class="ob-lead"><b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova.</p>
+        <div class="ob-portas">
+          <button type="button" class="ob-porta" data-action="caminho-novo">
+            <span class="ob-porta-ico">${icone("rocket")}</span>
+            <span class="ob-porta-txt">
+              <b>É a minha primeira vez</b>
+              <span class="muted small">Monte o seu concurso em 3 passos rápidos.</span>
+            </span>
+          </button>
+          <button type="button" class="ob-porta" data-action="caminho-entrar" ${podeEntrar ? "" : "disabled"}>
+            <span class="ob-porta-ico">${icone("lock")}</span>
+            <span class="ob-porta-txt">
+              <b>Já uso o Mentor</b>
+              <span class="muted small">${
+                podeEntrar
+                  ? "Entre com a sua senha e traga os seus concursos dos outros aparelhos."
+                  : "Indisponível aqui: exige um endereço <b>https://</b>."
+              }</span>
+            </span>
+          </button>
+        </div>
+        <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} A IA é opcional</p>
+      </div>`;
+    bindActions(root, {
+      "caminho-novo": () => { caminho = "novo"; passo = 1; app.refresh(); },
+      "caminho-entrar": () => { caminho = "entrar"; app.refresh(); },
+    });
+    return;
+  }
+
+  // -------- ENTRAR: quem já tem conta só precisa da senha --------
+  if (caminho === "entrar" && !st.concurso) {
+    root.innerHTML = `
+      <div class="ob-card">
+        <div class="ob-logo">${icone("lock")}</div>
+        <h1>Entrar com a sua senha</h1>
+        <p class="ob-lead">A mesma senha de sincronização que você usa nos outros aparelhos. Ela traz <b>todos os seus concursos</b>, com edital, materiais, questões e histórico.</p>
+        <div class="ob-form">
+          <label>Senha de sincronização
+            <input id="ob-senha" type="password" autocomplete="current-password" placeholder="a sua frase secreta" />
+          </label>
+          <div class="ob-final" style="border:0; padding:0; margin-top:4px">
+            <button class="btn btn-ghost" data-action="caminho-voltar">← Voltar</button>
+            <button class="btn btn-primary btn-lg" data-action="ob-entrar">${icone("lock")} Entrar</button>
+          </div>
+        </div>
+        <p class="ob-jatenho muted small">Não lembra a senha? Ela não tem recuperação — mas você pode <button type="button" class="lnk" data-action="caminho-novo">começar do zero</button> e trazer os dados depois.</p>
+      </div>`;
+    bindActions(root, {
+      "caminho-voltar": () => { caminho = null; app.refresh(); },
+      "caminho-novo": () => { caminho = "novo"; passo = 1; app.refresh(); },
+      "ob-entrar": async () => {
+        const frase = (root.querySelector("#ob-senha")?.value || "").trim();
+        if (!frase) return toast("Digite a sua senha de sincronização.", "erro");
+        toast("Entrando…");
+        try {
+          await restaurarDaNuvem(frase);
+          caminho = null;
+          toast("Pronto! Os seus dados vieram para este aparelho.", "ok");
+          app.refresh();
+        } catch (e) {
+          const msg = e.code === "COFRE_VAZIO" ? "Não encontrei dados para essa senha. Confira a senha — ou comece do zero."
+            : e.code === "SENHA_ERRADA" ? "Senha incorreta para este cofre."
+            : "Não consegui entrar: " + e.message;
+          toast(msg, "erro");
+        }
+      },
+    });
+    return;
+  }
+
   // -------- PASSO 1: Concurso (obrigatório) --------
   if (passo === 1) {
     root.innerHTML = `
@@ -217,11 +301,11 @@ export default function renderOnboarding(root, app) {
             : ""
         }
         <div class="ob-logo">${icone("library")}</div>
-        <h1>${outroPerfil ? "Novo concurso" : "Bem-vindo ao Mentor Concurso"}</h1>
+        <h1>${outroPerfil ? "Novo concurso" : "Vamos começar"}</h1>
         <p class="ob-lead">${
           outroPerfil
             ? "Este concurso começa vazio: <b>edital, materiais, questões e histórico próprios</b>. O que você já tem no outro fica intacto."
-            : "<b>Seu mentor de estudos para concursos:</b> um ciclo que organiza o que estudar, praticar e revisar até o dia da prova."
+            : "Informe o concurso que você vai prestar. Tudo o mais é ajustável depois."
         }</p>
         <p class="ob-steps" style="justify-content:center; display:flex">São só 3 passos rápidos. Comece informando o concurso.</p>
         ${outroPerfil ? "" : `<div class="ob-tema">
@@ -250,7 +334,7 @@ export default function renderOnboarding(root, app) {
           outroPerfil
             ? "" // restaurar traz TODOS os concursos do cofre: não cabe em "criar um concurso"
             : suportaSyncNuvem()
-            ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="restaurar-nuvem">Restaurar meus dados da nuvem</button></p>`
+            ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="caminho-entrar">Entrar com a minha senha</button></p>`
             : `<p class="ob-jatenho muted">Para trazer os dados de outro aparelho, abra o Mentor por um endereço <b>https://</b> (a sincronização segura exige conexão protegida).</p>`
         }
         ${outroPerfil ? "" : `<p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>`}
@@ -295,21 +379,7 @@ export default function renderOnboarding(root, app) {
         irComecar();
       },
       // Aparelho novo trazendo os dados pela senha (pula o cadastro do concurso).
-      "restaurar-nuvem": async () => {
-        const frase = await pedirTexto("Digite a sua senha de sincronização para trazer os seus dados:", { placeholder: "sua senha (a mesma dos outros aparelhos)", rotuloOk: "Restaurar" });
-        if (!frase || !frase.trim()) return;
-        toast("Restaurando da nuvem…");
-        try {
-          await restaurarDaNuvem(frase);
-          toast("Pronto! Seus dados foram restaurados neste aparelho.", "ok");
-          app.refresh();
-        } catch (e) {
-          const msg = e.code === "COFRE_VAZIO" ? "Não encontrei dados na nuvem para essa senha. Confira a senha, ou comece um novo plano."
-            : e.code === "SENHA_ERRADA" ? "Senha incorreta para este cofre."
-            : "Não consegui restaurar: " + e.message;
-          toast(msg, "erro");
-        }
-      },
+      "caminho-entrar": () => { caminho = "entrar"; app.refresh(); },
     });
     return;
   }
