@@ -542,13 +542,23 @@ export default function renderOnboarding(root, app) {
 }
 
 // Valida e cria/atualiza o concurso a partir dos campos do passo 1.
+// Faltando o concurso, o toast sozinho não basta: em tela grande ele aparece longe do campo e
+// passa despercebido, dando a impressão de que "Continuar"/"Pular para o fim" estão quebrados.
+// Marca o campo e leva o foco até ele; a marca sai assim que o usuário digita.
 function salvarConcurso(root, store) {
-  const cargo = root.querySelector("#ob-cargo").value;
+  const campo = root.querySelector("#ob-cargo");
+  const cargo = campo.value;
   const banca = root.querySelector("#ob-banca").value;
   if (!cargo.trim()) {
+    campo.classList.add("is-error"); // estado de validação que o CSS já define
+    campo.setAttribute("aria-invalid", "true");
+    campo.addEventListener("input", () => { campo.classList.remove("is-error"); campo.removeAttribute("aria-invalid"); }, { once: true });
+    campo.focus();
     toast("Informe o cargo/concurso.", "erro");
     return false;
   }
+  campo.classList.remove("is-error");
+  campo.removeAttribute("aria-invalid");
   store.criarConcurso({ cargo, banca });
   return true;
 }
