@@ -1,37 +1,31 @@
-// Sincronização "traga sua própria nuvem" (Modelo B) — SEM servidor, SEM conta nossa.
+// MOTOR da sincronização — puro e testável, sem transporte. Quem transporta é o
+// sync-nuvem.js (cofre cifrado por senha).
 //
-// Como funciona: o usuário escolhe UM arquivo (ex.: mentor-concurso-sync.json) dentro de
-// uma pasta que o Google Drive / OneDrive / Dropbox dele já sincroniza no computador. O
-// app lê e grava nesse arquivo via File System Access API (funciona no WebView2 do desktop
-// e em navegadores Chromium); o cliente de nuvem do próprio usuário leva o arquivo para as
-// outras máquinas. Cada usuário usa a NUVEM DELE — nós nunca vemos nem guardamos nada.
+// Aqui vivem: o "peso" de um estado e a guarda anti-perda, a montagem do snapshot que sobe
+// (sem binários), a aplicação do que vem da nuvem preservando os binários locais, a decisão
+// "o mais recente vence" e as cópias de segurança de conflito.
 //
-// REGRA DE OURO: PDFs e imagens (binários) NUNCA entram no arquivo de sync — só os dados e o
-// TEXTO extraído. E ao aplicar o que vem da nuvem, os binários LOCAIS são preservados.
+// REGRA DE OURO: PDFs e imagens (binários) NUNCA sobem — só os dados e o TEXTO extraído.
+// E ao aplicar o que vem da nuvem, os binários LOCAIS são preservados.
+//
+// (O "backup extra por arquivo" no Drive/OneDrive, que também morava aqui, foi removido em
+// 2026-08-03: ficava conectado falhando em silêncio e o cofre por senha já cobre os três
+// aparelhos.)
 
 import { store } from "./store.js";
 
 
-const NOME_PADRAO = "mentor-concurso-sync.json";
 const IDB_DB = "mentor-sync";
-const IDB_STORE = "handles";
-const IDB_KEY = "arquivo";
 const IDB_BACKUPS = "backups"; // cópias do lado sobrescrito em conflito (últimos N)
 const MAX_BACKUPS = 5;
 
-// ---- Suporte do ambiente ---------------------------------------------------
-export function suportaSync() {
-  return typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
-}
 
-// ---- IndexedDB mínimo só para guardar o "handle" do arquivo (não é serializável em JSON,
-// por isso não pode ir para o estado/config). ------------------------------------------------
+// ---- IndexedDB só para as cópias de segurança de conflito. ----------------------------
 function idb() {
   return new Promise((res, rej) => {
     const req = indexedDB.open(IDB_DB, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
       if (!db.objectStoreNames.contains(IDB_BACKUPS)) db.createObjectStore(IDB_BACKUPS);
     };
     req.onsuccess = () => res(req.result);
@@ -78,31 +72,6 @@ export async function ultimoBackupConflito() {
       rq.onsuccess = () => r(rq.result || null); rq.onerror = () => r(null);
     });
   } catch (_) { return null; }
-}
-async function idbSet(handle) {
-  const db = await idb();
-  await new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
-    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
-  });
-}
-async function idbGet() {
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(IDB_STORE, "readonly");
-    const r = tx.objectStore(IDB_STORE).get(IDB_KEY);
-    r.onsuccess = () => res(r.result || null);
-    r.onerror = () => rej(r.error);
-  });
-}
-async function idbClear() {
-  const db = await idb();
-  await new Promise((res) => {
-    const tx = db.transaction(IDB_STORE, "readwrite");
-    tx.objectStore(IDB_STORE).delete(IDB_KEY);
-    tx.oncomplete = res; tx.onerror = res;
-  });
 }
 
 // ---- Identidade do dispositivo (para o carimbo de "quem salvou por último") ----------------
@@ -212,157 +181,13 @@ export function decidir(localSnap, remoto) {
   return "igual";
 }
 
-// ---- TRANSPORTE (File System Access API) ---------------------------------------------------
-async function temPermissao(handle, escrever = true) {
-  const opts = { mode: escrever ? "readwrite" : "read" };
-  if ((await handle.queryPermission(opts)) === "granted") return true;
-  return (await handle.requestPermission(opts)) === "granted";
-}
-async function lerArquivo(handle) {
-  const file = await handle.getFile();
-  const txt = (await file.text()).trim();
-  if (!txt) return null;
-  try { return JSON.parse(txt); } catch (_) { return null; }
-}
-async function gravarArquivo(handle, obj) {
-  const w = await handle.createWritable();
-  await w.write(JSON.stringify(obj));
-  await w.close();
-}
 
 // ---- API de alto nível usada pela tela -----------------------------------------------------
 
-// Conecta (escolhe/cria o arquivo de sync na pasta da nuvem do usuário) e faz a 1ª sync.
-export async function conectar() {
-  if (!suportaSync()) throw new Error("Este ambiente não suporta a sincronização por arquivo.");
-  const handle = await window.showSaveFilePicker({
-    suggestedName: NOME_PADRAO,
-    types: [{ description: "Sincronização do Mentor Concurso", accept: { "application/json": [".json"] } }],
-  });
-  await temPermissao(handle, true);
-  await idbSet(handle);
-  store.setSyncMeta({ conectado: true, nomeArquivo: handle.name });
-  return sincronizarAgora({ motivo: "conexao" });
-}
 
-// Conexão do 2º computador: ABRE um arquivo já existente (sincronizado pelo Drive) só para
-// LER e BAIXAR os dados para este computador. Nunca envia/sobrescreve a nuvem na conexão —
-// é a opção segura para não perder o que está na nuvem.
-export async function conectarBaixando() {
-  if (!suportaSync() || typeof window.showOpenFilePicker !== "function") throw new Error("Este ambiente não suporta a sincronização por arquivo.");
-  const [handle] = await window.showOpenFilePicker({
-    types: [{ description: "Sincronização do Mentor Concurso", accept: { "application/json": [".json"] } }],
-  });
-  if (!handle) return { ok: false };
-  await temPermissao(handle, true);
-  await idbSet(handle);
-  const agora = new Date().toISOString();
-  const state = store.get();
-  const remoto = await lerArquivo(handle);
-  if (!remoto) {
-    // Arquivo ainda vazio (Drive talvez não baixou) — apenas conecta; nada a baixar.
-    store.setSyncMeta({ conectado: true, nomeArquivo: handle.name, ultimoResultado: "vazio", erro: "" });
-    return { ok: true, acao: "vazio" };
-  }
-  await guardarBackupConflito(montarSnapshotSync(state, dispositivoId())); // backup do que houver aqui
-  const merged = aplicarRemoto(state, remoto);
-  await store.importarBackup(merged);
-  marcarStatus({ conectado: true, nomeArquivo: handle.name, ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
-  return { ok: true, acao: "baixou" };
-}
 
-export async function desconectar() {
-  await idbClear();
-  store.setSyncMeta({ conectado: false });
-}
 
-export function estadoSync() {
-  return (store.get().config && store.get().config.sync) || { conectado: false };
-}
 
-// Núcleo: lê o remoto, decide, e sobe ou baixa (preservando binários locais). Atualiza o
-// status em config.sync. `silencioso` evita erro visível em chamadas automáticas.
-export async function sincronizarAgora({ motivo = "manual", silencioso = false } = {}) {
-  if (!suportaSync()) { if (!silencioso) throw new Error("Ambiente sem suporte a sincronização."); return { ok: false, motivo: "sem-suporte" }; }
-  const handle = await idbGet();
-  if (!handle) { if (!silencioso) throw new Error("Nenhuma pasta conectada. Clique em Conectar."); return { ok: false, motivo: "sem-handle" }; }
-  marcarStatus({ sincronizando: true });
-  try {
-    if (!(await temPermissao(handle, true))) throw new Error("Permissão de acesso ao arquivo negada.");
-    const state = store.get();
-    const localSnap = montarSnapshotSync(state, dispositivoId());
-    const remoto = await lerArquivo(handle);
-    const agora = new Date().toISOString();
-    const acao = decidir(localSnap, remoto);
-    const pl = peso(localSnap), pr = peso(remoto);
 
-    // GUARDA ANTI-PERDA: se a sincronização ENCOLHERIA muito os dados, NÃO aplica sozinha —
-    // guarda backup do lado em risco e registra uma decisão pendente para o usuário escolher.
-    if (acao === "baixar" && encolheria(pl, pr)) {
-      await guardarBackupConflito(localSnap); // o local (maior) seria sobrescrito
-      marcarStatus({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "baixar", local: pl, remoto: pr }, ultimoConflitoEm: agora, erro: "" });
-      return { ok: false, motivo: "reduziria", local: pl, remoto: pr };
-    }
-    if (acao === "subir" && encolheria(pr, pl)) {
-      if (remoto) await guardarBackupConflito(remoto); // o remoto (maior) seria sobrescrito
-      marcarStatus({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "subir", local: pl, remoto: pr }, ultimoConflitoEm: agora, erro: "" });
-      return { ok: false, motivo: "reduziria", local: pl, remoto: pr };
-    }
 
-    if (acao === "baixar") {
-      await guardarBackupConflito(localSnap); // SEMPRE guarda o que será sobrescrito
-      const merged = aplicarRemoto(state, remoto); // aplica preservando binários e config.sync locais
-      await store.importarBackup(merged);
-      marcarStatus({ sincronizando: false, ultimaSync: agora, baseEm: remoto._sync.atualizadoEm, ultimoResultado: "baixou", pendente: null, erro: "" });
-      return { ok: true, acao: "baixou" };
-    }
-    if (acao === "subir") {
-      if (pr > 0) await guardarBackupConflito(remoto); // guarda o remoto não-vazio antes de sobrescrever
-      await gravarArquivo(handle, localSnap);
-      marcarStatus({ sincronizando: false, ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, erro: "" });
-      return { ok: true, acao: "subiu" };
-    }
-    marcarStatus({ sincronizando: false, ultimaSync: agora, baseEm: (remoto && remoto._sync && remoto._sync.atualizadoEm) || localSnap._sync.atualizadoEm, ultimoResultado: "igual", pendente: null, erro: "" });
-    return { ok: true, acao: "igual" };
-  } catch (e) {
-    marcarStatus({ sincronizando: false, ultimoResultado: "erro", erro: e.message });
-    if (!silencioso) throw e;
-    return { ok: false, erro: e.message };
-  }
-}
 
-// Resolve a decisão pendente (quando a sync reduziria os dados). "local" = mantém os deste
-// computador e envia para a nuvem; "nuvem" = baixa e aplica o que está na nuvem (com backup).
-export async function resolverPendencia(escolha) {
-  if (!suportaSync()) return { ok: false };
-  const handle = await idbGet();
-  if (!handle) return { ok: false };
-  if (!(await temPermissao(handle, true))) throw new Error("Permissão de acesso ao arquivo negada.");
-  const agora = new Date().toISOString();
-  const state = store.get();
-  const localSnap = montarSnapshotSync(state, dispositivoId());
-  if (escolha === "local") {
-    await gravarArquivo(handle, localSnap);
-    marcarStatus({ ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, ultimoConflitoEm: "", erro: "" });
-    return { ok: true, acao: "subiu" };
-  }
-  const remoto = await lerArquivo(handle);
-  if (!remoto) return { ok: false };
-  await guardarBackupConflito(localSnap);
-  const merged = aplicarRemoto(state, remoto);
-  await store.importarBackup(merged);
-  marcarStatus({ ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
-  return { ok: true, acao: "baixou" };
-}
-
-function marcarStatus(patch) {
-  store.setSyncMeta(patch);
-}
-
-// Sincronização ao FECHAR o app (desktop: intercepta o fechamento; web: best-effort).
-// No desktop só fecha de fato depois de tentar subir os dados.
-export async function sincronizarAoFechar() {
-  const cfg = store.get().config || {};
-  if (!cfg.sync || !cfg.sync.conectado) return;
-  try { await sincronizarAgora({ motivo: "fechar", silencioso: true }); } catch (_) {}
-}

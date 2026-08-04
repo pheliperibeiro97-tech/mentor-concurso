@@ -15,7 +15,6 @@ import { iniciarCapturaErros } from "./erro-log.js";
 import { dispararNotificacoesDevidas, iniciarAgendadorDiario } from "./notificacoes.js";
 import { checarLicenca } from "./licenca.js";
 import { verificarAtualizacao } from "./updater.js";
-import { sincronizarAgora as syncAgora, sincronizarAoFechar, estadoSync } from "./sync.js";
 import { sincronizarNuvemAoFechar, iniciarSyncNuvemAuto } from "./sync-nuvem.js";
 import { icone } from "./icones.js";
 import { temNovidade, abrirNovidades } from "./novidades.js";
@@ -921,7 +920,6 @@ async function bootstrap() {
   });
   // Sincronização: ao ABRIR, puxa o mais recente da nuvem do usuário (se conectado).
   // Dois canais independentes: por arquivo (Drive/OneDrive, desktop) e por senha (celular + PC).
-  if (estadoSync().conectado) syncAgora({ motivo: "boot", silencioso: true });
   // A nuvem por senha (celular + PCs) fica AUTOMÁTICA: abre, volta ao foco, alterou, saiu.
   iniciarSyncNuvemAuto();
   // E garante a sincronização ao FECHAR o app.
@@ -941,7 +939,7 @@ async function ligarSyncAoFechar() {
         event.preventDefault(); // evita o fechamento parcial padrão (que deixaria o cronômetro segurando o app)
         if (fechando) return; // já estamos saindo
         fechando = true;
-        try { await Promise.race([Promise.all([sincronizarAoFechar(), sincronizarNuvemAoFechar()]), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
+        try { await Promise.race([sincronizarNuvemAoFechar(), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
         // Encerra o app INTEIRO (principal + cronômetro flutuante) de forma garantida.
         try {
           const { invoke } = await import("@tauri-apps/api/core");
@@ -952,7 +950,7 @@ async function ligarSyncAoFechar() {
       });
     } catch (_) {}
   } else {
-    window.addEventListener("pagehide", () => { try { sincronizarAoFechar(); sincronizarNuvemAoFechar(); } catch (_) {} });
+    window.addEventListener("pagehide", () => { try { sincronizarNuvemAoFechar(); } catch (_) {} });
   }
 }
 

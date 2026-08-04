@@ -261,7 +261,7 @@ export const GUIA = [
         <li><b>Privacidade</b>: a senha <b>cifra</b> tudo de ponta a ponta; nem nós nem o serviço de nuvem conseguem ler. A senha <b>não sai do aparelho</b> e <b>não tem recuperação</b> — se esquecer, escolha outra (cada aparelho mantém a cópia local).</li>
         <li><b>PDFs</b>: os arquivos originais <b>ficam em cada aparelho</b> (não sobem); o <b>texto extraído</b> sincroniza normalmente, então o material segue legível e pesquisável.</li>
         <li><b>Conflito</b>: vence o <b>mais recente</b>. Se um aparelho quase vazio fosse apagar um cheio, o app <b>para e pergunta</b> antes, guardando uma cópia de segurança.</li>
-        <li><b>Backup extra (opcional, só no app de computador)</b>: além disso, você pode manter uma cópia num arquivo dentro do seu <b>Google Drive/OneDrive</b> — em <b>Backup extra por arquivo</b>.</li>
+        <li><b>Uma cópia à parte</b>: em <b>Configurações → Dados</b>, o <b>Backup completo</b> baixa um arquivo com tudo, para você guardar onde quiser.</li>
       </ul>` },
 
   { id: "plataformas", grupo: "IA, dados e privacidade", titulo: "Onde usar: computador, navegador e celular", html: `
