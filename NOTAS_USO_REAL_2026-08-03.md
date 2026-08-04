@@ -10,10 +10,13 @@ para Ingresso na Magistratura do Estado de São Paulo.
 > `~/.claude/plans/encapsulated-wiggling-narwhal.md`; o que não está marcado segue como
 > backlog aberto.
 >
-> ⚠️ **Ainda não publicado.** Enquanto os três alvos (desktop, navegador, celular) não
-> estiverem na versão nova, **não sincronizar**: o envelope do cofre passou a ser gravado em
-> `v: 2` e a versão antiga não o lê. E a importação dos materiais do cursinho só deve
-> começar depois de medir o ganho real com uma disciplina-piloto.
+> ✅ **PUBLICADO como v0.8.0** em 2026-08-04 — release no GitHub (instalador NSIS +
+> `latest.json` assinado, updater conferido devolvendo 0.8.0) e Cloudflare Pages no ar
+> (cofre respondendo 404 em id inexistente, bundle com a versão nova).
+>
+> ⚠️ **Antes de voltar a sincronizar, atualizar os TRÊS aparelhos.** O envelope do cofre
+> agora é gravado em `v: 2` e a versão antiga não o lê. Navegador e celular se resolvem
+> sozinhos na mesma URL; o desktop, pelo updater.
 
 ---
 
