@@ -8,6 +8,20 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.2",
+    data: "agosto/2026",
+    titulo: "Atualizar material com um clique, e o edital sem buracos",
+    itens: [
+      "Novo botão «Atualizar material», nas opções (···) de cada material: traga a versão nova do arquivo e o app substitui o texto e o sumário MANTENDO tudo o que você criou a partir dele — questões, flashcards, mapas, vínculos com o edital e histórico. Antes isso dependia de o nome do arquivo ser idêntico ao anterior; se o cursinho renomeasse, o app criava uma cópia solta.",
+      "Dá para renomear o material na mesma hora, sem perder os vínculos.",
+      "Edital em PDF: uma disciplina inteira podia sumir na importação. Direito Penal e Processual Penal são numerados em algarismo romano (I, II, III, IV) e o app só entendia «1., 2., 3.» — todo o programa de Processual Penal era absorvido pela disciplina anterior. Corrigido.",
+      "Ainda no edital: uma citação de lei no começo de uma linha («5.903/2006, …») era lida como «item 5» e desalinhava a disciplina em um item — o Direito do Consumidor começava no item 2. Corrigido.",
+      "As alíneas do edital (a, b, c…) e os subitens («1 – Parte Geral») agora viram tópicos próprios, acompanháveis um a um. O Direito da Criança saiu de 3 tópicos gigantes para 43.",
+      "Materiais: o cartão ficou mais limpo. «Ver texto extraído» foi para dentro das opções (···), junto de «Abrir PDF»; fora ficou só «Gerar com IA». Clicar no título continua abrindo o material.",
+      "No primeiro acesso, se você tentar avançar sem informar o concurso, o campo agora fica destacado e recebe o foco — antes só aparecia um aviso no rodapé, longe de onde você estava olhando.",
+    ],
+  },
+  {
     v: "0.8.1",
     data: "agosto/2026",
     titulo: "O app lê a apostila e o edital sozinho",
