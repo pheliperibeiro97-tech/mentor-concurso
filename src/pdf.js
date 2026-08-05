@@ -382,10 +382,17 @@ export function ligarImportArquivo(input, opts = {}) {
     } catch (err) {
       try { console.error(err); } catch (_) {}
       status.className = "import-status erro";
+      // "NotReadableError" aqui quase sempre é ARQUIVO SÓ NA NUVEM: no OneDrive/Drive o arquivo
+      // pode existir como marcador (ReparsePoint) e só baixar quando alguém o abre. O navegador
+      // recebe a referência e não consegue ler — e "não consegui ler" não ajudaria ninguém a
+      // resolver. Aconteceu com a trilha do cursinho, guardada no OneDrive.
+      const soNaNuvem = err && (err.name === "NotReadableError" || /NotReadableError/.test(String(err)));
       status.textContent =
         err && err.code === "PDF_PROTEGIDO"
           ? "PDF protegido por senha — cole o texto manualmente."
-          : `✗ ${f.name} — não consegui ler. Cole o texto manualmente.`;
+          : soNaNuvem
+            ? `${f.name} — o arquivo está só na nuvem (OneDrive/Drive). Abra-o uma vez para baixar, ou marque "Manter sempre neste dispositivo", e tente de novo.`
+            : `✗ ${f.name} — não consegui ler. Cole o texto manualmente.`;
     }
   });
 }

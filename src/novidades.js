@@ -8,10 +8,28 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.4",
+    data: "agosto/2026",
+    titulo: "A trilha do cursinho vira tarefas, e o PDF passa a ser lido no seu computador",
+    itens: [
+      "NOVO — importe o PDF da TRILHA semanal do cursinho em Planejamento ▸ Tarefas avulsas ▸ «Adicionar tarefas» ▸ «Importar de arquivo»: o app recorta as metas numeradas («TAREFA 01», «TAREFA 02»…) na ordem do arquivo, cada uma com o link e a observação do cursinho. A tabela de sugestão de cronograma é ignorada de propósito — as tarefas entram sem dia, e você distribui como quiser. Antes o mesmo arquivo virava 8 tarefas inventadas a partir das primeiras páginas.",
+      "PDF com texto agora é lido NO SEU COMPUTADOR, e a IA só entra quando o arquivo é escaneado. A ordem era a inversa — todo PDF subia inteiro para a IA antes de qualquer tentativa —, o que gastava cota, demorava, quebrava quando a rede oscilava e ainda deixava o modelo reescrever o que estava escrito.",
+      "Arquivo que está «só na nuvem» (OneDrive/Drive) não podia ser lido e a mensagem só dizia «não consegui ler». Agora o app explica: abra o arquivo uma vez para baixá-lo, ou marque «Manter sempre neste dispositivo».",
+      "NOVO — «Refazer sumário», nas opções (···) do material: monta o sumário de novo a partir do texto que já está no app. Diferente de «Atualizar material», ele NÃO relê o arquivo — então não perde o que a Visão transcreveu das páginas escaneadas.",
+    ],
+  },
+  {
     v: "0.8.3",
     data: "agosto/2026",
-    titulo: "A biblioteca inteira de uma vez, e o sumário no lugar certo",
+    titulo: "A biblioteca inteira de uma vez, o PDF no leitor de verdade e os temas que mais caem",
     itens: [
+      "O PDF agora abre no leitor do PRÓPRIO navegador: seleção de texto, busca, zoom com Ctrl+roda, página inteira, girar, miniaturas, imprimir e salvar — tudo o que você já conhece, sem uma imitação pela metade. O app entra só com o título, a tela cheia (F11) e o fechar, e abre direto na página do tópico que você clicou.",
+      "NOVO — «temas que mais caem» a partir de um material seu. Se você tem um raio-x da banca (aquele PDF com o percentual de cada tema por disciplina), o Edital lê os números e propõe o nível de relevância de cada tópico. Não usa IA nem internet: os números já estão no material. A lista mostra DE ONDE veio cada sugestão e também o que NÃO achou par no seu edital — porque um tema grande às vezes está repartido em vários itens e precisa ser marcado à mão.",
+      "NOVO — o cronômetro pode FLUTUAR por cima dos outros aplicativos (botão na janelinha do cronômetro), para acompanhar o tempo estudando em outro programa. No computador a janelinha traz play/pausa; zerar e trocar de modo seguem no app.",
+      "Escrita: a foto da resposta manuscrita aceita VÁRIAS folhas de uma vez, ou o PDF exportado do tablet. Uma sentença tem várias páginas, e antes era uma foto por vez.",
+      "Materiais: os nomes das três visões diziam a mesma coisa e nenhum descrevia o que fazia. «Ver texto extraído» abria o SUMÁRIO; agora é «Ver sumário». Quem mostra o texto lido do arquivo passou a se chamar «Ver texto extraído», e o editor virou «Editar sumário».",
+      "CORREÇÃO — sumário de material cujo índice numera com ponto e sem subnível («1. Direito Constitucional …… 4») saía vazio ou errado, e a página anotada no próprio índice se perdia. Corrigido, junto com o caso de material que reenumera «1., 2., 3.» dentro de cada capítulo — o app montava o sumário com os temas de um capítulo qualquer no lugar dos capítulos.",
+      "CORREÇÃO — a etiqueta «página escaneada» mentia: páginas que já tinham texto continuavam marcadas como pendentes. Agora só aparece quando a página está mesmo sem texto.",
       "Dá para escolher VÁRIOS arquivos de uma vez em «Adicionar material»: eles entram numa fila e o app importa um a um, mostrando «Importando 3 de 17». Importar a biblioteca de um cursinho deixou de ser uma tarde de cliques.",
       "Ao ler um PDF grande, a etapa «Lendo o PDF» agora conta as páginas («página 340 de 1.289»). Antes eram minutos de tela parada.",
       "Depois de salvar, o botão mostra «Salvando…» e só libera quando o material está mesmo no disco — antes a janela parecia pronta e o clique seguinte se perdia.",
@@ -20,11 +38,6 @@ export const NOVIDADES = [
       "Os PDFs passaram a ser gravados como arquivo, não como texto codificado: a mesma biblioteca ocupa cerca de 25% menos espaço em disco.",
       "Os tópicos do edital que um material cobre agora ficam recolhidos numa linha só («16 tópicos do edital · Direito Administrativo +6»), que abre quando você quiser — o cartão de uma apostila virava um parágrafo de etiquetas.",
       "CORREÇÃO — os tópicos vinculados estavam errados em quase metade dos casos. O app casava o título do capítulo com o edital INTEIRO, então bastava uma palavra em comum: «Administração Pública», numa apostila de Constitucional, virava «crimes contra a administração pública» (Penal). Agora o casamento acontece primeiro dentro da disciplina do próprio material e, na dúvida, ele não vincula — vínculo errado contava como edital coberto. Medido na biblioteca real: 64% → 95% de acerto.",
-      "O PDF agora abre no leitor do PRÓPRIO navegador: seleção de texto, busca, zoom com Ctrl+roda, página inteira, girar, miniaturas, imprimir e salvar — tudo o que você já conhece, sem uma imitação pela metade. O app entra só com o título, a tela cheia (F11) e o fechar, e abre direto na página do tópico que você clicou.",
-      "Escrita: a foto da resposta manuscrita aceita VÁRIAS folhas de uma vez, ou o PDF exportado do tablet. Uma sentença tem várias páginas, e antes era uma foto por vez.",
-      "Materiais: os nomes das três visões diziam a mesma coisa e nenhum descrevia o que fazia. «Ver texto extraído» abria o SUMÁRIO; agora é «Ver sumário». Quem mostra o texto lido do arquivo passou a se chamar «Ver texto extraído», e o editor virou «Editar sumário».",
-      "NOVO — «temas que mais caem» a partir de um material seu. Se você tem um raio-x da banca (aquele PDF com o percentual de cada tema por disciplina), o Edital lê os números e propõe o nível de relevância de cada tópico. Não usa IA nem internet: os números já estão no material. A lista mostra de onde veio cada sugestão e o que NÃO achou par no seu edital, para você marcar à mão.",
-      "NOVO — o cronômetro pode FLUTUAR por cima dos outros aplicativos (botão na janelinha do cronômetro), para acompanhar o tempo estudando em outro programa. No computador ele traz play/pausa; zerar e trocar de modo seguem no app.",
       "«Ler figuras e tabelas»: a IA lê as páginas com imagem e escreve o que elas mostram, para o conteúdo delas entrar na busca e nas gerações. Um clique faz todas as que faltam, em todos os materiais, e dá para parar no meio e retomar de onde parou. Antes isso rodava sozinho na importação (estourando a cota da IA) e, pior, parava em silêncio nas 30 primeiras páginas de cada material.",
       "A etiqueta «página escaneada» do cartão agora é clicável: leva direto ao aviso que processa a página. Antes ela informava o problema e não oferecia saída.",
       "Materiais: o material é agrupado pela disciplina que ele mais cobre (não mais pelo primeiro tópico vinculado), e a etiqueta de tópico do cartão mostra só o começo do item, com o texto completo no tooltip — o cartão de uma apostila virava um parágrafo.",
