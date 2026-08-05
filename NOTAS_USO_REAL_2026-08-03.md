@@ -1280,3 +1280,78 @@ próprio, 1382×865 → 1920×1080 e de volta, pelo botão e pelo F11.
   disso a etiqueta "página escaneada" mentia: 16 das 29 já tinham texto e ainda apareciam,
   porque `paginasPendentes` olhava só a marca `vazia`, gravada na importação. Agora exige
   texto realmente vazio — conserto retroativo, vale para qualquer base já importada.
+
+---
+
+## 17. Trilha Estratégica e cronômetro flutuante (2026-08-05)
+
+### "Temas que mais caem" saiu de um material, sem IA
+
+O cursinho publica um raio-x da banca (`Estudo Estratégico`, 114 páginas) com a fatia de cada
+tema por disciplina. Virou uma terceira fonte de relevância no Edital, ao lado de "pelas minhas
+provas" e "pesquisar na web" — e a única que **não usa IA nem internet**: os números já estão no
+material que o usuário importou.
+
+O mesmo PDF diz a mesma coisa de três jeitos, e os três precisaram de leitor próprio:
+
+| Forma | Onde aparece |
+|---|---|
+| Gráfico com camada de texto | o PDF entrega a coluna de percentuais TODA JUNTA e os rótulos logo abaixo, na mesma ordem |
+| Enumeração no texto | "1. Organização dos Poderes — 21,25%" |
+| Tabela Markdown | é assim que a **Visão** devolve um gráfico que só existia como imagem |
+
+Seis disciplinas tinham o gráfico impresso na imagem da página — invisíveis para a extração de
+texto. A Visão do próprio app resolveu, uma página por vez. Detalhe que custou duas rodadas: **o
+gráfico fica na mesma página da frase "o tema de maior incidência é…"**, não na seguinte.
+
+**Conversão de percentual em nível.** O percentual é fatia DA disciplina, não relevância
+absoluta: 21% é o tema mais cobrado de Constitucional enquanto 31% é o de Tributário. Traduzir
+direto jogaria tudo para "Baixa". A conversão é pelo ACUMULADO, do jeito que o próprio material
+lê os números ("quatro temas respondem por mais da metade"): primeiros 50% = 95, até 75% = 70,
+até 90% = 40, resto = 15.
+
+**Três regras de casamento que só apareceram medindo** (`dev/teste-incidencia.mjs`, contra o
+edital real de 401 tópicos):
+
+1. **Disciplina como âncora.** O `acharTopicoPorNome` do store casa por "contém" no edital
+   inteiro — nunca recebeu o conserto que os materiais receberam na v0.8.3. Aqui usa-se o
+   `acharTopicoDoBloco`, com a disciplina.
+2. **Piso pelo tamanho do tema.** Item de edital do TJSP é enumeração longa; a nota é
+   interseção/menor conjunto, então tema de 1-2 palavras tira 0,5 com UMA palavra em comum e
+   passava no piso de 0,34. Foi assim que "Organização dos Poderes" caiu dentro de "Normas
+   Constitucionais: Hermenêutica e Filosofia". Tema curto agora só casa contendo tudo.
+3. **Citação de lei casa pelo NÚMERO.** "Lei", "nº" e pedaços de número são comuns a meio
+   edital: o Estatuto do Desarmamento ia para "Pessoas naturais · Direitos da personalidade" e a
+   Lei Carolina Dieckmann (12.737) para "Crimes eleitorais (Lei nº 4.737)". Não achando a mesma
+   lei, não casa — e está certo, essas leis não estão no edital.
+
+Disciplina do material que **não existe no edital** não é descartada: os temas dela são
+procurados no edital inteiro. É o caso da Legislação Penal Especial, que no edital do TJSP mora
+como tópicos dentro do Penal — 15 temas que iam para o lixo, 11 casaram.
+
+Resultado medido: 13 disciplinas, **137 de 168 temas casados (82%)**, 114 tópicos com nível
+proposto. O casamento não é perfeito, então a lista de revisão mostra DE ONDE veio cada
+sugestão ("de 'Recursos' — 16,41% de Direito Processual Civil"): dá para reprovar uma torta de
+relance, que é o ponto.
+
+### Cronômetro flutuando por cima de outros apps
+
+Pedido: no iPad, manter o cronômetro à vista estudando em outro aplicativo. A API que parece
+óbvia — **Document Picture-in-Picture** — **não existe no Safari**, nem no iPad nem no Mac; é
+Chrome/Edge/Firefox no computador, onde o app desktop já tem a janelinha nativa. O que o iPadOS
+suporta desde a versão 14 é o **PiP de vídeo**: relógio num `<canvas>` → `captureStream` →
+`<video>` → picture-in-picture.
+
+Quatro defeitos que só apareceram na tela (dois deles achados pelo usuário):
+
+- **A janelinha nascia enorme e não encolhia.** Ela mantém a proporção do vídeo e tem altura
+  mínima própria: canvas largo e baixo (480x220) ⇒ largura mínima grande. 16:9 resolve.
+- **Sem botões de play/pausa.** Vídeo vindo de canvas não os ganha — para o PiP, stream ao vivo
+  não é algo que se pause. Quem os desenha é a **Media Session**.
+- **`requestAnimationFrame` para em segundo plano** — exatamente quando esta janela serve para
+  alguma coisa. Desenho por timer, com `captureStream(0)` + `requestFrame()`.
+- **Abrir a janelinha iniciava o cronômetro**: o `play()` que damos para o vídeo existir era
+  lido como comando do usuário.
+
+Limite assumido: é um vídeo, não cabem botões nossos lá dentro. Zerar e trocar de modo seguem
+no app.
