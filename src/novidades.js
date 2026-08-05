@@ -8,6 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.5",
+    data: "agosto/2026",
+    titulo: "A nota da tarefa sai do tooltip, e o PDF baixa com o nome do material",
+    itens: [
+      "A NOTA de uma tarefa aparecia na mesma linha do título, cortada, e o texto completo só ao passar o mouse. Agora ocupa a linha de baixo, mostrando as duas primeiras linhas, com «mais» quando há mais que isso — e o link virou clicável, o que importa nas tarefas importadas da trilha (cada uma traz a orientação do professor e o endereço da aula).",
+      "O leitor de PDF ganhou um «Baixar» na barra do app, que abre a caixa de salvar do sistema já com o NOME DO MATERIAL. O «salvar» do leitor do navegador propõe um nome interno (um código), e não há como mudar isso de fora.",
+      "Trilha: a instrução de uma tarefa podia terminar no meio de um parêntese («… tópicos 2.7 a 2.20. (PDF»), porque no PDF ela é uma linha que não caberia. Agora emenda a continuação.",
+    ],
+  },
+  {
     v: "0.8.4",
     data: "agosto/2026",
     titulo: "A trilha do cursinho vira tarefas, e o PDF passa a ser lido no seu computador",
