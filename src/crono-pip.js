@@ -12,8 +12,8 @@
 //  - PROPORÇÃO manda no tamanho. A janelinha do PiP mantém a proporção do vídeo e tem altura
 //    mínima própria: com um canvas largo e baixo (480x220) ela nascia enorme e NÃO ENCOLHIA.
 //    16:9 é o formato que os navegadores esperam e o que aceita ser reduzido.
-//  - Vídeo vindo de canvas NÃO GANHA os botões de play/pausa: para o PiP, stream ao vivo não é
-//    algo que se pause. Quem desenha esses botões é a MEDIA SESSION.
+//  - Vídeo vindo de canvas NÃO GANHA os botões de play/pausa do Chromium, e não há como dar —
+//    ver o bloco "SOBRE OS BOTÕES DA JANELINHA" adiante. Ela é um MOSTRADOR.
 //  - requestAnimationFrame PARA quando a página vai para segundo plano — exatamente o momento
 //    em que esta janela serve para alguma coisa. O desenho é por timer, não por quadro.
 //  - O `play()` que damos para o vídeo existir não pode ser lido como "o usuário mandou iniciar";
@@ -30,7 +30,6 @@ let faixa = null;       // CanvasCaptureMediaStreamTrack, para forçar quadro
 let lerEstado = null;   // () => {texto, legenda, cor, rodando, extra}
 let aoPlayPause = null; // (querRodar:boolean) => void
 let ecoando = false;    // ignora o play/pause que NÓS mesmos disparamos
-let ultimoEstadoSistema = null;
 
 // `pictureInPictureEnabled` cobre Chrome/Edge/Firefox; `webkitSupportsPresentationMode` é o
 // caminho do Safari (iPad/iPhone/Mac), que nunca implementou o nome padrão.
@@ -56,36 +55,21 @@ const CSS_VAR = (nome, padrao) => {
   }
 };
 
-function ligarControlesDoSistema() {
-  const ms = typeof navigator !== "undefined" && navigator.mediaSession;
-  if (!ms) return;
-  try {
-    if (window.MediaMetadata) ms.metadata = new window.MediaMetadata({ title: "Cronômetro", artist: "Mentor Concurso" });
-    ms.setActionHandler("play", () => { if (aoPlayPause) aoPlayPause(true); });
-    ms.setActionHandler("pause", () => { if (aoPlayPause) aoPlayPause(false); });
-  } catch (_) {}
-}
-
-function desligarControlesDoSistema() {
-  const ms = typeof navigator !== "undefined" && navigator.mediaSession;
-  if (!ms) return;
-  try {
-    ms.setActionHandler("play", null);
-    ms.setActionHandler("pause", null);
-    ms.metadata = null;
-    ms.playbackState = "none";
-  } catch (_) {}
-  ultimoEstadoSistema = null;
-}
-
-function atualizarEstadoDoSistema(rodando) {
-  const alvo = rodando ? "playing" : "paused";
-  if (alvo === ultimoEstadoSistema) return; // o tique chama a cada segundo; só mexe na mudança
-  ultimoEstadoSistema = alvo;
-  try {
-    if (navigator.mediaSession) navigator.mediaSession.playbackState = alvo;
-  } catch (_) {}
-}
+// SOBRE OS BOTÕES DA JANELINHA — o que foi tentado, medido e descartado.
+//
+// Vídeo que vem de canvas não ganha play/pausa do Chromium: para ele, stream ao vivo não é algo
+// que se pause. A saída aparente era a Media Session (declarar as ações faz o navegador desenhar
+// os botões no PiP). Feito isso, os botões APARECERAM E NÃO FUNCIONARAM — e a medição explicou:
+// o stream é mudo e sem faixa de áudio (`getAudioTracks().length === 0`), então não existe sessão
+// de mídia ativa e o navegador nunca entrega a ação. Botão que não faz nada é pior que botão
+// nenhum, então a Media Session saiu.
+//
+// Dar áudio ao stream (uma faixa silenciosa) criaria a sessão de verdade, mas no iPad — que é o
+// alvo — tocar áudio TIRA O SOM DE QUEM ESTÁ ESTUDANDO COM MÚSICA. Não compensa.
+//
+// Fica assim: a janelinha é um MOSTRADOR. Onde o navegador oferecer play/pausa nativo do vídeo
+// (é o caso do Safari), os ouvintes de 'play'/'pause' abaixo comandam o cronômetro — esse caminho
+// está medido e funciona. No resto, o comando é no app, e a janelinha acompanha.
 
 // Encaixa o texto na largura útil: primeiro encolhendo a fonte até um mínimo legível, depois
 // CORTANDO com reticências. Só encolher não bastava — o rótulo do tópico é uma frase inteira
@@ -178,7 +162,7 @@ function montar() {
     document.body.appendChild(video);
     video.addEventListener("play", () => { if (!ecoando && aoPlayPause) aoPlayPause(true); });
     video.addEventListener("pause", () => { if (!ecoando && aoPlayPause) aoPlayPause(false); });
-    const aoSair = () => { pararDesenho(); desligarControlesDoSistema(); };
+    const aoSair = () => pararDesenho();
     video.addEventListener("leavepictureinpicture", aoSair);
     video.addEventListener("webkitpresentationmodechanged", () => { if (!pipAberto()) aoSair(); });
   }
@@ -203,7 +187,6 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
 
   montar();
   comecarDesenho(); // precisa haver quadro ANTES do play, senão o vídeo não tem o que tocar
-  ligarControlesDoSistema();
 
   ecoando = true;
   const tocando = video.play();
@@ -232,7 +215,6 @@ export async function fecharPip() {
     else if (document.pictureInPictureElement) await document.exitPictureInPicture();
   } catch (_) {}
   pararDesenho();
-  desligarControlesDoSistema();
   try { if (video && !video.paused) { ecoando = true; video.pause(); setTimeout(() => { ecoando = false; }, 60); } } catch (_) {}
   return false;
 }
@@ -241,7 +223,6 @@ export async function fecharPip() {
 // o comando que ele acabou de dar).
 export function espelharNoPip(rodando) {
   if (!video || !pipAberto()) return;
-  atualizarEstadoDoSistema(rodando);
   // No Safari os botões da janelinha SÃO o play/pause do vídeo, então lá o vídeo acompanha o
   // relógio. No Chromium quem desenha os botões é a Media Session, e o vídeo precisa continuar
   // tocando: pausá-lo congelaria a janelinha mesmo com o cronômetro andando.

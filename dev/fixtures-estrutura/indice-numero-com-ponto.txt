@@ -1,0 +1,68 @@
+# Índice que numera com PONTO e sem subnível ("1. Direito Constitucional"), com a página na MESMA
+# linha do título. Dois defeitos de uma vez, achados no material de estatística do cursinho:
+#   (a) a entrada era recusada (número simples exigia parêntese), e o índice perfeito dava zero;
+#   (b) mesmo lida, a página se perdia — os três layouts de pareamento esperam o número numa
+#       linha só dele, que é como o pdf.js entrega as apostilas.
+# E o corpo REENUMERA a cada capítulo ("1.", "2."… dentro de cada um), o que fazia a detecção por
+# numeração vencer o índice e montar o sumário com os temas de um capítulo qualquer.
+# esperado: forte=sim origem=indice blocos=4 paginas=3|6|9|12
+--- pagina 1 ---
+SUMÁRIO
+Considerações Iniciais ....................................................... 2
+1. Direito Constitucional ..................................................... 3
+2. Direito Civil .............................................................. 6
+3. Direito Penal .............................................................. 9
+4. Direito Tributário ........................................................ 12
+
+--- pagina 2 ---
+CONSIDERAÇÕES INICIAIS
+Este material reúne a análise estatística das provas dos últimos cinco anos.
+
+--- pagina 3 ---
+1. DIREITO CONSTITUCIONAL
+CONCENTRAÇÃO DOS TEMAS PRINCIPAIS
+1. Organização dos Poderes — 21,25%
+2. Organização do Estado — 15,42%
+3. Direitos e Garantias Fundamentais — 12,92%
+
+--- pagina 4 ---
+Comentário sobre os temas de maior incidência da disciplina.
+
+--- pagina 5 ---
+Comentário sobre os temas de menor incidência da disciplina.
+
+--- pagina 6 ---
+2. DIREITO CIVIL
+CONCENTRAÇÃO DOS TEMAS PRINCIPAIS
+1. Teoria Geral do Direito Civil — 21,11%
+2. Direito de Família — 13,84%
+3. Direito das Sucessões — 9,00%
+
+--- pagina 7 ---
+Comentário sobre a cobrança de direito civil nas provas.
+
+--- pagina 8 ---
+Comentário sobre a jurisprudência aplicada à disciplina.
+
+--- pagina 9 ---
+3. DIREITO PENAL
+CONCENTRAÇÃO DOS TEMAS PRINCIPAIS
+1. Teoria Geral da Pena — 23,94%
+2. Crimes contra a pessoa — 18,62%
+3. Teoria do Crime — 11,17%
+
+--- pagina 10 ---
+Comentário sobre a parte geral do código penal.
+
+--- pagina 11 ---
+Comentário sobre a parte especial do código penal.
+
+--- pagina 12 ---
+4. DIREITO TRIBUTÁRIO
+CONCENTRAÇÃO DOS TEMAS PRINCIPAIS
+1. Espécies Tributárias — 31,94%
+2. Leis Tributárias — 18,75%
+3. Crédito Tributário — 8,33%
+
+--- pagina 13 ---
+Comentário final sobre a disciplina e orientação de estudo.

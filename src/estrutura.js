@@ -157,10 +157,27 @@ export function reordenarRotulosDeEdital(paginas) {
 // OBRIGATÓRIO, senão qualquer linha começada por número viraria entrada (um ano de prova,
 // um item de lista).
 const RE_ENTRADA_INDICE = /^(?:(\d+(?:\.\d+)+)\)?|(\d+)\))\s*(.*)$/;
+// "1. Direito Constitucional": número simples seguido de PONTO. Fora do índice essa forma é
+// ambígua demais (item de lista, ano de prova), mas numa linha que traz os pontinhos e a página
+// não há o que confundir — e é assim que o material de estatística do cursinho numera as
+// disciplinas. Sem isto, um índice perfeito devolvia zero entradas.
+const RE_ENTRADA_INDICE_PONTO = /^(\d{1,2})\.\s+(\S.*)$/;
+// Página na MESMA linha do título ("... Direito Civil ......... 13"). Os três layouts de
+// pareamento abaixo pressupõem o número numa linha só dele — que é como o pdf.js entrega as
+// apostilas —, então sem ler daqui a página se perdia e o bloco ia parar na primeira vez em que
+// o título aparecesse no corpo (o capítulo da pág. 13 caía na 9).
+const RE_PAGINA_NA_LINHA = /\.{2,}\s*(\d{1,4})\s*$/;
 function casarEntradaIndice(linha) {
-  const m = String(linha || "").match(RE_ENTRADA_INDICE);
-  if (!m) return null;
-  return { numero: m[1] || m[2], titulo: (m[3] || "").trim() };
+  const s = String(linha || "");
+  const mp = s.match(RE_PAGINA_NA_LINHA);
+  const pagina = mp ? parseInt(mp[1], 10) : undefined;
+  const m = s.match(RE_ENTRADA_INDICE);
+  if (m) return { numero: m[1] || m[2], titulo: (m[3] || "").trim(), pagina };
+  if (RE_TEM_PONTILHADO.test(s)) {
+    const p = s.match(RE_ENTRADA_INDICE_PONTO);
+    if (p) return { numero: p[1], titulo: p[2].trim(), pagina };
+  }
+  return null;
 }
 // Título numerado no CORPO: "1.2 Princípios..." ou "1.2) ..." ou "12) ..." (paren opcional no corpo).
 const RE_TITULO_CORPO = /^(\d+(?:\.\d+)*)\)?\s+(\S.*)$/;
@@ -374,7 +391,7 @@ function parsePaginaIndice(pag, numPaginas) {
         if (n >= 1 && (!numPaginas || n <= numPaginas)) seq.push({ t: "N", n });
         continue;
       }
-      seq.push(titulo ? { t: "E", numero: ent.numero, titulo } : { t: "C", numero: ent.numero });
+      seq.push(titulo ? { t: "E", numero: ent.numero, titulo, pagina: ent.pagina } : { t: "C", numero: ent.numero });
       continue;
     }
     if (RE_SO_NUMERO.test(l)) {
@@ -402,8 +419,11 @@ function parsePaginaIndice(pag, numPaginas) {
     return casa;
   }
 
-  const entradas = seq.filter((x) => x.t === "E").map((x) => ({ numero: x.numero, titulo: x.titulo }));
+  const entradas = seq.filter((x) => x.t === "E").map((x) => (x.pagina != null ? { numero: x.numero, titulo: x.titulo, pagina: x.pagina } : { numero: x.numero, titulo: x.titulo }));
   if (!entradas.length) return [];
+  // Página lida da própria linha em TODAS as entradas: não há o que inferir, e deixar os layouts
+  // abaixo rodarem só arriscaria sobrescrever (ou apagar) um dado que já está certo.
+  if (entradas.every((e) => e.pagina != null)) return entradas;
 
   const idxFirstE = seq.findIndex((x) => x.t === "E");
   let idxLastN = -1;
@@ -488,6 +508,7 @@ function paginaDoTitulo(paginas, numero, titulo, indicePag) {
 export function detectarPorNumeracao(paginas, indicePag) {
   const brutas = [];
   const vistos = new Set();
+  const repeticoes = {}; // quantas vezes cada número aparece no documento inteiro
   for (const p of paginas) {
     if (ehPaginaDeIndice(p.n, indicePag)) continue;
     const linhas = (p.texto || "").split(/\r?\n/).map((l) => l.trim());
@@ -497,8 +518,9 @@ export function detectarPorNumeracao(paginas, indicePag) {
       if (!m) continue;
       const num = m[1];
       const titulo = m[2].trim();
-      if (vistos.has(num)) continue;
       if (/[.;:,]$/.test(titulo)) continue; // parece frase, não título
+      repeticoes[num] = (repeticoes[num] || 0) + 1;
+      if (vistos.has(num)) continue;
       // ANO de prova ("2023 VUNESP Tribunal de Justiça…"): é cabeçalho de questão comentada
       // dentro da apostila, não uma seção — e roubava dezenas de páginas da aula real.
       if (/^(19|20)\d\d$/.test(num)) continue;
@@ -510,6 +532,15 @@ export function detectarPorNumeracao(paginas, indicePag) {
       vistos.add(num);
     }
   }
+  // NUMERAÇÃO QUE RECOMEÇA não é estrutura do documento. Material que enumera de novo dentro de
+  // cada capítulo ("1. Organização dos Poderes — 21,25%" em Constitucional, "1. Espécies
+  // Tributárias — 31,94%" em Tributário) faz "1.", "2.", "3." aparecerem uma dúzia de vezes cada.
+  // O `vistos` esconde isso — só a PRIMEIRA ocorrência sobrevive —, e o resultado é um sumário
+  // montado com os temas de um capítulo qualquer, no lugar dos capítulos. Quando vários números
+  // se repetem pelo documento, a numeração é local: aqui não serve, e o índice assume.
+  const repetidos = Object.values(repeticoes).filter((c) => c >= 3).length;
+  if (repetidos >= 3) return [];
+
   // COERÊNCIA DE FAMÍLIA: uma apostila numera as seções sob um mesmo prefixo ("10.1", "10.2"…).
   // Se a maioria compartilha um prefixo, o que está fora dele é ruído (lista, tabela, questão).
   const porPrefixo = {};
