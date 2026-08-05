@@ -4347,11 +4347,13 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
    selecionar e copiar um trecho, como no leitor do navegador. Os spans são posicionados pelo
    pdf.js a partir de --scale-factor, definida no wrapper da página. */
 .pdf-page { position: relative; }
-.pdf-page .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1;
+/* `multiply` é o que faz a seleção TINGIR a página em vez de tapá-la: sem ele, o retângulo
+   azul fica por cima do canvas e o trecho selecionado some justamente na hora de ler/copiar. */
+.pdf-page .textLayer { mix-blend-mode: multiply; position: absolute; inset: 0; overflow: hidden; line-height: 1;
   text-align: initial; text-size-adjust: none; forced-color-adjust: none; opacity: 1; }
 .pdf-page .textLayer span, .pdf-page .textLayer br { position: absolute; white-space: pre;
   color: transparent; cursor: text; transform-origin: 0% 0%; }
-.pdf-page .textLayer ::selection { background: rgba(59,130,246,0.45); }
+.pdf-page .textLayer ::selection { background: rgba(59,130,246,0.35); }
 .pdf-page .textLayer mark.pdf-hit { background: rgba(250,204,21,0.55); color: transparent; border-radius: 2px; }
 /* Barra de busca e de impressão: aparecem sob a barra de ferramentas, sem empurrar a página */
 .pdf-achar, .pdf-imprimir { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
