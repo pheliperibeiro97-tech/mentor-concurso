@@ -46,8 +46,19 @@ let ultimoTextoDesenhado = null;
 // aparecia no iPad e não fazia nada ao ser tocado.
 // No iPad o caminho que existe é outro e é do SISTEMA: instalar o app na Tela de Início e usá-lo
 // numa janela pequena (Stage Manager / janelas do iPadOS 26) ao lado do outro aplicativo.
+// Aparelho onde a tentativa JÁ FALHOU. Fica gravado porque a única prova confiável é tentar:
+// o iPad anuncia suporte a PiP, aceita o pedido e não abre janela nenhuma.
+const CHAVE_INDISPONIVEL = "mentor_pip_indisponivel";
+function marcarIndisponivel() {
+  try { localStorage.setItem(CHAVE_INDISPONIVEL, "1"); } catch (_) {}
+}
+function jaFalhou() {
+  try { return localStorage.getItem(CHAVE_INDISPONIVEL) === "1"; } catch (_) { return false; }
+}
+
 export function pipDisponivel() {
   if (typeof document === "undefined") return false;
+  if (jaFalhou()) return false;
   if (typeof document.createElement("canvas").captureStream !== "function") return false;
   if (document.pictureInPictureEnabled) return true;
   const v = document.createElement("video");
@@ -274,7 +285,14 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
 
   ecoando = true;
   const tocando = video.play();
-  if (tocando && tocando.catch) tocando.catch(() => {});
+  // A trava só pode cair QUANDO O NOSSO play terminar, não no fim deste bloco: no Safari o pedido
+  // de PiP sai sem `await` (senão quebra a cadeia do gesto), então o `finally` rodava ANTES do
+  // play resolver — o evento 'play' chegava com a trava já solta e LIGAVA O CRONÔMETRO sozinho.
+  // Foi o defeito que o usuário viu no iPad ("ao clicar para flutuar, ele ativa").
+  const soltarTrava = () => setTimeout(() => { ecoando = false; }, 80);
+  if (tocando && tocando.then) tocando.then(soltarTrava, soltarTrava);
+  else soltarTrava();
+
   try {
     // Os dois navegadores querem coisas OPOSTAS aqui, e atender só um quebra o outro:
     //  - Safari: o pedido tem de sair DENTRO do gesto do usuário, então nada de `await` antes
@@ -286,8 +304,20 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
       await comQuadro();
       await video.requestPictureInPicture();
     }
-  } finally {
-    ecoando = false;
+  } catch (e) {
+    marcarIndisponivel();
+    await fecharPip();
+    throw e;
+  }
+
+  // CONFERE em vez de confiar. O suporte anunciado não garante nada — no iPad o pedido "passa" e
+  // a janelinha não abre. Não abriu, então este aparelho não faz PiP: desfaz tudo e anota, para o
+  // botão não voltar a prometer o que não entrega.
+  await new Promise((r) => setTimeout(r, 700));
+  if (!pipAberto()) {
+    marcarIndisponivel();
+    await fecharPip();
+    return false;
   }
   espelharNoPip(lerEstado().rodando);
   return true;

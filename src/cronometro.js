@@ -328,15 +328,12 @@ function montarWidget() {
           <button class="cf-modo" data-modo="regressivo" title="Conta para baixo, a partir do tempo definido.">Timer</button>
           <button class="cf-modo" data-modo="pomodoro" title="Ciclos de estudo e pausa.">Pomodoro</button>
         </div>
-        ${
-          pipDisponivel()
-            ? `<button class="cf-x cf-pip" data-cf-pip title="Deixar o cronômetro flutuando por cima dos outros aplicativos. No computador a janelinha traz play/pausa; zerar e trocar de modo seguem aqui." aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>`
-            : // Sem PiP possível (iPad/iPhone: o Safari não tem canvas.captureStream) o botão não
-              // aparece — botão morto é pior que botão nenhum. Em vez dele, o caminho que o
-              // SISTEMA oferece: a página só-do-cronômetro, que dá para pôr na Tela de Início e
-              // usar numa janela pequena ao lado de outro aplicativo.
-              `<button class="cf-x cf-pip" data-cf-so-crono title="Abrir só o cronômetro, numa janela separada. No iPad, adicione essa página à Tela de Início e use-a numa janela pequena ao lado do outro aplicativo." aria-label="Abrir só o cronômetro">${icone("picture-in-picture-2")}</button>`
-        }
+        <!-- UM botão para os dois caminhos, decidido no clique: janelinha flutuante onde o
+             aparelho abre de verdade, e "só o cronômetro" (janela separada, para pôr na Tela de
+             Início do iPad) onde não abre. Um botão só porque a decisão pode MUDAR depois da
+             primeira tentativa — o iPad aceita o pedido e não abre nada, e isso só se descobre
+             tentando; com dois botões, o widget precisaria ser remontado no meio. -->
+        <button class="cf-x cf-pip" data-cf-flutuar aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>
         <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
       </div>
       <div class="cf-disp"><div class="cf-big">00:00</div><div class="cf-cap"></div></div>
@@ -379,17 +376,17 @@ function montarWidget() {
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
   on(".cf-btn", "click", (e) => { e.stopPropagation(); setPopAberto(!popAberto); });
   on("[data-cf-fechar]", "click", () => setPopAberto(false));
-  on("[data-cf-so-crono]", "click", (e) => {
-    e.stopPropagation();
+  const abrirSoCronometro = () => {
     try {
       window.open("crono.html", "_blank", "noopener");
       toast("Abri só o cronômetro. No iPad: Compartilhar → Adicionar à Tela de Início; depois use essa janela ao lado do outro app.", "ok");
     } catch (_) {
       toast("Não consegui abrir a janela do cronômetro.", "erro");
     }
-  });
-  on("[data-cf-pip]", "click", async (e) => {
+  };
+  on("[data-cf-flutuar]", "click", async (e) => {
     e.stopPropagation();
+    if (!pipDisponivel()) return abrirSoCronometro();
     try {
       await alternarPip({
         estado: () => ({
@@ -401,9 +398,20 @@ function montarWidget() {
         }),
         onPlayPause: (querRodar) => { if (querRodar !== s.running) toggle(); },
       });
-      if (pipAberto()) setPopAberto(false); // a janelinha assume; o pop atrapalharia
+      if (pipAberto()) {
+        setPopAberto(false); // a janelinha assume; o pop atrapalharia
+      } else {
+        // O aparelho aceitou o pedido e não abriu nada (o caso do iPad). `alternarPip` já anotou
+        // que aqui não funciona, então o botão vira "só o cronômetro" no próximo desenho — e a
+        // pessoa não sai de mãos vazias deste clique.
+        toast("Este aparelho não abre a janelinha flutuante. Abrindo só o cronômetro, que dá para usar numa janela pequena.", "erro");
+        atualizarWidget();
+        abrirSoCronometro();
+      }
     } catch (err) {
-      toast("Este navegador não deixa o cronômetro flutuar. No computador, use a janela do cronômetro.", "erro");
+      toast("Este aparelho não abre a janelinha flutuante. Abrindo só o cronômetro, que dá para usar numa janela pequena.", "erro");
+      atualizarWidget();
+      abrirSoCronometro();
     }
   });
   on("[data-cf-toggle]", "click", toggle);
@@ -470,11 +478,18 @@ function atualizarWidget() {
   widget.classList.toggle("pausado", pausadoSeg > 0);
   // Botão de flutuar: fica aceso enquanto a janelinha está aberta, senão não dá para saber se
   // o clique pegou (a janelinha vive por cima de OUTRO aplicativo).
-  const bp = widget.querySelector("[data-cf-pip]");
+  // O rótulo acompanha o que o botão VAI fazer: onde a janelinha flutuante não abre (iPad), ele
+  // abre a página só-do-cronômetro, e prometer "flutuar por cima" ali seria mentira.
+  const bp = widget.querySelector("[data-cf-flutuar]");
   if (bp) {
     const on = pipAberto();
     bp.classList.toggle("on", on);
-    bp.title = on ? "Fechar a janelinha flutuante" : "Deixar o cronômetro flutuando por cima dos outros aplicativos. No computador a janelinha traz play/pausa; zerar e trocar de modo seguem aqui.";
+    bp.title = on
+      ? "Fechar a janelinha flutuante"
+      : pipDisponivel()
+        ? "Deixar o cronômetro flutuando por cima dos outros aplicativos. No computador a janelinha traz play/pausa; zerar e trocar de modo seguem aqui."
+        : "Abrir só o cronômetro, numa janela separada. No iPad, adicione essa página à Tela de Início e use-a numa janela pequena ao lado do outro aplicativo.";
+    bp.setAttribute("aria-label", on ? "Fechar a janelinha" : pipDisponivel() ? "Flutuar por cima" : "Abrir só o cronômetro");
   }
   // Botão FAB: tempo ao vivo quando ativo; "Cronômetro" quando ocioso.
   const btnT = widget.querySelector(".cf-btn-t");
