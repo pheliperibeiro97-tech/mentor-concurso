@@ -189,7 +189,9 @@ function reconstruirLinhas(items) {
 
 // `ate` limita a leitura às N primeiras páginas. Serve para quem só precisa do SUMÁRIO: numa
 // apostila de 1.289 páginas, ler 15 é instantâneo e ler tudo leva minutos.
-export async function extrairPdfPaginas(source, { ate } = {}) {
+// `onProgresso(feita, total)` avisa a cada página — sem isso, a leitura das 1.289 páginas do
+// Processual Civil são ~5 minutos de tela parada, sem sinal de que algo está acontecendo.
+export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
   const pdfjs = await getPdfjs();
   const pdf = await abrirPdf(source);
   const ehImg = (fn) =>
@@ -231,6 +233,12 @@ export async function extrairPdfPaginas(source, { ate } = {}) {
       temImagem = maxFrac >= LIMIAR_IMG_FRAC;
     } catch (_) {}
     paginas.push({ n: i, texto, vazia: texto.length < LIMIAR_VAZIA, temImagem, ocr: false });
+    // Aviso a cada 5 páginas (e na última): o suficiente para a barra andar, sem pagar um
+    // re-render por página num PDF de mil e poucas.
+    if (onProgresso && (i % 5 === 0 || i === ultima)) {
+      try { onProgresso(i, ultima); } catch (_) {}
+      await new Promise((r) => setTimeout(r, 0)); // devolve a vez à tela para ela pintar
+    }
   }
   const outline = await lerOutline(pdf);
   return { paginas, numPaginas: pdf.numPages, outline, linhasPorPagina };

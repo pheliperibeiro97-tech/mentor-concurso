@@ -3286,7 +3286,17 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .ls-icon { line-height: 1; }
 
 /* OCR / Visão */
-.tag-ocr { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); padding: 2px 10px; border-radius: 20px; font-size: var(--fs-2xs); font-weight: var(--fw-medium); }
+/* Tópicos vinculados do material: resumo de 1 linha que abre sob demanda (o cartão de uma
+   apostila chegava a 22 etiquetas longas e engolia o resto). */
+.doc-topicos { max-width: 100%; }
+.doc-topicos > summary { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); }
+.doc-topicos[open] > summary svg:last-child { transform: rotate(180deg); }
+.doc-topicos-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag-ocr { background: var(--warn-bg); color: var(--warn-ink); border: 1px solid var(--warn-line); padding: 2px 10px; border-radius: 20px; font-size: var(--fs-2xs); font-weight: var(--fw-medium); cursor: pointer; }
+.tag-ocr:hover { filter: brightness(1.08); }
+/* Realce momentâneo do alvo de um atalho (ex.: etiqueta de página escaneada → aviso). */
+.realce-momento { animation: realce-momento 1.6s ease-out; }
+@keyframes realce-momento { 0%, 40% { box-shadow: 0 0 0 3px var(--warn-line); } 100% { box-shadow: 0 0 0 0 transparent; } }
 .ocr-painel { margin-top: 12px; background: var(--bg-amarelo); border: 1px solid #fde68a; border-radius: 12px; padding: 12px 14px; }
 .ocr-titulo { font-weight: var(--fw-medium); font-size: var(--fs-sm); margin-bottom: 6px; }
 .ocr-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 4px 0; font-size: var(--fs-xs); }
@@ -4301,22 +4311,59 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .chat-input button:hover { background: var(--primary-d); }
 
 /* ===== Visualizador de PDF ===== */
-.pdf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); display: flex; align-items: center; justify-content: center; z-index: calc(var(--z-overlay) + 2); padding: 20px; }
-.pdf-viewer { background: #525659; border-radius: 12px; width: 100%; max-width: 900px; height: 90vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: var(--shadow-lg); }
-.pdf-bar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #323639; color: #fff; }
-.pdf-titulo { font-size: var(--fs-base); max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pdf-pag { font-size: var(--fs-sm); min-width: 70px; text-align: center; }
-.pdf-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: #fff; cursor: pointer; font-size: var(--fs-lg); }
-.pdf-btn:hover { background: rgba(255,255,255,0.18); }
-.pdf-close { background: rgba(239,68,68,0.25); border-color: rgba(239,68,68,0.4); }
-.pdf-canvas-wrap { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 16px; position: relative; }
-.pdf-canvas-wrap canvas { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.3); height: fit-content; max-width: 100%; }
+.pdf-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.55); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; z-index: calc(var(--z-overlay) + 2); padding: 24px; }
+/* A moldura segue os tokens do app (antes eram cinzas fixos de leitor antigo, que ignoravam
+   o tema): superfície, borda e raio iguais aos das outras janelas. */
+.pdf-viewer { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  width: 100%; max-width: 1040px; height: 92vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: var(--shadow-lg); color: var(--text); }
+.pdf-bar { display: flex; align-items: center; gap: 6px; padding: 10px 12px; background: var(--surface-2);
+  border-bottom: 1px solid var(--border); }
+.pdf-titulo { font-size: var(--fs-sm); font-weight: var(--fw-semibold); color: var(--text);
+  max-width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pdf-goto { display: flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); color: var(--muted); margin: 0; height: 30px; }
+/* O input global do app tem min-height de 40px (campo de formulário); dentro da barra ele
+   é um controle compacto, senão a barra de ferramentas fica com 61px de altura. */
+/* Campo da página: cabe 4 dígitos e nada mais — antes era um input de formulário inteiro. */
+.pdf-goto input { width: 4.4ch; min-height: 0; height: 24px; margin: 0; padding: 2px 4px; text-align: center;
+  font-size: var(--fs-2xs); border-radius: var(--radius-xs); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); appearance: textfield; }
+.pdf-goto input::-webkit-outer-spin-button, .pdf-goto input::-webkit-inner-spin-button { appearance: none; margin: 0; }
+.pdf-sep { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+.pdf-btn { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px;
+  border-radius: var(--radius-xs); border: 1px solid transparent; background: transparent; color: var(--text-2);
+  cursor: pointer; transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1); }
+.pdf-btn .ico { width: 17px; height: 17px; }
+.pdf-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
+.pdf-btn.is-ativo { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-soft-border); }
+.pdf-close:hover { background: var(--danger-soft, rgba(239,68,68,0.12)); color: var(--danger); border-color: transparent; }
 /* Rolagem contínua */
-.pdf-scroll { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; scroll-behavior: smooth; }
-.pdf-page { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.3); max-width: 100%; }
-.pdf-page canvas { display: block; width: 100%; height: auto; }
-.pdf-goto { color: #fff; font-size: var(--fs-sm); display: flex; align-items: center; gap: 4px; }
-.pdf-goto input { width: 54px; padding: 3px 4px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.1); color: #fff; }
+.pdf-scroll { flex: 1; overflow: auto; padding: 20px 16px; display: flex; flex-direction: column; align-items: center;
+  gap: 16px; scroll-behavior: smooth; background: var(--surface-3); }
+.pdf-page { background: #fff; border-radius: 4px; box-shadow: var(--shadow); max-width: 100%; }
+.pdf-page canvas { display: block; width: 100%; height: auto; border-radius: 4px; }
+/* A página é canvas (pixels) + camada de TEXTO invisível por cima: é ela que permite
+   selecionar e copiar um trecho, como no leitor do navegador. Os spans são posicionados pelo
+   pdf.js a partir de --scale-factor, definida no wrapper da página. */
+.pdf-page { position: relative; }
+.pdf-page .textLayer { position: absolute; inset: 0; overflow: hidden; line-height: 1;
+  text-align: initial; text-size-adjust: none; forced-color-adjust: none; opacity: 1; }
+.pdf-page .textLayer span, .pdf-page .textLayer br { position: absolute; white-space: pre;
+  color: transparent; cursor: text; transform-origin: 0% 0%; }
+.pdf-page .textLayer ::selection { background: rgba(59,130,246,0.45); }
+.pdf-page .textLayer mark.pdf-hit { background: rgba(250,204,21,0.55); color: transparent; border-radius: 2px; }
+/* Barra de busca e de impressão: aparecem sob a barra de ferramentas, sem empurrar a página */
+.pdf-achar, .pdf-imprimir { display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  background: var(--surface); color: var(--text); border-bottom: 1px solid var(--border); }
+.pdf-achar.oculto, .pdf-imprimir.oculto { display: none; }
+.pdf-achar input, .pdf-imprimir input { flex: 0 1 280px; margin: 0; padding: 6px 10px;
+  border-radius: var(--radius-xs); border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.pdf-achar-status { color: var(--muted); font-size: var(--fs-2xs); min-width: 132px; }
+.pdf-imprimir label { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--fs-2xs); color: var(--muted); }
+/* Em tela cheia o leitor ocupa tudo (o overlay vira a raiz) */
+.pdf-overlay:fullscreen { padding: 0; background: var(--surface-3); }
+.pdf-overlay:fullscreen .pdf-viewer { max-width: none; height: 100%; border-radius: 0; border: 0; }
 
 /* ===== Toast =====
    Fase 0: saiu do canto dos FABs (ficava encoberto) → centralizado embaixo, acima de tudo. */
@@ -5937,6 +5984,14 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   .onboarding-wrap { padding: 16px 12px; }
   .pdf-overlay { padding: 0; }
   .pdf-viewer { height: 100dvh; border-radius: 0; }
+  /* Celular: só os controles cabem (8 botões + página ≈ 380px). O título sai — o material
+     acabou de ser aberto do cartão que o nomeia — e a barra rola se ainda faltar espaço. */
+  .pdf-bar { gap: 2px; padding: 8px 6px; overflow-x: auto; scrollbar-width: none; }
+  .pdf-bar::-webkit-scrollbar { display: none; }
+  .pdf-titulo, .pdf-goto-rot { display: none; }
+  .pdf-btn { flex: 0 0 auto; }
+  .pdf-achar input, .pdf-imprimir input { flex: 1 1 auto; min-width: 0; }
+  .pdf-achar-status { min-width: 0; }
 }
 
 /* ----- 6. FABs e toasts deixam de cobrir o conteúdo -----
