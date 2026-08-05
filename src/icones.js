@@ -153,8 +153,10 @@ import layoutPanelTop from "lucide-static/icons/layout-panel-top.svg?raw";
 import indentIncrease from "lucide-static/icons/indent-increase.svg?raw";
 import indentDecrease from "lucide-static/icons/indent-decrease.svg?raw";
 import heading from "lucide-static/icons/heading.svg?raw";
+import pictureInPicture2 from "lucide-static/icons/picture-in-picture-2.svg?raw";
 
 const MAPA = {
+  "picture-in-picture-2": pictureInPicture2,
   "clock-3": clock3,
   "calendar-days": calendarDays,
   "trending-up": trendingUp,

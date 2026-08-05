@@ -13,6 +13,7 @@
 import { toast, confetti } from "./ui.js";
 import { fmtMMSS } from "./util.js";
 import { icone } from "./icones.js";
+import { pipDisponivel, pipAberto, alternarPip, espelharNoPip } from "./crono-pip.js";
 
 const LS_KEY = "mentor_crono_v1";
 
@@ -212,6 +213,7 @@ export function snapshot() {
 // ===== Notificação aos displays (mini-relógio + assinantes da tela Hoje) =====
 function notificarDisplays() {
   atualizarWidget();
+  espelharNoPip(s.running); // o play/pause da janelinha do sistema segue o app
   const snap = snapshot();
   ouvintes.forEach((fn) => {
     try {
@@ -326,6 +328,7 @@ function montarWidget() {
           <button class="cf-modo" data-modo="regressivo" title="Conta para baixo, a partir do tempo definido.">Timer</button>
           <button class="cf-modo" data-modo="pomodoro" title="Ciclos de estudo e pausa.">Pomodoro</button>
         </div>
+        ${pipDisponivel() ? `<button class="cf-x cf-pip" data-cf-pip title="Deixar o cronômetro flutuando por cima dos outros aplicativos. Lá dentro só cabe o play/pausa do sistema — zerar e trocar de modo seguem aqui." aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>` : ""}
         <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
       </div>
       <div class="cf-disp"><div class="cf-big">00:00</div><div class="cf-cap"></div></div>
@@ -368,6 +371,24 @@ function montarWidget() {
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
   on(".cf-btn", "click", (e) => { e.stopPropagation(); setPopAberto(!popAberto); });
   on("[data-cf-fechar]", "click", () => setPopAberto(false));
+  on("[data-cf-pip]", "click", async (e) => {
+    e.stopPropagation();
+    try {
+      await alternarPip({
+        estado: () => ({
+          texto: (emOvertime() ? "+" : "") + fmtMMSS(displaySeg()),
+          legenda: emOvertime() ? "Tempo extra" : [s.faseNome, s.topicoLabel].filter(Boolean).join(" · ") || "Em foco",
+          cor: s.cor,
+          rodando: s.running,
+          extra: emOvertime(),
+        }),
+        onPlayPause: (querRodar) => { if (querRodar !== s.running) toggle(); },
+      });
+      if (pipAberto()) setPopAberto(false); // a janelinha assume; o pop atrapalharia
+    } catch (err) {
+      toast("Este navegador não deixa o cronômetro flutuar. No computador, use a janela do cronômetro.", "erro");
+    }
+  });
   on("[data-cf-toggle]", "click", toggle);
   on("[data-cf-zerar]", "click", zerar);
   on("[data-cf-pular]", "click", pularFase);
