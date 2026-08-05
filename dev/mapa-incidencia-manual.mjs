@@ -48,7 +48,6 @@ export const MAPA = {
   Eleições: ["top_mse1bycc_7i"], // (16) Eleição · atos preparatórios · apuração e diplomação
   "Ações Constitucionais, Ações Especiais...": ["top_mse1bycc_7j"], // (17) Ações judiciais eleitorais
   "Teoria geral do Direito Eleitoral": ["top_mse1bycb_76"],
-  Nacionalidade: ["top_mse1byca_6u"], // (31) Direitos de cidadania — o item mais próximo do edital
   "Partidos Políticos": ["top_mse1bycb_75"], // mora em Eleitoral (3) no edital do TJSP
 };
 
@@ -62,6 +61,10 @@ export const FORA = {
   Execução: "execução penal já entra pelo item (IV.h), casado pela Lei nº 7.210/84",
   "Do Direito de Empresa": "1,04% — o conteúdo é de Direito Empresarial, já coberto lá",
   CONANDA: "0,73% — sem item próprio no edital",
+  // Conferido: NENHUM dos 401 tópicos menciona nacionalidade/naturalização. O vizinho de capítulo
+  // na CF ("Direitos de cidadania · sufrágio") é OUTRA matéria — e a regra aqui é que vazio é
+  // melhor que errado. Fica na lista de "sem correspondência", à vista, para marcar à mão.
+  Nacionalidade: "2,08% — o edital do TJSP não traz item de nacionalidade",
 };
 
 const nivelPorAcumulado = (a) => (a <= 50 ? 95 : a <= 75 ? 70 : a <= 90 ? 40 : 15);

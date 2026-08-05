@@ -67,6 +67,10 @@ async function abrirPdf(source) {
 // (candidata a OCR/Visão). Acima, o texto extraível já basta.
 const LIMIAR_VAZIA = 80;
 
+// Texto local suficiente para dispensar a IA na leitura de um PDF. Abaixo disto o PDF é
+// provavelmente escaneado (só imagem), e aí a IA é o único caminho.
+const LIMIAR_TEXTO_LOCAL = 200;
+
 // Fração mínima da área da página que uma imagem precisa ocupar para ser tratada
 // como FIGURA/TABELA relevante. Logos e banners de cabeçalho (que se repetem em
 // TODA página) são pequenos e ficam abaixo disto — assim não geram falso "tem imagem".
@@ -393,6 +397,17 @@ export function ligarImportArquivo(input, opts = {}) {
 export async function lerArquivoTexto(file, cfg, contexto) {
   const ehPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name || "");
   const ehImg = (file.type || "").startsWith("image/");
+  // PDF COM TEXTO: ler localmente PRIMEIRO. A ordem era a inversa — o arquivo inteiro subia para a
+  // IA antes de qualquer tentativa —, e isso é o pior dos dois mundos num PDF de texto: gasta cota,
+  // demora, quebra quando a rede responde 503 (foi o que aconteceu com a trilha do cursinho) e
+  // ainda deixa o modelo REESCREVER o que estava escrito. A IA continua sendo o caminho do PDF
+  // escaneado, que é onde ela ganha: se o texto local vier vazio ou ridículo, ela assume.
+  if (ehPdf) {
+    try {
+      const local = await extrairPdf(file);
+      if (local && local.trim().length >= LIMIAR_TEXTO_LOCAL) return local.trim();
+    } catch (_) {}
+  }
   if (cfg && iaDisponivel(cfg) && cfg.iaProvider === "gemini" && (ehPdf || ehImg) && file.size <= 14 * 1024 * 1024) {
     try {
       const dataB64 = await arquivoParaBase64(file);

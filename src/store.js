@@ -5953,6 +5953,12 @@ export const store = {
   // PREVIEW da extração de avulsas: devolve a PROPOSTA (não grava), para revisar/voltar
   // antes de criar. Online separa a observação; offline quebra por linha (sem observação).
   async prepararExtracaoTarefas(texto, topicoId = null, estimMin = null) {
+    // TRILHA do cursinho: o arquivo já vem com as metas numeradas ("TAREFA 01"…), e esse número é
+    // a ordem de execução. Recortar é melhor que interpretar — a IA, com as 34 páginas inteiras,
+    // devolveu 8 tarefas inventadas das primeiras páginas e perdeu o resto. Sem IA e sem corte.
+    if (ia.pareceTrilha(texto)) {
+      return ia.interpretarTrilha(texto).map((t) => ({ titulo: t.titulo, observacao: t.observacao, estimMin }));
+    }
     if (this.iaDisponivel()) {
       const itens = await iaProv.extrairTarefas(state.config, { texto, contexto: nomeContexto(state, topicoId) });
       return itens.map((it) => {

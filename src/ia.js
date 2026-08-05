@@ -417,6 +417,84 @@ export function interpretarIncidenciaPorDisciplina(texto) {
   return out;
 }
 
+// ---------- 4a-ter. TRILHA do cursinho (PDF semanal) → tarefas, na ordem do arquivo ----------
+// A trilha semanal numera as metas ("TAREFA 01", "TAREFA 02"…) dentro de seções por matéria
+// ("MATÉRIA: DIREITO PROCESSUAL CIVIL"). Esse número É a ordem de execução.
+//
+// Por que determinístico e não pela IA: jogar as 34 páginas na IA devolveu 8 tarefas inventadas
+// a partir das primeiras páginas — ela reescreve o material em vez de recortar as metas, e o
+// resto do documento se perde no caminho. Aqui o recorte é exato e a ordem é a do arquivo.
+const RX_TRILHA_NOME = /TRILHA\s+ESTRAT[ÉE]GICA\s+(\d{1,3})/i;
+const RX_MATERIA = /^\s*MAT[ÉE]RIA:\s*(.+?)\s*$/;
+const RX_TAREFA = /^\s*TAREFA\s+(\d{1,3})\s*$/;
+
+// CAIXA ALTA → Título, sem transformar as preposições ("DIREITO DO CONSUMIDOR" viraria
+// "Direito Do Consumidor", que ninguém escreve assim).
+const MINUSCULAS = new Set(["de", "da", "do", "das", "dos", "e", "em", "no", "na", "a", "o", "ao", "à", "para", "com"]);
+function capitalizarTitulo(s) {
+  return String(s || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .map((p, i) => (i > 0 && MINUSCULAS.has(p) ? p : p.replace(/^\p{L}/u, (c) => c.toUpperCase())))
+    .join(" ")
+    .trim();
+}
+
+export function pareceTrilha(texto) {
+  const t = String(texto || "");
+  return (t.match(/^\s*TAREFA\s+\d{1,3}\s*$/gm) || []).length >= 3;
+}
+
+export function interpretarTrilha(texto) {
+  const linhas = String(texto || "").split(/\r?\n/);
+  const nome = (String(texto || "").match(RX_TRILHA_NOME) || [])[1];
+  const prefixo = nome ? `Trilha ${nome}` : "Trilha";
+  const tarefas = [];
+  let materia = "";
+  let atual = null;
+  const fechar = () => {
+    if (!atual) return;
+    const uteis = atual.linhas.map((l) => l.replace(/\s+/g, " ").trim()).filter((l) => l && !/^\d+$/.test(l));
+    const corpo = uteis.filter((l) => !/^https?:|^OBS/i.test(l));
+    // O bloco abre com o ASSUNTO da tarefa, que quase sempre repete a matéria da seção — mas nem
+    // sempre: dentro de "MATÉRIA: FORMAÇÃO HUMANÍSTICA" vêm "Diário de Legislação", "Revisão
+    // semanal" e "Hora do informativo!", que são outra coisa. Quando difere, quem manda é a linha.
+    const primeira = corpo[0] || "";
+    const ehMateria = primeira.toLowerCase() === (atual.materia || "").toLowerCase();
+    const assunto = ehMateria ? atual.materia : primeira || atual.materia;
+    const instrucao = (ehMateria ? corpo[1] : corpo[1]) || (ehMateria ? "" : primeira) || "";
+    const link = (uteis.find((l) => /https?:\/\//.test(l)) || "").replace(/\s+/g, "");
+    const obs = uteis.filter((l) => /^OBS/i.test(l)).join(" ");
+    const cabecalho = [prefixo, atual.n, assunto].filter(Boolean).join(" · ");
+    tarefas.push({
+      numero: Number(atual.n),
+      materia: atual.materia,
+      assunto,
+      titulo: `${cabecalho}${instrucao ? " — " + instrucao : ""}`.replace(/\s+/g, " ").replace(/[.\s]+$/, ""),
+      observacao: [obs, link].filter(Boolean).join("\n"),
+    });
+    atual = null;
+  };
+  for (const linha of linhas) {
+    const mm = linha.match(RX_MATERIA);
+    if (mm) {
+      fechar();
+      materia = capitalizarTitulo(mm[1]); // "DIREITO DO CONSUMIDOR" → "Direito do Consumidor"
+      continue;
+    }
+    const mt = linha.match(RX_TAREFA);
+    if (mt) {
+      fechar();
+      atual = { n: mt[1], materia, linhas: [] };
+      continue;
+    }
+    if (atual && atual.linhas.length < 14) atual.linhas.push(linha);
+  }
+  fechar();
+  // A ordem é a do arquivo; o número da tarefa desempata se o PDF trouxer algo fora de ordem.
+  return tarefas.sort((a, b) => a.numero - b.numero);
+}
+
 // ---------- 4b. Interpretar lista de "temas que mais caem" com nível/percentual ----------
 // Extrai de cada linha o nome do tema e o peso/incidência (percentual ou número),
 // para ranquear o que é mais importante. Ex.: "Atos administrativos - 25%".
