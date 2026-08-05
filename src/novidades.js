@@ -8,6 +8,15 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.7",
+    data: "agosto/2026",
+    titulo: "O cronômetro flutuante não liga mais sozinho, e desiste com elegância onde não funciona",
+    itens: [
+      "CORREÇÃO — abrir a janelinha flutuante podia INICIAR o cronômetro sozinho. Era o app confundindo o «tocar» interno do vídeo (que é como a janelinha é feita) com um comando seu.",
+      "Onde a janelinha não abre de verdade — o caso do iPad e do iPhone —, o app agora percebe na primeira tentativa, abre «só o cronômetro» no lugar e não volta a oferecer a janelinha naquele aparelho. Antes o botão aceitava o clique e não acontecia nada.",
+    ],
+  },
+  {
     v: "0.8.6",
     data: "agosto/2026",
     titulo: "A barra do iPad não invade mais o app, e o cronômetro flutuante ficou nítido",
