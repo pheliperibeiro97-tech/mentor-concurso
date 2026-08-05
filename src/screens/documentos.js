@@ -762,8 +762,28 @@ export default function renderDocumentos(root, app) {
       const d = store.get().documentos.find((x) => x.id === id);
       const faltam = store.figurasPendentes(d).length;
       if (!faltam) return toast("As figuras deste material já estão descritas.", "ok");
-      const fim = toastCarregando(`Lendo figuras… 0 de ${faltam}`);
+      const fim = toastCarregando(`Lendo figuras… 0 de ${faltam}`, { aoCancelar: () => store.pararLeituraFiguras() });
       let r = null;
+      store.iniciarLeituraFiguras();
+      try {
+        // `toastCarregando` devolve uma função: com texto ATUALIZA o rótulo, sem texto FECHA.
+        r = await store.descreverFigurasDeDoc(id, {
+          onProgresso: ({ feitas, total }) => fim(`Lendo figuras… ${feitas} de ${total}`),
+        });
+      } finally { fim(); }
+      const restam = store.figurasPendentes(store.get().documentos.find((x) => x.id === id)).length;
+      toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
+      store.indexarFonteAuto(id);
+      app.refresh();
+    },
+    // O mesmo, para TODOS os materiais com figura pendente, em sequência.
+    "figuras-todos": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Descrever figuras");
+      const alvos = (store.get().documentos || [])
+        .map((d) => ({ d, faltam: store.figurasPendentes(d).length }))
+        .filter((x) => x.faltam);
+      if (!alvos.length) return toast("Não há figuras pendentes.", "ok");
+      const totalPaginas = alvos.reduce((a, x) => a + x.faltam, 0);
       store.iniciarLeituraFiguras();
       try {
         // `toastCarregando` devolve uma função: com texto ATUALIZA o rótulo, sem texto FECHA.
@@ -835,32 +855,22 @@ export default function renderDocumentos(root, app) {
       let jaFeitas = 0; // fechadas nos materiais anteriores
       let parou = false;
       let ultimo = null; // resultado do último material (traz o motivo de parar e a contagem)
-      const fim = toastCarregando(`Descrevendo figuras… 0 de ${totalPaginas}`);
+      const fim = toastCarregando(`Lendo figuras… 0 de ${totalPaginas}`, { aoCancelar: () => store.pararLeituraFiguras() });
       try {
         for (const { d, faltam } of alvos) {
           const r = await store.descreverFigurasDeDoc(d.id, {
             orcamentoReserva,
-            onProgresso: ({ feitas, pagina, conta }) => {
-              pintar(jaFeitas + feitas, d.titulo, pagina, conta);
-              fim(`Processando figuras… ${jaFeitas + feitas} de ${totalPaginas}`);
-            },
+            onProgresso: ({ feitas }) => fim(`Lendo figuras… ${jaFeitas + feitas} de ${totalPaginas}`),
           });
           jaFeitas += faltam - store.figurasPendentes(store.get().documentos.find((x) => x.id === d.id) || d).length;
           store.indexarFonteAuto(d.id);
           ultimo = r;
           if (r && r.parou) { parou = true; break; }
         }
-      } finally {
-        fim();
-        if (botaoIniciar) botaoIniciar.disabled = false;
-      }
+      } finally { fim(); }
       const restam = (store.get().documentos || []).reduce((a, d) => a + store.figurasPendentes(d).length, 0);
-      const msg = mensagemFiguras(ultimo, totalPaginas - restam, restam);
-      // O resultado fica NO PAINEL (e no toast); a tela só se refaz depois, senão a resposta
-      // desaparece antes de ser lida.
-      estado(parou ? "alerta" : restam ? "alerta" : "ok", msg);
-      toast(msg, parou || restam ? "erro" : "ok");
-      setTimeout(() => app.refresh(), 6000);
+      toast(mensagemFiguras(ultimo, totalPaginas - restam, restam), parou || restam ? "erro" : "ok");
+      app.refresh();
     },
     // Opcional 2: re-detecta a estrutura a partir do texto atual das páginas (ex.: após OCR).
     "redetectar-estrutura": (el) => {
@@ -1720,14 +1730,6 @@ function figurasNudgeHTML(store, st) {
     ${icone("image")}
     <span>As figuras e tabelas ${onde} ainda não foram lidas: o que está dentro delas não entra na busca nem nas gerações.</span>
     <button class="btn btn-primary btn-sm" data-action="figuras-todos" data-tip="A IA lê cada página com figura ou tabela e escreve o que ela mostra. São ${paginas} ${paginas === 1 ? "página" : "páginas"} — dá para parar no meio e retomar depois de onde parou.">${icone("image")} Ler figuras e tabelas</button>
-  </div>
-  <div class="sum-nudge fig-andamento oculto" id="fig-andamento">
-    <span class="fig-ico"><span class="import-spin">${icone("refresh-cw")}</span></span>
-    <span class="fig-txt">Processando…</span>
-    <div class="fc-prog-bar fig-bar"><span style="width:0%"></span></div>
-    <span class="fc-prog-txt fig-num"></span>
-    <span class="fig-aviso muted small"></span>
-    <button class="btn btn-ghost btn-sm fig-parar" data-action="figuras-parar">${icone("x")} Parar</button>
   </div>`;
 }
 

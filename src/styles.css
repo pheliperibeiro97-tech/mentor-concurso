@@ -3288,20 +3288,6 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 /* OCR / Visão */
 /* Tópicos vinculados do material: resumo de 1 linha que abre sob demanda (o cartão de uma
    apostila chegava a 22 etiquetas longas e engolia o resto). */
-/* Andamento da leitura de figuras: fica no lugar do aviso, com barra, contagem e "Parar" —
-   um trabalho de 45 minutos não pode viver só num toast de rodapé. */
-.fig-andamento.oculto, .fig-andamento .fig-parar.oculto { display: none; }
-.fig-andamento .fig-ico { display: inline-flex; flex: none; }
-.fig-andamento .fig-ico svg { width: 18px; height: 18px; }
-/* Cor pelo ESTADO: processando (azul do app), alerta (âmbar), concluído (verde). */
-.fig-andamento.is-alerta { border-color: var(--warn-line); background: var(--warn-bg); }
-.fig-andamento.is-alerta .fig-ico svg { color: var(--warn-ink); }
-.fig-andamento.is-ok { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); background: color-mix(in srgb, var(--success) 8%, transparent); }
-.fig-andamento.is-ok .fig-ico svg { color: var(--success); }
-.fig-andamento .fig-aviso { flex: 1 1 auto; min-width: 0; color: var(--warn-ink); }
-.fig-andamento .fig-txt { flex: 1 1 220px; min-width: 0; }
-.fig-andamento .fig-bar { flex: 1 1 160px; max-width: 320px; }
-.fig-andamento .fig-num { flex: none; }
 .doc-topicos { max-width: 100%; }
 .doc-topicos > summary { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-2xs); }
 .doc-topicos[open] > summary svg:last-child { transform: rotate(180deg); }
