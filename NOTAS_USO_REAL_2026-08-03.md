@@ -1240,3 +1240,43 @@ caras. Consertado:
   voltava como pendente e era reprocessada para sempre — pagando de novo.
 
 Custo real da lição: ~US$ 1 (20 chamadas). As 46 páginas lidas ficaram salvas.
+
+---
+
+## 16. O leitor de PDF passou a ser o do próprio WebView (2026-08-05)
+
+Depois de refazer o leitor caseiro (pdf.js) três vezes — seleção que tapava o texto no tema
+escuro, "página inteira" errado, zoom com Ctrl+roda faltando —, a pergunta do usuário resolveu
+o assunto: *"e se esse visualizador fosse um da própria web?"*. O WebView2 já traz o leitor do
+Edge, completo e conhecido: seleção, busca, zoom com Ctrl+roda, página inteira, girar,
+miniaturas, imprimir e salvar. Manter uma cópia pior disso à mão era trabalho contra.
+
+`abrirVisualizadorPdf()` agora decide o caminho:
+
+1. **Leitor nativo** (padrão no computador) — `navigator.pdfViewerEnabled` ligado: o app monta
+   só a moldura (título, tela cheia, fechar) e um `<iframe>` com um `blob:` do PDF, com
+   `#page=N` para cair na página do bloco clicado. Nada de canvas, nada de camada de texto.
+2. **pdf.js**, de reserva — onde não há leitor nativo. O Chrome no **Android baixa** o PDF em
+   vez de exibir, então o PWA/celular continua com o leitor próprio, que segue no código.
+
+Detalhes que só apareceram testando no app instalado:
+
+- **Largura**: o leitor nativo abre com a barra de miniaturas; com os 900 px do modal antigo a
+  folha saía **cortada à direita**. O quadro passou a `min(1400px, 96vw)` × `94vh`.
+- **Tela cheia**: dentro do iframe o F11 é do leitor nativo e não chega ao app, então o botão
+  da barra é o caminho garantido (o F11 no app funciona quando o foco está fora do iframe).
+  O **Escape** só fecha o visualizador quando NÃO se está em tela cheia — senão uma tecla
+  faria as duas coisas de uma vez.
+- Ícone: em lucide é `maximize-2`/`minimize-2`. `maximize` existe mas desenha outra coisa —
+  o botão saiu invisível na primeira tentativa.
+
+Medido no app instalado, nos dois temas: `pdf-nativo` ativo, iframe presente, nenhum canvas
+próprio, 1382×865 → 1920×1080 e de volta, pelo botão e pelo F11.
+
+### Fecho da biblioteca
+
+- **Figuras: 922 descritas, 0 pendentes** (899 pelo Gemini, 23 pela reserva ≈ US$ 1,15).
+- **Páginas escaneadas: 0 pendentes.** As 13 que sobraram foram transcritas pela Visão. Antes
+  disso a etiqueta "página escaneada" mentia: 16 das 29 já tinham texto e ainda apareciam,
+  porque `paginasPendentes` olhava só a marca `vazia`, gravada na importação. Agora exige
+  texto realmente vazio — conserto retroativo, vale para qualquer base já importada.
