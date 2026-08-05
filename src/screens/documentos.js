@@ -1773,7 +1773,8 @@ function docHTML(store, st, d, busca) {
               <div class="menu-rotulo">Sumário e edital</div>
               ${
                 d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
-                  ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Corrigir o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Editar sumário</button>`
+                  ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Corrigir o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Editar sumário</button>
+                     <button class="menu-item" data-action="redetectar-estrutura" data-id="${d.id}" data-tip="Monta o sumário de novo a partir do texto que já está aqui. Use depois de ler páginas com a Visão, ou quando uma versão do app melhorar a detecção — ao contrário de «Atualizar material», não relê o arquivo e não perde o que a Visão transcreveu." data-tip-pos="cima-esq"><span class="menu-ico">${icone("refresh-cw")}</span> Refazer sumário</button>`
                   : store.temPdfDoc(d) && store.iaDisponivel()
                     ? `<button class="menu-item" data-action="caprichar-estrutura" data-doc="${d.id}" data-tip="A IA lê a página de sumário do próprio PDF e monta os tópicos do material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("wand-sparkles")}</span> Montar sumário (IA)</button>`
                     : ""
