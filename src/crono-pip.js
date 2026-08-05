@@ -12,8 +12,8 @@
 //  - PROPORÇÃO manda no tamanho. A janelinha do PiP mantém a proporção do vídeo e tem altura
 //    mínima própria: com um canvas largo e baixo (480x220) ela nascia enorme e NÃO ENCOLHIA.
 //    16:9 é o formato que os navegadores esperam e o que aceita ser reduzido.
-//  - Vídeo vindo de canvas NÃO GANHA os botões de play/pausa do Chromium, e não há como dar —
-//    ver o bloco "SOBRE OS BOTÕES DA JANELINHA" adiante. Ela é um MOSTRADOR.
+//  - Vídeo vindo de canvas não ganha play/pausa sozinho: é preciso Media Session E uma faixa de
+//    áudio inaudível, e no Safari nem isso (ver "OS BOTÕES DA JANELINHA" adiante).
 //  - requestAnimationFrame PARA quando a página vai para segundo plano — exatamente o momento
 //    em que esta janela serve para alguma coisa. O desenho é por timer, não por quadro.
 //  - O `play()` que damos para o vídeo existir não pode ser lido como "o usuário mandou iniciar";
@@ -30,6 +30,8 @@ let faixa = null;       // CanvasCaptureMediaStreamTrack, para forçar quadro
 let lerEstado = null;   // () => {texto, legenda, cor, rodando, extra}
 let aoPlayPause = null; // (querRodar:boolean) => void
 let ecoando = false;    // ignora o play/pause que NÓS mesmos disparamos
+let ultimoEstadoSistema = null;
+let ultimoTextoDesenhado = null;
 
 // `pictureInPictureEnabled` cobre Chrome/Edge/Firefox; `webkitSupportsPresentationMode` é o
 // caminho do Safari (iPad/iPhone/Mac), que nunca implementou o nome padrão.
@@ -44,8 +46,6 @@ export function pipAberto() {
   return !!(document.pictureInPictureElement || (video && video.webkitPresentationMode === "picture-in-picture"));
 }
 
-const ehSafari = () => !!(video && video.webkitSetPresentationMode);
-
 const CSS_VAR = (nome, padrao) => {
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
@@ -55,21 +55,82 @@ const CSS_VAR = (nome, padrao) => {
   }
 };
 
-// SOBRE OS BOTÕES DA JANELINHA — o que foi tentado, medido e descartado.
+// OS BOTÕES DA JANELINHA — o caminho, medido fotografando a janela do Windows.
 //
-// Vídeo que vem de canvas não ganha play/pausa do Chromium: para ele, stream ao vivo não é algo
-// que se pause. A saída aparente era a Media Session (declarar as ações faz o navegador desenhar
-// os botões no PiP). Feito isso, os botões APARECERAM E NÃO FUNCIONARAM — e a medição explicou:
-// o stream é mudo e sem faixa de áudio (`getAudioTracks().length === 0`), então não existe sessão
-// de mídia ativa e o navegador nunca entrega a ação. Botão que não faz nada é pior que botão
-// nenhum, então a Media Session saiu.
+// Vídeo que vem de canvas não ganha play/pausa: para o PiP, stream ao vivo não é algo que se
+// pause. A janelinha nascia só com "Voltar para a guia", fechar, mudo e engrenagem.
 //
-// Dar áudio ao stream (uma faixa silenciosa) criaria a sessão de verdade, mas no iPad — que é o
-// alvo — tocar áudio TIRA O SOM DE QUEM ESTÁ ESTUDANDO COM MÚSICA. Não compensa.
+// Declarar as ações da Media Session não bastou: os botões APARECERAM E NÃO FUNCIONARAM, porque
+// o stream era mudo e sem faixa de áudio — sem áudio não há sessão de mídia ativa e o navegador
+// nunca entrega a ação. O que fecha a conta é dar ao stream uma FAIXA DE ÁUDIO praticamente
+// inaudível (30 Hz a 0,08% de volume): aí o botão aparece E o clique chega aqui (conferido
+// clicando no botão de verdade, com o cursor do sistema).
 //
-// Fica assim: a janelinha é um MOSTRADOR. Onde o navegador oferecer play/pausa nativo do vídeo
-// (é o caso do Safari), os ouvintes de 'play'/'pause' abaixo comandam o cronômetro — esse caminho
-// está medido e funciona. No resto, o comando é no app, e a janelinha acompanha.
+// 🔴 Só fora do Safari. No iPad, tocar áudio TOMA O FOCO DE ÁUDIO do aparelho e cala a música de
+// quem está estudando — o preço não vale o botão. Lá a janelinha é mostrador, e o play/pausa
+// nativo do vídeo (que o Safari oferece) comanda o cronômetro pelos ouvintes de 'play'/'pause'.
+let audio = null; // {ctx, osc} enquanto a janelinha está aberta
+
+function ligarAudioInaudivel(stream) {
+  if (audio) return true;
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return false;
+    const ctxA = new AC();
+    const osc = ctxA.createOscillator();
+    const gain = ctxA.createGain();
+    gain.gain.value = 0.0008; // ~0,08% — inaudível, mas não zero (zero o navegador ignora)
+    osc.frequency.value = 30; // abaixo da faixa útil de qualquer alto-falante
+    const dest = ctxA.createMediaStreamDestination();
+    osc.connect(gain);
+    gain.connect(dest);
+    osc.start();
+    stream.addTrack(dest.stream.getAudioTracks()[0]);
+    ctxA.resume().catch(() => {});
+    audio = { ctx: ctxA, osc };
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function desligarAudio() {
+  if (!audio) return;
+  try { audio.osc.stop(); } catch (_) {}
+  try { audio.ctx.close(); } catch (_) {}
+  audio = null;
+}
+
+function ligarControlesDoSistema() {
+  const ms = typeof navigator !== "undefined" && navigator.mediaSession;
+  if (!ms) return;
+  try {
+    if (window.MediaMetadata) ms.metadata = new window.MediaMetadata({ title: "Cronômetro", artist: "Mentor Concurso" });
+    ms.setActionHandler("play", () => { if (aoPlayPause) aoPlayPause(true); });
+    ms.setActionHandler("pause", () => { if (aoPlayPause) aoPlayPause(false); });
+  } catch (_) {}
+}
+
+function desligarControlesDoSistema() {
+  const ms = typeof navigator !== "undefined" && navigator.mediaSession;
+  if (!ms) return;
+  try {
+    ms.setActionHandler("play", null);
+    ms.setActionHandler("pause", null);
+    ms.metadata = null;
+    ms.playbackState = "none";
+  } catch (_) {}
+  ultimoEstadoSistema = null;
+}
+
+function atualizarEstadoDoSistema(rodando) {
+  const alvo = rodando ? "playing" : "paused";
+  if (alvo === ultimoEstadoSistema) return; // o tique chama a cada segundo; só mexe na mudança
+  ultimoEstadoSistema = alvo;
+  try {
+    if (navigator.mediaSession) navigator.mediaSession.playbackState = alvo;
+  } catch (_) {}
+}
 
 // Encaixa o texto na largura útil: primeiro encolhendo a fonte até um mínimo legível, depois
 // CORTANDO com reticências. Só encolher não bastava — o rótulo do tópico é uma frase inteira
@@ -112,6 +173,7 @@ function desenhar() {
     const SANS = { peso: 500, face: '"Inter Variable", Inter, system-ui, sans-serif' };
     ctx.fillText(encaixarTexto(e.legenda, Math.round(A * 0.12), SANS, util, 13), L / 2 + 4, A * 0.76);
   }
+  ultimoTextoDesenhado = e.texto;
   // Com fps=0 o quadro só sai quando pedimos — assim o vídeo acompanha o timer, e não o
   // contrário (que é o que congelava em segundo plano).
   try { if (faixa && faixa.requestFrame) faixa.requestFrame(); } catch (_) {}
@@ -162,17 +224,19 @@ function montar() {
     document.body.appendChild(video);
     video.addEventListener("play", () => { if (!ecoando && aoPlayPause) aoPlayPause(true); });
     video.addEventListener("pause", () => { if (!ecoando && aoPlayPause) aoPlayPause(false); });
-    const aoSair = () => pararDesenho();
+    const aoSair = () => { pararDesenho(); desligarControlesDoSistema(); desligarAudio(); };
     video.addEventListener("leavepictureinpicture", aoSair);
     video.addEventListener("webkitpresentationmodechanged", () => { if (!pipAberto()) aoSair(); });
   }
   if (!video.srcObject) {
     if (typeof canvas.captureStream !== "function") throw new Error("este navegador não captura o canvas");
-    const stream = canvas.captureStream(0); // 0 = só sai quadro quando pedimos (requestFrame)
+    let stream = canvas.captureStream(0); // 0 = só sai quadro quando pedimos (requestFrame)
     faixa = stream.getVideoTracks()[0] || null;
     // Navegador sem requestFrame precisa de captura contínua, senão o vídeo nunca recebe quadro.
-    video.srcObject = faixa && faixa.requestFrame ? stream : canvas.captureStream(4);
-    if (!(faixa && faixa.requestFrame)) faixa = null;
+    if (!(faixa && faixa.requestFrame)) { stream = canvas.captureStream(4); faixa = null; }
+    // Fora do Safari, a faixa de áudio inaudível é o que faz os botões existirem (ver acima).
+    if (!video.webkitSetPresentationMode && ligarAudioInaudivel(stream)) video.muted = false;
+    video.srcObject = stream;
   }
 }
 
@@ -187,6 +251,7 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
 
   montar();
   comecarDesenho(); // precisa haver quadro ANTES do play, senão o vídeo não tem o que tocar
+  ligarControlesDoSistema();
 
   ecoando = true;
   const tocando = video.play();
@@ -210,6 +275,8 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
 }
 
 export async function fecharPip() {
+  desligarControlesDoSistema();
+  desligarAudio();
   try {
     if (video && video.webkitSetPresentationMode) video.webkitSetPresentationMode("inline");
     else if (document.pictureInPictureElement) await document.exitPictureInPicture();
@@ -223,10 +290,11 @@ export async function fecharPip() {
 // o comando que ele acabou de dar).
 export function espelharNoPip(rodando) {
   if (!video || !pipAberto()) return;
-  // No Safari os botões da janelinha SÃO o play/pause do vídeo, então lá o vídeo acompanha o
-  // relógio. No Chromium quem desenha os botões é a Media Session, e o vídeo precisa continuar
-  // tocando: pausá-lo congelaria a janelinha mesmo com o cronômetro andando.
-  if (!ehSafari()) return;
+  atualizarEstadoDoSistema(rodando); // teclas de mídia e centro de mídia do sistema
+  // O ⏵/⏸ da janelinha segue o estado do VÍDEO, não o `playbackState` (medido: com o cronômetro
+  // pausado o botão continuava ⏸, e um segundo clique repetia "pause" em vez de retomar). Então o
+  // vídeo acompanha o relógio nos dois navegadores. Pausado, a imagem congela — e congelada no
+  // tempo parado é exatamente o que se quer ver.
   ecoando = true;
   try {
     if (rodando && video.paused) video.play().catch(() => {});
@@ -234,4 +302,26 @@ export function espelharNoPip(rodando) {
   } finally {
     setTimeout(() => { ecoando = false; }, 60);
   }
+  // Com o vídeo pausado o canvas não é mais transmitido, então a imagem fica na do último quadro.
+  // Se o valor mudar mesmo parado (zerar, trocar de modo, mudar o alvo), a janelinha mostraria um
+  // número velho: aqui ela é destravada só o suficiente para receber o quadro novo.
+  if (!rodando) reidratarQuadroCongelado();
+}
+
+let reidratando = false;
+function reidratarQuadroCongelado() {
+  if (reidratando || !video || !lerEstado) return;
+  let texto;
+  try { texto = lerEstado().texto; } catch (_) { return; }
+  if (texto === ultimoTextoDesenhado) return;
+  reidratando = true;
+  ecoando = true;
+  video
+    .play()
+    .then(() => new Promise((r) => setTimeout(r, 200)))
+    .catch(() => {})
+    .finally(() => {
+      try { video.pause(); } catch (_) {}
+      setTimeout(() => { ecoando = false; reidratando = false; }, 80);
+    });
 }
