@@ -3498,6 +3498,15 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 /* Nota (observação) na MESMA linha do título. */
 .missao-coment-inline { font-size: var(--fs-xs); color: var(--text-2); display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; }
 .missao-coment-inline .mci-txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
+/* NOTA da tarefa: linha PRÓPRIA, abaixo do título. Recolhida mostra as duas primeiras linhas
+   (não uma reticência num tooltip); "mais" abre o resto. Ver `notaHTML` em planejamento.js. */
+.missao-nota { display: flex; gap: 6px; margin: 4px 0 0 2px; font-size: var(--fs-xs); color: var(--text-2); }
+.missao-nota .mn-ico { flex: none; opacity: 0.7; line-height: 1.5; }
+.missao-nota .mn-corpo { min-width: 0; flex: 1 1 auto; }
+.missao-nota .mn-txt { line-height: 1.45; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.missao-nota.aberta .mn-txt { display: block; -webkit-line-clamp: unset; }
+.missao-nota .mn-txt a { color: var(--primary); text-decoration: underline; word-break: break-all; }
+.missao-nota .mn-acoes { display: flex; gap: 10px; margin-top: 2px; }
 .missao-edit { display: flex; flex-direction: column; gap: 8px; }
 .missao-edit-campos { display: flex; gap: 10px; flex-wrap: wrap; }
 .missao-edit-campos .inline { margin: 0; font-size: var(--fs-xs); color: var(--muted); gap: 4px; }

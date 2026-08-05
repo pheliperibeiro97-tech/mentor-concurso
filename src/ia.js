@@ -462,7 +462,16 @@ export function interpretarTrilha(texto) {
     const primeira = corpo[0] || "";
     const ehMateria = primeira.toLowerCase() === (atual.materia || "").toLowerCase();
     const assunto = ehMateria ? atual.materia : primeira || atual.materia;
-    const instrucao = (ehMateria ? corpo[1] : corpo[1]) || (ehMateria ? "" : primeira) || "";
+    // A instrução pode QUEBRAR no meio de um parêntese ("… tópicos 2.7 a 2.20. (PDF" / "versão
+    // resumida)"), porque no PDF é uma linha só que não caberia. Enquanto o parêntese estiver
+    // aberto, emenda a linha seguinte — no máximo duas, para não colar o parágrafo inteiro.
+    let instrucao = corpo[1] || (ehMateria ? "" : primeira) || "";
+    for (let k = 2; k < corpo.length && k <= 3; k++) {
+      const abre = (instrucao.match(/\(/g) || []).length;
+      const fecha = (instrucao.match(/\)/g) || []).length;
+      if (abre <= fecha) break;
+      instrucao += " " + corpo[k];
+    }
     const link = (uteis.find((l) => /https?:\/\//.test(l)) || "").replace(/\s+/g, "");
     const obs = uteis.filter((l) => /^OBS/i.test(l)).join(" ");
     const cabecalho = [prefixo, atual.n, assunto].filter(Boolean).join(" · ");

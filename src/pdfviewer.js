@@ -36,8 +36,26 @@ const temLeitorNativo = () =>
   typeof navigator !== "undefined" &&
   (navigator.pdfViewerEnabled === true || !!(navigator.mimeTypes && navigator.mimeTypes["application/pdf"]));
 
+// Nome de arquivo a partir do título do material: é o que o "salvar" do leitor sugere, e o que
+// aparece no cabeçalho da impressão. Sem isto o navegador propunha o UUID do blob.
+function nomeDeArquivo(titulo) {
+  const limpo = String(titulo || "PDF")
+    .replace(/[\\/:*?"<>|]+/g, "-") // proibidos no Windows
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 90);
+  return (limpo || "documento") + ".pdf";
+}
+
 function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
-  const url = URL.createObjectURL(new Blob([dataUrlToUint8(dataUrl)], { type: "application/pdf" }));
+  const nome = nomeDeArquivo(titulo);
+  const bytes = dataUrlToUint8(dataUrl);
+  // `File` em vez de `Blob` porque ele carrega um nome — mas MEDIDO: o nome NÃO chega à URL
+  // `blob:` (a resposta não traz Content-Disposition), então o "salvar" do leitor nativo continua
+  // propondo o UUID. É por isso que existe o botão "Baixar" na barra do app abaixo: ele usa a
+  // caixa de salvar do sistema já com o nome do material. Trocar isso exigiria servir o PDF por
+  // uma URL cujo CAMINHO termine no nome — service worker ou protocolo de arquivo do Tauri.
+  const url = URL.createObjectURL(new File([bytes], nome, { type: "application/pdf" }));
   const overlay = document.createElement("div");
   overlay.className = "pdf-overlay pdf-nativo";
   overlay.innerHTML = `
@@ -45,6 +63,7 @@ function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
       <div class="pdf-bar">
         <b class="pdf-titulo">${esc(titulo || "PDF")}</b>
         <span class="spacer"></span>
+        <button class="pdf-btn" data-p="baixar" title="Baixar como “${esc(nome)}”">${icone("download")}</button>
         <button class="pdf-btn" data-p="fullscreen" title="Tela cheia (F11)">${icone("maximize-2")}</button>
         <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
       </div>
@@ -75,8 +94,15 @@ function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
     else if (e.key === "F11") { e.preventDefault(); alternarCheia(); }
   };
   document.addEventListener("keydown", onKey);
-  overlay.addEventListener("click", (e) => {
+  overlay.addEventListener("click", async (e) => {
     if (e.target.closest('[data-p="fullscreen"]')) return alternarCheia();
+    if (e.target.closest('[data-p="baixar"]')) {
+      // Caixa de salvar do SISTEMA, já com o nome do material. O "salvar" do leitor nativo
+      // propõe o UUID do blob e não há como mudar isso de fora.
+      const ok = await baixarArquivo(nome, bytes, "application/pdf");
+      if (ok) toast(`Salvo como “${nome}”.`, "ok");
+      return;
+    }
     if (e.target.closest('[data-p="close"]') || e.target === overlay) fechar();
   });
 }

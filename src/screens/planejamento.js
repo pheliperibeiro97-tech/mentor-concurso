@@ -9,6 +9,7 @@ let mostrarConcluidas = false;
 let mostrarReplan = false;
 let missSort = "custom";
 let missComent = new Set(); // ids de tarefas com o editor de nota aberto
+let missComentAberto = new Set(); // ids com a nota EXPANDIDA (por padrão vem recolhida em 2 linhas)
 let missEdit = new Set(); // ids de tarefas com o título em edição
 let tarefasView = "semana"; // "semana" (grade Seg→Dom) | "soltas" (lista livre)
 let addDiaForm = null; // data ISO do dia com o formulário "+ tarefa" aberto
@@ -189,6 +190,12 @@ export default function renderPlanejamento(root, app) {
     "ir-hoje": () => app.navigate("hoje"),
     "edit-coment": (el) => {
       missComent.add(el.getAttribute("data-id"));
+      app.refresh();
+    },
+    "toggle-nota": (el) => {
+      const id = el.getAttribute("data-id");
+      if (missComentAberto.has(id)) missComentAberto.delete(id);
+      else missComentAberto.add(id);
       app.refresh();
     },
     "cancelar-coment": (el) => {
@@ -750,6 +757,34 @@ function replanHTML(store) {
 
 // Categorias de tarefa (etiqueta vinculada ao item) e a cor/classe de cada uma.
 const CATEGORIAS = ["Materiais", "Lei Seca", "Jurisprudência", "Prática", "Revisão", "Não definida"];
+
+// NOTA da tarefa. Antes vivia na MESMA linha do título, cortada em 340 px, e o texto completo só
+// no tooltip — inútil para uma observação de verdade (as tarefas importadas da trilha do cursinho
+// trazem a orientação do professor e o link da aula). Agora ocupa a linha de baixo, recolhida em
+// duas linhas, com "mais" quando há mais que isso. O link vira clicável: ele é metade do valor da
+// nota quando ela veio de uma trilha.
+const RX_URL = /(https?:\/\/[^\s<>"')]+)/g;
+function notaComLinks(texto) {
+  return esc(texto)
+    .split("\n")
+    .map((l) => l.replace(RX_URL, (u) => `<a href="${u}" target="_blank" rel="noopener">${u}</a>`))
+    .join("<br>");
+}
+function notaHTML(m, aberta) {
+  const bruto = String(m.comentario || "");
+  // "Longa" = mais de uma linha ou texto que não caberia em duas — o botão só aparece se servir.
+  const longa = bruto.includes("\n") || bruto.length > 150;
+  return `<div class="missao-nota ${aberta ? "aberta" : ""}">
+    <span class="mn-ico">${icone("message-square")}</span>
+    <div class="mn-corpo">
+      <div class="mn-txt">${notaComLinks(bruto)}</div>
+      <div class="mn-acoes">
+        ${longa ? `<button class="lnk" data-action="toggle-nota" data-id="${m.id}">${aberta ? "menos" : "mais"}</button>` : ""}
+        <button class="lnk" data-action="edit-coment" data-id="${m.id}" data-tip="Editar a nota">editar</button>
+      </div>
+    </div>
+  </div>`;
+}
 const CAT_CLASSE = {
   Materiais: "material",
   "Lei Seca": "leiseca",
@@ -1579,14 +1614,9 @@ function missoesHTML(st, missoes, sortMode) {
                   <span class="missao-titulo ${m.concluida ? "feito" : ""}">${esc(m.titulo)}</span>
                   ${m.estimMin ? `<span class="tarefa-tempo muted small" data-tip="Tempo só sugerido — nunca interrompe nada.">≈ ${fmtMin(m.estimMin)}</span>` : ""}
                   ${vinc ? `<span class="tag-topico" data-tip="Tópico vinculado">${esc(vinc)}</span>` : ""}
-                  ${
-                    missComent.has(m.id)
-                      ? ""
-                      : m.comentario
-                        ? `<span class="missao-coment-inline"><span class="mci-txt" data-tip="${esc(m.comentario)}">${icone("message-square")} ${esc(m.comentario)}</span> <button class="lnk" data-action="edit-coment" data-id="${m.id}" data-tip="Editar a nota">editar</button></span>`
-                        : `<button class="lnk missao-add-coment" data-action="edit-coment" data-id="${m.id}" data-tip="Anotar um lembrete nesta tarefa.">${icone("message-square")} Adicionar nota</button>`
-                  }
-                </div>`
+                  ${missComent.has(m.id) || m.comentario ? "" : `<button class="lnk missao-add-coment" data-action="edit-coment" data-id="${m.id}" data-tip="Anotar um lembrete nesta tarefa.">${icone("message-square")} Adicionar nota</button>`}
+                </div>
+                ${missComent.has(m.id) || !m.comentario ? "" : notaHTML(m, missComentAberto.has(m.id))}`
           }
           ${
             missComent.has(m.id)
