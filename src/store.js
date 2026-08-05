@@ -2029,7 +2029,7 @@ export const store = {
           porLei !== undefined
             ? porLei
             : acharTopicoDoBloco(t.tema, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId, minMesma: pisoDeTema(t.tema) });
-        if (!r) { naoEncontrados.push(`${sec.disciplina}: ${t.tema}`); continue; }
+        if (!r) { naoEncontrados.push(`${sec.disciplina}: ${t.tema} — ${String(t.pct).replace(".", ",")}%`); continue; }
         // Vários temas podem cair no mesmo tópico do edital: fica o maior nível.
         const jaTem = itens.find((x) => x.topicoId === r.topicoId);
         if (jaTem) { if (peso > jaTem.pesoSugerido) { jaTem.pesoSugerido = peso; jaTem.pct = t.pct; jaTem.tema = t.tema; } continue; }

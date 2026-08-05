@@ -18,8 +18,6 @@
 //    em que esta janela serve para alguma coisa. O desenho é por timer, não por quadro.
 //  - O `play()` que damos para o vídeo existir não pode ser lido como "o usuário mandou iniciar";
 //    sem trava, abrir a janelinha ligava o cronômetro sozinho.
-import { fmtMMSS } from "./util.js";
-
 const L = 320; // 16:9 — ver acima
 const A = 180;
 const MS_DESENHO = 250; // em segundo plano o navegador afrouxa para ~1 s, que é o que importa
@@ -89,15 +87,22 @@ function atualizarEstadoDoSistema(rodando) {
   } catch (_) {}
 }
 
-// Encolhe a fonte até o texto caber na largura útil — "1:59:59" e uma legenda longa não podem
-// vazar pelas bordas de uma janelinha de 320 px.
-function fonteQueCabe(texto, tamanhoIdeal, familia, largura) {
+// Encaixa o texto na largura útil: primeiro encolhendo a fonte até um mínimo legível, depois
+// CORTANDO com reticências. Só encolher não bastava — o rótulo do tópico é uma frase inteira
+// ("…laterais · Conceito e características · Princípios do direito contratu…") e vazava pelas
+// duas bordas de uma janelinha de 320 px.
+function encaixarTexto(texto, tamanhoIdeal, familia, largura, minimoPx) {
   let px = tamanhoIdeal;
-  do {
+  const cabe = (t) => ctx.measureText(t).width <= largura;
+  for (; px >= minimoPx; px -= 2) {
     ctx.font = `${familia.peso} ${px}px ${familia.face}`;
-    if (ctx.measureText(texto).width <= largura) return;
-    px -= 2;
-  } while (px > 9);
+    if (cabe(texto)) return texto;
+  }
+  ctx.font = `${familia.peso} ${minimoPx}px ${familia.face}`;
+  if (cabe(texto)) return texto;
+  let t = texto;
+  while (t.length > 1 && !cabe(t + "…")) t = t.slice(0, -1);
+  return t.trimEnd() + "…";
 }
 
 function desenhar() {
@@ -115,13 +120,13 @@ function desenhar() {
   ctx.textBaseline = "middle";
   ctx.fillStyle = CSS_VAR("--text-1", "#f8fafc");
   // Mono para o dígito não "dançar" a cada segundo.
-  fonteQueCabe(e.texto, Math.round(A * 0.4), { peso: 600, face: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace' }, util);
-  ctx.fillText(e.texto, L / 2 + 4, A * 0.42);
+  const MONO = { peso: 600, face: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace' };
+  ctx.fillText(encaixarTexto(e.texto, Math.round(A * 0.4), MONO, util, 24), L / 2 + 4, A * 0.42);
 
   if (e.legenda) {
     ctx.fillStyle = CSS_VAR("--text-3", "#94a3b8");
-    fonteQueCabe(e.legenda, Math.round(A * 0.12), { peso: 500, face: '"Inter Variable", Inter, system-ui, sans-serif' }, util);
-    ctx.fillText(e.legenda, L / 2 + 4, A * 0.76);
+    const SANS = { peso: 500, face: '"Inter Variable", Inter, system-ui, sans-serif' };
+    ctx.fillText(encaixarTexto(e.legenda, Math.round(A * 0.12), SANS, util, 13), L / 2 + 4, A * 0.76);
   }
   // Com fps=0 o quadro só sai quando pedimos — assim o vídeo acompanha o timer, e não o
   // contrário (que é o que congelava em segundo plano).
@@ -136,6 +141,23 @@ function comecarDesenho() {
 function pararDesenho() {
   clearInterval(timer);
   timer = 0;
+}
+
+// Espera o vídeo ter quadro (readyState >= HAVE_CURRENT_DATA). Teto curto: se não vier, tenta
+// assim mesmo e o erro sobe para a tela avisar, em vez de ficar preso aqui.
+function comQuadro(ms = 1500) {
+  if (!video || video.readyState >= 2) return Promise.resolve();
+  return new Promise((resolve) => {
+    const pronto = () => { limpar(); resolve(); };
+    const limpar = () => {
+      clearTimeout(t);
+      video.removeEventListener("loadeddata", pronto);
+      video.removeEventListener("canplay", pronto);
+    };
+    const t = setTimeout(pronto, ms);
+    video.addEventListener("loadeddata", pronto);
+    video.addEventListener("canplay", pronto);
+  });
 }
 
 function montar() {
@@ -184,13 +206,19 @@ export async function alternarPip({ estado, onPlayPause } = {}) {
   ligarControlesDoSistema();
 
   ecoando = true;
-  // Sem `await` de propósito: no Safari o pedido de PiP tem de sair DENTRO do gesto do usuário, e
-  // esperar a promessa do play já quebraria essa cadeia.
   const tocando = video.play();
   if (tocando && tocando.catch) tocando.catch(() => {});
   try {
+    // Os dois navegadores querem coisas OPOSTAS aqui, e atender só um quebra o outro:
+    //  - Safari: o pedido tem de sair DENTRO do gesto do usuário, então nada de `await` antes
+    //    (e `webkitSetPresentationMode` é síncrono, o que resolve).
+    //  - Chromium: `requestPictureInPicture()` REJEITA enquanto o vídeo não tem quadro. Tentar
+    //    sem esperar foi o que deixou a janelinha sem abrir, calada.
     if (video.webkitSetPresentationMode) video.webkitSetPresentationMode("picture-in-picture");
-    else await video.requestPictureInPicture();
+    else {
+      await comQuadro();
+      await video.requestPictureInPicture();
+    }
   } finally {
     ecoando = false;
   }
@@ -225,9 +253,4 @@ export function espelharNoPip(rodando) {
   } finally {
     setTimeout(() => { ecoando = false; }, 60);
   }
-}
-
-// Texto pronto para a janelinha, a partir do estado do cronômetro.
-export function textoDoPip(seg, extra) {
-  return (extra ? "+" : "") + fmtMMSS(seg);
 }

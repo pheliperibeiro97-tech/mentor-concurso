@@ -3938,6 +3938,10 @@ i.fc-comp-novo { background: var(--accent); } i.fc-comp-apr { background: var(--
 /* De onde veio o casamento (tema do material → tópico do edital). Fica embaixo do nome porque é
    o que permite reprovar uma sugestão torta de relance, sem abrir tooltip nenhum. */
 .sug-origem { display: block; margin-top: 2px; line-height: 1.35; }
+/* Temas do material sem tópico no edital: recolhido, mas presente — é buraco no plano. */
+.sug-fora summary { cursor: pointer; }
+.sug-fora-lista { margin: 4px 0 0; padding-left: 18px; max-height: 220px; overflow: auto; }
+.sug-fora-lista li { margin: 2px 0; }
 .sug-origem .ico { width: 12px; height: 12px; vertical-align: -1px; margin-right: 2px; }
 .sug-mud { font-size: var(--fs-sm); white-space: nowrap; }
 .sug-fontes { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 10px; }

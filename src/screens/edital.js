@@ -154,9 +154,22 @@ function sugResultadoHTML(temOficial, r) {
     r.fonte === "web" && r.fontesWeb && r.fontesWeb.length
       ? `<div class="sug-fontes muted small">${icone("globe")} Fontes: ${r.fontesWeb.map((f) => `<a href="${esc(f.uri)}" target="_blank" rel="noopener">${esc(f.titulo)} ↗</a>`).join(" · ")}</div>`
       : "";
+  // O que NÃO casou importa tanto quanto o que casou: "Organização dos Poderes" é o maior tema de
+  // Constitucional (21%) e não tem tópico equivalente no edital do TJSP — está repartido em Poder
+  // Legislativo, Executivo, Judiciário e Funções Essenciais. Escondido num contador, isso vira
+  // um buraco silencioso no seu plano; listado, você marca esses à mão.
+  const forasteiros =
+    r.naoEncontrados && r.naoEncontrados.length
+      ? `<details class="sug-fora u-mt-8">
+           <summary class="lnk">${icone("triangle-alert")} ${plural(r.naoEncontrados.length, "tema do material ficou", "temas do material ficaram")} sem tópico correspondente no seu edital</summary>
+           <p class="muted small u-mt-4 u-mb-4">Ou o edital não tem esse tema, ou ele está repartido em vários itens (o caso de “Organização dos Poderes”). Defina a relevância desses à mão, no tópico certo.</p>
+           <ul class="sug-fora-lista muted small">${r.naoEncontrados.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+         </details>`
+      : "";
   return `<div class="sug-resultado">
     <div class="muted small u-mt-12 u-mb-8">${cabec} Marcadas as que aumentam a relevância:</div>
     <ul class="sug-lista">${linhas}</ul>
+    ${forasteiros}
     ${fontes}
     ${temOficial ? `<label class="inline small u-mt-8 u-mb-8"><input type="checkbox" id="sug-dividir" /> ${icone("scale")} Dividir a relevância entre tópicos do <b>mesmo item do edital</b> (quando um item virou vários tópicos — evita inflar a soma)</label>` : ""}
     <div class="form-acoes" style="justify-content:flex-start">
