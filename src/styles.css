@@ -3932,6 +3932,10 @@ i.fc-comp-novo { background: var(--accent); } i.fc-comp-apr { background: var(--
 .sug-item { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
 .sug-item .sug-cb { width: auto; margin: 0; flex-shrink: 0; }
 .sug-nome { font-size: var(--fs-sm); font-weight: var(--fw-regular); flex: 1 1 200px; }
+/* De onde veio o casamento (tema do material → tópico do edital). Fica embaixo do nome porque é
+   o que permite reprovar uma sugestão torta de relance, sem abrir tooltip nenhum. */
+.sug-origem { display: block; margin-top: 2px; line-height: 1.35; }
+.sug-origem .ico { width: 12px; height: 12px; vertical-align: -1px; margin-right: 2px; }
 .sug-mud { font-size: var(--fs-sm); white-space: nowrap; }
 .sug-fontes { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 4px 10px; }
 .pq-lista { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }

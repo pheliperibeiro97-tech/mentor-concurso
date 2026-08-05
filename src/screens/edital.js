@@ -114,6 +114,13 @@ function sugIAHTML(store, carregando = "", rel = null) {
     <div class="barra-acoes u-mb-8">
       <button class="btn ${nProvas ? "btn-primary" : "btn-ghost"} btn-sm" data-action="sug-provas" ${carregando || !nProvas ? "disabled" : ""} data-tip="${nProvas ? `Analisa as ${nProvas} questões das suas provas importadas (incidência real).` : "Importe provas anteriores para usar esta opção."}">${carregando === "provas" ? "Analisando…" : `Pelas minhas provas (${nProvas})`}</button>
       <button class="btn btn-ghost btn-sm" data-action="sug-web" ${carregando ? "disabled" : ""} data-tip="Pesquisa na web o 'raio-x' da banca/cargo${alvo ? ` (${esc(alvo)})` : ""} e estima a relevância, com fontes.">${carregando === "web" ? "Pesquisando…" : "Pesquisar na web"}</button>
+      ${store
+        .materiaisComIncidencia()
+        .map(
+          (m) =>
+            `<button class="btn btn-ghost btn-sm" data-action="sug-material" data-id="${m.id}" ${carregando ? "disabled" : ""} data-tip="Lê a estatística de incidência que já está dentro deste material (${m.n} disciplinas) e converte em nível de relevância. Não usa IA nem internet.">${carregando === "material" ? "Lendo…" : `De “${esc(m.titulo)}”`}</button>`
+        )
+        .join("")}
     </div>
     ${!nProvas ? `<p class="muted small u-m-0 u-mb-4">${icone("bar-chart-3")} Você ainda não importou provas — a opção pelas suas provas (a mais confiável) aparece depois da primeira importação.</p>` : ""}
     ${rel ? sugResultadoHTML(!!store.coberturaOficial(), rel) : ""}
@@ -126,13 +133,17 @@ function sugResultadoHTML(temOficial, r) {
   const cabec =
     r.fonte === "provas"
       ? `Pelas suas provas: ${plural(r.itens.length, "tópico", "tópicos")} com questões (de ${r.total} analisadas). A relevância é a participação na prova.`
-      : `Pela web: estimativa de relevância por tópico — confira nas fontes abaixo.`;
+      : r.fonte === "material"
+        ? `De “${esc(r.titulo)}”: ${plural(r.itens.length, "tópico", "tópicos")} em ${plural(r.disciplinas, "disciplina", "disciplinas")}. O percentual é a fatia do tema DENTRO da disciplina; o nível vem do acumulado (primeiros 50% = 95, até 75% = 70, até 90% = 40, resto = 15).`
+        : `Pela web: estimativa de relevância por tópico — confira nas fontes abaixo.`;
   const linhas = r.itens
     .map((it, i) => {
       const sobe = it.pesoSugerido > (it.atual || 0);
       return `<li class="sug-item">
         <input type="checkbox" class="sug-cb" data-i="${i}" ${sobe ? "checked" : ""} />
-        <span class="sug-nome">${esc(it.nome)}</span>
+        <span class="sug-nome">${esc(it.nome)}
+          ${it.tema ? `<span class="sug-origem muted small">${icone("corner-down-right")} de “${esc(it.tema)}”${it.pct != null ? ` — ${String(it.pct).replace(".", ",")}% de ${esc(it.disciplina || "")}` : ""}</span>` : ""}
+        </span>
         <span class="sug-mud"><span class="muted small">${it.atual ? it.atual + "%" : "—"}</span> → <b>${it.pesoSugerido}%</b></span>
         ${it.n != null ? `<span class="muted small">${it.n} ${it.n === 1 ? "questão" : "questões"}</span>` : ""}
         ${it.confianca ? `<span class="mini-tag">confiança ${esc(it.confianca)}</span>` : ""}
@@ -812,6 +823,24 @@ function abrirSugestaoIA(app) {
           estado.rel = await store.sugerirRelevanciaPorProvas();
           if (!estado.rel.itens.length) toast("Não consegui derivar relevância das provas. Confira se os tópicos do edital batem com as questões.", "erro");
         } catch (e) { console.error(e); toast("A IA não conseguiu concluir agora. Tente de novo em instantes.", "erro"); }
+        estado.carregando = ""; rerender();
+      },
+      // Sem IA e sem rede: os números já estão no material que o usuário importou.
+      "sug-material": (el) => {
+        estado.carregando = "material"; estado.rel = null; rerender();
+        try {
+          const r = store.sugerirRelevanciaPorMaterial(el.dataset.id);
+          estado.rel = r;
+          if (!r.itens.length) toast("Não achei estatística de incidência aplicável aos seus tópicos neste material.", "erro");
+          else if (r.naoEncontrados.length || r.disciplinasIgnoradas.length)
+            toast(
+              `${plural(r.itens.length, "tópico casado", "tópicos casados")}. Sem correspondência no seu edital: ` +
+                [r.naoEncontrados.length ? plural(r.naoEncontrados.length, "tema", "temas") : "", r.disciplinasIgnoradas.length ? plural(r.disciplinasIgnoradas.length, "disciplina", "disciplinas") : ""]
+                  .filter(Boolean)
+                  .join(" e ") + ".",
+              "ok"
+            );
+        } catch (e) { console.error(e); toast("Não consegui ler a estatística deste material.", "erro"); }
         estado.carregando = ""; rerender();
       },
       "sug-web": async () => {

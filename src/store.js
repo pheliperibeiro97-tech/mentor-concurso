@@ -390,6 +390,21 @@ function mapaParaTexto(arv, nivel = 0) {
 }
 
 // Nome legível "Disciplina · Tópico" para dar contexto à IA (melhora a geração).
+// Piso de casamento conforme o TAMANHO do tema, usado ao ler estatística de incidência de um
+// material. A nota do casador é interseção/menor conjunto, e os itens do edital são enumerações
+// longas ("(8) Normas Constitucionais: Hermenêutica e Filosofia…"): com tema de uma ou duas
+// palavras, UMA palavra em comum já dá 0,5 e passaria no piso normal de 0,34 — foi assim que
+// "Organização dos Poderes" caiu dentro de "Normas Constitucionais". Tema curto, então, só casa
+// se o tópico contiver TODAS as suas palavras (nota 1).
+const PALAVRAS_VAZIAS = new Set(["de", "da", "do", "das", "dos", "em", "no", "na", "ao", "para", "com", "seus", "suas", "sua", "seu"]);
+function pisoDeTema(tema) {
+  const n = String(tema || "")
+    .toLowerCase()
+    .split(/[^a-zà-ú]+/)
+    .filter((w) => w.length > 2 && !PALAVRAS_VAZIAS.has(w)).length;
+  return n <= 2 ? 1 : 0.5;
+}
+
 function nomeContexto(st, topicoId) {
   if (!topicoId) return "geral";
   const t = st.topicos.find((x) => x.id === topicoId);
@@ -1956,6 +1971,59 @@ export const store = {
     itens.sort((a, b) => b.pesoSugerido - a.pesoSugerido);
     const alvo = [c.banca, c.cargo].filter(Boolean).join(" · ");
     return { fonte: "web", itens, fontesWeb: fontesWeb || [], resumo: resumo || "", alvo };
+  },
+  // Piso de casamento conforme o TAMANHO do tema. A nota é interseção/menor conjunto, e os itens
+  // do edital são enumerações longas ("(8) Normas Constitucionais: Hermenêutica e Filosofia…"):
+  // com tema de 1-2 palavras, UMA palavra em comum já dá 0,5 e passaria no piso normal de 0,34 —
+  // foi assim que "Organização dos Poderes" caiu em "Normas Constitucionais". Tema curto, então,
+  // só casa se o tópico contiver TODAS as suas palavras.
+  // D: material de "raio-x da banca" que você importou (ex.: o Estudo Estratégico do cursinho),
+  // com a fatia de cada tema por disciplina. Diferente de B e C, NÃO usa IA: o material já traz
+  // os números, o trabalho é casar tema↔tópico do edital e traduzir percentual em nível.
+  //
+  // Dois cuidados que a experiência com a biblioteca já ensinou:
+  // 1. O casamento é o `acharTopicoDoBloco`, com a DISCIPLINA como âncora — o `acharTopicoPorNome`
+  //    casa por "contém" no edital inteiro e põe "Administração Pública" (Constitucional) dentro
+  //    de "crimes contra a administração pública" (Penal). Disciplina que não existe no seu
+  //    edital é reportada e ignorada, não empurrada para qualquer lugar.
+  // 2. O percentual é fatia DA DISCIPLINA, não relevância absoluta: 21% pode ser o tema mais
+  //    cobrado de Constitucional enquanto 31% é o de Tributário. Traduzir direto jogaria tudo
+  //    para "Baixa". Por isso a conversão é pelo ACUMULADO, do jeito que o próprio material lê os
+  //    números ("quatro temas respondem por mais da metade"): os temas que somam os primeiros
+  //    50% são Altíssima, até 75% Alta, até 90% Média, o rabo é Baixa.
+  sugerirRelevanciaPorMaterial(docId) {
+    const doc = state.documentos.find((d) => d.id === docId);
+    if (!doc) return { fonte: "material", itens: [], naoEncontrados: [], disciplinasIgnoradas: [], titulo: "" };
+    const secoes = ia.interpretarIncidenciaPorDisciplina(doc.texto || "");
+    const itens = [];
+    const naoEncontrados = [];
+    const disciplinasIgnoradas = [];
+    const usados = new Set();
+    for (const sec of secoes) {
+      const disciplinaId = disciplinaDoMaterial(sec.disciplina, state.disciplinas || []);
+      if (!disciplinaId) { disciplinasIgnoradas.push(sec.disciplina); continue; }
+      let acumulado = 0;
+      for (const t of sec.temas) {
+        acumulado += t.pct;
+        const peso = acumulado <= 50 ? 95 : acumulado <= 75 ? 70 : acumulado <= 90 ? 40 : 15;
+        const r = acharTopicoDoBloco(t.tema, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId, minMesma: pisoDeTema(t.tema) });
+        if (!r) { naoEncontrados.push(`${sec.disciplina}: ${t.tema}`); continue; }
+        // Vários temas podem cair no mesmo tópico do edital: fica o maior nível.
+        const jaTem = itens.find((x) => x.topicoId === r.topicoId);
+        if (jaTem) { if (peso > jaTem.pesoSugerido) { jaTem.pesoSugerido = peso; jaTem.pct = t.pct; jaTem.tema = t.tema; } continue; }
+        const top = state.topicos.find((x) => x.id === r.topicoId);
+        usados.add(r.topicoId);
+        itens.push({ topicoId: r.topicoId, nome: top ? top.nome : t.tema, tema: t.tema, disciplina: sec.disciplina, pct: t.pct, atual: top ? top.peso || 0 : 0, pesoSugerido: peso });
+      }
+    }
+    itens.sort((a, b) => b.pesoSugerido - a.pesoSugerido || b.pct - a.pct);
+    return { fonte: "material", titulo: doc.titulo, itens, naoEncontrados, disciplinasIgnoradas, disciplinas: secoes.length };
+  },
+  // Materiais que TÊM estatística de incidência dentro (para a tela oferecer a opção).
+  materiaisComIncidencia() {
+    return (state.documentos || [])
+      .map((d) => ({ id: d.id, titulo: d.titulo, n: ia.interpretarIncidenciaPorDisciplina(d.texto || "").length }))
+      .filter((x) => x.n >= 2);
   },
   // Aplica as relevâncias escolhidas (marca "mais cai" com o peso sugerido).
   aplicarRelevanciaSugerida(itens) {

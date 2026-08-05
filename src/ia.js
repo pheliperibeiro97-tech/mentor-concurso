@@ -350,6 +350,73 @@ export function corrigirTexto(texto, tipo = "discursiva") {
   };
 }
 
+// ---------- 4a-bis. Estatística de incidência POR DISCIPLINA, de um material inteiro ----------
+// Material de "raio-x da banca" (ex.: o Estudo Estratégico) traz, para cada disciplina, a fatia
+// de cada tema nas provas. O mesmo PDF mistura três formas de dizer isso, e as três aparecem no
+// mesmo arquivo — por isso as três são lidas e vence a que achar mais temas na seção:
+//   (a) TABELA (é assim que a Visão devolve um gráfico que só existia como imagem):
+//         | Espécies Tributárias | 31,94% |
+//   (b) TEXTO enumerado da análise qualitativa:  "1. Organização dos Poderes — 21,25%"
+//   (c) GRÁFICO com camada de texto: o PDF entrega a coluna de percentuais TODA JUNTA e, logo
+//       depois, a coluna de rótulos na mesma ordem — nunca lado a lado.
+// Puro de propósito: entra texto, sai [{disciplina, temas:[{tema,pct}]}], sem tocar em estado.
+const RX_DISCIPLINA = /^\s*\d{1,2}\.\s+([A-ZÁÂÃÉÊÍÓÔÕÚÜÇ][A-ZÁÂÃÉÊÍÓÔÕÚÜÇ \-]{5,})\s*$/;
+const RX_PCT_SO = /^\s*(\d{1,2}[,.]\d{1,2})\s*%\s*$/;
+const RX_TABELA = /^\s*\|\s*([^|]{3,90}?)\s*\|\s*(\d{1,2}[,.]\d{1,2})\s*%\s*\|\s*$/;
+const RX_ENUM = /^\s*\d{1,2}\.\s+(.{3,90}?)\s*[—–-]\s*(\d{1,2}[,.]\d{1,2})\s*%\s*$/;
+const num = (s) => parseFloat(String(s).replace(",", "."));
+const ehRuido = (s) => !s || /^\d+$/.test(s) || /^[\d,.%\s|—–-]+$/.test(s);
+
+function temasDaSecao(linhas) {
+  const tabela = [], enums = [], grafico = [];
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    let m = l.match(RX_TABELA);
+    if (m && !/percentual|tema/i.test(m[1])) tabela.push({ tema: m[1], pct: num(m[2]) });
+    m = l.match(RX_ENUM);
+    if (m) enums.push({ tema: m[1].trim(), pct: num(m[2]) });
+    // (c) corrida de percentuais sozinhos → os rótulos vêm logo abaixo, na mesma ordem
+    if (RX_PCT_SO.test(l) && (i === 0 || !RX_PCT_SO.test(linhas[i - 1]))) {
+      const pcts = [];
+      let j = i;
+      while (j < linhas.length && RX_PCT_SO.test(linhas[j])) pcts.push(num(linhas[j++].match(RX_PCT_SO)[1]));
+      if (pcts.length >= 5) {
+        const nomes = [];
+        while (j < linhas.length && nomes.length < pcts.length) {
+          const s = linhas[j++].trim();
+          if (!ehRuido(s)) nomes.push(s.replace(/…+$/, "").trim());
+        }
+        if (nomes.length >= pcts.length) for (let k = 0; k < pcts.length; k++) grafico.push({ tema: nomes[k], pct: pcts[k] });
+      }
+    }
+  }
+  return [tabela, enums, grafico].reduce((a, b) => (b.length > a.length ? b : a), []);
+}
+
+export function interpretarIncidenciaPorDisciplina(texto) {
+  const linhas = String(texto || "").split(/\r?\n/);
+  const cortes = [];
+  linhas.forEach((l, i) => { const m = l.match(RX_DISCIPLINA); if (m) cortes.push({ i, nome: m[1].trim() }); });
+  const out = [];
+  for (let k = 0; k < cortes.length; k++) {
+    const ini = cortes[k].i;
+    const fim = k + 1 < cortes.length ? cortes[k + 1].i : linhas.length;
+    const temas = temasDaSecao(linhas.slice(ini, fim));
+    if (!temas.length) continue;
+    // Um tema pode reaparecer (gráfico e texto na mesma seção): fica o maior percentual.
+    const porNome = new Map();
+    for (const t of temas) {
+      const ch = t.tema.toLowerCase();
+      if (!porNome.has(ch) || porNome.get(ch).pct < t.pct) porNome.set(ch, t);
+    }
+    out.push({
+      disciplina: cortes[k].nome.replace(/\s+/g, " ").toLowerCase().replace(/(^|\s)\p{L}/gu, (c) => c.toUpperCase()),
+      temas: [...porNome.values()].sort((a, b) => b.pct - a.pct),
+    });
+  }
+  return out;
+}
+
 // ---------- 4b. Interpretar lista de "temas que mais caem" com nível/percentual ----------
 // Extrai de cada linha o nome do tema e o peso/incidência (percentual ou número),
 // para ranquear o que é mais importante. Ex.: "Atos administrativos - 25%".
