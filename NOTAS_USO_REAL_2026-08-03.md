@@ -933,3 +933,310 @@ saiu de 3 tópicos para 43 acompanháveis.
 | Processual Penal | **ausente** | 18 |
 
 Travado em `dev/fixtures-edital/item-romano.txt`, que reproduz as três armadilhas em miniatura.
+
+---
+
+## 11. A biblioteca de verdade entrou no app (2026-08-04, sobre a v0.8.2)
+
+Até aqui o app tinha **2 materiais** (o edital do 192º e um resumo dele). As 24 apostilas do
+"Direto ao Ponto" nunca tinham sido importadas — a v0.8.0 só havia **medido** que caberiam.
+Agora entraram as **17 do edital** (mesmo corte por disciplina do plano do cursinho: disciplina
+fora do edital, arquivo inteiro fora), pelo caminho do usuário comum: janela "Adicionar
+material" do próprio app, no desktop, uma por vez.
+
+| | |
+|---|---|
+| Materiais | 2 → **19** |
+| Páginas | 444 → **9.105** |
+| Blocos de sumário | 4 → **358** |
+| Blocos vinculados a tópicos do edital | **327** (91%) |
+| Tempo | ~50 min de lote (137 s a 316 s por apostila) |
+| Base local | 18 MB → **428 MB** (os PDFs ficam guardados, decisão do usuário) |
+| Envelope do cofre | **5,63 MB** de 24 MB (0,63 KB/página) — sincronizado sozinho ao fim |
+
+### O achado: com IA ligada, o app troca um sumário certo por um errado
+
+O piloto (Ambiental) parecia perfeito — 12 blocos, p.3–365, 10 já vinculados ao edital. A
+conferência bloco a bloco contra o **cabeçalho numerado no corpo** mostrou que não era.
+
+O índice da p.2 do Ambiental é lido pelo pdf.js como `10.1 3 / 10.2 4 / 10.3 36 / 10.4 64 /
+10.5 90 / …`, e os cabeçalhos estão mesmo nessas páginas ("10.3 Princípios Ambientais" abre a
+p.36). O material salvo dizia **13, 32 e 39**.
+
+Medindo os três candidatos contra o gabarito (a página em que `N.M` abre linha no corpo, fora
+das páginas de índice), nas 17 apostilas, 339 blocos:
+
+| Candidato | Acertos |
+|---|---|
+| O que o app gravou (IA por cima do determinístico) | 260/339 (77%) |
+| `detectarEstrutura()` como está hoje | **117/339 (35%)** |
+| Só o índice (`parseIndice`), com a numeração do corpo como reserva | **316/339 (93%)** |
+
+São **dois** defeitos independentes, os dois na preferência de fonte:
+
+1. **`screens/documentos.js:1241`** — com chave de IA configurada, `estruturarPorSumarioIA`
+   sobrescreve o resultado determinístico *sempre que devolve blocos*. A regra é da F2, quando
+   o leitor determinístico ainda era fraco; depois da v0.8.1 ela inverteu o sinal. A IA erra
+   lendo o índice de duas colunas como imagem (36→13, 64→32, 90→39).
+2. **`estrutura.js:673`** — dentro do determinístico, `tags[e.numero]` (marcador `#NN`) tem
+   prioridade sobre a página declarada no índice. Nestas apostilas a tag cai dezenas de
+   páginas adiante, e é isso que derruba o determinístico para 35%: o índice foi lido **certo**
+   (`parseIndice` acerta 316/339) e descartado logo depois.
+
+O caso extremo é o **Consumidor**, cujo índice não traz número de página nenhum: a IA ancorou
+15 dos 19 blocos na última página (p.162), enquanto a numeração do corpo acerta 17/17.
+
+### O que foi feito nos dados (o código não foi tocado)
+
+Correção aplicada pelo método do próprio app (`store.aplicarEstruturaAoMaterial`, que re-deriva
+`topicoIds`/`topicoPaginas` e faz commit): **83 páginas iniciais corrigidas** e **6 blocos
+fantasma removidos** (número repetido e sem página, no Administrativo, na Legislação Penal
+Especial e no Consumidor). Reconferido: **339/339**, nenhum bloco sem página, todos em ordem,
+cada material cobrindo da p.3 até a última.
+
+Backups: `_BACKUP_db_pre-biblioteca_2026-08-04.db` (18 MB, antes de tudo) e
+`_BACKUP_db_pos-import_pre-correcao_2026-08-04.db` (428 MB, antes da correção).
+
+### Método (vale para a próxima)
+
+- Pilotar o desktop por CDP: o `setInputFiles` do Playwright **estoura 30 s** num
+  `<input type=file>` `hidden` dentro de `<label>`; entregar o arquivo por
+  `DOM.setFileInputFiles` (CDP cru) resolve. E, depois de salvar uma apostila grande, o app
+  ainda está gravando o binário: esperar até **120 s** pela janela seguinte abrir.
+- Conferir lendo o **SQLite direto** (`kv:state`), não a tela — não depende de instância de
+  módulo nem de render.
+- O gabarito de página tem de vir do **corpo do PDF**, não do índice nem da IA: procurar
+  `^N.M` fora das páginas de índice (página com 3+ códigos distintos = índice).
+
+### Fica pendente
+
+O conserto no app (as duas preferências de fonte acima) e um teste que trave o comportamento —
+sem ele, toda apostila nova volta a entrar com o sumário torto. Com o conserto, dá para refazer
+os 17 com "Atualizar material" (mantém id, vínculos e histórico) em vez de corrigir dado.
+
+---
+
+## 12. Os gargalos da sessão da biblioteca, consertados (v0.8.3)
+
+A importação da biblioteca (seção 11) expôs defeitos que não eram do import, e sim de decisões
+antigas do app. Todos medidos antes e depois, sobre as 17 apostilas reais.
+
+### 1. A fonte do sumário estava invertida, em dois lugares
+
+| Candidato a página inicial de cada bloco | Acertos (339 blocos) |
+|---|---|
+| O que o app gravava (IA por cima do determinístico) | 260 |
+| `detectarEstrutura()` como estava | 117 |
+| **Depois do conserto** | **339** |
+
+- `screens/documentos.js` — a IA virou **rede**, não padrão: só é chamada quando o
+  determinístico NÃO resolveu (`ehEstruturaForte()` = origem índice/numeração e ≥80% dos blocos
+  com página). A regra antiga é da F2, quando o leitor determinístico ainda era fraco.
+- `estrutura.js` — a ordem passou a ser **corpo > índice > tag**. A tag (`?topic=10.5`) é um
+  link da plataforma na página: marca uma página que FALA da seção, não onde ela começa.
+- `parseIndice` passou a devolver **todas** as páginas do índice (`indicePags`), não só a
+  última: com índice de 2-3 páginas, o título era "achado no corpo" na própria página de índice
+  (era o que punha os 47 blocos do Processual Civil na p.2-3).
+- `paginaDoTitulo` guarda o casamento **só pelo número** como reserva, para quando a linha do
+  índice quebra e o título chega truncado (o `3.22` do Administrativo).
+
+Travado por 4 fixtures em `dev/fixtures-estrutura/` (duas REPROVAM no código anterior — testado)
+e pelo auditor `dev/auditar-sumarios.mjs`, que confere a base real contra o cabeçalho no corpo.
+
+### 2. O estado era reescrito inteiro a cada clique
+
+Com a biblioteca dentro, o estado tinha **42,9 MB** e cada gravação custava **558 ms** de
+`JSON.stringify` — mais o IPC e a escrita. Três coisas saíram de lá:
+
+| O que saiu | Peso | Onde mora agora |
+|---|---|---|
+| `texto` do material (é o join das `paginas`) | 17,4 MB | recomposto no `init()` |
+| `paginas` do material | 17,4 MB | chave `pag:<doc>` |
+| índice semântico (vetor de 768 dimensões por trecho) | 6,5 MB / 989 trechos | chave `emb:<perfil>` |
+
+O índice era a bomba-relógio: indexar a biblioteca (~22.800 trechos) levaria o estado a ~190 MB,
+e a indexação grava a cada 20 trechos. Medido no navegador com 3 apostilas: estado em memória
+3,54 MB, **gravado 0,48 MB**.
+
+⚠️ **A migração é o ponto perigoso** e quase passou batido: no 1º boot, páginas e índice ainda
+estão DENTRO do estado. Se a assinatura deles fosse marcada como "já gravada" nesse momento, a
+1ª gravação tiraria os dois do estado sem nunca os ter escrito fora — e sumiriam no boot
+seguinte. Só entra em `pagsSalvas`/`embSalvos` o que veio do disco. Testado no navegador
+plantando um estado no formato antigo, recarregando duas vezes e conferindo o conteúdo.
+
+### 3. Importar era um arquivo por vez, sem sinal de vida
+
+- `#doc-file` ganhou `multiple` e uma **fila**: "Importando 3 de 17", cada arquivo pelo mesmo
+  caminho de sempre. Material de mesmo título é ATUALIZADO (mesmo id, vínculos preservados).
+- `extrairPdfPaginas` aceita `onProgresso` → a etapa mostra "página 340 de 1.289".
+- Salvar espera a gravação REAL (`store.aguardarGravacao()`), com o botão em "Salvando…".
+- Na fila, a descrição automática de FIGURAS pela IA não roda: estourava a cota do Gemini
+  (HTTP 429 já no 3º arquivo, limite de 15 req/min no plano grátis).
+
+### 4. Espaço em disco
+
+O binário do material era gravado como data URL base64 (`TEXT`): 288 MB de PDF viravam 383 MB.
+Comandos novos `set_blob_bin`/`get_blob_bin` decodificam no Rust e guardam **bytes**; o JS
+continua trabalhando com data URL, então nada mudou para o visualizador, o OCR e a Visão.
+Material gravado por versão anterior continua sendo lido do caminho antigo.
+
+### 5. A biblioteca na tela
+
+- Agrupar por disciplina usava só `d.topicoId` (o primeiro tópico vinculado). Agora vale a
+  disciplina com **mais blocos** do sumário.
+- A etiqueta de tópico mostrava o item do edital inteiro (o item (11) de Bens Públicos tem 18
+  subdivisões) e o cartão virava um parágrafo: agora mostra o começo, com o texto completo no
+  tooltip.
+
+### O que a IA do app é, afinal
+
+`iaProvider: "gemini"` com `gemini-3.1-flash-lite` (padrão) e `gemini-embedding-001` para o
+índice semântico. O provedor **claude-cli** (Claude Code local, só desktop) existe no código e
+continua sem uso — não é ele que está ligado.
+
+### Resultado, medido na base real depois de refazer os 17 pela fila nova
+
+| | Antes | Depois |
+|---|---|---|
+| Blocos na página certa (auditor) | 260/339 | **354/354** |
+| Origem do sumário | 16 por IA, 1 por índice | **17 por índice** |
+| `state` (reescrito a cada clique) | 42,9 MB | **0,67 MB** |
+| Binário dos materiais no banco | 338,70 MB (base64) | **253,38 MB** (bytes) |
+| Arquivo `.db` | 428 MB | **280 MB** (após `VACUUM`) |
+| Envelope do cofre (com as 9.105 páginas) | 5,63 MB | **5,50 MB** |
+| Fila dos 17, ponta a ponta | — | **50,8 min**, sem uma chamada de IA |
+
+O `VACUUM` foi manual: o SQLite não devolve sozinho o espaço das chaves antigas em base64.
+Conferido também: leitura do binário do disco **sem cache** (358 ms para 5,6 MB) e o
+visualizador de PDF abrindo e pintando as páginas pelo caminho novo; o snapshot de
+sincronização continua levando as 9.105 páginas (é montado do estado em MEMÓRIA, não do
+arquivo). Testes: 5/5 sumário, 2/2 edital, 4/4 estrutura, persistência ok.
+
+---
+
+## 13. Armadilha do build: o executável pode sair com o frontend ANTIGO
+
+Descoberto ao conferir a v0.8.3 no desktop: a tela continuava mostrando o botão no lugar
+antigo depois de instalar. Não era cache do WebView (nem service worker — o desktop não
+registra nenhum): o `dist` estava certo (`main-DEAhBc2H.js`, com o texto novo), mas o
+**executável instalado embutia `main-B_KjCcTI.js`**, de duas compilações antes.
+
+Causa: o Tauri assa o `dist` DENTRO do binário Rust. Se nada do Rust mudou, o Cargo reaproveita
+o binário compilado e os assets embutidos continuam sendo os da compilação anterior — o
+`vite build` do `beforeBuildCommand` roda, atualiza o `dist`, e o resultado é ignorado.
+
+**Regra para publicar:** quando a versão só muda o frontend, forçar a recompilação antes de
+empacotar:
+
+```bash
+touch src-tauri/src/lib.rs     # ou: cargo clean -p mentor-concurso
+npm run tauri build
+```
+
+**Como conferir depois de instalar** (30 segundos, e teria evitado publicar a versão errada):
+
+```powershell
+$exe = "$env:LOCALAPPDATA\Mentor Concurso\mentor-concurso.exe"
+$txt = [System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe))
+$txt.Contains("main-<hash do dist atual>")   # tem de ser True
+```
+
+Ou, com o app aberto: `document.querySelector('script[type=module][src]').src` tem de bater com
+o arquivo em `dist/assets/`.
+
+---
+
+## 14. O vínculo bloco↔tópico estava errado em quase metade dos casos
+
+Pergunta do usuário depois de ver os "chips" do cartão: *a vinculação de fato está correta?*
+Não estava. `dev/auditar-vinculos.mjs` compara a disciplina do tópico vinculado com a
+disciplina do próprio material (a do nome do arquivo):
+
+| | Blocos na disciplina do material |
+|---|---|
+| Direitos Humanos | 5/13 (38%) |
+| Constitucional | 10/20 (50%) |
+| Tributário | 7/14 (50%) |
+| Administrativo | 11/19 (58%) |
+| **Total (materiais cuja disciplina está no edital)** | **173/269 (64%)** |
+
+Exemplos: `2.8 Administração Pública` (Constitucional) → **Penal**, "crimes contra a
+administração pública"; `14.5 Proteção às Pessoas com Deficiência` (Direitos Humanos) →
+**Civil**, "Pessoas naturais".
+
+**Causa, literal:** `casarEstruturaComEdital` chamava `sugerirTopicoPorAssunto(b.titulo, "")`.
+A função aceita uma dica de disciplina e o chamador passava string vazia — o casamento era por
+sobreposição de palavras contra o edital inteiro, e "administração", "competência" e "proteção"
+aparecem em todas as matérias.
+
+**Conserto:** `acharTopicoDoBloco()` (função pura, em `estrutura.js`) casa **primeiro dentro da
+disciplina do material** (`disciplinaDoMaterial()`, tirada do nome do arquivo) e só olha o
+edital inteiro se não houver nada aceitável ali — com exigência maior (0.6 contra 0.34). Sem
+candidato bom, **não vincula**: vínculo errado conta como cobertura do edital e contamina
+dossiê e revisões, então vazio é melhor.
+
+Simulado sobre a base real, sem gravar (`dev/simular-vinculos.mjs`): **64% → 95%**. Mudam 119
+blocos; 40 ficam sem vínculo (são os que hoje apontam para a matéria errada).
+
+As três apostilas que **não** são disciplina do edital (Legislação Civil Especial, Legislação
+Penal Especial, Difusos e Coletivos) continuam casando globalmente, que é o certo: o conteúdo
+delas mora dentro de Civil, Penal e Consumidor. Elas aparecem com 0% no auditor **por
+construção** — não é defeito.
+
+Travado em `dev/teste-vinculos.mjs` (6 regras, incluindo os quatro casos reais acima).
+
+### Re-vínculo aplicado na base real (3 passadas)
+
+`store.revincularMateriais()` re-aplica a regra nos materiais já importados sem tocar em
+páginas, texto, figuras, questões, flashcards ou histórico. Cada passada revelou um resíduo:
+
+| Passada | Regra que entrou | Acerto (materiais cuja disciplina está no edital) |
+|---|---|---|
+| — | (antes) | 173/269 · **64%** |
+| 1ª | casar primeiro dentro da disciplina do material | 252/263 · **96%** |
+| 2ª | título com menos de 3 palavras úteis não sai da disciplina | 255/258 · **99%** |
+| 3ª | herança da aula do cursinho também respeita a disciplina | 253/253 · **100%** |
+
+O resíduo da 2ª eram títulos de uma palavra: a nota é interseção/menor conjunto, então
+"Prescrição" casa 1.00 com qualquer "Prescrição e decadência" do edital. O da 3ª era o
+atalho "aula de tópico único → o bloco herda", que passava por fora da regra.
+
+Preço: 313 vínculos contra 327 antes. Os 14 que sumiram são os que apontavam para a matéria
+errada e não têm equivalente na própria disciplina — vazio conta certo no "% do edital
+coberto"; errado, não.
+
+---
+
+## 15. Ler figuras: o híbrido Gemini + Claude Code, e a armadilha do 429
+
+O usuário pediu para usar a IA do app **pelo Claude Code** na leitura das 531 páginas com
+figura. Medindo antes de soltar, o custo apareceu — e não é onde se imagina:
+
+| Chamada ao `claude -p` | Custo relatado |
+|---|---|
+| "Responda apenas: OK" — **sem imagem** | US$ 0,0480 |
+| a mesma coisa **com a imagem da página** | US$ 0,0573 |
+
+A imagem custa ~US$ 0,009; **84% do custo é a invocação em si** — cada `claude -p` abre sessão
+nova e recria ~22 mil tokens de contexto (prompt de sistema, ferramentas, o `CLAUDE.md` do
+usuário, catálogo de skills). Para 531 páginas: ~2h15 e ~US$ 27, contra ~45 min e zero pelo
+Gemini flash-lite. Claude Code é a ferramenta certa para a página difícil, não para 531
+chamadinhas.
+
+Daí o **híbrido**: Gemini na frente, Claude Code só onde o Gemini recusar.
+
+⚠️ **A armadilha que pegou na prática:** a 1ª execução mandou 20 páginas para o Claude Code em
+poucos minutos. Motivo: o Gemini devolvia **429**, e o código tratava 429 como "recusa" — ou
+seja, *cota estourada virava conta cara automaticamente*, exatamente o que o híbrido queria
+evitar. E o teto da reserva era por MATERIAL (40), então 14 apostilas dariam até 560 chamadas
+caras. Consertado:
+
+- **429 não é recusa, é "espere"**: espera 25 s, tenta o Gemini de novo e, se insistir, PARA a
+  rodada avisando que a cota acabou (o app retoma depois de onde parou).
+- Reserva paga só para **recusa de verdade** (imagem/conteúdo rejeitado), com **orçamento
+  único da rodada** (25), não por material.
+- Ritmo do Gemini de 4,2 s → **5 s** (12 req/min; o teto do plano grátis é 15/min).
+- Página conferida **sem figura** passa a ser registrada (`{pagina, vazio:true}`): sem isso ela
+  voltava como pendente e era reprocessada para sempre — pagando de novo.
+
+Custo real da lição: ~US$ 1 (20 chamadas). As 46 páginas lidas ficaram salvas.
