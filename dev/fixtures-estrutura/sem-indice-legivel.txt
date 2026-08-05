@@ -1,0 +1,15 @@
+# O contrário dos outros: material SEM índice e sem seção numerada no corpo (apostila
+# escaneada, artigo, anotação colada). Aqui o determinístico não tem o que ancorar e a IA
+# (Visão sobre a página do sumário) continua sendo o melhor caminho — por isso `forte=nao`.
+# Sem esta fixture, apertar a regra do `ehEstruturaForte` desligaria a IA também neste caso.
+# esperado: origem=nenhuma blocos=0 forte=nao
+--- pagina 1 ---
+Anotações de aula
+
+Hoje tratamos do princípio da legalidade e de suas exceções na jurisprudência recente.
+
+--- pagina 2 ---
+Seguimos com a discussão sobre a reserva legal e o papel do regulamento autônomo.
+
+--- pagina 3 ---
+Encerramos com um caso prático e a leitura recomendada para a próxima aula.

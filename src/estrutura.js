@@ -276,7 +276,10 @@ export function parseIndice(paginas, numPaginas) {
     }
   }
   // `indicePag` é o PISO para procurar os títulos no corpo: a última página do índice.
-  return { entradas, indicePag: pgsIndice[pgsIndice.length - 1].n };
+  // `indicePags` são TODAS as páginas do índice — apostila grande espalha o índice por 2-3
+  // páginas, e pular só a última faz um título ser "achado no corpo" numa página de índice
+  // anterior (o Processual Civil, com índice nas págs. 2-3, ancorava tudo na 3).
+  return { entradas, indicePag: pgsIndice[pgsIndice.length - 1].n, indicePags: pgsIndice.map((p) => p.n) };
 }
 
 // Apostila de cursinho → AULAS, sem IA nenhuma. Cada item do sumário é uma aula: em
@@ -448,23 +451,36 @@ export function mapaTopicTag(paginas) {
   return mapa;
 }
 
+// Uma página é do índice? Aceita número (uso antigo) ou lista de páginas.
+function ehPaginaDeIndice(n, indicePag) {
+  return Array.isArray(indicePag) ? indicePag.includes(n) : !!indicePag && n === indicePag;
+}
+
 // Acha, no CORPO, a página onde um título numerado aparece (para confirmar/achar o início).
-// Ignora a página do Índice (lá todos os títulos aparecem, daria falso positivo).
+// Ignora as páginas do Índice (lá todos os títulos aparecem, daria falso positivo).
+// Devolve { pagina, comTitulo } — `comTitulo` diz se o texto ao lado do número também bateu.
+// O casamento só pelo NÚMERO é guardado como reserva: quando a linha do índice quebra, o
+// título chega truncado ("Normas do Direito Brasileiro (LINDB)" no lugar da frase inteira) e a
+// conferência de texto falha, embora "3.22 " abrindo linha no corpo seja âncora boa.
 function paginaDoTitulo(paginas, numero, titulo, indicePag) {
   const alvoNum = numero;
   const tituloNorm = String(titulo || "").toLowerCase().slice(0, 30);
+  let soNumero = null;
   for (const p of paginas) {
-    if (indicePag && p.n === indicePag) continue;
+    if (ehPaginaDeIndice(p.n, indicePag)) continue;
     const linhas = (p.texto || "").split(/\r?\n/).map((l) => l.trim());
     for (const l of linhas) {
       const m = l.match(RE_TITULO_CORPO);
       if (m && m[1] === alvoNum) {
         // confere que o texto após o número bate com o título do índice (evita falso positivo)
-        if (!tituloNorm || m[2].toLowerCase().includes(tituloNorm.slice(0, 12)) || tituloNorm.includes(m[2].toLowerCase().slice(0, 12))) return p.n;
+        if (!tituloNorm || m[2].toLowerCase().includes(tituloNorm.slice(0, 12)) || tituloNorm.includes(m[2].toLowerCase().slice(0, 12))) {
+          return { pagina: p.n, comTitulo: true };
+        }
+        if (soNumero == null) soNumero = p.n;
       }
     }
   }
-  return null;
+  return soNumero != null ? { pagina: soNumero, comTitulo: false } : null;
 }
 
 // FALLBACK 1 — títulos NUMERADOS no corpo (PDF sem página de Índice, mas com seções "1.2 Título").
@@ -473,7 +489,7 @@ export function detectarPorNumeracao(paginas, indicePag) {
   const brutas = [];
   const vistos = new Set();
   for (const p of paginas) {
-    if (indicePag && p.n === indicePag) continue;
+    if (ehPaginaDeIndice(p.n, indicePag)) continue;
     const linhas = (p.texto || "").split(/\r?\n/).map((l) => l.trim());
     for (let i = 0; i < linhas.length; i++) {
       const l = linhas[i];
@@ -514,7 +530,7 @@ export function detectarPorMarcador(paginas, indicePag) {
   const entradas = [];
   const vistos = new Set();
   for (const p of paginas) {
-    if (indicePag && p.n === indicePag) continue;
+    if (ehPaginaDeIndice(p.n, indicePag)) continue;
     const linhas = (p.texto || "").split(/\r?\n/).map((l) => l.trim());
     for (const l of linhas) {
       const m = l.match(RE_MARCADOR_HASH);
@@ -556,7 +572,7 @@ export function detectarPorFonte(linhasPorPagina, numPaginas, indicePag) {
   const limiteRep = Math.max(3, Math.round(linhasPorPagina.length * 0.4));
   const headings = [];
   for (const pg of linhasPorPagina) {
-    if (indicePag && pg.n === indicePag) continue;
+    if (ehPaginaDeIndice(pg.n, indicePag)) continue;
     for (const l of pg.linhas || []) {
       const t = (l.texto || "").trim();
       if (t.length < 3 || t.length > 90) continue;
@@ -634,6 +650,100 @@ export function montarEstruturaDeTopicos(topicos, { paginas, numPaginas, sumario
   return { aulaTitulo: aulaTitulo || inferirTituloAula(paginas), origem: "ia-sumario", blocos };
 }
 
+// ---- casamento bloco do sumário ↔ tópico do edital --------------------------------------
+// Fica aqui (e não no store) porque é regra pura: entra texto, sai um id. Assim dá para medir
+// contra a base real sem abrir o app — foi como se descobriu que só 53% dos vínculos caíam na
+// disciplina do próprio material.
+const STOP_CASAMENTO = new Set([
+  "de", "da", "do", "dos", "das", "e", "a", "o", "as", "os", "em", "no", "na", "para", "com",
+  // "direito(s)" é quase-stopword: toda disciplina jurídica é "Direito X", o que discrimina é o
+  // termo específico. "disposicoes/gerais" aparecem em metade dos títulos de lei.
+  "disposicoes", "gerais", "direito", "direitos",
+]);
+const normCasamento = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const tokensCasamento = (s) =>
+  new Set(normCasamento(s).split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOP_CASAMENTO.has(w)));
+
+// Acha o tópico que melhor casa com um título de bloco.
+//   `disciplinaId` = disciplina do MATERIAL (do nome do arquivo). Quando ela é conhecida, o
+//   casamento acontece PRIMEIRO dentro dela; só se não houver nada aceitável ali é que se olha
+//   o edital inteiro, e com exigência bem maior — é preferível não vincular a vincular errado.
+// Sem essa preferência, "2.8 Administração Pública" (apostila de Constitucional) casava com
+// "Dos crimes contra a administração pública" (Penal), e "Proteção às Mulheres" (Direitos
+// Humanos) com "Pessoas naturais" (Civil): basta uma palavra em comum.
+// `minOutra` é alto de propósito (0.75 contra 0.34 da própria disciplina): medindo na
+// biblioteca real, o que passava entre 0.6 e 0.75 era majoritariamente ruído — "Processo
+// Judicial Tributário" virando "Arbitragem", "Incidente de Deslocamento de Competência"
+// virando "Precedentes judiciais". Perde-se junto algum vínculo legítimo (o capítulo de
+// crimes ambientais da apostila de Ambiental, que mora em Penal no edital), e é uma troca
+// consciente: vínculo errado conta como edital coberto e contamina dossiê e revisões, então
+// vazio é melhor — e o usuário pode vincular à mão no cartão do material.
+export function acharTopicoDoBloco(titulo, { topicos, disciplinas, disciplinaId, minMesma = 0.34, minOutra = 0.75 } = {}) {
+  const alvo = tokensCasamento(titulo);
+  if (!alvo.size || !Array.isArray(topicos) || !topicos.length) return null;
+  const nomeDisc = (id) => {
+    const d = (disciplinas || []).find((x) => x.id === id);
+    return d ? d.nome : "";
+  };
+  const melhorEntre = (lista, incluirDisciplinaNoTexto) => {
+    let melhor = null, melhorNota = 0;
+    for (const t of lista) {
+      const cand = tokensCasamento(`${t.nome} ${incluirDisciplinaNoTexto ? nomeDisc(t.disciplinaId) : ""}`);
+      let inter = 0;
+      for (const w of cand) if (alvo.has(w)) inter++;
+      const nota = inter / Math.max(1, Math.min(alvo.size, cand.size));
+      if (inter > 0 && nota > melhorNota) { melhorNota = nota; melhor = t; }
+    }
+    return { melhor, nota: melhorNota };
+  };
+  if (disciplinaId) {
+    const daCasa = topicos.filter((t) => t.disciplinaId === disciplinaId);
+    // Dentro da própria disciplina o nome dela não entra no texto: todos os candidatos a
+    // compartilham, e ela só inflaria a nota sem discriminar nada.
+    const r = melhorEntre(daCasa, false);
+    if (r.melhor && r.nota >= minMesma) return { topicoId: r.melhor.id, nota: r.nota, mesmaDisciplina: true };
+  }
+  // Sair da disciplina do material exige um título com SUBSTÂNCIA. Um título de uma ou duas
+  // palavras ("Prescrição", "Ilicitude", "Evolução Histórica") pontua 1.00 em qualquer lugar —
+  // a nota é interseção/menor conjunto, então o lado curto sempre cabe inteiro dentro de algum
+  // dos 400 tópicos do edital. Foi assim que "7.33 Prescrição", do Direito Penal, virou
+  // "Prescrição e decadência" do Civil. Dentro da própria disciplina o risco não existe (o
+  // universo é pequeno e temático), então o piso vale só para o casamento global.
+  if (disciplinaId && alvo.size < 3) return null;
+  const g = melhorEntre(topicos, true);
+  const minimo = disciplinaId ? minOutra : minMesma;
+  if (g.melhor && g.nota >= minimo) return { topicoId: g.melhor.id, nota: g.nota, mesmaDisciplina: false };
+  return null;
+}
+
+// Disciplina do material a partir do título/arquivo ("3. Direito Administrativo" → a disciplina
+// de mesmo nome no edital). Devolve null quando não há correspondência clara — caso das
+// apostilas que não são disciplina do edital (Legislação Civil Especial, Difusos e Coletivos),
+// em que o conteúdo mora mesmo em outras matérias.
+export function disciplinaDoMaterial(titulo, disciplinas) {
+  const alvo = normCasamento(disciplinaDoNomeDeArquivo(titulo)).trim();
+  if (!alvo || !Array.isArray(disciplinas)) return null;
+  const exata = disciplinas.find((d) => normCasamento(d.nome).trim() === alvo);
+  if (exata) return exata.id;
+  const contida = disciplinas.find((d) => {
+    const n = normCasamento(d.nome).trim();
+    return n.length >= 6 && (n.includes(alvo) || alvo.includes(n));
+  });
+  return contida ? contida.id : null;
+}
+
+// O sumário determinístico é bom o bastante para dispensar a IA? Veio do ÍNDICE (ou da
+// numeração das seções no corpo, que também é ancorada em texto real) e quase todo bloco tem
+// página. `outline`/`fonte`/`marcador` NÃO contam: são os fallbacks incertos, e é neles (mais
+// no PDF escaneado, que não tem texto nenhum) que a Visão da IA ganha da heurística.
+// Fica aqui, e não na tela, porque é regra de detecção — e assim entra no teste sem DOM.
+export function ehEstruturaForte(est) {
+  if (!est || !Array.isArray(est.blocos) || !est.blocos.length) return false;
+  if (est.origem !== "indice" && est.origem !== "numeracao") return false;
+  const comPagina = est.blocos.filter((b) => b.pIni != null).length;
+  return comPagina >= Math.ceil(est.blocos.length * 0.8);
+}
+
 // DETECTA a estrutura: devolve { aulaTitulo, origem, blocos:[{numero,titulo,tipo,banca,assunto,nivel,pIni,pFim,confianca}] }.
 // `outline` (opcional) = [{titulo, pagina}] de pdf.getOutline(); `linhasPorPagina` = fonte por linha (fallback).
 export function detectarEstrutura({ paginas, outline, numPaginas, linhasPorPagina } = {}) {
@@ -644,7 +754,8 @@ export function detectarEstrutura({ paginas, outline, numPaginas, linhasPorPagin
   const temTag = Object.keys(tags).length > 0;
 
   // Fonte primária: Índice/Sumário. Fallbacks (PDF sem Índice): outline → numeração → fonte.
-  let { entradas, indicePag } = parseIndice(paginas, numPaginas);
+  let { entradas, indicePag, indicePags } = parseIndice(paginas, numPaginas);
+  indicePags = indicePags || (indicePag ? [indicePag] : []);
   let origem = entradas.length ? "indice" : null;
   if (!entradas.length && Array.isArray(outline) && outline.length) {
     entradas = outline.map((o, k) => ({ numero: String(k + 1), titulo: o.titulo, pagina: o.pagina }));
@@ -667,16 +778,25 @@ export function detectarEstrutura({ paginas, outline, numPaginas, linhasPorPagin
   // Confiança menor para fallbacks (mais incertos → o usuário confirma na F3).
   const tetoConf = origem === "fonte" ? 0.55 : origem === "numeracao" ? 0.72 : origem === "marcador" ? 0.82 : 0.99;
 
-  // Resolve a página de início de cada entrada: tag > índice > título no corpo.
+  // Resolve a página de início de cada entrada: CORPO > índice > tag.
+  //
+  // A ordem era tag > índice > corpo, e a tag ganhava sempre que existisse. Só que a tag é um
+  // link da plataforma na página ("?topic=10.5"): ela marca uma página que FALA da seção, não
+  // onde a seção começa — nas apostilas do cursinho ela cai dezenas de páginas adiante. Medido
+  // nas 17 apostilas (339 blocos, gabarito = página em que o cabeçalho "N.M" abre linha no
+  // corpo): com a tag na frente, 117/339; com o índice/corpo na frente, 316/339. O cabeçalho no
+  // corpo é a única âncora que É o começo da seção, então ele manda; o índice vem logo atrás
+  // (concordam quase sempre) e a tag vira o último recurso, para PDF sem índice legível.
   const blocos = entradas.map((e) => {
     let pIni = null, conf = 0.5;
-    if (temTag && tags[e.numero]) { pIni = tags[e.numero].ini; conf = 0.98; }
+    const noCorpo = paginaDoTitulo(paginas, e.numero, e.titulo, indicePags);
+    const pCorpo = noCorpo && noCorpo.comTitulo ? noCorpo.pagina : null;
+    if (pCorpo != null) { pIni = pCorpo; conf = 0.9; }
     else if (e.pagina) { pIni = e.pagina; conf = 0.8; }
-    const pCorpo = paginaDoTitulo(paginas, e.numero, e.titulo, indicePag);
-    if (pCorpo) {
-      if (pIni == null) { pIni = pCorpo; conf = 0.7; }
-      else if (Math.abs(pCorpo - pIni) <= 1) conf = Math.min(0.99, conf + 0.15); // bateu → confiança alta
-    }
+    else if (noCorpo) { pIni = noCorpo.pagina; conf = 0.75; } // número bateu, título veio truncado
+    else if (temTag && tags[e.numero]) { pIni = tags[e.numero].ini; conf = 0.55; } // pede conferência na tela
+    // Duas fontes independentes concordando: confiança máxima.
+    if (pCorpo != null && e.pagina && Math.abs(pCorpo - e.pagina) <= 1) conf = 0.99;
     const cls = classificarTitulo(e.titulo);
     const nivel = e.nivel || (e.numero.match(/\./g) || []).length + 1;
     return { numero: e.numero, titulo: e.titulo, ...cls, nivel, pIni, pFim: null, confianca: pIni != null ? Math.min(conf, tetoConf) : 0.3 };

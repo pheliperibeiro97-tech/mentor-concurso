@@ -1,0 +1,45 @@
+# Índice de DUAS COLUNAS (o layout que o pdf.js entrega como "7.1 3") + tag da plataforma
+# ("?topic=7.2") numa página DEPOIS do começo da seção. A tag tinha prioridade e puxava cada
+# bloco para a página do link; nas 17 apostilas reais isso derrubou o detector para 117/339.
+# A âncora certa é o cabeçalho numerado no corpo (e o índice, que concorda com ele).
+# esperado: forte=sim origem=indice blocos=4 paginas=3|5|7|9
+--- pagina 1 ---
+Prof. Exemplo
+7 Direito de Exemplo
+Direto ao Ponto: Magistratura
+
+--- pagina 2 ---
+7.1 3
+7.2 5
+7.3 7
+7.4 9
+Considerações Iniciais ..........................................................
+Princípios ......................................................................
+Regras ..........................................................................
+Jurisprudência ..................................................................
+
+--- pagina 3 ---
+7.1 Considerações Iniciais
+Caro(a) aluno(a), este material cobre o essencial da disciplina para a prova.
+
+--- pagina 4 ---
+Comentário do professor: veja a aula correspondente em
+https://plataforma.exemplo/curso/aula?topic=7.2
+
+--- pagina 5 ---
+7.2 Princípios
+Os princípios estruturam a interpretação de toda a disciplina.
+
+--- pagina 6 ---
+Questão comentada. Material de apoio em https://plataforma.exemplo/a?topic=7.3
+
+--- pagina 7 ---
+7.3 Regras
+As regras trazem a disciplina positiva do tema.
+
+--- pagina 8 ---
+Continuação do capítulo anterior, com exercícios ?topic=7.4
+
+--- pagina 9 ---
+7.4 Jurisprudência
+Seleção de julgados recentes sobre a matéria.

@@ -1,0 +1,71 @@
+# Índice espalhado por DUAS páginas (apostila grande: o Processual Civil real tem 47 entradas
+# em 2 páginas). Só a ÚLTIMA página do índice era pulada ao procurar o título no corpo, então
+# as entradas listadas na PRIMEIRA eram "achadas" ali mesmo e ancoravam na página do índice.
+# esperado: forte=sim origem=indice blocos=7 paginas=6|8|10|12|14|16|18
+--- pagina 1 ---
+Prof. Exemplo
+6 Direito Processual de Exemplo
+
+--- pagina 2 ---
+Índice
+6.1 Da Jurisdição ............................................................. 6
+6.2 Da Competência ............................................................ 8
+6.3 Da Ação ................................................................... 10
+6.4 Do Processo ............................................................... 12
+
+--- pagina 3 ---
+6.5 Da Petição Inicial ........................................................ 14
+6.6 Das Provas ................................................................ 16
+6.7 Da Sentença ............................................................... 18
+
+--- pagina 4 ---
+Apresentação do curso e orientações de estudo.
+
+--- pagina 5 ---
+Quadro de leis e súmulas mais cobradas na disciplina.
+
+--- pagina 6 ---
+6.1 Da Jurisdição
+Jurisdição é a função estatal de aplicar o direito ao caso concreto.
+
+--- pagina 7 ---
+Continuação do capítulo de jurisdição.
+
+--- pagina 8 ---
+6.2 Da Competência
+Competência é a medida da jurisdição.
+
+--- pagina 9 ---
+Continuação do capítulo de competência.
+
+--- pagina 10 ---
+6.3 Da Ação
+Ação é o direito de provocar a atividade jurisdicional.
+
+--- pagina 11 ---
+Continuação do capítulo de ação.
+
+--- pagina 12 ---
+6.4 Do Processo
+Processo é a relação jurídica que se desenvolve em contraditório.
+
+--- pagina 13 ---
+Continuação do capítulo de processo.
+
+--- pagina 14 ---
+6.5 Da Petição Inicial
+A petição inicial é a peça que instaura o processo.
+
+--- pagina 15 ---
+Continuação do capítulo de petição inicial.
+
+--- pagina 16 ---
+6.6 Das Provas
+A prova destina-se a formar o convencimento do juiz.
+
+--- pagina 17 ---
+Continuação do capítulo de provas.
+
+--- pagina 18 ---
+6.7 Da Sentença
+Sentença é o pronunciamento que põe fim à fase de conhecimento.

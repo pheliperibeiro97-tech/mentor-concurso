@@ -1,0 +1,38 @@
+# Índice SEM número de página nenhum (o caso do 16. Direito do Consumidor): só a lista de
+# títulos. Não havendo página no índice, a âncora tem de ser o cabeçalho numerado no corpo.
+# Era aqui que a IA colocava 15 dos 19 blocos na ÚLTIMA página do material.
+# esperado: forte=sim origem=indice blocos=3 paginas=3|6|9
+--- pagina 1 ---
+Prof. Exemplo
+16 Direito do Exemplo
+Documento última vez atualizado em 08/06/2026.
+
+--- pagina 2 ---
+Índice
+16.1) Considerações Iniciais
+16.2) Disposições Gerais
+16.3) Conceito de Consumidor
+
+--- pagina 3 ---
+16.1 Considerações Iniciais
+O conteúdo está concentrado na lei especial, suficiente para a maioria das provas.
+
+--- pagina 4 ---
+Continuação da introdução, com fundamentos constitucionais do tema.
+
+--- pagina 5 ---
+Mais fundamentos e um quadro comparativo.
+
+--- pagina 6 ---
+16.2 Disposições Gerais
+As disposições gerais delimitam o campo de aplicação da lei.
+
+--- pagina 7 ---
+Continuação das disposições gerais.
+
+--- pagina 8 ---
+Exercícios comentados da seção anterior.
+
+--- pagina 9 ---
+16.3 Conceito de Consumidor
+Consumidor é o destinatário final do produto ou serviço.
