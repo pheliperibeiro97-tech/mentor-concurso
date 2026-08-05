@@ -2587,7 +2587,10 @@ export const store = {
   // Páginas que ainda dependem de OCR/Visão (sem texto e ainda não transcritas).
   paginasPendentes(doc) {
     if (!doc || !Array.isArray(doc.paginas)) return [];
-    return doc.paginas.filter((p) => p.vazia && !p.ocr);
+    // `vazia` é uma marca do momento da IMPORTAÇÃO. Se a página ganhou conteúdo depois — é o
+    // caso da que só tinha um quadro e foi descrita na leitura de figuras — ela não está mais
+    // pendente, e continuar anunciando "página escaneada" é mentira na tela.
+    return doc.paginas.filter((p) => p.vazia && !p.ocr && !(p.texto || "").trim());
   },
   // (Re)processa a estrutura de páginas de um doc já salvo a partir do PDF/imagem
   // guardado — usado para detectar páginas-lacuna em material importado antes do OCR.
@@ -2617,7 +2620,14 @@ export const store = {
     if (!doc) throw new Error("Documento não encontrado.");
     const contexto = nomeContexto(state, doc.topicoId);
     const texto = await iaProv.transcreverImagem(state.config, { dataUrl, contexto });
+    // Página realmente em branco (separador, verso, folha de rosto) devolve texto vazio — e
+    // isso é uma resposta, não uma falha: marca como conferida, senão ela volta como pendente
+    // em toda rodada e o usuário paga de novo pela mesma folha em branco.
     this.atualizarPaginaOcr(id, n, texto);
+    if (!String(texto || "").trim()) {
+      const pg = (doc.paginas || []).find((p) => p.n === n);
+      if (pg) { pg.ocr = true; commit(); }
+    }
     return texto;
   },
   // Transcrição avulsa de uma foto (ex.: discursiva manuscrita) — só devolve o texto,

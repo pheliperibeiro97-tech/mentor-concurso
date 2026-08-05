@@ -26,7 +26,49 @@ function dataUrlToUint8(dataUrl) {
 const normalizar = (s) =>
   String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
+// ---- leitor NATIVO -------------------------------------------------------------------------
+// O WebView2 (e o Chrome/Edge no computador) traz um leitor de PDF completo: seleção nos dois
+// temas, busca, zoom com Ctrl+roda, "página inteira" que alinha de verdade, girar, miniaturas,
+// imprimir e baixar — tudo aquilo que este arquivo tentava reimplementar, com os defeitos que
+// vieram junto. Quando ele existe, é ele que abre; o leitor caseiro abaixo fica de reserva
+// para onde não existe (Chrome no Android, por exemplo, BAIXA o PDF em vez de exibir).
+const temLeitorNativo = () =>
+  typeof navigator !== "undefined" &&
+  (navigator.pdfViewerEnabled === true || !!(navigator.mimeTypes && navigator.mimeTypes["application/pdf"]));
+
+function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
+  const url = URL.createObjectURL(new Blob([dataUrlToUint8(dataUrl)], { type: "application/pdf" }));
+  const overlay = document.createElement("div");
+  overlay.className = "pdf-overlay pdf-nativo";
+  overlay.innerHTML = `
+    <div class="pdf-viewer">
+      <div class="pdf-bar">
+        <b class="pdf-titulo">${esc(titulo || "PDF")}</b>
+        <span class="spacer"></span>
+        <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
+      </div>
+      <iframe class="pdf-quadro" title="${esc(titulo || "PDF")}" src="${url}#page=${Math.max(1, paginaInicial || 1)}"></iframe>
+    </div>`;
+  document.body.appendChild(overlay);
+  const fechar = () => {
+    document.removeEventListener("keydown", onKey);
+    URL.revokeObjectURL(url);
+    overlay.remove();
+  };
+  const onKey = (e) => { if (e.key === "Escape") fechar(); };
+  document.addEventListener("keydown", onKey);
+  overlay.addEventListener("click", (e) => {
+    if (e.target.closest('[data-p="close"]') || e.target === overlay) fechar();
+  });
+}
+
 export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
+  if (temLeitorNativo()) return abrirPdfNativo(dataUrl, titulo, paginaInicial);
+  return abrirVisualizadorProprio(dataUrl, titulo, paginaInicial);
+}
+
+// Leitor próprio (pdf.js) — reserva para quando não há leitor nativo.
+async function abrirVisualizadorProprio(dataUrl, titulo, paginaInicial) {
   const overlay = document.createElement("div");
   overlay.className = "pdf-overlay";
   overlay.innerHTML = `

@@ -415,6 +415,7 @@ export default function renderDocumentos(root, app) {
     </div>
     ${filtroTopicosPainelHTML(st, filtroTop.sel, filtroTop.aberto)}
     ${figurasNudgeHTML(store, st)}
+    ${visaoNudgeHTML(store, st)}
 
     <div class="lista-docs">
       ${listaDocsHTML(store, st, docs, agrup, busca)}
@@ -774,6 +775,21 @@ export default function renderDocumentos(root, app) {
       const restam = store.figurasPendentes(store.get().documentos.find((x) => x.id === id)).length;
       toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
       store.indexarFonteAuto(id);
+      app.refresh();
+    },
+    // Páginas escaneadas de TODOS os materiais, em sequência (mesmo caminho do botão que já
+    // existe dentro do cartão, só que sem obrigar a abrir material por material).
+    "ocr-todos": async () => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Reconhecer texto por Visão (OCR)");
+      const alvos = (store.get().documentos || [])
+        .map((d) => ({ d, ns: store.paginasPendentes(d).map((p) => p.n) }))
+        .filter((x) => x.ns.length);
+      if (!alvos.length) return toast("Não há páginas escaneadas pendentes.", "ok");
+      for (const { d, ns } of alvos) {
+        await processarOcr(app, store, d, ns);
+        // Alguma sobrou (cota/erro/cancelamento)? Não insiste nos materiais seguintes.
+        if (store.paginasPendentes(store.get().documentos.find((x) => x.id === d.id) || d).length) break;
+      }
       app.refresh();
     },
     // O mesmo, para TODOS os materiais com figura pendente, em sequência.
@@ -1674,6 +1690,25 @@ function figurasNudgeHTML(store, st) {
     ${icone("image")}
     <span>As figuras e tabelas ${onde} ainda não foram lidas: o que está dentro delas não entra na busca nem nas gerações.</span>
     <button class="btn btn-primary btn-sm" data-action="figuras-todos" data-tip="A IA lê cada página com figura ou tabela e escreve o que ela mostra. São ${paginas} ${paginas === 1 ? "página" : "páginas"} — dá para parar no meio e retomar depois de onde parou.">${icone("image")} Ler figuras e tabelas</button>
+  </div>`;
+}
+
+// Mesmo molde do aviso de figuras, para o outro conteúdo que fica invisível ao app: página
+// que veio ESCANEADA (sem texto selecionável). Aparece só quando há pendência e some sozinho.
+function visaoNudgeHTML(store, st) {
+  if (!store.iaDisponivel()) return "";
+  let paginas = 0;
+  let materiais = 0;
+  for (const d of st.documentos || []) {
+    const n = store.paginasPendentes(d).length;
+    if (n) { paginas += n; materiais++; }
+  }
+  if (!paginas) return "";
+  const onde = materiais === 1 ? "deste material" : `de ${materiais} materiais`;
+  return `<div class="sum-nudge">
+    ${icone("search")}
+    <span>${plural(paginas, "página", "páginas")} ${onde} ${paginas === 1 ? "veio escaneada" : "vieram escaneadas"} (sem texto): o que está nelas não entra na busca nem nas gerações.</span>
+    <button class="btn btn-primary btn-sm" data-action="ocr-todos" data-tip="A IA transcreve o texto dessas páginas. Uma requisição por página — dá para parar no meio; o que for transcrito fica salvo.">${icone("search")} Ler páginas escaneadas</button>
   </div>`;
 }
 

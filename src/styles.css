@@ -4338,6 +4338,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .pdf-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--border); }
 .pdf-btn.is-ativo { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-soft-border); }
 .pdf-close:hover { background: var(--danger-soft, rgba(239,68,68,0.12)); color: var(--danger); border-color: transparent; }
+/* Leitor NATIVO: a barra do app fica só com o título e o fechar; o resto é o leitor do
+   próprio WebView, dentro do iframe. */
+.pdf-nativo .pdf-quadro { flex: 1; width: 100%; border: 0; background: var(--surface-3); }
 /* Rolagem contínua */
 .pdf-scroll { flex: 1; overflow: auto; padding: 20px 16px; display: flex; flex-direction: column; align-items: center;
   gap: 16px; scroll-behavior: smooth; background: var(--surface-3); }
