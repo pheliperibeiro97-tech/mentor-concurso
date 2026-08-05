@@ -85,8 +85,45 @@ export async function loadState() {
   }
 }
 
+// O `texto` do material é o JOIN das `paginas` (o init o recompõe com recomputarTextoDoc, e a
+// sincronização já o retira do snapshot pelo mesmo motivo). Gravar os dois é guardar o mesmo
+// conteúdo duas vezes: medido na base com as 17 apostilas do cursinho, 17,4 MB de um estado de
+// 42,9 MB. E o estado inteiro é reescrito a CADA mudança — tirar isso derrubou o
+// `JSON.stringify` de 558 ms para 371 ms por gravação.
+// A cópia é RASA: troca só o campo `texto`; `paginas` continua sendo a mesma referência (não há
+// cópia de conteúdo), e o objeto vivo em memória não é tocado — quem já leu `d.texto` continua
+// enxergando o texto.
+// Também tira o ÍNDICE SEMÂNTICO: ele mora na chave `emb:<perfil>` (o store grava e restaura),
+// e cada trecho carrega um vetor de 768 dimensões — 6,5 KB por trecho no JSON. Só sai daqui
+// quando o armazenamento de blobs está disponível; sem ele, o índice continua no estado (é
+// melhor um estado gordo do que perder o índice num desktop com binário antigo).
+// E tira as PÁGINAS do material (chave `pag:<doc>`, gravada pelo store): são o corpo do
+// material — 17,4 MB nas 17 apostilas do cursinho, contra ~1,6 MB de todo o resto do estudo.
+// `opts.blobs` existe para o teste (dev/teste-persistencia.mjs) conseguir exercitar os dois
+// mundos; em produção vale o `blobsOk` real do módulo.
+export function estadoParaGravar(state, opts) {
+  const comBlobs = opts && opts.blobs !== undefined ? !!opts.blobs : blobsOk;
+  const enxugarDoc = (d) => {
+    if (!d || typeof d !== "object") return d;
+    const temPaginas = Array.isArray(d.paginas) && d.paginas.length > 0;
+    if (!temPaginas) return d;
+    // `texto` é o join das páginas (o init recompõe); `paginas` mora fora quando há blobs.
+    return { ...d, texto: "", ...(comBlobs ? { paginas: undefined, temPaginas: d.paginas.length } : {}) };
+  };
+  const enxugarDocs = (docs) => (Array.isArray(docs) ? docs.map(enxugarDoc) : docs);
+  const enxugarPerfil = (p) => {
+    if (!p || typeof p !== "object") return p;
+    const out = p.documentos ? { ...p, documentos: enxugarDocs(p.documentos) } : { ...p };
+    if (comBlobs) out.embeddings = undefined; // `undefined` some do JSON.stringify
+    return out;
+  };
+  if (Array.isArray(state && state.perfis)) return { ...state, perfis: state.perfis.map(enxugarPerfil) };
+  if (state && Array.isArray(state.documentos)) return { ...state, documentos: enxugarDocs(state.documentos) };
+  return state;
+}
+
 export async function saveState(state) {
-  const json = JSON.stringify(state);
+  const json = JSON.stringify(estadoParaGravar(state));
   try {
     if (isTauri()) {
       await tauriInvoke("save_state", { json });
@@ -133,10 +170,37 @@ let blobsOk = true;
 export function blobsDisponiveis() {
   return blobsOk;
 }
+// Um blob de MATERIAL é `{pdfData, imgData}` com data URL base64 — a forma que o
+// visualizador, o OCR e a Visão consomem. No desktop ele é gravado como BYTES (o Rust
+// decodifica): a mesma biblioteca ocupa 288 MB em vez de 383 MB. Os outros blobs (páginas do
+// material, índice semântico) são JSON e seguem pelo caminho de texto.
+// Material gravado por uma versão anterior continua sendo lido do caminho antigo — não há
+// migração forçada; a próxima gravação daquele material já vai em bytes.
+const RE_DATA_URL = /^data:([^;,]*);base64,(.*)$/s;
+// Chaves que NÃO são binário de material: continuam em JSON (e nem tentam o caminho de bytes).
+const ehChaveDeTexto = (id) => /^(pag|emb):/.test(String(id));
+function campoBinario(valor) {
+  if (!valor || typeof valor !== "object") return null;
+  // Um material é PDF ou imagem, nunca os dois. Se algum dia for, o caminho de texto guarda
+  // os dois campos e nada se perde — o de bytes guarda um só.
+  if (valor.pdfData && valor.imgData) return null;
+  for (const campo of ["pdfData", "imgData"]) {
+    const m = typeof valor[campo] === "string" ? valor[campo].match(RE_DATA_URL) : null;
+    if (m) return { campo: campo === "pdfData" ? "pdf" : "img", mime: m[1] || "application/octet-stream", b64: m[2] };
+  }
+  return null;
+}
+
 export async function getBlob(id) {
   if (!id) return null;
   try {
     if (isTauri()) {
+      const bin = ehChaveDeTexto(id) ? null : await tauriInvoke("get_blob_bin", { id: String(id) });
+      if (bin) {
+        const { campo, mime, b64 } = JSON.parse(bin);
+        const dataUrl = `data:${mime};base64,${b64}`;
+        return { pdfData: campo === "pdf" ? dataUrl : null, imgData: campo === "img" ? dataUrl : null };
+      }
       const txt = await tauriInvoke("get_blob", { id: String(id) });
       return txt ? JSON.parse(txt) : null;
     }
@@ -151,6 +215,11 @@ export async function setBlob(id, valor) {
   if (!id) return false;
   try {
     if (isTauri()) {
+      const bin = campoBinario(valor);
+      if (bin) {
+        await tauriInvoke("set_blob_bin", { id: String(id), campo: bin.campo, mime: bin.mime, b64: bin.b64 });
+        return true;
+      }
       await tauriInvoke("set_blob", { id: String(id), json: JSON.stringify(valor || {}) });
       return true;
     }

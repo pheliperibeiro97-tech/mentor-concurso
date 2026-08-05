@@ -11,7 +11,7 @@ import * as areas from "./areas.js";
 import { parsearLeiHTML, buscarLeiPlanalto, selecionarArtigos } from "./legis.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
-import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario, paginasDeSumario } from "./estrutura.js";
+import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario, paginasDeSumario, acharTopicoDoBloco, disciplinaDoMaterial } from "./estrutura.js";
 import { buscarNoGuia } from "./guia.js";
 
 function defaultState() {
@@ -155,6 +155,88 @@ async function guardarBinarioDoc(doc, pdfData, imgData) {
     doc.imgData = imgData || null;
     commit();
   }
+}
+
+// ---- descrição de figura: Gemini na frente, Claude Code na reserva ------------------------
+// Por que híbrido: o Gemini flash-lite faz uma página em ~4 s e é grátis, mas tem cota (15
+// req/min no plano gratuito) e às vezes recusa a imagem. O Claude Code local não tem cota, só
+// que cada chamada sobe o agente inteiro — medido: US$ 0,048 para responder "OK" SEM imagem
+// nenhuma, contra US$ 0,057 com a imagem. Ou seja, 84% do custo é a invocação, não o trabalho.
+// Então ele entra só onde o Gemini falhou, e com TETO: se a cota diária do Gemini acabasse no
+// meio, as centenas de páginas restantes cairiam todas no caro sem ninguém perceber.
+// Parada cooperativa da leitura de figuras: é trabalho de dezenas de minutos, então tem de
+// dar para interromper — e o laço é o único lugar que sabe onde está.
+let pedidoDePararFiguras = false;
+const ehTauriApp = () => typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
+const RITMO_GEMINI_MS = 5000; // 12 req/min — o plano grátis permite 15, e sobra folga
+const ESPERA_COTA_MS = 25000; // o próprio 429 do Gemini sugere ~15 s; 25 dá margem
+let ultimaChamadaVisao = 0;
+const ehCota = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(String((e && e.message) || e));
+
+async function descreverUmaFigura(store, b64, pagina, conta, orcamento) {
+  const cfg = state.config;
+  const temGemini = !!(cfg.iaKey || "").trim();
+  const temReserva = ehTauriApp(); // Claude Code local só existe no desktop
+  const chamar = (provedor) =>
+    iaProv.descreverFiguras({ ...cfg, iaProvider: provedor }, { dataB64: b64, contexto: `pág. ${pagina}` });
+  const respeitarRitmo = async () => {
+    const espera = RITMO_GEMINI_MS - (Date.now() - ultimaChamadaVisao);
+    if (espera > 0) await new Promise((r) => setTimeout(r, espera));
+    ultimaChamadaVisao = Date.now();
+  };
+
+  if (temGemini) {
+    for (let tentativa = 0; tentativa < 2; tentativa++) {
+      await respeitarRitmo();
+      try {
+        const texto = await chamar("gemini");
+        conta.gemini++;
+        return { texto, via: "gemini" };
+      } catch (e) {
+        // COTA (429) não é recusa da imagem: é "espere". Mandar isso para a reserva paga
+        // transformaria "acabou a cota do grátis" em conta cara sem ninguém perceber — foi o
+        // que aconteceu na 1ª tentativa desta leitura (20 páginas foram parar no Claude Code).
+        // Então: espera e tenta de novo; se insistir, PARA a rodada.
+        if (ehCota(e)) {
+          if (tentativa === 0) { await new Promise((r) => setTimeout(r, ESPERA_COTA_MS)); continue; }
+          return { parou: "cota" };
+        }
+        console.warn("[figuras] Gemini recusou a pág.", pagina, e && e.message);
+        conta.recusadas++;
+        break; // recusa de verdade (imagem/conteúdo) → vale a reserva
+      }
+    }
+  }
+  // Sem reserva (ou com ela desligada/no teto), a recusa de UMA página não pode derrubar a
+  // rodada inteira: pula essa página — ela continua pendente — e segue para a próxima.
+  // Orçamento da reserva é do LOTE INTEIRO (vem do chamador), não de cada material: com teto
+  // por material, 14 apostilas dariam 14 × o teto de chamadas caras.
+  if (!temReserva || orcamento.max <= 0 || orcamento.usadas >= orcamento.max) return { pular: true };
+  try {
+    const texto = await chamar("claude-cli");
+    orcamento.usadas++;
+    conta.reserva++;
+    return { texto, via: "claude-cli" };
+  } catch (e) {
+    console.error("[figuras] reserva também falhou na pág.", pagina, e && e.message);
+    return { pular: true };
+  }
+}
+
+// Anexa descrições de figura ao material: acumula na lista e cola cada uma NA PÁGINA de origem
+// (sobrevive ao recomputarTextoDoc e fica buscável junto do conteúdo daquela página).
+function gravarFiguras(d, novas) {
+  if (!novas || !novas.length) return;
+  d.figuras = [...(d.figuras || []), ...novas];
+  for (const f of novas) {
+    if (!f.descricao) continue; // página conferida e sem figura: fica só o registro
+    const pg = Array.isArray(d.paginas) ? d.paginas.find((p) => p.n === f.pagina) : null;
+    if (pg && !(pg.texto || "").includes("[Figura descrita pela IA]")) {
+      pg.texto = (pg.texto || "") + `\n\n[Figura descrita pela IA] ${f.descricao}`;
+    }
+  }
+  recomputarTextoDoc(d);
+  commit();
 }
 
 function recomputarTextoDoc(doc) {
@@ -910,9 +992,105 @@ function agendarEmit() {
   });
 }
 
+// ---- índice semântico FORA do estado (chave `emb:<perfil>`) -------------------
+// O vetor de cada trecho é pesado e não muda quase nunca; o estado, ao contrário, é reescrito
+// inteiro a cada mudança. Guardar os dois juntos fazia toda marcação de tópico pagar o preço
+// do índice. Fica na memória (state.embeddings continua igual para o resto do app) e só é
+// gravado quando a ASSINATURA muda — modelo, nº de trechos ou a lista de fontes indexadas.
+const embSalvos = new Map(); // perfilId -> assinatura já gravada
+function assinaturaEmb(p) {
+  const e = p && p.embeddings;
+  if (!e || typeof e !== "object") return "";
+  const fontes = Object.entries(e.fontes || {}).map(([k, v]) => `${k}:${v}`).sort().join(",");
+  return `${e.modelo || ""}|${(e.itens || []).length}|${fontes}`;
+}
+async function restaurarEmbeddings() {
+  if (!blobsDisponiveis()) return;
+  for (const p of state.perfis || []) {
+    try {
+      const guardado = await getBlob(`emb:${p.id}`);
+      if (guardado && typeof guardado === "object" && Array.isArray(guardado.itens)) {
+        p.embeddings = guardado;
+        embSalvos.set(p.id, assinaturaEmb(p)); // veio do disco: já está gravado
+      }
+      // MIGRAÇÃO: veio de um estado antigo, com o índice embutido. NÃO marcar como gravado —
+      // se marcasse, a 1ª gravação tiraria o índice do estado sem nunca o ter escrito fora,
+      // e ele sumiria na abertura seguinte.
+    } catch (_) {}
+  }
+}
+async function salvarEmbeddingsSujos() {
+  if (!blobsDisponiveis()) return;
+  for (const p of state.perfis || []) {
+    const sig = assinaturaEmb(p);
+    if (sig === (embSalvos.get(p.id) ?? null)) continue;
+    const ok = await setBlob(`emb:${p.id}`, p.embeddings || { modelo: "", itens: [], fontes: {} });
+    if (ok) embSalvos.set(p.id, sig);
+  }
+}
+
+// ---- PÁGINAS do material FORA do estado (chave `pag:<docId>`) -----------------
+// As páginas são o corpo do material (uma entrada de texto por página do PDF): 17,4 MB nas 17
+// apostilas do cursinho, contra ~1,6 MB de todo o resto do estudo (edital, questões, sessões,
+// flashcards). Como o estado é reescrito INTEIRO a cada mudança, sem isto marcar um tópico
+// como estudado custava serializar a biblioteca toda. Continuam na MEMÓRIA (`d.paginas` segue
+// existindo para as 76 leituras espalhadas pelo app) e só vão ao disco quando mudam.
+const pagsSalvas = new Map(); // docId -> assinatura já gravada
+const assinaturaPaginas = (d) => {
+  const ps = d && d.paginas;
+  if (!Array.isArray(ps)) return "";
+  let chars = 0;
+  for (const p of ps) chars += (p && p.texto ? p.texto.length : 0) + (p && p.ocr ? 1 : 0);
+  return `${ps.length}:${chars}`;
+};
+function esquecerPaginas(docId) {
+  pagsSalvas.delete(docId);
+  if (blobsDisponiveis()) delBlob(`pag:${docId}`);
+}
+async function restaurarPaginas() {
+  if (!blobsDisponiveis()) return;
+  for (const p of state.perfis || []) {
+    for (const d of p.documentos || []) {
+      try {
+        if (Array.isArray(d.paginas) && d.paginas.length) continue; // MIGRAÇÃO: ver abaixo
+        const guardado = await getBlob(`pag:${d.id}`);
+        if (guardado && Array.isArray(guardado.paginas)) {
+          d.paginas = guardado.paginas;
+          pagsSalvas.set(d.id, assinaturaPaginas(d)); // veio do disco: já está gravado
+        }
+        // Material com as páginas ainda EMBUTIDAS no estado (versão anterior) fica de fora do
+        // `pagsSalvas` de propósito: assim a 1ª gravação as escreve na chave própria ANTES de
+        // o estado ser gravado sem elas. Marcá-las como "já gravadas" apagaria o conteúdo.
+      } catch (_) {}
+    }
+  }
+}
+async function salvarPaginasSujas() {
+  if (!blobsDisponiveis()) return;
+  for (const p of state.perfis || []) {
+    for (const d of p.documentos || []) {
+      if (!Array.isArray(d.paginas) || !d.paginas.length) continue;
+      const sig = assinaturaPaginas(d);
+      if (sig === (pagsSalvas.get(d.id) ?? null)) continue;
+      const ok = await setBlob(`pag:${d.id}`, { paginas: d.paginas });
+      if (ok) pagsSalvas.set(d.id, sig);
+    }
+  }
+}
+
+let gravacaoEmVoo = null; // promessa da gravação atual (para `aguardarGravacao`)
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveState(state), 250);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    // Primeiro o que mora fora (só o que mudou), depois o estado — assim uma queda entre os
+    // dois deixa o conteúdo no disco e o estado apontando para ele, nunca o contrário.
+    gravacaoEmVoo = (async () => {
+      await salvarEmbeddingsSujos();
+      await salvarPaginasSujas();
+      await saveState(state);
+    })();
+  }, 250);
 }
 
 // commit = aplica mudança, persiste e notifica a UI.
@@ -963,6 +1141,13 @@ export const store = {
       // Documentos cujo binário ainda está embutido no estado: movidos para fora logo
       // abaixo, depois que os perfis forem varridos.
       const migrarBinarioParaFora = [];
+      // O que mora FORA do estado volta para a memória ANTES dos backfills: as páginas
+      // (chave `pag:<doc>`) porque o backfill logo abaixo recompõe o `texto` a partir delas,
+      // e o índice semântico (chave `emb:<perfil>`) porque a tela pode consultá-lo assim que
+      // o app abre. Os dois saíram do estado porque ele é reescrito inteiro a cada mudança:
+      // páginas = 17,4 MB e índice = 6,5 MB (989 trechos) na base com as 17 apostilas.
+      await restaurarPaginas();
+      await restaurarEmbeddings();
       for (const p of state.perfis || []) {
         if (p.nome === "Meu concurso" && p.concurso && p.concurso.cargo) p.nome = "";
         // O snapshot de sincronização sobe as PÁGINAS e omite o `texto` do material (é o
@@ -1111,6 +1296,13 @@ export const store = {
   },
   get() {
     return state;
+  },
+  // Espera a gravação REAL terminar (o debounce de 250 ms + a escrita de páginas, índice e
+  // estado). Guardar uma apostila é escrever dezenas de MB; sem isto a tela seguia adiante
+  // e o app ficava surdo a cliques enquanto escrevia, sem dizer que estava salvando.
+  async aguardarGravacao() {
+    while (saveTimer) await new Promise((r) => setTimeout(r, 60));
+    await Promise.resolve(gravacaoEmVoo).catch(() => {});
   },
   subscribe(fn) {
     listeners.add(fn);
@@ -2142,41 +2334,67 @@ export const store = {
   // F1 — descreve as FIGURAS de conteúdo (diagramas/tabelas/mapas) do material com a IA, em lote.
   // Renderiza só as páginas COM figura (marca d'água já foi excluída na extração), deduplica por
   // conteúdo e anexa as descrições ao texto (buscável). Cap p/ não estourar a cota. Roda em background.
-  async descreverFigurasDeDoc(docId, max = 30) {
+  // Páginas com figura que AINDA não foram descritas (o que falta para este material).
+  figurasPendentes(doc) {
+    if (!doc || !Array.isArray(doc.paginas) || !this.temPdfDoc(doc)) return [];
+    const feitas = new Set((doc.figuras || []).map((f) => f.pagina));
+    return doc.paginas.filter((p) => p.temImagem && !feitas.has(p.n)).map((p) => p.n);
+  },
+  // Descreve as figuras do material — TODAS as que faltam, em um comando só. Faz uma requisição
+  // por página com figura, então é lento e consome cota; por isso avisa o progresso, grava a
+  // cada lote (o que já foi fica) e para na hora se a cota estourar.
+  //
+  // Era `(docId, max = 30)`: descrevia no máximo 30 páginas e jogava fora o que já existia,
+  // repetindo as mesmas requisições a cada chamada. Agora é INCREMENTAL (só o que falta) e o
+  // teto virou tamanho de lote, não um limite escondido.
+  // Parada cooperativa. O reset é do LOTE (quem começa chama `iniciarLeituraFiguras`), não de
+  // cada material: resetando por material, o "Parar" clicado no 3º seria esquecido no 4º.
+  iniciarLeituraFiguras() {
+    pedidoDePararFiguras = false;
+  },
+  pararLeituraFiguras() {
+    pedidoDePararFiguras = true;
+  },
+  async descreverFigurasDeDoc(docId, opts = {}) {
+    const { onProgresso, orcamentoReserva } = typeof opts === "object" && opts ? opts : {};
+    const orcamento = orcamentoReserva || { usadas: 0, max: 15 }; // sem lote: teto pequeno
     const d = state.documentos.find((x) => x.id === docId);
-    if (!d || !this.temPdfDoc(d) || !Array.isArray(d.paginas) || !this.iaDisponivel()) return { descritas: 0 };
-    const figPags = d.paginas.filter((p) => p.temImagem).map((p) => p.n);
-    if (!figPags.length) return { descritas: 0 };
+    if (!d || !this.temPdfDoc(d) || !Array.isArray(d.paginas) || !this.iaDisponivel()) return { descritas: 0, faltam: 0 };
+    const pendentes = this.figurasPendentes(d);
+    if (!pendentes.length) return { descritas: 0, faltam: 0, total: (d.figuras || []).length };
     const { pdfData } = await this.binarioDoc(docId);
-    if (!pdfData) return { descritas: 0 };
-    const imgs = await pdf.rasterizarPaginas(pdfData, figPags.slice(0, max), 1.6);
-    const vistos = new Set();
-    const figuras = [];
-    for (const im of imgs) {
-      const h = hashLei(String(im.dataUrl || "").slice(0, 3000)); // dedupe grosseiro por prefixo da imagem
-      if (vistos.has(h)) continue;
-      vistos.add(h);
-      const b64 = (im.dataUrl || "").split(",")[1] || "";
-      if (!b64) continue;
-      try {
-        const desc = await iaProv.descreverFiguras(state.config, { dataB64: b64, contexto: `pág. ${im.n}` });
-        if (desc && desc.length > 20) figuras.push({ pagina: im.n, descricao: desc });
-      } catch (e) { console.error("[figuras]", e); }
-    }
-    if (figuras.length) {
-      d.figuras = figuras;
-      // Anexa cada descrição À PÁGINA de origem: sobrevive ao recomputarTextoDoc e fica na posição
-      // certa do texto (buscável, junto do conteúdo daquela página).
-      for (const f of figuras) {
-        const pg = Array.isArray(d.paginas) ? d.paginas.find((p) => p.n === f.pagina) : null;
-        if (pg && !(pg.texto || "").includes("[Figura descrita pela IA]")) {
-          pg.texto = (pg.texto || "") + `\n\n[Figura descrita pela IA] ${f.descricao}`;
-        }
+    if (!pdfData) return { descritas: 0, faltam: pendentes.length };
+    const vistos = new Set((d.figuras || []).map((f) => f.hash).filter(Boolean));
+    const novas = [];
+    const conta = { gemini: 0, reserva: 0, recusadas: 0 };
+    let parou = null; // "cota" (as duas fontes travaram) ou "reserva" (teto do caro)
+    const LOTE = 5; // rasteriza de 5 em 5: segurar 30 imagens de página inteira estoura a memória
+
+    for (let i = 0; i < pendentes.length && !parou; i += LOTE) {
+      const imgs = await pdf.rasterizarPaginas(pdfData, pendentes.slice(i, i + LOTE), 1.6);
+      for (const im of imgs) {
+        if (pedidoDePararFiguras) { parou = "usuario"; break; }
+        const h = hashLei(String(im.dataUrl || "").slice(0, 3000)); // dedupe grosseiro por prefixo da imagem
+        if (vistos.has(h)) continue;
+        vistos.add(h);
+        const b64 = (im.dataUrl || "").split(",")[1] || "";
+        if (!b64) continue;
+        const r = await descreverUmaFigura(this, b64, im.n, conta, orcamento);
+        if (r.parou) { parou = r.parou; break; }
+        if (r.pular) { conta.puladas = (conta.puladas || 0) + 1; vistos.delete(h); continue; } // fica pendente
+        // Resposta vazia é a resposta CERTA quando a página não tem figura de conteúdo (é o
+        // que o prompt pede). Isso também precisa ser anotado: sem registro, a página volta a
+        // contar como pendente e é reprocessada — e reprocessar imagem custa tempo e dinheiro.
+        if (r.texto && r.texto.length > 20) novas.push({ pagina: im.n, descricao: r.texto, hash: h, via: r.via });
+        else novas.push({ pagina: im.n, hash: h, vazio: true, via: r.via });
+        // Progresso detalhado: sem isso a tela fica muda por 45 minutos e ninguém sabe se
+        // está andando, travou ou acabou.
+        if (onProgresso) onProgresso({ feitas: novas.length, total: pendentes.length, pagina: im.n, conta });
       }
-      recomputarTextoDoc(d);
-      commit();
+      if (novas.length) gravarFiguras(d, novas.splice(0)); // grava o lote e segue (nada se perde)
     }
-    return { descritas: figuras.length, total: figPags.length };
+    const faltam = this.figurasPendentes(d).length;
+    return { descritas: (d.figuras || []).filter((f) => f.descricao).length, faltam, parou, cota: parou === "cota", ...conta };
   },
   // F2 — estrutura o material pela IMAGEM do SUMÁRIO (contorna o texto colado/leaders que quebram o
   // parser determinístico). Recebe as páginas + o PDF; devolve a estrutura {origem:'ia-sumario', blocos}
@@ -2235,7 +2453,7 @@ export const store = {
     const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: (await this.binarioDoc(d.id)).pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
     if (!est) return { ok: false };
     d.estrutura = est;
-    this.casarEstruturaComEdital(est);
+    this.casarEstruturaComEdital(est, d.titulo);
     this.aplicarEstruturaAoMaterial(docId, est);
     commit();
     return { ok: true, blocos: est.blocos.length };
@@ -2300,6 +2518,12 @@ export const store = {
       idx.itens = idx.itens.filter((it) => it.fonteId !== id);
       if (idx.fontes) delete idx.fontes[id];
     }
+    // O que mora FORA do estado tem de ser apagado à mão: páginas (`pag:<id>`) e o binário
+    // (`bin:`/`blob:<id>`). Sem isto, apagar um material deixava o PDF órfão no banco para
+    // sempre — numa apostila são dezenas de MB que não voltavam nem com "apagar tudo".
+    esquecerPaginas(id);
+    cacheBinario.delete(id);
+    if (blobsDisponiveis()) delBlob(id);
     commit();
   },
   // Descarta o BINÁRIO do material (PDF/imagem), mantendo o texto e as páginas. Usado para
@@ -2832,22 +3056,55 @@ export const store = {
   // F2: casa a ESTRUTURA detectada com o edital (DETERMINÍSTICO, instantâneo). Para cada bloco,
   // sugere topicoId pelo título; usa a AULA do cursinho (casada pelo título do material) como viés.
   // Não grava nada no material — só preenche estrutura.blocos[].topicoId e estrutura.aula*.
-  casarEstruturaComEdital(estrutura) {
+  // `titulo` = nome do material/arquivo ("3. Direito Administrativo"). É por ele que se sabe a
+  // DISCIPLINA da apostila, e casar dentro dela primeiro é o que separa um vínculo certo de um
+  // vínculo por coincidência de palavra. Medido na biblioteca real: 64% → 95% de acerto nos
+  // materiais cuja disciplina existe no edital.
+  // `opts.limparSemMatch`: bloco sem candidato aceitável fica SEM vínculo. Usado ao
+  // re-vincular material já importado — sem isso o vínculo errado antigo sobreviveria à
+  // correção, que é justamente o que se quer desfazer. Em estrutura recém-detectada não faz
+  // diferença (não há vínculo anterior), e no refino por IA fica desligado de propósito.
+  casarEstruturaComEdital(estrutura, titulo, opts = {}) {
     if (!estrutura || !Array.isArray(estrutura.blocos)) return estrutura;
     const aula = estrutura.aulaTitulo ? this.acharAulaPorTitulo(estrutura.aulaTitulo) : null;
     if (aula) { estrutura.aulaId = aula.id; estrutura.aulaNome = aula.nome; }
     const topsAula = aula && Array.isArray(aula.topicoIds) ? aula.topicoIds : null;
+    // Apostila que não é disciplina do edital (Legislação Civil Especial, Difusos e Coletivos)
+    // devolve null aqui — e aí vale o casamento global, que é o certo para elas.
+    const disciplinaId = titulo ? disciplinaDoMaterial(titulo, state.disciplinas) : null;
     for (const b of estrutura.blocos) {
-      const sug = this.sugerirTopicoPorAssunto(b.titulo, "");
+      const sug = acharTopicoDoBloco(b.titulo, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId });
       if (sug) {
         b.topicoId = sug.topicoId;
         // se o sugerido está entre os tópicos da aula, sobe a confiança
         if (topsAula && topsAula.includes(sug.topicoId)) b.confianca = Math.min(0.99, (b.confianca || 0.7) + 0.1);
-      } else if (topsAula && topsAula.length === 1) {
-        b.topicoId = topsAula[0]; // aula de tópico único → herda
+      } else if (topsAula && topsAula.length === 1 && (!disciplinaId || (state.topicos.find((t) => t.id === topsAula[0]) || {}).disciplinaId === disciplinaId)) {
+        // Aula do cursinho com UM tópico só → o bloco herda. Mas a herança também respeita a
+        // disciplina do material: sem isso, os capítulos do Tributário que não achavam par
+        // herdavam um tópico de Constitucional e voltavam a contar como matéria errada.
+        b.topicoId = topsAula[0];
+      } else if (opts.limparSemMatch) {
+        b.topicoId = null;
       }
     }
     return estrutura;
+  },
+  // Re-aplica o casamento bloco↔tópico em TODOS os materiais com sumário, usando a regra
+  // atual. Serve para consertar de uma vez a biblioteca importada por uma versão anterior
+  // (onde o casamento ignorava a disciplina do material). Não toca em páginas, texto, figuras
+  // nem histórico — só nos vínculos e nas faixas de página derivadas deles.
+  revincularMateriais() {
+    const relatorio = [];
+    for (const d of state.documentos) {
+      const blocos = (d.estrutura && d.estrutura.blocos) || [];
+      if (!blocos.length) continue;
+      const antes = blocos.filter((b) => b.topicoId).length;
+      this.casarEstruturaComEdital(d.estrutura, d.titulo, { limparSemMatch: true });
+      const depois = blocos.filter((b) => b.topicoId).length;
+      this.aplicarEstruturaAoMaterial(d.id, d.estrutura); // re-deriva topicoIds/topicoPaginas + commit
+      relatorio.push({ id: d.id, titulo: d.titulo, antes, depois });
+    }
+    return relatorio;
   },
   // F2: REFINO por IA (leve: só os títulos + a lista de tópicos). Sobrescreve o topicoId dos blocos
   // pelo casamento semântico da IA quando ela retorna um tópico válido. Requer iaDisponivel().
@@ -2895,7 +3152,7 @@ export const store = {
     if (!d || !Array.isArray(d.paginas) || !d.paginas.length) return null;
     const est = detectarEstrutura({ paginas: d.paginas, numPaginas: d.paginas.length });
     if (!est || !est.blocos.length) return null;
-    this.casarEstruturaComEdital(est);
+    this.casarEstruturaComEdital(est, d.titulo);
     this._herdarTopicos(est, d.estrutura); // mantém o que o usuário já confirmou
     d.estrutura = est;
     commit();
@@ -6046,6 +6303,8 @@ export const store = {
   },
   removerMapaMental(id) {
     state.mapasMentais = state.mapasMentais.filter((m) => m.id !== id);
+    cacheBinario.delete(id);
+    if (blobsDisponiveis()) delBlob(id); // a imagem/PDF do mapa também mora fora do estado
     commit();
   },
   setObservacaoMapa(id, texto) {
@@ -8282,6 +8541,14 @@ export const store = {
     const preservar = {};
     for (const k of ["iaProvider", "iaKey", "iaKeyReserva", "iaModelo", "tema"]) {
       if (antes[k] !== undefined && antes[k] !== "") preservar[k] = antes[k];
+    }
+    // O que mora fora do estado não é apagado por `resetState()`: binário, páginas e índice
+    // semântico têm chave própria. Sem isto, "apagar tudo" deixaria centenas de MB órfãos.
+    for (const p of state.perfis || []) {
+      for (const d of p.documentos || []) { esquecerPaginas(d.id); delBlob(d.id); }
+      for (const m of p.mapasMentais || []) delBlob(m.id);
+      delBlob(`emb:${p.id}`);
+      embSalvos.delete(p.id);
     }
     state = migrarParaPerfis(defaultState());
     instalarAcessores(); // `state` é outro objeto: sem isto, state.disciplinas some

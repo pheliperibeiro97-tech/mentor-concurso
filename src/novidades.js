@@ -8,6 +8,25 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.3",
+    data: "agosto/2026",
+    titulo: "A biblioteca inteira de uma vez, e o sumário no lugar certo",
+    itens: [
+      "Dá para escolher VÁRIOS arquivos de uma vez em «Adicionar material»: eles entram numa fila e o app importa um a um, mostrando «Importando 3 de 17». Importar a biblioteca de um cursinho deixou de ser uma tarde de cliques.",
+      "Ao ler um PDF grande, a etapa «Lendo o PDF» agora conta as páginas («página 340 de 1.289»). Antes eram minutos de tela parada.",
+      "Depois de salvar, o botão mostra «Salvando…» e só libera quando o material está mesmo no disco — antes a janela parecia pronta e o clique seguinte se perdia.",
+      "CORREÇÃO IMPORTANTE — o sumário do material ia para a página errada. Com a IA conectada, o app deixava a leitura por imagem do índice passar por cima do sumário que ele já tinha lido corretamente do próprio PDF; e, dentro do leitor determinístico, um link da plataforma («?topic=10.5») tinha prioridade sobre o índice e sobre o título no corpo. Medido nas 17 apostilas do cursinho (339 tópicos de material): 260 e 117 acertos, contra 339 agora. Se você importou material antes desta versão, use «Atualizar material» para refazer o sumário.",
+      "O app ficou MUITO mais leve com biblioteca grande: o texto das páginas, o índice de busca por significado e os PDFs saíram do arquivo de estado, que era reescrito inteiro a cada clique. Com 17 apostilas (9.105 páginas), cada gravação caiu de 43 MB para menos de 2 MB.",
+      "Os PDFs passaram a ser gravados como arquivo, não como texto codificado: a mesma biblioteca ocupa cerca de 25% menos espaço em disco.",
+      "Os tópicos do edital que um material cobre agora ficam recolhidos numa linha só («16 tópicos do edital · Direito Administrativo +6»), que abre quando você quiser — o cartão de uma apostila virava um parágrafo de etiquetas.",
+      "CORREÇÃO — os tópicos vinculados estavam errados em quase metade dos casos. O app casava o título do capítulo com o edital INTEIRO, então bastava uma palavra em comum: «Administração Pública», numa apostila de Constitucional, virava «crimes contra a administração pública» (Penal). Agora o casamento acontece primeiro dentro da disciplina do próprio material e, na dúvida, ele não vincula — vínculo errado contava como edital coberto. Medido na biblioteca real: 64% → 95% de acerto.",
+      "Leitor de PDF refeito: dá para SELECIONAR e copiar texto, buscar dentro do documento (Ctrl+F, com realce e «anterior/próxima»), imprimir um intervalo de páginas e abrir em tela cheia — além do zoom e do ajuste à largura que já existiam. A aparência passou a seguir o tema do app (antes era um cinza fixo que ignorava o modo escuro).",
+      "«Ler figuras e tabelas»: a IA lê as páginas com imagem e escreve o que elas mostram, para o conteúdo delas entrar na busca e nas gerações. Um clique faz todas as que faltam, em todos os materiais, e dá para parar no meio e retomar de onde parou. Antes isso rodava sozinho na importação (estourando a cota da IA) e, pior, parava em silêncio nas 30 primeiras páginas de cada material.",
+      "A etiqueta «página escaneada» do cartão agora é clicável: leva direto ao aviso que processa a página. Antes ela informava o problema e não oferecia saída.",
+      "Materiais: o material é agrupado pela disciplina que ele mais cobre (não mais pelo primeiro tópico vinculado), e a etiqueta de tópico do cartão mostra só o começo do item, com o texto completo no tooltip — o cartão de uma apostila virava um parágrafo.",
+    ],
+  },
+  {
     v: "0.8.2",
     data: "agosto/2026",
     titulo: "Atualizar material com um clique, e o edital sem buracos",

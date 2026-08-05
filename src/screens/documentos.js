@@ -14,7 +14,7 @@ import { extrairTextoArquivo } from "../ia-provider.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
 import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
-import { detectarEstrutura, limparRuidoDePaginas } from "../estrutura.js";
+import { detectarEstrutura, limparRuidoDePaginas, ehEstruturaForte } from "../estrutura.js";
 
 // Mini-diálogo de FAIXA DE PÁGINAS (de–até) para gerar/extrair de um trecho por número de página.
 // Devolve { de, ate } (validado, 1..maxPag) ou null se cancelar.
@@ -316,12 +316,20 @@ function sumarioNavegavelHTML(d, store) {
   const revTodos = temTopicos
     ? `<button class="btn btn-ghost btn-sm" data-action="sum-revisar-todos" data-id="${d.id}" data-tip="Programa revisão espaçada de todos os tópicos vinculados deste material.">${icone("repeat")} Programar revisão dos tópicos</button>`
     : "";
-  // Estrutura de método ANTIGO (pré-Vision): oferece refazer pela IA do sumário — resolve materiais
-  // importados antes, cujos "tópicos" saíram como números/ruído. Sugere, não executa sozinho.
-  const estruturaAntiga = d.estrutura.origem && d.estrutura.origem !== "ia-sumario" && store.temPdfDoc(d) && store.iaDisponivel()
+  // Convite para a IA reler o sumário — só quando o determinístico NÃO resolveu.
+  //
+  // A regra era o contrário: qualquer sumário que não viesse da IA (`origem !== "ia-sumario"`)
+  // ganhava o aviso de "método antigo". Depois da v0.8.3 isso ficou de cabeça para baixo: o
+  // sumário lido do ÍNDICE do próprio PDF é o mais fiel (medido: 339/339 blocos na página
+  // certa, contra 260 pela IA), e o app pedia para trocá-lo justamente pelo caminho que erra.
+  // Agora o convite aparece só onde a Visão ganha mesmo: estrutura fraca (fonte/marcador/
+  // outline, ou blocos sem página) — tipicamente PDF escaneado ou sem índice legível.
+  const fraca = !ehEstruturaForte(d.estrutura);
+  const semPagina = blocos.filter((b) => b.pIni == null).length;
+  const estruturaFraca = fraca && store.temPdfDoc(d) && store.iaDisponivel()
     ? `<div class="sum-nudge">
          ${icone("wand-sparkles")}
-         <span>Este sumário foi montado por um método antigo (por ${esc(rotuloOrigem(d.estrutura.origem))}) e pode ter saído com números/ruído no lugar dos tópicos. Deixe a IA reler o sumário do próprio PDF.</span>
+         <span>Este sumário saiu de um sinal fraco (${esc(rotuloOrigem(d.estrutura.origem) || "sem índice legível")}${semPagina ? `, ${plural(semPagina, "bloco sem página", "blocos sem página")}` : ""}). Se o PDF tiver um índice em imagem, a IA consegue lê-lo.</span>
          <button class="btn btn-primary btn-sm" data-action="caprichar-estrutura" data-doc="${d.id}">${icone("wand-sparkles")} Refazer tópicos pelo sumário (IA)</button>
        </div>`
     : "";
@@ -330,7 +338,7 @@ function sumarioNavegavelHTML(d, store) {
       <span class="muted small">${icone("list-tree")} Sumário — selecione um tópico para ler o trecho e revisar por partes.</span>
       ${revTodos}
     </div>
-    ${estruturaAntiga}
+    ${estruturaFraca}
     ${raiz.map(render).join("")}
   </div>`;
 }
@@ -406,6 +414,7 @@ export default function renderDocumentos(root, app) {
       </label>
     </div>
     ${filtroTopicosPainelHTML(st, filtroTop.sel, filtroTop.aberto)}
+    ${figurasNudgeHTML(store, st)}
 
     <div class="lista-docs">
       ${listaDocsHTML(store, st, docs, agrup, busca)}
@@ -726,6 +735,85 @@ export default function renderDocumentos(root, app) {
       abertoId = id;
       if (ocrAberto.has(id)) ocrAberto.delete(id);
       else ocrAberto.add(id);
+      app.refresh();
+    },
+    // Etiqueta "N páginas escaneadas" do cartão: abre o material e rola até o aviso, que traz
+    // o botão de ler as páginas. Antes a etiqueta não fazia nada — informava um problema e
+    // deixava o usuário sem saída.
+    "ir-ocr": (el) => {
+      const id = el.getAttribute("data-id");
+      abertoId = id;
+      app.refresh();
+      setTimeout(() => {
+        const alvo = document.querySelector(`[data-foco-id="${id}"] .ocr-alerta`);
+        if (alvo) {
+          alvo.scrollIntoView({ behavior: "smooth", block: "center" });
+          alvo.classList.add("realce-momento");
+          setTimeout(() => alvo.classList.remove("realce-momento"), 1600);
+        }
+      }, 60);
+    },
+    // Descrever FIGURAS com a IA, sob demanda: UM comando descreve todas as que faltam no
+    // material (uma requisição por página com figura). Deixou de ser automático na importação
+    // em fila porque 17 apostilas seguidas estouravam a cota.
+    "descrever-figuras": async (el) => {
+      const id = el.getAttribute("data-id");
+      if (!store.iaDisponivel()) return avisoIA(app, "Descrever figuras");
+      const d = store.get().documentos.find((x) => x.id === id);
+      const faltam = store.figurasPendentes(d).length;
+      if (!faltam) return toast("As figuras deste material já estão descritas.", "ok");
+      const fim = toastCarregando(`Lendo figuras… 0 de ${faltam}`, { aoCancelar: () => store.pararLeituraFiguras() });
+      let r = null;
+      store.iniciarLeituraFiguras();
+      try {
+        // `toastCarregando` devolve uma função: com texto ATUALIZA o rótulo, sem texto FECHA.
+        r = await store.descreverFigurasDeDoc(id, {
+          onProgresso: ({ feitas, total }) => fim(`Lendo figuras… ${feitas} de ${total}`),
+        });
+      } finally { fim(); }
+      const restam = store.figurasPendentes(store.get().documentos.find((x) => x.id === id)).length;
+      toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
+      store.indexarFonteAuto(id);
+      app.refresh();
+    },
+    // O mesmo, para TODOS os materiais com figura pendente, em sequência.
+    "figuras-todos": async (el) => {
+      if (!store.iaDisponivel()) return avisoIA(app, "Descrever figuras");
+      const alvos = (store.get().documentos || [])
+        .map((d) => ({ d, faltam: store.figurasPendentes(d).length }))
+        .filter((x) => x.faltam);
+      if (!alvos.length) return toast("Não há figuras pendentes.", "ok");
+      const totalPaginas = alvos.reduce((a, x) => a + x.faltam, 0);
+      store.iniciarLeituraFiguras();
+      // Um orçamento para a rodada TODA (não por material): a reserva é a fonte cara.
+      // `max: 0` = só Gemini (a reserva paga fica desligada). O usuário liga quando quiser
+      // pagar pela leitura das páginas que o Gemini recusar.
+      const orcamentoReserva = { usadas: 0, max: 0 };
+      let jaFeitas = 0; // fechadas nos materiais anteriores
+      let parou = false;
+      let ultimo = null; // resultado do último material (traz o motivo de parar e a contagem)
+      // Acompanhamento no padrão da casa: botão ocupado + toast de carregando com a contagem
+      // (é o bastante para saber que está andando) e Cancelar, como na leitura de páginas
+      // escaneadas. Erro e resultado saem no toast do fim.
+      if (el) el.disabled = true;
+      const fim = toastCarregando(`Lendo figuras… 0 de ${totalPaginas}`, { aoCancelar: () => store.pararLeituraFiguras() });
+      try {
+        for (const { d, faltam } of alvos) {
+          const r = await store.descreverFigurasDeDoc(d.id, {
+            orcamentoReserva,
+            onProgresso: ({ feitas }) => fim(`Lendo figuras… ${jaFeitas + feitas} de ${totalPaginas}`),
+          });
+          jaFeitas += faltam - store.figurasPendentes(store.get().documentos.find((x) => x.id === d.id) || d).length;
+          store.indexarFonteAuto(d.id);
+          ultimo = r;
+          if (r && r.parou) { parou = true; break; }
+        }
+      } finally {
+        fim();
+        if (el) el.disabled = false;
+      }
+      const restam = (store.get().documentos || []).reduce((a, d) => a + store.figurasPendentes(d).length, 0);
+      toast(mensagemFiguras(ultimo, totalPaginas - restam, restam), parou || restam ? "erro" : "ok");
       app.refresh();
     },
     // Opcional 2: re-detecta a estrutura a partir do texto atual das páginas (ex.: após OCR).
@@ -1098,6 +1186,37 @@ function listaDocsHTML(store, st, docs, modo, busca) {
     .join("");
 }
 
+// Disciplina de um material que cobre VÁRIOS tópicos (uma apostila cobre a disciplina
+// inteira): a que tem mais blocos do sumário. Antes valia só `d.topicoId` — o primeiro tópico
+// vinculado —, então uma apostila de 47 blocos era arquivada pela disciplina do bloco 1, e
+// bastava o primeiro capítulo ser de outra matéria para ela sumir do grupo certo.
+// Rótulo curto para o "chip" de tópico do cartão. No edital do 192º, 1 tópico = 1 item
+// inteiro do edital, com todas as subdivisões separadas por "·" — o item (11) de Bens
+// Públicos tem 18 delas, e o cartão do material virava um parágrafo. Mostra
+// "Disciplina · (11) primeiro pedaço…" e deixa o nome completo no tooltip.
+function rotuloCurtoTopico(nome, max = 64) {
+  const partes = String(nome || "").split(" · ");
+  let curto = partes.length > 2 ? `${partes[0]} · ${partes[1]}` : String(nome || "");
+  if (curto.length > max) curto = curto.slice(0, max - 1).trimEnd();
+  return curto.length < String(nome || "").length ? `${curto}…` : curto;
+}
+
+function disciplinaDoDoc(st, d) {
+  const contagem = new Map();
+  const anota = (topicoId) => {
+    if (!topicoId) return;
+    const t = st.topicos.find((x) => x.id === topicoId);
+    if (!t || !t.disciplinaId) return;
+    contagem.set(t.disciplinaId, (contagem.get(t.disciplinaId) || 0) + 1);
+  };
+  for (const b of (d.estrutura && d.estrutura.blocos) || []) anota(b.topicoId);
+  if (!contagem.size) (d.topicoIds || []).forEach(anota);
+  if (!contagem.size) anota(d.topicoId);
+  if (!contagem.size) return null;
+  const [discId] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0];
+  return st.disciplinas.find((x) => x.id === discId) || null;
+}
+
 function agruparDocs(st, docs, modo) {
   if (modo === "nenhum") return [{ titulo: null, docs }];
   const grupos = new Map();
@@ -1107,7 +1226,7 @@ function agruparDocs(st, docs, modo) {
     if (modo === "topico") {
       nome = t ? nomeTopico(st, t) : "Sem tópico";
     } else {
-      const disc = t ? st.disciplinas.find((x) => x.id === t.disciplinaId) : null;
+      const disc = disciplinaDoDoc(st, d);
       nome = disc ? disc.nome : "Sem disciplina";
     }
     if (!grupos.has(nome)) grupos.set(nome, []);
@@ -1159,8 +1278,8 @@ function formHTML(opcoesTopico, alvo) {
         <label class="u-grow-2">Título <input id="doc-titulo" type="text" value="${alvo ? esc(alvo.titulo) : ""}" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
         <label class="u-grow">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       </div>
-      <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Você também pode arrastar o arquivo para este cartão.">${icone("paperclip")} Selecionar arquivo
-        <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden />
+      <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Pode escolher VÁRIOS de uma vez (eles entram em fila) ou arrastar os arquivos para este cartão.">${icone("paperclip")} ${alvo ? "Selecionar arquivo" : "Selecionar arquivos"}
+        <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" ${alvo ? "" : "multiple"} hidden />
       </label>
       <label>Conteúdo <textarea id="doc-texto" rows="6" placeholder="${esc("Cole aqui o conteúdo da aula (ou importe um arquivo acima).\nEx.: Atos administrativos são toda manifestação unilateral de vontade da Administração… Atributos: presunção de legitimidade, imperatividade, autoexecutoriedade…")}"></textarea></label>
       <div id="doc-estrutura"></div>
@@ -1194,14 +1313,95 @@ function abrirImportarMaterial(app, alvoId = null) {
 
       // ---- upload de arquivo (#doc-file): mesma lógica do importador inline antigo,
       // escopada ao corpo da janela e gravando em `pend`. ----
+      // Aviso de direitos: uma vez por aparelho, e ANTES de uma fila começar (não no meio).
+      const confirmarAvisoDireitos = async () => {
+        if (store.get().config.materialAvisoAceito) return true;
+        const ok = await confirmar("Importe apenas material que você tem direito de usar. Ele fica só neste dispositivo. Continuar?");
+        if (ok) store.setConfig({ materialAvisoAceito: true });
+        return ok;
+      };
+
+      // Salva o que está na janela (campos + `pend`). É o mesmo caminho do botão "Salvar na
+      // base" e de cada arquivo da fila — daí estar fora do handler.
+      const salvarPendente = async ({ silencioso, perguntarExistente } = {}) => {
+        const titulo = corpo.querySelector("#doc-titulo").value.trim();
+        const texto = corpo.querySelector("#doc-texto").value.trim();
+        const topicoId = corpo.querySelector("#doc-top").value;
+        if (pend.estrutura) lerEstruturaDoDOM(corpo, pend.estrutura);
+        // Veio de "Atualizar com arquivo novo": o destino já é conhecido, não se pergunta
+        // nem se procura por título — é justamente o caso em que o cursinho renomeia o
+        // arquivo e o casamento por nome falharia, criando uma cópia solta em silêncio.
+        if (alvo) {
+          store.atualizarMaterialDeImport(alvo.id, { titulo, texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
+          if (!silencioso) store.indexarFonteAuto(alvo.id);
+          if (!silencioso) toast("Material atualizado. Questões, flashcards e vínculos preservados.", "ok");
+          await store.aguardarGravacao();
+          return "atualizado";
+        }
+        const existente = (pend.pdf || pend.img) ? store.acharDocPorTitulo(titulo) : null;
+        if (existente) {
+          // Na fila, reimportar a apostila de mesmo nome SEMPRE atualiza: é o que "trouxe a
+          // versão nova do cursinho" quer dizer, e ninguém quer 17 perguntas seguidas.
+          const atualizar = perguntarExistente
+            ? await confirmar(`Já existe um material chamado "${titulo}". Atualizar ele com esta importação (mantém as questões/flashcards/marcações e os tópicos já confirmados)? Escolha Cancelar para criar um novo.`)
+            : true;
+          if (atualizar) {
+            store.atualizarMaterialDeImport(existente.id, { texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
+            if (!silencioso) store.indexarFonteAuto(existente.id); // na fila não: estoura a cota (ver acima)
+            if (!silencioso) toast("Material atualizado (mesmo id; vínculos preservados).", "ok");
+            await store.aguardarGravacao();
+            return "atualizado";
+          }
+        }
+        const topsEstr = pend.estrutura ? [...new Set(pend.estrutura.blocos.map((b) => b.topicoId).filter(Boolean))] : [];
+        const doc = store.addDocumento({
+          titulo,
+          texto,
+          topicoId: topicoId || null,
+          topicoIds: topsEstr.length ? topsEstr : topicoId ? [topicoId] : [],
+          origem: "importado",
+          pdfData: pend.pdf,
+          imgData: pend.img,
+          paginas: pend.paginas,
+          estrutura: pend.estrutura,
+        });
+        if (doc && pend.estrutura) store.aplicarEstruturaAoMaterial(doc.id, pend.estrutura);
+        // Busca inteligente: indexa o material novo em background (silencioso; no-op se a
+        // busca nunca foi ativada ou a IA está desconectada). Na FILA não: uma apostila rende
+        // ~1.300 trechos e 17 delas estouram a cota do Gemini na hora (HTTP 429 já no 2º
+        // arquivo, medido). Fica para o "Indexar" de Materiais, que faz todos de uma vez.
+        if (doc && !silencioso) store.indexarFonteAuto(doc.id);
+        // F1 — descrever FIGURAS de conteúdo com a IA, automático e em BACKGROUND (não bloqueia).
+        // Na FILA isso não roda: uma apostila tem dezenas de figuras e 17 arquivos seguidos
+        // estouram a cota do Gemini (medido: HTTP 429 já no 3º arquivo, limite de 15 req/min
+        // do plano grátis). Fica para o botão "Descrever figuras" de cada material.
+        const temFig = !silencioso && doc && store.iaDisponivel() && Array.isArray(pend.paginas) && pend.paginas.some((p) => p.temImagem);
+        if (temFig) {
+          const fim = toastCarregando("Descrevendo as figuras do material com a IA…");
+          store.descreverFigurasDeDoc(doc.id).then((r) => { fim(); if (r && r.descritas) toast(`${plural(r.descritas, "figura descrita", "figuras descritas")} pela IA (já entram na busca).`, "ok"); store.indexarFonteAuto(doc.id); /* o texto ganhou as descrições → reindexa */ }).catch(() => fim());
+        }
+        if (store.get().config.descartarPdfAposImport && doc && store.temBinario(doc) && store.paginasPendentes(doc).length === 0 && !temFig) {
+          store.descartarBinarioDoc(doc.id);
+        }
+        if (!silencioso) toast("Material adicionado à base.");
+        // Espera a gravação REAL terminar (debounce + escrita): é o que impede a próxima
+        // janela de abrir enquanto o app ainda escreve dezenas de MB.
+        await store.aguardarGravacao();
+        return "novo";
+      };
+
       const fileInput = corpo.querySelector("#doc-file");
       if (fileInput) {
         ligarDropZone(fileInput);
         const docStatus = document.createElement("span");
         docStatus.className = "import-status";
         (fileInput.closest("label") || fileInput).insertAdjacentElement("afterend", docStatus);
-        fileInput.addEventListener("change", async (e) => {
-          const f = e.target.files[0];
+        // Linha de progresso da FILA (fica vazia quando é um arquivo só).
+        const fila = document.createElement("div");
+        fila.className = "muted small u-mt-8";
+        docStatus.insertAdjacentElement("afterend", fila);
+        let emFila = false;
+        const lerArquivo = async (f) => {
           if (!f) return;
           const tituloEl = corpo.querySelector("#doc-titulo");
           if (!tituloEl.value) tituloEl.value = f.name.replace(/\.[^.]+$/, "");
@@ -1220,7 +1420,9 @@ function abrirImportarMaterial(app, alvoId = null) {
               // dentro do próprio modal. Toast só para avisos excepcionais.
               painel = criarPainelEtapas(docStatus, [
                 { id: "ler", rotulo: "Lendo o PDF" },
-                { id: "sumario", rotulo: iaOn ? "Montando o sumário com IA" : "Montando o sumário" },
+                // Rótulo neutro: só se sabe se a IA entrou depois de o determinístico rodar
+                // (ela virou rede, não padrão). O detalhe da etapa diz qual caminho valeu.
+                { id: "sumario", rotulo: "Montando o sumário" },
                 { id: "texto", rotulo: "Preparando o texto" },
               ]);
               painel.set("ler", "ativa");
@@ -1228,24 +1430,35 @@ function abrirImportarMaterial(app, alvoId = null) {
               const teto = tetoPdfGuardado();
               if (ab.byteLength <= teto) pend.pdf = await abToDataUrl(ab);
               else toast(`PDF acima de ${Math.round(teto / 1024 / 1024)} MB: não será guardado para visualização; o texto extraído continua salvo normalmente.`, "erro");
-              const { paginas: paginasBrutas, numPaginas, outline, linhasPorPagina } = await extrairPdfPaginas(new File([ab], f.name, { type: "application/pdf" }));
+              const { paginas: paginasBrutas, numPaginas, outline, linhasPorPagina } = await extrairPdfPaginas(
+                new File([ab], f.name, { type: "application/pdf" }),
+                // Progresso real: 1.289 páginas levam minutos, e a etapa ficava só "Lendo o PDF".
+                { onProgresso: (feita, total) => painel.set("ler", "ativa", `página ${feita} de ${total}`) }
+              );
               const paginas = limparRuidoDePaginas(paginasBrutas);
               texto = paginas.map((p) => p.texto || "").join("\n\n").trim();
               painel.set("ler", "ok", `${plural(numPaginas || paginas.length, "página", "páginas")}${(numPaginas || 0) > 400 ? " — material grande, gerações podem demorar" : ""}`);
               painel.set("sumario", "ativa");
               try {
                 let est = detectarEstrutura({ paginas: paginasBrutas, outline, numPaginas: numPaginas || paginasBrutas.length, linhasPorPagina });
-                // F2: com IA + PDF, estrutura pelo SUMÁRIO (imagem) — muito mais fiel que a heurística
-                // (que embaralha com marca d'água/numeração). Manda só 1-2 imagens; o determinístico é fallback.
+                // A IA é REDE, não padrão. A regra "IA por cima do determinístico" é da F2, quando o
+                // leitor determinístico ainda era fraco; depois da v0.8.1 ela passou a trocar o certo
+                // pelo errado. Medido nas 17 apostilas do cursinho (339 blocos, gabarito = a página em
+                // que o cabeçalho "N.M" abre linha no corpo): índice 316/339, IA por cima 260/339. A IA
+                // erra lendo o índice de duas colunas como imagem (no Ambiental, 36→13, 64→32, 90→39).
+                // Então só chama a IA quando o determinístico NÃO resolveu: sem sumário, sumário de
+                // fonte fraca (outline/fonte/marcador) ou com buraco de página — que é o caso real de
+                // apostila escaneada, para o qual a Visão foi feita.
+                const estForte = ehEstruturaForte(est);
                 let viaIA = false;
-                if (iaOn && pend.pdf) {
+                if (iaOn && pend.pdf && !estForte) {
                   try {
                     const estIA = await store.estruturarPorSumarioIA({ paginas: paginasBrutas, pdfData: pend.pdf, numPaginas: numPaginas || paginasBrutas.length });
                     if (estIA && estIA.blocos.length) { est = estIA; viaIA = true; }
                   } catch (_) {}
                 }
                 pend.estrutura = est && est.blocos.length ? est : null;
-                if (pend.estrutura) store.casarEstruturaComEdital(pend.estrutura);
+                if (pend.estrutura) store.casarEstruturaComEdital(pend.estrutura, corpo.querySelector("#doc-titulo")?.value || f.name);
                 const casados = pend.estrutura ? pend.estrutura.blocos.filter((b) => b.topicoId).length : 0;
                 painel.set(
                   "sumario",
@@ -1285,73 +1498,66 @@ function abrirImportarMaterial(app, alvoId = null) {
             if (painel) painel.erroAtiva(err.code === "PDF_PROTEGIDO" ? "PDF protegido por senha" : "não consegui ler");
             docStatus.className = "import-status erro";
             docStatus.innerHTML = err.code === "PDF_PROTEGIDO" ? "PDF protegido — cole o texto." : `${icone("x")} ${esc(f.name)} — não consegui ler.`;
+            if (emFila) throw err; // na fila, quem trata é o laço (segue para o próximo arquivo)
             toast(err.code === "PDF_PROTEGIDO" ? err.message : "Não consegui ler este arquivo. Confira se ele não está protegido por senha e tente de novo, ou cole o texto manualmente.", "erro");
           }
+        };
+
+        // FILA: importar a biblioteca inteira de uma vez. O caminho de um arquivo só continua
+        // igual (ler → conferir o sumário na tela → salvar); com vários, conferir 17 sumários
+        // numa janela não faz sentido, então cada arquivo é lido e salvo em sequência e o
+        // relatório vem no fim. Material de mesmo título é ATUALIZADO (mesmo id, vínculos e
+        // histórico preservados), que é o que "reimportei a apostila nova" quer dizer.
+        const importarFila = async (arquivos) => {
+          if (!(await confirmarAvisoDireitos())) return;
+          emFila = true;
+          const tituloEl = corpo.querySelector("#doc-titulo");
+          const botaoSalvar = corpo.querySelector('[data-action="add-doc"]');
+          if (botaoSalvar) botaoSalvar.disabled = true;
+          const feitos = [], falhos = [];
+          for (let i = 0; i < arquivos.length; i++) {
+            const f = arquivos[i];
+            fila.textContent = `Importando ${i + 1} de ${arquivos.length} — ${f.name}`;
+            tituloEl.value = ""; // cada arquivo traz o próprio nome
+            try {
+              await lerArquivo(f);
+              await salvarPendente({ silencioso: true });
+              feitos.push(f.name);
+            } catch (err) {
+              console.error(err);
+              falhos.push(f.name);
+            }
+          }
+          emFila = false;
+          if (botaoSalvar) botaoSalvar.disabled = false;
+          fila.textContent = `${plural(feitos.length, "material importado", "materiais importados")}${falhos.length ? ` · ${falhos.length} falharam: ${falhos.join(", ")}` : ""}`;
+          toast(
+            `${plural(feitos.length, "material importado", "materiais importados")}${falhos.length ? `; ${plural(falhos.length, "arquivo falhou", "arquivos falharam")}` : ""}.` +
+              (store.iaDisponivel() ? " A busca por significado e a descrição de figuras ficam para quando você pedir (evita estourar a cota da IA de uma vez)." : ""),
+            falhos.length ? "erro" : "ok"
+          );
+          app.refresh();
+          if (!falhos.length) fechar();
+        };
+
+        fileInput.addEventListener("change", async (e) => {
+          const arquivos = [...(e.target.files || [])];
+          if (!arquivos.length) return;
+          if (arquivos.length > 1) return importarFila(arquivos);
+          await lerArquivo(arquivos[0]);
         });
       }
 
       bindActions(corpo, {
         "cancelar-form": () => fechar(),
-        "add-doc": async () => {
-          const titulo = corpo.querySelector("#doc-titulo").value.trim();
+        "add-doc": async (el) => {
           const texto = corpo.querySelector("#doc-texto").value.trim();
-          const topicoId = corpo.querySelector("#doc-top").value;
           if (!texto && !pend.pdf && !pend.img) return toast("O conteúdo está vazio.", "erro");
-          if (!store.get().config.materialAvisoAceito) {
-            const ok = await confirmar("Importe apenas material que você tem direito de usar. Ele fica só neste dispositivo. Continuar?");
-            if (!ok) return;
-            store.setConfig({ materialAvisoAceito: true });
-          }
-          if (pend.estrutura) lerEstruturaDoDOM(corpo, pend.estrutura);
-          // Veio de "Atualizar com arquivo novo": o destino já é conhecido, não se pergunta
-          // nem se procura por título — é justamente o caso em que o cursinho renomeia o
-          // arquivo e o casamento por nome falharia, criando uma cópia solta em silêncio.
-          if (alvo) {
-            store.atualizarMaterialDeImport(alvo.id, { titulo, texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
-            store.indexarFonteAuto(alvo.id);
-            toast("Material atualizado. Questões, flashcards e vínculos preservados.", "ok");
-            fechar();
-            app.refresh();
-            return;
-          }
-          const existente = (pend.pdf || pend.img) ? store.acharDocPorTitulo(titulo) : null;
-          if (existente) {
-            const ok = await confirmar(`Já existe um material chamado "${titulo}". Atualizar ele com esta importação (mantém as questões/flashcards/marcações e os tópicos já confirmados)? Escolha Cancelar para criar um novo.`);
-            if (ok) {
-              store.atualizarMaterialDeImport(existente.id, { texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
-              store.indexarFonteAuto(existente.id); // busca inteligente: reindexa em background (no-op se não ativada)
-              toast("Material atualizado (mesmo id; vínculos preservados).", "ok");
-              fechar();
-              app.refresh();
-              return;
-            }
-          }
-          const topsEstr = pend.estrutura ? [...new Set(pend.estrutura.blocos.map((b) => b.topicoId).filter(Boolean))] : [];
-          const doc = store.addDocumento({
-            titulo,
-            texto,
-            topicoId: topicoId || null,
-            topicoIds: topsEstr.length ? topsEstr : topicoId ? [topicoId] : [],
-            origem: "importado",
-            pdfData: pend.pdf,
-            imgData: pend.img,
-            paginas: pend.paginas,
-            estrutura: pend.estrutura,
-          });
-          if (doc && pend.estrutura) store.aplicarEstruturaAoMaterial(doc.id, pend.estrutura);
-          // Busca inteligente: indexa o material novo em background (silencioso; no-op se a
-          // busca nunca foi ativada ou a IA está desconectada).
-          if (doc) store.indexarFonteAuto(doc.id);
-          // F1 — descrever FIGURAS de conteúdo com a IA, automático e em BACKGROUND (não bloqueia).
-          const temFig = doc && store.iaDisponivel() && Array.isArray(pend.paginas) && pend.paginas.some((p) => p.temImagem);
-          if (temFig) {
-            const fim = toastCarregando("Descrevendo as figuras do material com a IA…");
-            store.descreverFigurasDeDoc(doc.id).then((r) => { fim(); if (r && r.descritas) toast(`${plural(r.descritas, "figura descrita", "figuras descritas")} pela IA (já entram na busca).`, "ok"); store.indexarFonteAuto(doc.id); /* o texto ganhou as descrições → reindexa */ }).catch(() => fim());
-          }
-          if (store.get().config.descartarPdfAposImport && doc && store.temBinario(doc) && store.paginasPendentes(doc).length === 0 && !temFig) {
-            store.descartarBinarioDoc(doc.id);
-          }
-          toast("Material adicionado à base.");
+          if (!(await confirmarAvisoDireitos())) return;
+          // "Salvando…" com o botão travado: gravar uma apostila é escrever dezenas de MB no
+          // disco, e antes disso a janela ficava viva mas surda — o clique seguinte se perdia.
+          const r = await comOcupado(() => salvarPendente({ perguntarExistente: true }), { botao: el, msg: "Salvando o material…" });
+          if (r === null) return;
           fechar();
           app.refresh();
         },
@@ -1392,6 +1598,85 @@ function abrirImportarMaterial(app, alvoId = null) {
   });
 }
 
+// Mensagem do fim da leitura de figuras: diz quantas saíram de cada fonte e, se parou, por quê.
+// Sem isso o usuário não sabe se o trabalho acabou ou se foi interrompido, nem quanto do caro
+// (Claude Code) foi usado.
+function mensagemFiguras(r, feitas, restam) {
+  const via = r && r.reserva ? ` (${r.reserva} pela reserva do Claude Code)` : "";
+  const puladas = r && r.puladas ? ` ${r.puladas} ${r.puladas === 1 ? "página o Gemini não conseguiu ler" : "páginas o Gemini não conseguiu ler"} (ficaram pendentes).` : "";
+  if (r && r.parou === "usuario") {
+    return `Parado por você em ${plural(restam, "página pendente", "páginas pendentes")}${via}. O que foi lido está salvo — clicar de novo retoma daqui.`;
+  }
+  if (r && r.parou === "reserva") {
+    return `Parei em ${plural(restam, "página pendente", "páginas pendentes")}: o Gemini está recusando e a reserva do Claude Code chegou ao teto desta rodada${via}. O que foi descrito ficou salvo — tente de novo mais tarde, quando a cota do Gemini voltar.`;
+  }
+  if (r && r.parou === "cota") {
+    return `Parei em ${plural(restam, "página pendente", "páginas pendentes")}: a cota da IA acabou por agora${via}. O que foi lido ficou salvo — é só clicar de novo quando a cota voltar (o app retoma de onde parou).`;
+  }
+  if (r && r.parou) {
+    return `Parei em ${plural(restam, "página pendente", "páginas pendentes")}${via}. O que foi lido ficou salvo; é só clicar de novo mais tarde.`;
+  }
+  return `${plural(feitas, "página lida", "páginas lidas")}${via} — o que havia de figura e tabela entrou na busca e nas gerações.${puladas}`;
+}
+
+// Tópicos do edital que o material cobre. Uma apostila cobre a disciplina inteira: o
+// Administrativo vincula 22 tópicos, e cada tópico do 192º é um item do edital com todas as
+// subdivisões. Em etiquetas soltas, o cartão virava uma parede de texto e escondia o resto
+// (título, ações, avisos). Vira um resumo de uma linha que ABRE sob demanda; o rótulo curto e
+// o tooltip com o nome inteiro continuam valendo lá dentro.
+function topicosVinculadosHTML(st, d) {
+  const tops = (d.topicoIds && d.topicoIds.length ? d.topicoIds : d.topicoId ? [d.topicoId] : [])
+    .map((id) => st.topicos.find((t) => t.id === id))
+    .filter(Boolean);
+  if (!tops.length) return "";
+  const chip = (t) => {
+    const pg = d.topicoPaginas && d.topicoPaginas[t.id];
+    const nome = nomeTopico(st, t);
+    const curto = rotuloCurtoTopico(nome);
+    return `<span class="tag-topico"${curto !== nome ? ` data-tip="${esc(nome)}" data-tip-pos="cima-esq"` : ""}>${esc(curto)}${pg ? ` <span class="tag-pag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span>`;
+  };
+  // Um tópico só não justifica o clique a mais.
+  if (tops.length === 1) return chip(tops[0]);
+  const discs = [...new Set(tops.map((t) => (st.disciplinas.find((x) => x.id === t.disciplinaId) || {}).nome).filter(Boolean))];
+  const resumoDiscs = discs.slice(0, 2).join(", ") + (discs.length > 2 ? ` +${discs.length - 2}` : "");
+  return `<details class="doc-topicos">
+    <summary class="lnk" data-tip="Ver os tópicos do edital que este material cobre, com as páginas de cada um." data-tip-pos="cima-esq">
+      ${icone("list-checks")} ${plural(tops.length, "tópico do edital", "tópicos do edital")}${resumoDiscs ? ` · ${esc(resumoDiscs)}` : ""} ${icone("chevron-down")}
+    </summary>
+    <div class="doc-topicos-lista">${tops.map(chip).join("")}</div>
+  </details>`;
+}
+
+// "Ler figuras e tabelas" de TODOS os materiais que ainda têm páginas com imagem sem
+// descrição. Mora na barra da busca inteligente, junto de "Atualizar índice": as duas são a
+// mesma família (preparar o material com IA para ele render busca e geração), e ali a ação
+// fica discreta — ao lado de "Adicionar material" ela competia com a ação principal da tela
+// e anunciava um número que ninguém pediu. A contagem vive no tooltip, não no rótulo.
+function figurasPendentesGeral(store, st) {
+  let paginas = 0;
+  let materiais = 0;
+  for (const d of st.documentos || []) {
+    const n = store.figurasPendentes(d).length;
+    if (n) { paginas += n; materiais++; }
+  }
+  return { paginas, materiais };
+}
+
+// Aparece só quando há figura por ler, e some sozinho quando acaba. É um AVISO com uma saída
+// (o mesmo componente do convite do sumário), não um botão fixo competindo com "Adicionar
+// material": diz por que aquilo importa e oferece a ação, sem número no rótulo.
+function figurasNudgeHTML(store, st) {
+  if (!store.iaDisponivel()) return "";
+  const { paginas, materiais } = figurasPendentesGeral(store, st);
+  if (!paginas) return "";
+  const onde = materiais === 1 ? "deste material" : `de ${materiais} materiais`;
+  return `<div class="sum-nudge">
+    ${icone("image")}
+    <span>As figuras e tabelas ${onde} ainda não foram lidas: o que está dentro delas não entra na busca nem nas gerações.</span>
+    <button class="btn btn-primary btn-sm" data-action="figuras-todos" data-tip="A IA lê cada página com figura ou tabela e escreve o que ela mostra. São ${paginas} ${paginas === 1 ? "página" : "páginas"} — dá para parar no meio e retomar depois de onde parou.">${icone("image")} Ler figuras e tabelas</button>
+  </div>`;
+}
+
 function docHTML(store, st, d, busca) {
   const topicosDoc = (d.topicoIds && d.topicoIds.length ? d.topicoIds : d.topicoId ? [d.topicoId] : [])
     .map((id) => st.topicos.find((t) => t.id === id))
@@ -1404,7 +1689,7 @@ function docHTML(store, st, d, busca) {
   const tipo = store.temPdfDoc(d) ? { ic: "file-text", lb: "PDF" } : (d.temImg || d.imgData) ? { ic: "image", lb: "Imagem" } : { ic: "file-text", lb: "Texto" };
   const nPag = (d.paginas || []).length;
   const nTop = d.estrutura && d.estrutura.blocos ? d.estrutura.blocos.length : 0;
-  const nFig = (d.figuras || []).length;
+  const nFig = (d.figuras || []).filter((f) => f.descricao).length; // as "vazias" são só marcação de página conferida
   const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : ""].filter(Boolean).join(" · ");
   return `
     <div class="card doc-item" data-foco-id="${d.id}">
@@ -1417,8 +1702,8 @@ function docHTML(store, st, d, busca) {
           </div>
         </div>
         <div class="doc-meta">
-          ${topicosDoc.map((t) => { const pg = d.topicoPaginas && d.topicoPaginas[t.id]; return `<span class="tag-topico">${esc(nomeTopico(st, t))}${pg ? ` <span class="tag-pag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span>`; }).join("")}
-          ${pend ? `<span class="tag-ocr">${icone("hourglass")} ${pend} pág. p/ OCR</span>` : ""}
+          ${topicosVinculadosHTML(st, d)}
+          ${pend ? `<button class="tag-ocr" data-action="ir-ocr" data-id="${d.id}" data-tip="Abrir o material e ler estas páginas com a Visão (elas vieram escaneadas, sem texto)." data-tip-pos="cima-dir">${icone("hourglass")} ${plural(pend, "página escaneada", "páginas escaneadas")}</button>` : ""}
           ${d.binarioDescartado ? `<span class="muted small" data-tip="O PDF original foi descartado; o texto extraído foi mantido." data-tip-pos="cima-dir">${icone("file-text")} PDF descartado</span>` : ""}
           ${
             (d.texto || "").trim()
@@ -1441,7 +1726,14 @@ function docHTML(store, st, d, busca) {
               <button class="menu-item" data-action="abrir" data-id="${d.id}" data-tip="Abre o material no cartão: o sumário navegável (ou o texto corrido, se você trocar a visão)." data-tip-pos="cima-esq"><span class="menu-ico">${icone(aberto ? "chevron-down" : "chevron-right")}</span> ${aberto ? "Ocultar texto" : "Ver texto extraído"}</button>
               ${store.temPdfDoc(d) ? `<button class="menu-item" data-action="ler-pdf" data-id="${d.id}" data-tip="Abre o PDF original no leitor interno (zoom e navegação por página)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Abrir PDF</button>` : ""}
               ${(d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Mostra o texto completo extraído, em vez do sumário. É o que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Texto corrido"}</button>` : ""}
-              ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Refaz UMA página com a Visão (tabela/organograma cujo texto saiu fora de ordem, ou página escaneada)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Reprocessar página (Visão)</button>` : ""}
+              ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Passa a Visão numa página específica: serve tanto para a que veio escaneada (sem texto) quanto para a que saiu fora de ordem (tabela/organograma)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Ler página com a Visão</button>` : ""}
+              ${
+                // Figuras: caminho MANUAL (na importação em fila isso não roda mais — 17
+                // apostilas seguidas estouram a cota da IA).
+                store.figurasPendentes(d).length && !d.binarioDescartado && store.iaDisponivel()
+                  ? `<button class="menu-item" data-action="descrever-figuras" data-id="${d.id}" data-tip="A IA lê as páginas com figura/tabela deste material e escreve o que elas mostram; as descrições entram na busca e nas gerações. Um clique faz todas as que faltam." data-tip-pos="cima-esq"><span class="menu-ico">${icone("image")}</span> Descrever ${plural(store.figurasPendentes(d).length, "figura", "figuras")}</button>`
+                  : ""
+              }
               <div class="menu-sep"></div>
               <div class="menu-rotulo">Sumário e edital</div>
               ${

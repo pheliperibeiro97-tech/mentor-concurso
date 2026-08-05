@@ -82,9 +82,66 @@ fn set_blob(id: String, json: String, db: State<Db>) -> Result<(), String> {
 #[tauri::command]
 fn del_blob(id: String, db: State<Db>) -> Result<(), String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
+    // Apaga as duas formas: o JSON antigo (`blob:`) e os bytes (`bin:`).
+    conn.execute("DELETE FROM kv WHERE key = ?1", [format!("blob:{}", id)])
+        .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM kv WHERE key = ?1", [format!("bin:{}", id)])
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// ===== Binário do material gravado como BYTES =====
+// O JS trabalha com data URL ("data:application/pdf;base64,…") porque é o que o visualizador,
+// a Visão e o OCR consomem. Gravar essa STRING no banco custa 33% a mais de disco do que o
+// arquivo: as 17 apostilas do cursinho (288 MB de PDF) ocupavam 383 MB. Aqui o base64 é
+// decodificado e o que vai para o SQLite são os bytes; na leitura ele é recodificado, então
+// nada muda do lado do JS. A coluna é TEXT, mas SQLite guarda BLOB sem converter.
+//
+// Formato do valor: "campo|mime\n" + bytes — assim o registro é autossuficiente (diz se é o
+// PDF ou a imagem do material e qual o tipo) sem uma segunda linha de metadados.
+#[tauri::command]
+fn set_blob_bin(id: String, campo: String, mime: String, b64: String, db: State<Db>) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64.as_bytes())
+        .map_err(|e| format!("base64 inválido: {}", e))?;
+    let mut buf = format!("{}|{}\n", campo, mime).into_bytes();
+    buf.extend_from_slice(&bytes);
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO kv (key, value) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        rusqlite::params![format!("bin:{}", id), buf],
+    )
+    .map_err(|e| e.to_string())?;
+    // O mesmo material não pode ficar nas duas formas: a antiga sai.
     conn.execute("DELETE FROM kv WHERE key = ?1", [format!("blob:{}", id)])
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+fn get_blob_bin(id: String, db: State<Db>) -> Result<Option<String>, String> {
+    use base64::Engine;
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let mut stmt = conn
+        .prepare("SELECT value FROM kv WHERE key = ?1")
+        .map_err(|e| e.to_string())?;
+    let mut rows = stmt.query([format!("bin:{}", id)]).map_err(|e| e.to_string())?;
+    let Some(row) = rows.next().map_err(|e| e.to_string())? else {
+        return Ok(None);
+    };
+    let buf: Vec<u8> = row.get(0).map_err(|e| e.to_string())?;
+    let corte = buf
+        .iter()
+        .position(|b| *b == b'\n')
+        .ok_or_else(|| "binário sem cabeçalho".to_string())?;
+    let cabecalho = String::from_utf8_lossy(&buf[..corte]).to_string();
+    let (campo, mime) = cabecalho.split_once('|').unwrap_or(("pdf", "application/pdf"));
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&buf[corte + 1..]);
+    serde_json::to_string(&serde_json::json!({ "campo": campo, "mime": mime, "b64": b64 }))
+        .map(Some)
+        .map_err(|e| e.to_string())
 }
 
 // ===== Arquivo ORIGINAL do material (vínculo, não cópia) =====
@@ -303,6 +360,8 @@ pub fn run() {
             get_blob,
             set_blob,
             del_blob,
+            set_blob_bin,
+            get_blob_bin,
             escolher_arquivo,
             abrir_no_sistema,
             get_machine_id,

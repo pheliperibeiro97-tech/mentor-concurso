@@ -1,11 +1,17 @@
 // Visualizador de PDF em ROLAGEM CONTÍNUA (todas as páginas empilhadas), com:
-// - campo "ir para a página N"
-// - zoom (+/−) e ajuste à largura
-// - download do arquivo
-// - indicador da página atual atualizado conforme a rolagem
+// - SELEÇÃO E CÓPIA de texto (camada de texto do pdf.js por cima do canvas)
+// - BUSCA no documento (Ctrl+F), com realce e "anterior/próxima"
+// - campo "ir para a página N", zoom (+/−), ajuste à largura
+// - IMPRIMIR um intervalo de páginas e BAIXAR o arquivo
+// - TELA CHEIA
 // Renderização preguiçosa (IntersectionObserver): só desenha as páginas que entram
-// na viewport — aguenta PDFs grandes sem travar.
+// na viewport — aguenta PDFs grandes (1.289 páginas) sem travar.
+//
+// O que NÃO tem, de propósito: marcação/anotação no PDF. O grifo saiu de Materiais quando o
+// binário passou a ser descartável, e a decisão continua — o estudo se marca no texto
+// extraído, não numa cópia do arquivo.
 import { esc } from "./util.js";
+import { baixarArquivo, toast, toastCarregando } from "./ui.js";
 import { icone } from "./icones.js";
 
 function dataUrlToUint8(dataUrl) {
@@ -16,6 +22,10 @@ function dataUrlToUint8(dataUrl) {
   return arr;
 }
 
+// Comparação "como gente busca": sem acento e sem caixa.
+const normalizar = (s) =>
+  String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
 export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
   const overlay = document.createElement("div");
   overlay.className = "pdf-overlay";
@@ -24,14 +34,27 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
       <div class="pdf-bar">
         <b class="pdf-titulo">${esc(titulo || "PDF")}</b>
         <span class="spacer"></span>
-        <label class="pdf-goto">Pág.
-          <input id="pdf-num" type="number" min="1" value="1" /> / <span id="pdf-total">…</span>
+        <label class="pdf-goto"><span class="pdf-goto-rot">Pág.</span>
+          <input id="pdf-num" type="number" min="1" value="1" /> <span class="pdf-goto-total">/ <span id="pdf-total">…</span></span>
         </label>
+        <span class="pdf-sep"></span>
+        <button class="pdf-btn" data-p="buscar" title="Buscar no documento (Ctrl+F)">${icone("search")}</button>
         <button class="pdf-btn" data-p="zoomout" title="Diminuir">${icone("zoom-out")}</button>
         <button class="pdf-btn" data-p="zoomin" title="Aumentar">${icone("zoom-in")}</button>
         <button class="pdf-btn" data-p="fit" title="Ajustar à largura">${icone("move-horizontal")}</button>
+        <button class="pdf-btn" data-p="fit-pagina" title="Página inteira">${icone("expand")}</button>
+        <span class="pdf-sep"></span>
+        <button class="pdf-btn" data-p="imprimir" title="Imprimir">${icone("printer")}</button>
         <button class="pdf-btn" data-p="download" title="Baixar PDF">${icone("download")}</button>
+        <button class="pdf-btn" data-p="fullscreen" title="Tela cheia">${icone("maximize-2")}</button>
         <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
+      </div>
+      <div class="pdf-achar oculto" id="pdf-achar">
+        <input id="pdf-q" type="search" placeholder="Buscar no documento…" autocomplete="off" />
+        <span class="pdf-achar-status muted small" id="pdf-status"></span>
+        <button class="pdf-btn" data-p="antes" title="Anterior (Shift+Enter)">${icone("chevron-up")}</button>
+        <button class="pdf-btn" data-p="depois" title="Próxima (Enter)">${icone("chevron-down")}</button>
+        <button class="pdf-btn" data-p="fechar-busca" title="Fechar busca (Esc)">${icone("x")}</button>
       </div>
       <div class="pdf-scroll" id="pdf-scroll"><div class="pdf-load"><div class="pdf-skel-pag skel"></div><div class="muted small">Carregando o PDF…</div></div></div>
     </div>`;
@@ -39,21 +62,33 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
   const scroll = overlay.querySelector("#pdf-scroll");
   const numInput = overlay.querySelector("#pdf-num");
   const totalEl = overlay.querySelector("#pdf-total");
+  const barraBusca = overlay.querySelector("#pdf-achar");
+  const campoBusca = overlay.querySelector("#pdf-q");
+  const statusBusca = overlay.querySelector("#pdf-status");
 
+  let pdfjs = null;
   let pdf = null;
   let escala = 1.4;
   let baseW = 800; // largura natural da página 1 (escala 1) — p/ "ajustar à largura"
+  let baseH = 1040; // altura natural — p/ "página inteira"
   const wrappers = []; // 1 div por página
   const renderizada = new Set();
   let io = null;
+  // Busca
+  const textoDaPagina = new Map(); // n -> texto normalizado (cache; getTextContent é caro)
+  let consulta = "";
+  let ocorrencias = []; // [{pagina, indice}] das páginas já varridas
+  let atual = -1;
 
   try {
-    const pdfjs = await import("pdfjs-dist");
+    pdfjs = await import("pdfjs-dist");
     const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
     pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
     pdf = await pdfjs.getDocument({ data: dataUrlToUint8(dataUrl) }).promise;
     const p1 = await pdf.getPage(1);
-    baseW = p1.getViewport({ scale: 1 }).width;
+    const vp1 = p1.getViewport({ scale: 1 });
+    baseW = vp1.width;
+    baseH = vp1.height;
     totalEl.textContent = pdf.numPages;
     numInput.max = pdf.numPages;
     montar();
@@ -75,7 +110,9 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
       w.className = "pdf-page";
       w.dataset.pagina = String(i);
       const canvas = document.createElement("canvas");
-      w.appendChild(canvas);
+      const camada = document.createElement("div");
+      camada.className = "textLayer"; // nome que o CSS do pdf.js espera
+      w.append(canvas, camada);
       scroll.appendChild(w);
       wrappers.push(w);
     }
@@ -100,7 +137,8 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
     const w = Math.round(baseW * escala);
     for (const wrap of wrappers) {
       wrap.style.width = w + "px";
-      // altura aproximada (proporção carta) até a renderização real ajustar
+      // A camada de texto do pdf.js v4 posiciona os spans a partir desta variável.
+      wrap.style.setProperty("--scale-factor", String(escala));
       if (!renderizada.has(parseInt(wrap.dataset.pagina, 10))) wrap.style.minHeight = Math.round(w * 1.3) + "px";
     }
   }
@@ -110,12 +148,20 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
     renderizada.add(n);
     const wrap = wrappers[n - 1];
     const canvas = wrap.querySelector("canvas");
+    const camada = wrap.querySelector(".textLayer");
     const page = await pdf.getPage(n);
     const viewport = page.getViewport({ scale: escala });
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     wrap.style.minHeight = "";
     await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    // Camada de TEXTO por cima: é o que permite selecionar e copiar (o canvas é só pixels).
+    try {
+      camada.innerHTML = "";
+      const tl = new pdfjs.TextLayer({ textContentSource: await page.getTextContent(), container: camada, viewport });
+      await tl.render();
+      if (consulta) realcarNaPagina(n);
+    } catch (_) { /* sem camada de texto a página continua legível, só não selecionável */ }
   }
 
   function irPara(n) {
@@ -124,56 +170,244 @@ export async function abrirVisualizadorPdf(dataUrl, titulo, paginaInicial) {
     if (wrap) scroll.scrollTo({ top: wrap.offsetTop - 8, behavior: "smooth" });
   }
 
+  function paginaAtual() {
+    const meio = scroll.scrollTop + scroll.clientHeight / 3;
+    let n = 1;
+    for (const w of wrappers) {
+      if (w.offsetTop <= meio) n = parseInt(w.dataset.pagina, 10);
+      else break;
+    }
+    return n;
+  }
+
+  function zoom(delta) {
+    escala = Math.min(3, Math.max(0.4, escala + delta));
+    aplicarZoom();
+  }
+  // "Ajustar à largura" enche a largura útil; "Página inteira" faz a página caber na altura
+  // também — é o que o leitor do navegador chama de "ajustar à página".
+  function ajustar(modo) {
+    const margem = 40;
+    const larg = (scroll.clientWidth - margem) / baseW;
+    if (modo === "largura") escala = Math.min(3, Math.max(0.4, larg));
+    else {
+      const alt = (scroll.clientHeight - margem) / (baseH || baseW * 1.3);
+      escala = Math.min(3, Math.max(0.4, Math.min(larg, alt)));
+    }
+    aplicarZoom();
+  }
+
   function aplicarZoom() {
     dimensionar();
     renderizada.clear();
-    // re-observa tudo: o IntersectionObserver dispara de novo para as páginas
-    // visíveis, que são re-renderizadas na nova escala.
     io.disconnect();
     wrappers.forEach((w) => io.observe(w));
   }
 
+  // ---- BUSCA ------------------------------------------------------------------
+  // Varre página a página, sob demanda, a partir da atual: pré-varrer 1.289 páginas levaria
+  // minutos (é o mesmo custo da extração no import). O status mostra o progresso.
+  async function textoDe(n) {
+    if (textoDaPagina.has(n)) return textoDaPagina.get(n);
+    const page = await pdf.getPage(n);
+    const tc = await page.getTextContent();
+    const t = normalizar(tc.items.map((i) => i.str).join(" "));
+    textoDaPagina.set(n, t);
+    return t;
+  }
+
+  // Varre o documento INTEIRO em segundo plano, começando pela página em que o usuário está.
+  // Parar na primeira página com resultado (como fazia antes) deixava "próxima" dando a volta
+  // em duas ocorrências enquanto o resto do PDF nunca era olhado. A varredura roda em pedaços
+  // para não travar a tela, e a navegação já funciona com o que foi achado até agora.
+  let varrendo = false;
+  let completa = false;
+  async function varrerTudo(q) {
+    varrendo = true;
+    completa = false;
+    const total = pdf.numPages;
+    const inicio = paginaAtual();
+    for (let k = 0; k < total; k++) {
+      if (q !== consulta) { varrendo = false; return; } // a busca mudou no meio
+      const n = ((inicio - 1 + k + total) % total) + 1;
+      const t = await textoDe(n);
+      let i = t.indexOf(q);
+      const antes = ocorrencias.length;
+      while (i >= 0) { ocorrencias.push({ pagina: n, indice: i }); i = t.indexOf(q, i + q.length); }
+      // Achou as primeiras? já leva o usuário até lá, sem esperar o resto da varredura.
+      if (!antes && ocorrencias.length) { atual = 0; mostrarOcorrencia(); }
+      if (k % 8 === 0) {
+        atualizarStatus(k + 1, total);
+        await new Promise((r) => setTimeout(r, 0)); // devolve a vez à tela
+      }
+    }
+    varrendo = false;
+    completa = true;
+    atualizarStatus();
+  }
+
+  function atualizarStatus(varridas, total) {
+    if (!consulta) return (statusBusca.textContent = "");
+    const n = ocorrencias.length;
+    const pos = atual >= 0 && n ? `${atual + 1} de ${n}` : n ? `${n} ${n === 1 ? "ocorrência" : "ocorrências"}` : "";
+    const progresso = varridas && !completa ? ` · procurando ${Math.round((varridas / total) * 100)}%` : "";
+    statusBusca.textContent = n ? pos + progresso : completa ? "nada encontrado" : `procurando${progresso ? progresso.replace(" · procurando", "") : "…"}`;
+  }
+
+  async function buscar(direcao) {
+    const q = normalizar(campoBusca.value.trim());
+    if (!q) { limparRealce(); consulta = ""; ocorrencias = []; atual = -1; statusBusca.textContent = ""; return; }
+    if (q !== consulta) {
+      consulta = q;
+      ocorrencias = [];
+      atual = -1;
+      limparRealce();
+      return varrerTudo(q); // a 1ª ocorrência já é mostrada de dentro da varredura
+    }
+    if (!ocorrencias.length) return; // ainda procurando (ou nada encontrado)
+    atual = (atual + (direcao < 0 ? -1 : 1) + ocorrencias.length) % ocorrencias.length;
+    mostrarOcorrencia();
+  }
+
+  function mostrarOcorrencia() {
+    const oc = ocorrencias[atual];
+    if (!oc) return;
+    atualizarStatus();
+    irPara(oc.pagina);
+    setTimeout(() => realcarNaPagina(oc.pagina), 250);
+  }
+
+  // Realce dentro da camada de texto: envolve as ocorrências em <mark>. Feito por span, o
+  // posicionamento absoluto do pdf.js continua valendo (o <mark> é inline dentro do span).
+  function realcarNaPagina(n) {
+    const wrap = wrappers[n - 1];
+    if (!wrap || !consulta) return;
+    for (const span of wrap.querySelectorAll(".textLayer span")) {
+      const txt = span.textContent;
+      if (!txt || !normalizar(txt).includes(consulta)) continue;
+      const norm = normalizar(txt);
+      let out = "";
+      let i = 0;
+      let p = norm.indexOf(consulta);
+      while (p >= 0) {
+        out += esc(txt.slice(i, p)) + `<mark class="pdf-hit">${esc(txt.slice(p, p + consulta.length))}</mark>`;
+        i = p + consulta.length;
+        p = norm.indexOf(consulta, i);
+      }
+      out += esc(txt.slice(i));
+      span.innerHTML = out;
+    }
+  }
+
+  function limparRealce() {
+    for (const m of overlay.querySelectorAll("mark.pdf-hit")) {
+      const pai = m.parentElement;
+      m.replaceWith(document.createTextNode(m.textContent));
+      pai.normalize();
+    }
+  }
+
+  function abrirBusca(abrir) {
+    barraBusca.classList.toggle("oculto", !abrir);
+    if (abrir) { campoBusca.focus(); campoBusca.select(); }
+    else { limparRealce(); consulta = ""; ocorrencias = []; statusBusca.textContent = ""; }
+  }
+
+  // ---- IMPRESSÃO --------------------------------------------------------------
+  // Entrega o PRÓPRIO PDF à impressão do sistema, num iframe: a caixa de impressão do
+  // Windows/navegador já traz seletor de intervalo, prévia e opções — não faz sentido pedir o
+  // intervalo antes, numa segunda tela, e a impressão sai com a qualidade do vetor.
+  // (A primeira versão rasterizava as páginas escolhidas em imagem: pesado, pior e com uma
+  // etapa a mais para o usuário.)
+  async function imprimir(botao) {
+    const url = URL.createObjectURL(new Blob([dataUrlToUint8(dataUrl)], { type: "application/pdf" }));
+    const quadro = document.createElement("iframe");
+    quadro.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    quadro.src = url;
+    if (botao) botao.disabled = true;
+    const fim = toastCarregando("Preparando a impressão…");
+    quadro.addEventListener("load", () => {
+      fim();
+      if (botao) botao.disabled = false;
+      try {
+        quadro.contentWindow.focus();
+        quadro.contentWindow.print();
+      } catch (err) {
+        console.error("[pdf] imprimir", err);
+        toast("Não consegui abrir a impressão. Use “Baixar PDF” e imprima pelo leitor do sistema.", "erro");
+      }
+      // O diálogo é modal; só depois de fechado é seguro soltar o iframe e a URL.
+      setTimeout(() => { quadro.remove(); URL.revokeObjectURL(url); }, 120000);
+    });
+    document.body.appendChild(quadro);
+  }
+
   // Atualiza o número da página conforme a rolagem (página cujo topo passou do meio).
   scroll.addEventListener("scroll", () => {
-    const meio = scroll.scrollTop + scroll.clientHeight / 3;
-    let atual = 1;
-    for (const w of wrappers) {
-      if (w.offsetTop <= meio) atual = parseInt(w.dataset.pagina, 10);
-      else break;
-    }
-    if (document.activeElement !== numInput) numInput.value = atual;
+    if (document.activeElement !== numInput) numInput.value = paginaAtual();
   });
 
   numInput.addEventListener("change", () => irPara(parseInt(numInput.value, 10)));
+  campoBusca.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); buscar(e.shiftKey ? -1 : 1); }
+    if (e.key === "Escape") { e.preventDefault(); abrirBusca(false); }
+  });
 
   function fechar() {
     document.removeEventListener("keydown", onKey);
     if (io) io.disconnect();
+    if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
     overlay.remove();
   }
   function onKey(e) {
-    if (e.key === "Escape") fechar();
+    if (e.key === "Escape" && barraBusca.classList.contains("oculto")) fechar();
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); abrirBusca(true); }
+    else if (e.key === "PageDown") { e.preventDefault(); irPara(paginaAtual() + 1); }
+    else if (e.key === "PageUp") { e.preventDefault(); irPara(paginaAtual() - 1); }
+    // Zoom pelo teclado, como no leitor do navegador. "+" chega como "+", "=" ou "Add"
+    // conforme o layout do teclado — daí a lista.
+    else if ((e.ctrlKey || e.metaKey) && ["+", "=", "Add"].includes(e.key)) { e.preventDefault(); zoom(+0.2); }
+    else if ((e.ctrlKey || e.metaKey) && ["-", "_", "Subtract"].includes(e.key)) { e.preventDefault(); zoom(-0.2); }
+    else if ((e.ctrlKey || e.metaKey) && e.key === "0") { e.preventDefault(); escala = 1.4; aplicarZoom(); }
   }
   document.addEventListener("keydown", onKey);
 
-  overlay.addEventListener("click", (e) => {
+  overlay.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-p]");
     if (!b) {
-      if (e.target === overlay) fechar();
+      // Clicar no fundo fecha — mas não quando o clique é o fim de uma SELEÇÃO de texto
+      // arrastada até fora da página (senão copiar um trecho fechava o leitor).
+      if (e.target === overlay && !String(window.getSelection() || "").trim()) fechar();
       return;
     }
     const p = b.getAttribute("data-p");
     if (p === "close") fechar();
-    else if (p === "zoomin") { escala = Math.min(3, escala + 0.2); aplicarZoom(); }
-    else if (p === "zoomout") { escala = Math.max(0.5, escala - 0.2); aplicarZoom(); }
-    else if (p === "fit") { escala = Math.max(0.5, Math.min(3, (scroll.clientWidth - 40) / baseW)); aplicarZoom(); }
-    else if (p === "download") {
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = (titulo || "documento").replace(/[^\w.-]+/g, "_") + ".pdf";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+    else if (p === "zoomin") zoom(+0.2);
+    else if (p === "zoomout") zoom(-0.2);
+    else if (p === "fit") ajustar("largura");
+    else if (p === "fit-pagina") ajustar("pagina");
+    else if (p === "buscar") abrirBusca(barraBusca.classList.contains("oculto"));
+    else if (p === "fechar-busca") abrirBusca(false);
+    else if (p === "antes") buscar(-1);
+    else if (p === "depois") buscar(1);
+    else if (p === "imprimir") imprimir(b);
+    else if (p === "fullscreen") {
+      if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+      else overlay.requestFullscreen().catch(() => {});
+    } else if (p === "download") {
+      // Antes era um <a download> solto: no webview do desktop ele podia não abrir diálogo
+      // nenhum e o usuário ficava sem saber se salvou, onde salvou ou se falhou.
+      // `baixarArquivo` usa a caixa de salvar NATIVA no desktop (e o download normal no
+      // navegador), e aqui o resultado vira aviso na tela.
+      b.disabled = true;
+      try {
+        const nome = (titulo || "documento").replace(/[^\w.-]+/g, "_") + ".pdf";
+        const salvo = await baixarArquivo(nome, dataUrlToUint8(dataUrl), "application/pdf");
+        toast(salvo ? `PDF salvo: ${nome}` : "Download cancelado.", salvo ? "ok" : "erro");
+      } catch (err) {
+        console.error("[pdf] download", err);
+        toast("Não consegui salvar o PDF.", "erro");
+      } finally { b.disabled = false; }
     }
   });
 }

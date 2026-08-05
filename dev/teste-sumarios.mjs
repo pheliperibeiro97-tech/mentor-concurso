@@ -23,7 +23,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseIndice, detectarPorNumeracao, acharPaginaSumario, limparRuidoDePaginas, reordenarRotulosDeEdital } from "../src/estrutura.js";
+import { parseIndice, detectarPorNumeracao, acharPaginaSumario, limparRuidoDePaginas, reordenarRotulosDeEdital, detectarEstrutura, ehEstruturaForte } from "../src/estrutura.js";
 import { separarEdital } from "../src/ia.js";
 
 const aqui = path.dirname(fileURLToPath(import.meta.url));
@@ -164,6 +164,41 @@ function rodarFixturesEdital() {
   return falhas;
 }
 
+// ---- fixtures de ESTRUTURA (o que o import de MATERIAL usa: detectarEstrutura) -------------
+// As fixtures de cima medem a LEITURA do índice; estas medem a decisão seguinte, que é onde
+// cada bloco vai parar no PDF. Existem porque a ordem das fontes estava invertida: a tag da
+// plataforma ("?topic=7.2") ganhava do índice e do cabeçalho no corpo, e nas 17 apostilas do
+// cursinho isso dava 117/339 blocos na página certa (contra 339/339 com a ordem corrigida).
+function rodarFixturesEstrutura() {
+  const dir = path.join(aqui, "fixtures-estrutura");
+  if (!fs.existsSync(dir)) return 0;
+  const arqs = fs.readdirSync(dir).filter((f) => f.endsWith(".txt")).sort();
+  let falhas = 0;
+  for (const arq of arqs) {
+    const txt = fs.readFileSync(path.join(dir, arq), "utf8");
+    const esp = esperadoDoCabecalho(txt) || {};
+    const paginas = paginasDoTexto(txt);
+    const est = detectarEstrutura({ paginas, numPaginas: paginas.length });
+    const erros = [];
+    const cmp = (rotulo, obtido, esperado) => {
+      if (esperado === undefined) return;
+      if (String(obtido) !== String(esperado)) erros.push(`${rotulo}: obtido «${obtido}», esperado «${esperado}»`);
+    };
+    cmp("origem", est.origem || "nenhuma", esp.origem);
+    cmp("blocos", est.blocos.length, esp.blocos);
+    cmp("paginas", est.blocos.map((b) => b.pIni ?? "?").join("|"), esp.paginas);
+    // `forte` decide se a IA é chamada no import (documentos.js): forte = determinístico
+    // resolveu, IA nem é acionada. É a outra metade do conserto — sem esta checagem, a
+    // preferência poderia voltar a inverter sem nenhuma fixture reclamar.
+    cmp("forte", ehEstruturaForte(est) ? "sim" : "nao", esp.forte);
+    console.log(`${erros.length ? "XX" : "ok"}  ${arq.replace(".txt", "").padEnd(24)} ${est.blocos.length} blocos · p.${est.blocos.map((b) => b.pIni ?? "?").join("/")} · forte=${ehEstruturaForte(est) ? "sim" : "nao"}`);
+    erros.forEach((e) => console.log(`      ${e}`));
+    falhas += erros.length ? 1 : 0;
+  }
+  console.log(`\n${arqs.length - falhas}/${arqs.length} fixtures de estrutura passaram`);
+  return falhas;
+}
+
 let falhas;
 if (pastaReais) {
   falhas = rodarReais(pastaReais);
@@ -171,5 +206,7 @@ if (pastaReais) {
   falhas = rodarFixtures();
   console.log("");
   falhas += rodarFixturesEdital();
+  console.log("");
+  falhas += rodarFixturesEstrutura();
 }
 process.exit(falhas ? 1 : 0);
