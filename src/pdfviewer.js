@@ -1,11 +1,11 @@
-// Visualizador de PDF em ROLAGEM CONTÍNUA (todas as páginas empilhadas), com:
-// - SELEÇÃO E CÓPIA de texto (camada de texto do pdf.js por cima do canvas)
-// - BUSCA no documento (Ctrl+F), com realce e "anterior/próxima"
-// - campo "ir para a página N", zoom (+/−), ajuste à largura
-// - IMPRIMIR um intervalo de páginas e BAIXAR o arquivo
-// - TELA CHEIA
-// Renderização preguiçosa (IntersectionObserver): só desenha as páginas que entram
-// na viewport — aguenta PDFs grandes (1.289 páginas) sem travar.
+// Abertura de PDF do app. Dois caminhos:
+//
+//  1. LEITOR NATIVO (padrão no computador): o WebView2/Chrome já traz um leitor completo e
+//     familiar — seleção, busca, zoom com Ctrl+roda, página inteira, girar, miniaturas,
+//     imprimir e baixar. O app só põe a moldura (título, tela cheia, fechar).
+//  2. LEITOR PRÓPRIO (pdf.js), de reserva: onde não há leitor nativo — o Chrome no Android
+//     BAIXA o PDF em vez de exibir. Rolagem contínua com renderização preguiçosa, camada de
+//     texto para seleção, busca, impressão e zoom.
 //
 // O que NÃO tem, de propósito: marcação/anotação no PDF. O grifo saiu de Materiais quando o
 // binário passou a ser descartável, e a decisão continua — o estudo se marca no texto
@@ -45,6 +45,7 @@ function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
       <div class="pdf-bar">
         <b class="pdf-titulo">${esc(titulo || "PDF")}</b>
         <span class="spacer"></span>
+        <button class="pdf-btn" data-p="fullscreen" title="Tela cheia (F11)">${icone("maximize-2")}</button>
         <button class="pdf-btn pdf-close" data-p="close" title="Fechar (Esc)">${icone("x")}</button>
       </div>
       <iframe class="pdf-quadro" title="${esc(titulo || "PDF")}" src="${url}#page=${Math.max(1, paginaInicial || 1)}"></iframe>
@@ -55,9 +56,27 @@ function abrirPdfNativo(dataUrl, titulo, paginaInicial) {
     URL.revokeObjectURL(url);
     overlay.remove();
   };
-  const onKey = (e) => { if (e.key === "Escape") fechar(); };
+  // Tela cheia: o botão e o F11, que é o atalho que todo mundo usa em leitor de PDF.
+  // (Dentro do iframe o F11 não chega até aqui, então o botão é o caminho garantido.)
+  const alternarCheia = () => {
+    const btn = overlay.querySelector('[data-p="fullscreen"]');
+    if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+    else overlay.requestFullscreen().catch(() => {});
+    setTimeout(() => {
+      const cheio = document.fullscreenElement === overlay;
+      if (btn) {
+        btn.innerHTML = icone(cheio ? "minimize-2" : "maximize-2");
+        btn.title = cheio ? "Sair da tela cheia (F11)" : "Tela cheia (F11)";
+      }
+    }, 120);
+  };
+  const onKey = (e) => {
+    if (e.key === "Escape" && document.fullscreenElement !== overlay) fechar();
+    else if (e.key === "F11") { e.preventDefault(); alternarCheia(); }
+  };
   document.addEventListener("keydown", onKey);
   overlay.addEventListener("click", (e) => {
+    if (e.target.closest('[data-p="fullscreen"]')) return alternarCheia();
     if (e.target.closest('[data-p="close"]') || e.target === overlay) fechar();
   });
 }
