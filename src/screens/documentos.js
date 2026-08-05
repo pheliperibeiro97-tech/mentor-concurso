@@ -785,69 +785,6 @@ export default function renderDocumentos(root, app) {
       if (!alvos.length) return toast("Não há figuras pendentes.", "ok");
       const totalPaginas = alvos.reduce((a, x) => a + x.faltam, 0);
       store.iniciarLeituraFiguras();
-      try {
-        // `toastCarregando` devolve uma função: com texto ATUALIZA o rótulo, sem texto FECHA.
-        r = await store.descreverFigurasDeDoc(id, {
-          onProgresso: ({ feitas, total, pagina }) => fim(`Lendo figuras… ${feitas} de ${total} · pág. ${pagina}`),
-        });
-      } finally { fim(); }
-      const restam = store.figurasPendentes(store.get().documentos.find((x) => x.id === id)).length;
-      toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
-      store.indexarFonteAuto(id);
-      app.refresh();
-    },
-    "figuras-parar": () => {
-      store.pararLeituraFiguras();
-      toast("Vou parar depois da página em leitura. O que já foi lido está salvo.", "ok");
-    },
-    // O mesmo, para TODOS os materiais com figura pendente, em sequência.
-    "figuras-todos": async (el) => {
-      if (!store.iaDisponivel()) return avisoIA(app, "Descrever figuras");
-      const alvos = (store.get().documentos || [])
-        .map((d) => ({ d, faltam: store.figurasPendentes(d).length }))
-        .filter((x) => x.faltam);
-      if (!alvos.length) return toast("Não há figuras pendentes.", "ok");
-      const totalPaginas = alvos.reduce((a, x) => a + x.faltam, 0);
-      // Painel de andamento NA TELA (o toast do rodapé se perde num trabalho de 45 min): barra,
-      // contagem, material e página em leitura, e um botão de parar.
-      const painel = root.querySelector("#fig-andamento");
-      const elIco = painel?.querySelector(".fig-ico");
-      const elTxt = painel?.querySelector(".fig-txt");
-      const elBar = painel?.querySelector(".fig-bar span");
-      const elNum = painel?.querySelector(".fig-num");
-      const elAviso = painel?.querySelector(".fig-aviso");
-      const botaoIniciar = root.querySelector('[data-action="figuras-todos"]');
-      if (painel) painel.classList.remove("oculto");
-      if (botaoIniciar) botaoIniciar.disabled = true;
-      // O painel diz em que ESTADO está: processando (com giro), problema (âmbar) ou fim
-      // (verde/vermelho). Barra e contagem sozinhas não dizem se travou ou se deu erro.
-      const estado = (tipo, texto) => {
-        if (!painel) return;
-        painel.classList.remove("is-processando", "is-alerta", "is-ok", "is-erro");
-        painel.classList.add(`is-${tipo}`);
-        const ico = { processando: `<span class="import-spin">${icone("refresh-cw")}</span>`, alerta: icone("triangle-alert"), ok: icone("check"), erro: icone("x") }[tipo];
-        if (elIco) elIco.innerHTML = ico || "";
-        if (texto && elTxt) elTxt.textContent = texto;
-        if (tipo !== "processando" && painel.querySelector(".fig-parar")) painel.querySelector(".fig-parar").classList.add("oculto");
-      };
-      const pintar = (feitas, titulo, pagina, conta) => {
-        const pct = Math.min(100, Math.round((feitas / Math.max(totalPaginas, 1)) * 100));
-        if (elBar) elBar.style.width = pct + "%";
-        if (elNum) elNum.textContent = `${feitas} de ${totalPaginas} · ${pct}%`;
-        if (elTxt) elTxt.textContent = titulo ? `Processando ${titulo}${pagina ? ` · pág. ${pagina}` : ""}…` : "Processando…";
-        // Problemas aparecem enquanto acontecem, não só no fim.
-        const puladas = (conta && conta.puladas) || 0;
-        const reserva = (conta && conta.reserva) || 0;
-        if (elAviso) {
-          elAviso.textContent = [
-            puladas ? `${puladas} ${puladas === 1 ? "página recusada pela IA (pulada)" : "páginas recusadas pela IA (puladas)"}` : "",
-            reserva ? `${reserva} pela reserva` : "",
-          ].filter(Boolean).join(" · ");
-        }
-      };
-      estado("processando", "Processando…");
-      pintar(0);
-      store.iniciarLeituraFiguras();
       // Um orçamento para a rodada TODA (não por material): a reserva é a fonte cara.
       // `max: 0` = só Gemini (a reserva paga fica desligada). O usuário liga quando quiser
       // pagar pela leitura das páginas que o Gemini recusar.
@@ -855,6 +792,10 @@ export default function renderDocumentos(root, app) {
       let jaFeitas = 0; // fechadas nos materiais anteriores
       let parou = false;
       let ultimo = null; // resultado do último material (traz o motivo de parar e a contagem)
+      // Acompanhamento no padrão da casa: botão ocupado + toast de carregando com a contagem
+      // (é o bastante para saber que está andando) e Cancelar, como na leitura de páginas
+      // escaneadas. Erro e resultado saem no toast do fim.
+      if (el) el.disabled = true;
       const fim = toastCarregando(`Lendo figuras… 0 de ${totalPaginas}`, { aoCancelar: () => store.pararLeituraFiguras() });
       try {
         for (const { d, faltam } of alvos) {
@@ -867,7 +808,10 @@ export default function renderDocumentos(root, app) {
           ultimo = r;
           if (r && r.parou) { parou = true; break; }
         }
-      } finally { fim(); }
+      } finally {
+        fim();
+        if (el) el.disabled = false;
+      }
       const restam = (store.get().documentos || []).reduce((a, d) => a + store.figurasPendentes(d).length, 0);
       toast(mensagemFiguras(ultimo, totalPaginas - restam, restam), parou || restam ? "erro" : "ok");
       app.refresh();
