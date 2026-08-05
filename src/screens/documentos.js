@@ -762,18 +762,23 @@ export default function renderDocumentos(root, app) {
       const d = store.get().documentos.find((x) => x.id === id);
       const faltam = store.figurasPendentes(d).length;
       if (!faltam) return toast("As figuras deste material já estão descritas.", "ok");
-      const fim = toastCarregando(`Descrevendo figuras… 0 de ${faltam}`);
+      const fim = toastCarregando(`Lendo figuras… 0 de ${faltam}`);
       let r = null;
+      store.iniciarLeituraFiguras();
       try {
         // `toastCarregando` devolve uma função: com texto ATUALIZA o rótulo, sem texto FECHA.
         r = await store.descreverFigurasDeDoc(id, {
-          onProgresso: (feitas, total) => fim(`Descrevendo figuras… ${feitas} de ${total}`),
+          onProgresso: ({ feitas, total, pagina }) => fim(`Lendo figuras… ${feitas} de ${total} · pág. ${pagina}`),
         });
       } finally { fim(); }
       const restam = store.figurasPendentes(store.get().documentos.find((x) => x.id === id)).length;
       toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
       store.indexarFonteAuto(id);
       app.refresh();
+    },
+    "figuras-parar": () => {
+      store.pararLeituraFiguras();
+      toast("Vou parar depois da página em leitura. O que já foi lido está salvo.", "ok");
     },
     // O mesmo, para TODOS os materiais com figura pendente, em sequência.
     "figuras-todos": async (el) => {
@@ -783,6 +788,46 @@ export default function renderDocumentos(root, app) {
         .filter((x) => x.faltam);
       if (!alvos.length) return toast("Não há figuras pendentes.", "ok");
       const totalPaginas = alvos.reduce((a, x) => a + x.faltam, 0);
+      // Painel de andamento NA TELA (o toast do rodapé se perde num trabalho de 45 min): barra,
+      // contagem, material e página em leitura, e um botão de parar.
+      const painel = root.querySelector("#fig-andamento");
+      const elIco = painel?.querySelector(".fig-ico");
+      const elTxt = painel?.querySelector(".fig-txt");
+      const elBar = painel?.querySelector(".fig-bar span");
+      const elNum = painel?.querySelector(".fig-num");
+      const elAviso = painel?.querySelector(".fig-aviso");
+      const botaoIniciar = root.querySelector('[data-action="figuras-todos"]');
+      if (painel) painel.classList.remove("oculto");
+      if (botaoIniciar) botaoIniciar.disabled = true;
+      // O painel diz em que ESTADO está: processando (com giro), problema (âmbar) ou fim
+      // (verde/vermelho). Barra e contagem sozinhas não dizem se travou ou se deu erro.
+      const estado = (tipo, texto) => {
+        if (!painel) return;
+        painel.classList.remove("is-processando", "is-alerta", "is-ok", "is-erro");
+        painel.classList.add(`is-${tipo}`);
+        const ico = { processando: `<span class="import-spin">${icone("refresh-cw")}</span>`, alerta: icone("triangle-alert"), ok: icone("check"), erro: icone("x") }[tipo];
+        if (elIco) elIco.innerHTML = ico || "";
+        if (texto && elTxt) elTxt.textContent = texto;
+        if (tipo !== "processando" && painel.querySelector(".fig-parar")) painel.querySelector(".fig-parar").classList.add("oculto");
+      };
+      const pintar = (feitas, titulo, pagina, conta) => {
+        const pct = Math.min(100, Math.round((feitas / Math.max(totalPaginas, 1)) * 100));
+        if (elBar) elBar.style.width = pct + "%";
+        if (elNum) elNum.textContent = `${feitas} de ${totalPaginas} · ${pct}%`;
+        if (elTxt) elTxt.textContent = titulo ? `Processando ${titulo}${pagina ? ` · pág. ${pagina}` : ""}…` : "Processando…";
+        // Problemas aparecem enquanto acontecem, não só no fim.
+        const puladas = (conta && conta.puladas) || 0;
+        const reserva = (conta && conta.reserva) || 0;
+        if (elAviso) {
+          elAviso.textContent = [
+            puladas ? `${puladas} ${puladas === 1 ? "página recusada pela IA (pulada)" : "páginas recusadas pela IA (puladas)"}` : "",
+            reserva ? `${reserva} pela reserva` : "",
+          ].filter(Boolean).join(" · ");
+        }
+      };
+      estado("processando", "Processando…");
+      pintar(0);
+      store.iniciarLeituraFiguras();
       // Um orçamento para a rodada TODA (não por material): a reserva é a fonte cara.
       // `max: 0` = só Gemini (a reserva paga fica desligada). O usuário liga quando quiser
       // pagar pela leitura das páginas que o Gemini recusar.
@@ -795,17 +840,27 @@ export default function renderDocumentos(root, app) {
         for (const { d, faltam } of alvos) {
           const r = await store.descreverFigurasDeDoc(d.id, {
             orcamentoReserva,
-            onProgresso: (feitas) => fim(`Lendo figuras… ${jaFeitas + feitas} de ${totalPaginas} · ${d.titulo}`),
+            onProgresso: ({ feitas, pagina, conta }) => {
+              pintar(jaFeitas + feitas, d.titulo, pagina, conta);
+              fim(`Processando figuras… ${jaFeitas + feitas} de ${totalPaginas}`);
+            },
           });
           jaFeitas += faltam - store.figurasPendentes(store.get().documentos.find((x) => x.id === d.id) || d).length;
           store.indexarFonteAuto(d.id);
           ultimo = r;
           if (r && r.parou) { parou = true; break; }
         }
-      } finally { fim(); }
+      } finally {
+        fim();
+        if (botaoIniciar) botaoIniciar.disabled = false;
+      }
       const restam = (store.get().documentos || []).reduce((a, d) => a + store.figurasPendentes(d).length, 0);
-      toast(mensagemFiguras(ultimo, totalPaginas - restam, restam), parou || restam ? "erro" : "ok");
-      app.refresh();
+      const msg = mensagemFiguras(ultimo, totalPaginas - restam, restam);
+      // O resultado fica NO PAINEL (e no toast); a tela só se refaz depois, senão a resposta
+      // desaparece antes de ser lida.
+      estado(parou ? "alerta" : restam ? "alerta" : "ok", msg);
+      toast(msg, parou || restam ? "erro" : "ok");
+      setTimeout(() => app.refresh(), 6000);
     },
     // Opcional 2: re-detecta a estrutura a partir do texto atual das páginas (ex.: após OCR).
     "redetectar-estrutura": (el) => {
@@ -1595,6 +1650,9 @@ function abrirImportarMaterial(app, alvoId = null) {
 function mensagemFiguras(r, feitas, restam) {
   const via = r && r.reserva ? ` (${r.reserva} pela reserva do Claude Code)` : "";
   const puladas = r && r.puladas ? ` ${r.puladas} ${r.puladas === 1 ? "página o Gemini não conseguiu ler" : "páginas o Gemini não conseguiu ler"} (ficaram pendentes).` : "";
+  if (r && r.parou === "usuario") {
+    return `Parado por você em ${plural(restam, "página pendente", "páginas pendentes")}${via}. O que foi lido está salvo — clicar de novo retoma daqui.`;
+  }
   if (r && r.parou === "reserva") {
     return `Parei em ${plural(restam, "página pendente", "páginas pendentes")}: o Gemini está recusando e a reserva do Claude Code chegou ao teto desta rodada${via}. O que foi descrito ficou salvo — tente de novo mais tarde, quando a cota do Gemini voltar.`;
   }
@@ -1662,6 +1720,14 @@ function figurasNudgeHTML(store, st) {
     ${icone("image")}
     <span>As figuras e tabelas ${onde} ainda não foram lidas: o que está dentro delas não entra na busca nem nas gerações.</span>
     <button class="btn btn-primary btn-sm" data-action="figuras-todos" data-tip="A IA lê cada página com figura ou tabela e escreve o que ela mostra. São ${paginas} ${paginas === 1 ? "página" : "páginas"} — dá para parar no meio e retomar depois de onde parou.">${icone("image")} Ler figuras e tabelas</button>
+  </div>
+  <div class="sum-nudge fig-andamento oculto" id="fig-andamento">
+    <span class="fig-ico"><span class="import-spin">${icone("refresh-cw")}</span></span>
+    <span class="fig-txt">Processando…</span>
+    <div class="fc-prog-bar fig-bar"><span style="width:0%"></span></div>
+    <span class="fc-prog-txt fig-num"></span>
+    <span class="fig-aviso muted small"></span>
+    <button class="btn btn-ghost btn-sm fig-parar" data-action="figuras-parar">${icone("x")} Parar</button>
   </div>`;
 }
 

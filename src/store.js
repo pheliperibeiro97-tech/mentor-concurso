@@ -164,6 +164,9 @@ async function guardarBinarioDoc(doc, pdfData, imgData) {
 // nenhuma, contra US$ 0,057 com a imagem. Ou seja, 84% do custo é a invocação, não o trabalho.
 // Então ele entra só onde o Gemini falhou, e com TETO: se a cota diária do Gemini acabasse no
 // meio, as centenas de páginas restantes cairiam todas no caro sem ninguém perceber.
+// Parada cooperativa da leitura de figuras: é trabalho de dezenas de minutos, então tem de
+// dar para interromper — e o laço é o único lugar que sabe onde está.
+let pedidoDePararFiguras = false;
 const ehTauriApp = () => typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
 const RITMO_GEMINI_MS = 5000; // 12 req/min — o plano grátis permite 15, e sobra folga
 const ESPERA_COTA_MS = 25000; // o próprio 429 do Gemini sugere ~15 s; 25 dá margem
@@ -2344,6 +2347,14 @@ export const store = {
   // Era `(docId, max = 30)`: descrevia no máximo 30 páginas e jogava fora o que já existia,
   // repetindo as mesmas requisições a cada chamada. Agora é INCREMENTAL (só o que falta) e o
   // teto virou tamanho de lote, não um limite escondido.
+  // Parada cooperativa. O reset é do LOTE (quem começa chama `iniciarLeituraFiguras`), não de
+  // cada material: resetando por material, o "Parar" clicado no 3º seria esquecido no 4º.
+  iniciarLeituraFiguras() {
+    pedidoDePararFiguras = false;
+  },
+  pararLeituraFiguras() {
+    pedidoDePararFiguras = true;
+  },
   async descreverFigurasDeDoc(docId, opts = {}) {
     const { onProgresso, orcamentoReserva } = typeof opts === "object" && opts ? opts : {};
     const orcamento = orcamentoReserva || { usadas: 0, max: 15 }; // sem lote: teto pequeno
@@ -2362,6 +2373,7 @@ export const store = {
     for (let i = 0; i < pendentes.length && !parou; i += LOTE) {
       const imgs = await pdf.rasterizarPaginas(pdfData, pendentes.slice(i, i + LOTE), 1.6);
       for (const im of imgs) {
+        if (pedidoDePararFiguras) { parou = "usuario"; break; }
         const h = hashLei(String(im.dataUrl || "").slice(0, 3000)); // dedupe grosseiro por prefixo da imagem
         if (vistos.has(h)) continue;
         vistos.add(h);
@@ -2375,7 +2387,9 @@ export const store = {
         // contar como pendente e é reprocessada — e reprocessar imagem custa tempo e dinheiro.
         if (r.texto && r.texto.length > 20) novas.push({ pagina: im.n, descricao: r.texto, hash: h, via: r.via });
         else novas.push({ pagina: im.n, hash: h, vazio: true, via: r.via });
-        if (onProgresso) onProgresso(novas.length, pendentes.length, conta);
+        // Progresso detalhado: sem isso a tela fica muda por 45 minutos e ninguém sabe se
+        // está andando, travou ou acabou.
+        if (onProgresso) onProgresso({ feitas: novas.length, total: pendentes.length, pagina: im.n, conta });
       }
       if (novas.length) gravarFiguras(d, novas.splice(0)); // grava o lote e segue (nada se perde)
     }
