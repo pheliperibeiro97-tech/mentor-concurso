@@ -397,6 +397,20 @@ function mapaParaTexto(arv, nivel = 0) {
 // "Organização dos Poderes" caiu dentro de "Normas Constitucionais". Tema curto, então, só casa
 // se o tópico contiver TODAS as suas palavras (nota 1).
 const PALAVRAS_VAZIAS = new Set(["de", "da", "do", "das", "dos", "em", "no", "na", "ao", "para", "com", "seus", "suas", "sua", "seu"]);
+// Tema que CITA UMA LEI ("Lei nº 12.850/13 – Crime Organizado") tem identidade própria: o número.
+// Casar por palavra aqui é desastre — "lei", "nº" e pedaços de número são comuns a metade do
+// edital, e foi assim que o Estatuto do Desarmamento caiu em "Pessoas naturais · Direitos da
+// personalidade" e a Lei Carolina Dieckmann (12.737) em "Crimes eleitorais (Lei nº 4.737)".
+// Havendo número, só casa com o tópico que cita O MESMO número; não achando, não casa.
+const RX_NUM_LEI = /\b(\d{1,2}\.\d{3})(?:[/-]\d{2,4})?\b/;
+function topicoPorNumeroDeLei(tema, topicos) {
+  const m = String(tema || "").match(RX_NUM_LEI);
+  if (!m) return undefined; // undefined = "não é citação de lei"; null = "é, mas não achei"
+  const alvo = m[1];
+  const achados = topicos.filter((t) => [t.nome, ...(t.aliases || [])].some((n) => String(n).includes(alvo)));
+  return achados.length ? { topicoId: achados[0].id, nota: 1, porNumeroDeLei: true } : null;
+}
+
 function pisoDeTema(tema) {
   const n = String(tema || "")
     .toLowerCase()
@@ -2000,13 +2014,21 @@ export const store = {
     const disciplinasIgnoradas = [];
     const usados = new Set();
     for (const sec of secoes) {
+      // Disciplina do material que não é disciplina do SEU edital (o caso da Legislação Penal
+      // Especial, que no edital do TJSP mora como tópicos dentro de outras matérias) não é motivo
+      // para jogar a seção fora: sem a âncora, cada tema é procurado no edital inteiro — e aí o
+      // piso vale ainda mais, porque não há disciplina para segurar um casamento solto.
       const disciplinaId = disciplinaDoMaterial(sec.disciplina, state.disciplinas || []);
-      if (!disciplinaId) { disciplinasIgnoradas.push(sec.disciplina); continue; }
+      if (!disciplinaId) disciplinasIgnoradas.push(sec.disciplina);
       let acumulado = 0;
       for (const t of sec.temas) {
         acumulado += t.pct;
         const peso = acumulado <= 50 ? 95 : acumulado <= 75 ? 70 : acumulado <= 90 ? 40 : 15;
-        const r = acharTopicoDoBloco(t.tema, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId, minMesma: pisoDeTema(t.tema) });
+        const porLei = topicoPorNumeroDeLei(t.tema, state.topicos);
+        const r =
+          porLei !== undefined
+            ? porLei
+            : acharTopicoDoBloco(t.tema, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId, minMesma: pisoDeTema(t.tema) });
         if (!r) { naoEncontrados.push(`${sec.disciplina}: ${t.tema}`); continue; }
         // Vários temas podem cair no mesmo tópico do edital: fica o maior nível.
         const jaTem = itens.find((x) => x.topicoId === r.topicoId);
@@ -2017,7 +2039,7 @@ export const store = {
       }
     }
     itens.sort((a, b) => b.pesoSugerido - a.pesoSugerido || b.pct - a.pct);
-    return { fonte: "material", titulo: doc.titulo, itens, naoEncontrados, disciplinasIgnoradas, disciplinas: secoes.length };
+    return { fonte: "material", titulo: doc.titulo, itens, naoEncontrados, disciplinasIgnoradas, disciplinas: secoes.length, semDisciplina: disciplinasIgnoradas.length };
   },
   // Materiais que TÊM estatística de incidência dentro (para a tela oferecer a opção).
   materiaisComIncidencia() {

@@ -451,6 +451,14 @@ function atualizarWidget() {
   widget.classList.toggle("ativo", ativo());
   widget.classList.toggle("extra", over);
   widget.classList.toggle("pausado", pausadoSeg > 0);
+  // Botão de flutuar: fica aceso enquanto a janelinha está aberta, senão não dá para saber se
+  // o clique pegou (a janelinha vive por cima de OUTRO aplicativo).
+  const bp = widget.querySelector("[data-cf-pip]");
+  if (bp) {
+    const on = pipAberto();
+    bp.classList.toggle("on", on);
+    bp.title = on ? "Fechar a janelinha flutuante" : "Deixar o cronômetro flutuando por cima dos outros aplicativos. Lá dentro só há o play/pausa do sistema — zerar e trocar de modo seguem aqui.";
+  }
   // Botão FAB: tempo ao vivo quando ativo; "Cronômetro" quando ocioso.
   const btnT = widget.querySelector(".cf-btn-t");
   if (btnT) btnT.textContent = ativo() ? (over ? "+" : "") + fmtMMSS(displaySeg()) : "Cronômetro";

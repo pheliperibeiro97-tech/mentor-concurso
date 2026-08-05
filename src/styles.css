@@ -1398,6 +1398,9 @@ body.onboarding #crono-fab { display: none !important; }
 .cf-topbar { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0; }
 .cf-x { flex: none; width: 30px; height: 34px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; }
 .cf-x:hover { background: var(--surface-2); color: var(--text); }
+/* Flutuar por cima (PiP): fica ao lado do fechar, e ACESO enquanto a janelinha está aberta. */
+.cf-topbar .cf-pip + .cf-x { margin-left: -6px; }
+.cf-pip.on { background: var(--primary-soft); color: var(--primary); }
 .cf-x svg { width: 16px; height: 16px; }
 .cf-modos { display: flex; flex: 1; gap: 2px; margin: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 3px; }
 .cf-modo { flex: 1; border: 0; background: transparent; color: var(--text-2); font: 600 0.78rem inherit; font-family: inherit; padding: 8px 4px; border-radius: 8px; cursor: pointer; }

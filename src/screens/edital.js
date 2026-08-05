@@ -832,14 +832,14 @@ function abrirSugestaoIA(app) {
           const r = store.sugerirRelevanciaPorMaterial(el.dataset.id);
           estado.rel = r;
           if (!r.itens.length) toast("Não achei estatística de incidência aplicável aos seus tópicos neste material.", "erro");
-          else if (r.naoEncontrados.length || r.disciplinasIgnoradas.length)
-            toast(
-              `${plural(r.itens.length, "tópico casado", "tópicos casados")}. Sem correspondência no seu edital: ` +
-                [r.naoEncontrados.length ? plural(r.naoEncontrados.length, "tema", "temas") : "", r.disciplinasIgnoradas.length ? plural(r.disciplinasIgnoradas.length, "disciplina", "disciplinas") : ""]
-                  .filter(Boolean)
-                  .join(" e ") + ".",
-              "ok"
-            );
+          else {
+            const partes = [`${plural(r.itens.length, "tópico casado", "tópicos casados")}`];
+            if (r.naoEncontrados.length) partes.push(`${plural(r.naoEncontrados.length, "tema ficou", "temas ficaram")} sem correspondência`);
+            // Disciplina do material que não existe no edital não é descartada: os temas dela são
+            // procurados no edital inteiro (a Legislação Penal Especial mora dentro do Penal).
+            if (r.disciplinasIgnoradas.length) partes.push(`${r.disciplinasIgnoradas.join(", ")} não é disciplina do seu edital — procurei os temas dela no edital inteiro`);
+            toast(partes.join(" · ") + ".", "ok");
+          }
         } catch (e) { console.error(e); toast("Não consegui ler a estatística deste material.", "erro"); }
         estado.carregando = ""; rerender();
       },

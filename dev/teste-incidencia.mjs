@@ -21,6 +21,15 @@ const pisoDoTema = (tema) => {
   return n <= 2 ? 1 : Number(process.env.PISO || 0.5); // espelha `pisoDeTema` do store.js
 };
 
+// Espelha `topicoPorNumeroDeLei` do store.js: citação de lei casa pelo NÚMERO, não por palavra.
+const RX_NUM_LEI = /\b(\d{1,2}\.\d{3})(?:[/-]\d{2,4})?\b/;
+function topicoPorNumeroDeLei(tema, tops) {
+  const m = String(tema || "").match(RX_NUM_LEI);
+  if (!m) return undefined;
+  const achados = tops.filter((t) => [t.nome, ...(t.aliases || [])].some((n) => String(n).includes(m[1])));
+  return achados.length ? { topicoId: achados[0].id, nota: 1, porNumeroDeLei: true } : null;
+}
+
 const secoes = interpretarIncidenciaPorDisciplina(texto);
 console.log(`${secoes.length} disciplinas com estatística no material · ${topicos.length} tópicos no edital\n`);
 
@@ -30,24 +39,21 @@ const alvo = new Map();
 for (const sec of secoes) {
   const disciplinaId = disciplinaDoMaterial(sec.disciplina, disciplinas);
   const soma = sec.temas.reduce((a, t) => a + t.pct, 0);
-  if (!disciplinaId) {
-    semDisciplina.push(sec.disciplina);
-    console.log(`${sec.disciplina.padEnd(36)} ${String(sec.temas.length).padStart(2)} temas · soma ${soma.toFixed(1).padStart(5)}%  → SEM disciplina no edital`);
-    continue;
-  }
+  if (!disciplinaId) semDisciplina.push(sec.disciplina); // procura no edital inteiro, sem âncora
   let acumulado = 0, ok = 0;
   for (const t of sec.temas) {
     temasTotal++;
     acumulado += t.pct;
     const peso = acumulado <= 50 ? 95 : acumulado <= 75 ? 70 : acumulado <= 90 ? 40 : 15;
-    const r = acharTopicoDoBloco(t.tema, { topicos, disciplinas, disciplinaId, minMesma: pisoDoTema(t.tema) });
+    const porLei = topicoPorNumeroDeLei(t.tema, topicos);
+    const r = porLei !== undefined ? porLei : acharTopicoDoBloco(t.tema, { topicos, disciplinas, disciplinaId, minMesma: pisoDoTema(t.tema) });
     if (!r) { semTopico.push(`${sec.disciplina} · ${t.tema} (${t.pct}%)`); continue; }
     ok++; casados++;
     const top = topicos.find((x) => x.id === r.topicoId);
     const at = alvo.get(r.topicoId);
     if (!at || at.peso < peso) alvo.set(r.topicoId, { peso, nome: top?.nome, tema: t.tema, disc: sec.disciplina, pct: t.pct });
   }
-  console.log(`${sec.disciplina.padEnd(36)} ${String(sec.temas.length).padStart(2)} temas · soma ${soma.toFixed(1).padStart(5)}%  → ${ok} casados (${Math.round((ok / sec.temas.length) * 100)}%)`);
+  console.log(`${sec.disciplina.padEnd(36)} ${String(sec.temas.length).padStart(2)} temas · soma ${soma.toFixed(1).padStart(5)}%  → ${ok} casados (${Math.round((ok / sec.temas.length) * 100)}%)${disciplinaId ? "" : "  [sem disciplina no edital: buscou no edital inteiro]"}`);
 }
 
 console.log(`\ncasamento: ${casados}/${temasTotal} temas (${Math.round((casados / Math.max(1, temasTotal)) * 100)}%) · ${alvo.size} tópicos do edital receberiam nível`);
