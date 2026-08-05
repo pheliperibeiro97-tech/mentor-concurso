@@ -71,7 +71,13 @@ const LIMIAR_VAZIA = 80;
 // como FIGURA/TABELA relevante. Logos e banners de cabeçalho (que se repetem em
 // TODA página) são pequenos e ficam abaixo disto — assim não geram falso "tem imagem".
 const LIMIAR_IMG_FRAC = 0.1;
-const LIMIAR_FUNDO = 0.82; // F1: imagem que cobre ~página inteira = fundo/marca d'água → NÃO é figura de conteúdo
+// Imagem que cobre ~a página inteira PODE ser fundo/marca d'água — mas também pode ser um
+// gráfico exportado com a moldura da página, que é conteúdo puro. O que separa os dois não é o
+// tamanho, é a REPETIÇÃO: marca d'água aparece em (quase) toda página; figura, não. Descartar
+// pelo tamanho custou caro — no "Estudo Estratégico" matava os 13 gráficos de incidência
+// (100% deles), enquanto nas apostilas reais poupava 1 página em 175. Ver `decidirFiguras`.
+const LIMIAR_FUNDO = 0.82;
+const FRACAO_PAGINAS_FUNDO = 0.6; // acima disto, imagem de página cheia é fundo do documento
 
 // Extração simples: PDF → texto corrido, JÁ SEM o ruído de cabeçalho/rodapé e com os rótulos
 // girados no lugar. A limpeza tem de acontecer aqui, e não só em Materiais: quem importava o
@@ -210,14 +216,17 @@ export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
     // "tem figura" = existe alguma imagem que ocupa fração relevante da página.
     // Rastreia a matriz de transformação (apenas o determinante = área) pela lista
     // de operadores; assim distingue uma FIGURA/TABELA grande de um logo pequeno.
-    let temImagem = false;
+    // Duas medidas por página: a maior imagem que NÃO cobre a página (figura comum) e a maior
+    // de todas (que pode ser gráfico de página cheia ou marca d'água). Quem é qual só se decide
+    // depois de ver o documento inteiro — ver `decidirFiguras`.
+    let fracFigura = 0;
+    let fracCheia = 0;
     try {
       const view = page.view; // [x0,y0,x1,y1] em unidades do PDF
       const areaPagina = Math.abs((view[2] - view[0]) * (view[3] - view[1])) || 1;
       const ops = await page.getOperatorList();
       let det = 1;
       const pilha = [];
-      let maxFrac = 0;
       for (let k = 0; k < ops.fnArray.length; k++) {
         const fn = ops.fnArray[k];
         if (fn === pdfjs.OPS.save) pilha.push(det);
@@ -227,12 +236,12 @@ export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
           det *= m[0] * m[3] - m[1] * m[2];
         } else if (ehImg(fn)) {
           const frac = Math.abs(det) / areaPagina;
-          if (frac < LIMIAR_FUNDO) maxFrac = Math.max(maxFrac, frac); // ignora fundo/marca d'água de página inteira
+          if (frac < LIMIAR_FUNDO) fracFigura = Math.max(fracFigura, frac);
+          else fracCheia = Math.max(fracCheia, frac);
         }
       }
-      temImagem = maxFrac >= LIMIAR_IMG_FRAC;
     } catch (_) {}
-    paginas.push({ n: i, texto, vazia: texto.length < LIMIAR_VAZIA, temImagem, ocr: false });
+    paginas.push({ n: i, texto, vazia: texto.length < LIMIAR_VAZIA, temImagem: fracFigura >= LIMIAR_IMG_FRAC, ocr: false, fracCheia });
     // Aviso a cada 5 páginas (e na última): o suficiente para a barra andar, sem pagar um
     // re-render por página num PDF de mil e poucas.
     if (onProgresso && (i % 5 === 0 || i === ultima)) {
@@ -240,8 +249,20 @@ export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
       await new Promise((r) => setTimeout(r, 0)); // devolve a vez à tela para ela pintar
     }
   }
+  decidirFiguras(paginas);
   const outline = await lerOutline(pdf);
   return { paginas, numPaginas: pdf.numPages, outline, linhasPorPagina };
+}
+
+// Segundo passe: resolve as imagens de PÁGINA CHEIA, que a página sozinha não consegue
+// classificar. Se quase todas as páginas têm uma, é o fundo/marca d'água do documento e nenhuma
+// vira figura; se são poucas, são gráficos/pranchas de conteúdo e viram figura. Campo auxiliar
+// `fracCheia` sai daqui — não vale a pena guardá-lo no estado.
+function decidirFiguras(paginas) {
+  const cheias = paginas.filter((p) => p.fracCheia > 0);
+  const ehFundo = paginas.length >= 4 && cheias.length / paginas.length >= FRACAO_PAGINAS_FUNDO;
+  if (!ehFundo) for (const p of cheias) p.temImagem = true;
+  for (const p of paginas) delete p.fracCheia;
 }
 
 // Lê os MARCADORES embutidos do PDF (outline/bookmarks) já resolvidos em página: [{titulo, pagina, nivel}].

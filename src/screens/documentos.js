@@ -259,7 +259,7 @@ function rotuloRevisao(st, topicoId) {
   return `<span class="sum-rev-badge ${d != null && d <= 0 ? "due" : ""}" data-tip="Revisão espaçada deste tópico (Central de Revisões).">${icone("repeat")} ${txt}</span>`;
 }
 
-// F4: "ver texto extraído" como SUMÁRIO NAVEGÁVEL, estilo Lei Seca — ÁRVORE recolhível aninhada por
+// O corpo do cartão quando o material tem sumário: "Ver sumário" — ÁRVORE recolhível aninhada por
 // nível (pais contêm filhos). Cada seção: lê o trecho daquelas páginas, gera deste bloco, e ENTRA na
 // REVISÃO POR TÓPICOS (revisão espaçada). Botão "abrir pág." leva ao PDF na página.
 function sumarioNavegavelHTML(d, store) {
@@ -1732,7 +1732,7 @@ function docHTML(store, st, d, busca) {
         <div class="doc-ident">
           <span class="doc-tipo-ico" data-tip="${tipo.lb}">${icone(tipo.ic)}</span>
           <div class="doc-ident-txt">
-            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" data-tip="Ver/ocultar o texto extraído">${esc(d.titulo)}</span>
+            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" data-tip="${nTop ? "Abrir/fechar o sumário do material" : "Abrir/fechar o texto extraído"}">${esc(d.titulo)}</span>
             <div class="doc-sub muted small">${sub}</div>
           </div>
         </div>
@@ -1758,9 +1758,9 @@ function docHTML(store, st, d, busca) {
             <summary class="lnk" data-tip-pos="cima-dir" data-tip="Mais ações para este material.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
               <div class="menu-rotulo">Ler e ver</div>
-              <button class="menu-item" data-action="abrir" data-id="${d.id}" data-tip="Abre o material no cartão: o sumário navegável (ou o texto corrido, se você trocar a visão)." data-tip-pos="cima-esq"><span class="menu-ico">${icone(aberto ? "chevron-down" : "chevron-right")}</span> ${aberto ? "Ocultar texto" : "Ver texto extraído"}</button>
+              <button class="menu-item" data-action="abrir" data-id="${d.id}" data-tip="${nTop ? "Abre o material no cartão, no sumário navegável." : "Abre o material no cartão, no texto extraído do arquivo."}" data-tip-pos="cima-esq"><span class="menu-ico">${icone(aberto ? "chevron-down" : "chevron-right")}</span> ${aberto ? "Fechar material" : nTop ? "Ver sumário" : "Ver texto extraído"}</button>
               ${store.temPdfDoc(d) ? `<button class="menu-item" data-action="ler-pdf" data-id="${d.id}" data-tip="Abre o PDF original no leitor interno (zoom e navegação por página)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> Abrir PDF</button>` : ""}
-              ${(d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Mostra o texto completo extraído, em vez do sumário. É o que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Texto corrido"}</button>` : ""}
+              ${nTop && (d.texto || "").trim() ? `<button class="menu-item" data-action="menu-texto-corrido" data-id="${d.id}" data-tip="Troca a visão do cartão: em vez do sumário, o texto que o app leu do arquivo — é ele que alimenta a busca e a IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("file-text")}</span> ${textoBrutoAberto.has(d.id) ? "Ver sumário" : "Ver texto extraído"}</button>` : ""}
               ${(d.paginas || []).length && !d.binarioDescartado ? `<button class="menu-item" data-action="menu-reprocessar-pagina" data-id="${d.id}" data-tip="Passa a Visão numa página específica: serve tanto para a que veio escaneada (sem texto) quanto para a que saiu fora de ordem (tabela/organograma)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("search")}</span> Ler página com a Visão</button>` : ""}
               ${
                 // Figuras: caminho MANUAL (na importação em fila isso não roda mais — 17
@@ -1773,7 +1773,7 @@ function docHTML(store, st, d, busca) {
               <div class="menu-rotulo">Sumário e edital</div>
               ${
                 d.estrutura && d.estrutura.blocos && d.estrutura.blocos.length
-                  ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Ver e editar o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Sumário</button>`
+                  ? `<button class="menu-item" data-action="menu-revisar-estrutura" data-id="${d.id}" data-tip="Corrigir o sumário: títulos, tópicos do edital e faixas de páginas. Lá dentro dá para refazer com IA." data-tip-pos="cima-esq"><span class="menu-ico">${icone("list-tree")}</span> Editar sumário</button>`
                   : store.temPdfDoc(d) && store.iaDisponivel()
                     ? `<button class="menu-item" data-action="caprichar-estrutura" data-doc="${d.id}" data-tip="A IA lê a página de sumário do próprio PDF e monta os tópicos do material." data-tip-pos="cima-esq"><span class="menu-ico">${icone("wand-sparkles")}</span> Montar sumário (IA)</button>`
                     : ""
@@ -1803,7 +1803,7 @@ function docHTML(store, st, d, busca) {
                      ? `${estruturaResumoHTML(d.estrutura, store, d.id)}
                         <button class="btn btn-ghost btn-sm u-mt-8" data-action="estr-edit-toggle" data-id="${d.id}">${icone("check")} concluir revisão do sumário</button>`
                      : textoBrutoAberto.has(d.id)
-                       ? `<div class="doc-corpo"><div class="muted small u-mb-8">${icone("file-text")} Texto corrido completo (alimenta busca e IA). <button class="lnk" data-action="menu-texto-corrido" data-id="${d.id}">voltar ao sumário</button></div>${esc(d.texto) || "<i>vazio</i>"}</div>`
+                       ? `<div class="doc-corpo"><div class="muted small u-mb-8">${icone("file-text")} Texto extraído do arquivo, completo — é o que alimenta a <b>busca</b> e a <b>IA</b> (não precisa estar bonito). <button class="lnk" data-action="menu-texto-corrido" data-id="${d.id}">voltar ao sumário</button></div>${esc(d.texto) || "<i>vazio</i>"}</div>`
                        : sumarioNavegavelHTML(d, store)
                    : `<div class="doc-corpo">
                         <div class="muted small u-mb-8">${icone("file-text")} Texto extraído do material — é o que alimenta a <b>busca</b> e a <b>IA</b> (não precisa estar bonito).</div>

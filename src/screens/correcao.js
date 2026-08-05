@@ -100,8 +100,8 @@ export default function renderCorrecao(root, app) {
       </label>
       ${
         iaOn
-          ? `<label class="btn btn-ghost btn-sm btn-file" data-tip-pos="cima-esq" data-tip="Tire/escolha uma foto da resposta manuscrita; a Visão transcreve para o campo acima.">${icone("camera")} Foto da resposta (manuscrita)
-        <input id="cor-foto" type="file" accept=".jpg,.jpeg,.png,.webp,image/*" hidden />
+          ? `<label class="btn btn-ghost btn-sm btn-file" data-tip-pos="cima-esq" data-tip="Fotografe a resposta escrita à mão — várias folhas de uma vez, ou o PDF exportado do tablet. A Visão transcreve tudo, na ordem, para o campo acima.">${icone("camera")} Foto da resposta (manuscrita)
+        <input id="cor-foto" type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,image/*,application/pdf" multiple hidden />
       </label>`
           : ""
       }
@@ -149,22 +149,45 @@ export default function renderCorrecao(root, app) {
   const fotoEl = root.querySelector("#cor-foto");
   if (fotoEl) {
     ligarDropZone(fotoEl, { zona: root.querySelector(".correcao-form") });
+    // Uma sentença manuscrita tem VÁRIAS folhas, e o iPad exporta as anotações como um PDF só.
+    // Por isso aqui entram N imagens e/ou um PDF; cada folha vira uma requisição da Visão e o
+    // texto é emendado NA ORDEM das folhas, no fim do que já está escrito.
     fotoEl.addEventListener("change", async (e) => {
-      const f = e.target.files[0];
-      if (!f) return;
-      toast("Transcrevendo a foto com Visão…");
-      try {
-        const dataUrl = await new Promise((res, rej) => {
+      const arquivos = [...(e.target.files || [])];
+      if (!arquivos.length) return;
+      const lerDataUrl = (f) =>
+        new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = () => res(r.result);
           r.onerror = rej;
           r.readAsDataURL(f);
         });
-        const transc = await store.transcreverFoto(dataUrl, "manuscrito");
+      try {
+        // PDF (ex.: anotação do iPad exportada) vira uma imagem por página, na ordem.
+        const folhas = [];
+        for (const f of arquivos) {
+          if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") {
+            const { extrairPdfPaginas, rasterizarPaginas } = await import("../pdf.js");
+            const { numPaginas } = await extrairPdfPaginas(f);
+            const imgs = await rasterizarPaginas(f, Array.from({ length: numPaginas }, (_, i) => i + 1), 2);
+            folhas.push(...imgs.map((i) => i.dataUrl));
+          } else {
+            folhas.push(await lerDataUrl(f));
+          }
+        }
+        const partes = [];
+        await comOcupado(async () => {
+          for (let i = 0; i < folhas.length; i++) {
+            toast(folhas.length > 1 ? `Transcrevendo folha ${i + 1} de ${folhas.length}…` : "Transcrevendo a foto com Visão…");
+            partes.push(await store.transcreverFoto(folhas[i], "manuscrito"));
+          }
+        });
+        const transc = partes.filter((p) => String(p || "").trim()).join("\n\n");
+        if (!transc) return toast("Não consegui ler nada nessas folhas. Tente fotos mais nítidas ou digite o texto.", "erro");
         const atual = textoEl.value.trim();
         textoEl.value = atual ? atual + "\n\n" + transc : transc;
         textoEl.dispatchEvent(new Event("input"));
-        toast("Texto transcrito. Confira e ajuste antes de corrigir.", "ok");
+        toast(`${plural(folhas.length, "folha transcrita", "folhas transcritas")}. Confira e ajuste antes de corrigir.`, "ok");
       } catch (err) {
         toast("Não consegui ler a foto. Tente uma imagem mais nítida ou digite o texto.", "erro");
       } finally {
