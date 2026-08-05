@@ -235,7 +235,6 @@ export default function renderOnboarding(root, app) {
             </span>
           </button>
         </div>
-        <p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} A IA é opcional</p>
       </div>`;
     bindActions(root, {
       "caminho-novo": () => { caminho = "novo"; passo = 1; app.refresh(); },
@@ -253,7 +252,10 @@ export default function renderOnboarding(root, app) {
         <p class="ob-lead">A mesma senha de sincronização que você usa nos outros aparelhos. Ela traz <b>todos os seus concursos</b>, com edital, materiais, questões e histórico.</p>
         <div class="ob-form">
           <label>Senha de sincronização
-            <input id="ob-senha" type="password" autocomplete="current-password" placeholder="a sua frase secreta" />
+            <div class="campo-senha">
+              <input id="ob-senha" type="password" autocomplete="current-password" placeholder="a sua frase secreta" />
+              <button type="button" class="ver-senha" data-action="ver-senha" data-alvo="ob-senha" aria-label="Mostrar a senha" data-tip="Mostrar/ocultar a senha">${icone("eye")}</button>
+            </div>
           </label>
           <div class="ob-final" style="border:0; padding:0; margin-top:4px">
             <button class="btn btn-ghost" data-action="caminho-voltar">← Voltar</button>
@@ -268,6 +270,18 @@ export default function renderOnboarding(root, app) {
       </div>`;
     bindActions(root, {
       "caminho-voltar": () => { caminho = null; app.refresh(); },
+      // Olho do campo de senha: sem ele, quem erra uma frase longa não tem como saber onde.
+      // Não usa app.refresh() de propósito — o refresh reconstruiria o campo e apagaria o que
+      // já estava digitado.
+      "ver-senha": (el) => {
+        const inp = root.querySelector("#" + el.getAttribute("data-alvo"));
+        if (!inp) return;
+        const mostrando = inp.type === "text";
+        inp.type = mostrando ? "password" : "text";
+        el.innerHTML = icone(mostrando ? "eye" : "eye-off");
+        el.setAttribute("aria-label", mostrando ? "Mostrar a senha" : "Ocultar a senha");
+        inp.focus();
+      },
       "ajuda-senha": () => abrirAjudaSenha(),
       "caminho-novo": () => { caminho = "novo"; passo = 1; app.refresh(); },
       "ob-entrar": async () => {
@@ -342,7 +356,7 @@ export default function renderOnboarding(root, app) {
             ? `<p class="ob-jatenho">Já usa o Mentor em outro aparelho? <button type="button" class="lnk" data-action="caminho-entrar">Entrar com a minha senha</button></p>`
             : `<p class="ob-jatenho muted">Para trazer os dados de outro aparelho, abra o Mentor por um endereço <b>https://</b> (a sincronização segura exige conexão protegida).</p>`
         }
-        ${outroPerfil ? "" : `<p class="ob-foot">${icone("check")} Funciona sem internet e sem cadastro &nbsp;·&nbsp; ${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} A IA é opcional (você conecta quando quiser). Tudo é ajustável depois em Configurações.</p>`}
+        ${outroPerfil ? "" : `<p class="ob-foot">${icone("check")} Tema claro ou escuro &nbsp;·&nbsp; ${icone("check")} Tudo é ajustável depois em Configurações.</p>`}
       </div>`;
 
     bindActions(root, {

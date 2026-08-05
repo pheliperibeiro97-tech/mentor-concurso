@@ -328,7 +328,15 @@ function montarWidget() {
           <button class="cf-modo" data-modo="regressivo" title="Conta para baixo, a partir do tempo definido.">Timer</button>
           <button class="cf-modo" data-modo="pomodoro" title="Ciclos de estudo e pausa.">Pomodoro</button>
         </div>
-        ${pipDisponivel() ? `<button class="cf-x cf-pip" data-cf-pip title="Deixar o cronômetro flutuando por cima dos outros aplicativos. Lá dentro só cabe o play/pausa do sistema — zerar e trocar de modo seguem aqui." aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>` : ""}
+        ${
+          pipDisponivel()
+            ? `<button class="cf-x cf-pip" data-cf-pip title="Deixar o cronômetro flutuando por cima dos outros aplicativos. No computador a janelinha traz play/pausa; zerar e trocar de modo seguem aqui." aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>`
+            : // Sem PiP possível (iPad/iPhone: o Safari não tem canvas.captureStream) o botão não
+              // aparece — botão morto é pior que botão nenhum. Em vez dele, o caminho que o
+              // SISTEMA oferece: a página só-do-cronômetro, que dá para pôr na Tela de Início e
+              // usar numa janela pequena ao lado de outro aplicativo.
+              `<button class="cf-x cf-pip" data-cf-so-crono title="Abrir só o cronômetro, numa janela separada. No iPad, adicione essa página à Tela de Início e use-a numa janela pequena ao lado do outro aplicativo." aria-label="Abrir só o cronômetro">${icone("picture-in-picture-2")}</button>`
+        }
         <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
       </div>
       <div class="cf-disp"><div class="cf-big">00:00</div><div class="cf-cap"></div></div>
@@ -371,6 +379,15 @@ function montarWidget() {
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
   on(".cf-btn", "click", (e) => { e.stopPropagation(); setPopAberto(!popAberto); });
   on("[data-cf-fechar]", "click", () => setPopAberto(false));
+  on("[data-cf-so-crono]", "click", (e) => {
+    e.stopPropagation();
+    try {
+      window.open("crono.html", "_blank", "noopener");
+      toast("Abri só o cronômetro. No iPad: Compartilhar → Adicionar à Tela de Início; depois use essa janela ao lado do outro app.", "ok");
+    } catch (_) {
+      toast("Não consegui abrir a janela do cronômetro.", "erro");
+    }
+  });
   on("[data-cf-pip]", "click", async (e) => {
     e.stopPropagation();
     try {

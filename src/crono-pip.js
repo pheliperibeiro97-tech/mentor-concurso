@@ -18,8 +18,12 @@
 //    em que esta janela serve para alguma coisa. O desenho é por timer, não por quadro.
 //  - O `play()` que damos para o vídeo existir não pode ser lido como "o usuário mandou iniciar";
 //    sem trava, abrir a janelinha ligava o cronômetro sozinho.
-const L = 320; // 16:9 — ver acima
-const A = 180;
+// 16:9 (ver acima) em resolução ALTA. O que manda no tamanho mínimo da janelinha é a PROPORÇÃO,
+// não a contagem de pixels: com 320x180 a janela abria certinho mas o vídeo era esticado na tela e
+// o relógio saía embaçado. 960x540 é a mesma proporção com três vezes mais pixels — nítido, e o
+// desenho continua barato (um retângulo e dois textos).
+const L = 960;
+const A = 540;
 const MS_DESENHO = 250; // em segundo plano o navegador afrouxa para ~1 s, que é o que importa
 
 let video = null;
@@ -35,8 +39,16 @@ let ultimoTextoDesenhado = null;
 
 // `pictureInPictureEnabled` cobre Chrome/Edge/Firefox; `webkitSupportsPresentationMode` é o
 // caminho do Safari (iPad/iPhone/Mac), que nunca implementou o nome padrão.
+// 🔴 O REQUISITO QUE DERRUBA O iPAD: `canvas.captureStream()` NÃO EXISTE no Safari do iOS/iPadOS
+// (bug antigo do WebKit; funciona no Safari do Mac e no simulador, não no aparelho). Sem ele não
+// há MediaStream, então não há vídeo, então não há PiP — por mais que o iPadOS suporte PiP de
+// vídeo desde a versão 14. O botão precisa checar ISSO, e não só o suporte a PiP: antes ele
+// aparecia no iPad e não fazia nada ao ser tocado.
+// No iPad o caminho que existe é outro e é do SISTEMA: instalar o app na Tela de Início e usá-lo
+// numa janela pequena (Stage Manager / janelas do iPadOS 26) ao lado do outro aplicativo.
 export function pipDisponivel() {
   if (typeof document === "undefined") return false;
+  if (typeof document.createElement("canvas").captureStream !== "function") return false;
   if (document.pictureInPictureEnabled) return true;
   const v = document.createElement("video");
   return typeof v.webkitSupportsPresentationMode === "function" && v.webkitSupportsPresentationMode("picture-in-picture");
@@ -139,7 +151,8 @@ function atualizarEstadoDoSistema(rodando) {
 function encaixarTexto(texto, tamanhoIdeal, familia, largura, minimoPx) {
   let px = tamanhoIdeal;
   const cabe = (t) => ctx.measureText(t).width <= largura;
-  for (; px >= minimoPx; px -= 2) {
+  const passo = Math.max(2, Math.round(tamanhoIdeal * 0.02)); // resolução alta pede passo maior
+  for (; px >= minimoPx; px -= passo) {
     ctx.font = `${familia.peso} ${px}px ${familia.face}`;
     if (cabe(texto)) return texto;
   }
@@ -154,24 +167,30 @@ function desenhar() {
   if (!ctx || !lerEstado) return;
   let e;
   try { e = lerEstado(); } catch (_) { return; }
-  const util = L - 16;
+  // Tudo em fração da tela, e não em pixels fixos: assim a resolução pode subir (foi de 320x180
+  // para 960x540 porque o relógio saía embaçado) sem que a faixa, as margens e os pisos de fonte
+  // encolham junto.
+  const faixaL = Math.round(L * 0.025);
+  const margem = Math.round(L * 0.05);
+  const util = L - margem * 2;
+  const centro = L / 2 + faixaL / 2;
   ctx.fillStyle = CSS_VAR("--surface-1", "#0f172a");
   ctx.fillRect(0, 0, L, A);
   // Faixa da cor do foco à esquerda: identifica a sessão de relance, como o pill dentro do app.
   ctx.fillStyle = e.extra ? "#dc2626" : e.cor || "#2563eb";
-  ctx.fillRect(0, 0, 8, A);
+  ctx.fillRect(0, 0, faixaL, A);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillStyle = CSS_VAR("--text-1", "#f8fafc");
   // Mono para o dígito não "dançar" a cada segundo.
   const MONO = { peso: 600, face: '"JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace' };
-  ctx.fillText(encaixarTexto(e.texto, Math.round(A * 0.4), MONO, util, 24), L / 2 + 4, A * 0.42);
+  ctx.fillText(encaixarTexto(e.texto, Math.round(A * 0.4), MONO, util, Math.round(A * 0.13)), centro, A * 0.42);
 
   if (e.legenda) {
     ctx.fillStyle = CSS_VAR("--text-3", "#94a3b8");
     const SANS = { peso: 500, face: '"Inter Variable", Inter, system-ui, sans-serif' };
-    ctx.fillText(encaixarTexto(e.legenda, Math.round(A * 0.12), SANS, util, 13), L / 2 + 4, A * 0.76);
+    ctx.fillText(encaixarTexto(e.legenda, Math.round(A * 0.12), SANS, util, Math.round(A * 0.07)), centro, A * 0.76);
   }
   ultimoTextoDesenhado = e.texto;
   // Com fps=0 o quadro só sai quando pedimos — assim o vídeo acompanha o timer, e não o

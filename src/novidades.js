@@ -8,6 +8,18 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.6",
+    data: "agosto/2026",
+    titulo: "A barra do iPad não invade mais o app, e o cronômetro flutuante ficou nítido",
+    itens: [
+      "CORREÇÃO no iPad/iPhone — a hora, a data e a bateria do sistema apareciam POR CIMA da barra do app, uma escrita sobre a outra. O app desenha sob a barra do sistema de propósito (para usar a tela toda), mas só reservava espaço embaixo; agora reserva no topo também.",
+      "Campo de senha ganhou o botão de MOSTRAR/OCULTAR. Digitar uma frase longa sem poder conferir era erro na certa.",
+      "O cronômetro flutuante ficou NÍTIDO: a janelinha era desenhada em resolução baixa e esticada, o que deixava o relógio embaçado.",
+      "No iPad e no iPhone o botão de flutuar não aparece mais — ele não podia funcionar ali (o navegador do iOS não deixa transformar o desenho do relógio em vídeo, e é assim que a janelinha é feita; vale para Chrome e Edge também, que no iOS usam o mesmo motor do Safari). No lugar dele há «abrir só o cronômetro»: adicione essa página à Tela de Início e use-a numa janela pequena ao lado do outro aplicativo.",
+      "Primeira tela: saiu o rodapé «funciona sem internet e sem cadastro · a IA é opcional».",
+    ],
+  },
+  {
     v: "0.8.5",
     data: "agosto/2026",
     titulo: "A nota da tarefa sai do tooltip, e o PDF baixa com o nome do material",
