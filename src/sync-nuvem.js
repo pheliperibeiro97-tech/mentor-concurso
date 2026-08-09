@@ -219,7 +219,7 @@ export async function restaurarDaNuvem(frase, { endpoint, dica } = {}) {
   // explícita de "trazer o que está na nuvem para cá", então substitui mesmo — a guarda
   // anti-perda de sincronizarNuvem é que protege o caminho automático.
   const merged = aplicarRemoto(store.get(), remoto);
-  await store.importarBackup(merged);
+  await store.importarBackup(merged, { semCarimbo: true });
   const agora = new Date().toISOString();
   marcar({ conectado: true, cofre: id.slice(0, 8), ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, erro: "" });
   return { ok: true, acao: "baixou" };
@@ -264,7 +264,7 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
     if (acao === "baixar") {
       await guardarBackupConflito(localSnap);
       const merged = aplicarRemoto(state, remoto);
-      await store.importarBackup(merged);
+      await store.importarBackup(merged, { semCarimbo: true });
       marcar({ sincronizando: false, ultimaSync: agora, baseEm: remoto._sync.atualizadoEm, ultimoResultado: "baixou", pendente: null, erro: "" });
       return { ok: true, acao: "baixou" };
     }
@@ -305,7 +305,7 @@ export async function resolverPendenciaNuvem(escolha) {
   if (!remoto) return { ok: false };
   await guardarBackupConflito(localSnap);
   const merged = aplicarRemoto(state, remoto);
-  await store.importarBackup(merged);
+  await store.importarBackup(merged, { semCarimbo: true });
   marcar({ ultimaSync: agora, baseEm: (remoto._sync && remoto._sync.atualizadoEm) || agora, ultimoResultado: "baixou", pendente: null, ultimoConflitoEm: "", erro: "" });
   return { ok: true, acao: "baixou" };
 }

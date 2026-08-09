@@ -281,6 +281,10 @@ function sumarioNavegavelHTML(d, store) {
   const render = (nd) => {
     const { b, i } = nd;
     const tn = nomeTop(b.topicoId);
+    // Mesmo tratamento do chip de "tópicos vinculados" do cartão (topicosVinculadosHTML):
+    // rótulo curto + tooltip com o nome inteiro só quando truncar — senão o sumário vira
+    // uma parede de texto com o nome completo do item do edital em cada linha.
+    const tnCurto = tn ? rotuloCurtoTopico(tn) : null;
     const tipoTag = b.tipo !== "teoria" ? `<span class="mini-tag">${esc(b.tipo)}${b.banca ? " " + esc(b.banca) : ""}</span>` : "";
     const verPdf = store.temPdfDoc(d) ? `<button class="lnk" data-action="ler-pdf-pag" data-id="${d.id}" data-pag="${b.pIni}" data-tip="Abrir esta página no PDF">${icone("file-text")} abrir pág. ${b.pIni}</button>` : "";
     const ehQuestoes = b.tipo === "questoes" || b.tipo === "lista";
@@ -303,7 +307,7 @@ function sumarioNavegavelHTML(d, store) {
     const aviso = (b.confianca || 1) < 0.6 ? `<span class="estr-aviso" data-tip="Baixa confiança — confira no Sumário (menu do material).">${icone("triangle-alert")}</span> ` : "";
     const filhosHTML = nd.filhos.length ? `<div class="sum-filhos">${nd.filhos.map(render).join("")}</div>` : "";
     return `<details class="sum-bloco" data-niv="${b.nivel || 1}">
-      <summary>${icone("chevron-right")}<span class="estr-num">${esc(b.numero || "")}</span> ${aviso}<span class="sum-titulo">${esc(b.titulo)}</span> <span class="muted small">p.${b.pIni}–${b.pFim}</span> ${tipoTag} ${tn ? `<span class="estr-top">→ ${esc(tn)}</span>` : ""} ${rotuloRevisao(st, b.topicoId)}</summary>
+      <summary>${icone("chevron-right")}<span class="estr-num">${esc(b.numero || "")}</span> ${aviso}<span class="sum-titulo">${esc(b.titulo)}</span> <span class="muted small">p.${b.pIni}–${b.pFim}</span> ${tipoTag} ${tn ? `<span class="estr-top"${tnCurto !== tn ? ` data-tip="${esc(tn)}" data-tip-pos="cima-esq"` : ""}>→ ${esc(tnCurto)}</span>` : ""} ${rotuloRevisao(st, b.topicoId)}</summary>
       <div class="sum-corpo">
         <div class="sum-corpo-acoes">${verPdf}${revBtn}${gerar}</div>
         <div class="doc-corpo">${esc(textoDoBloco(d, b)) || "<i>vazio</i>"}</div>

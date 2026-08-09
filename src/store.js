@@ -8614,15 +8614,39 @@ export const store = {
 
   // Importa um backup JSON (substitui TODOS os dados). Valida minimamente e
   // reaplica os backfills de normalização (via init).
-  async importarBackup(obj) {
+  // `opts.semCarimbo`: usado pelo sync na nuvem (sync-nuvem.js) ao BAIXAR — `aplicarRemoto`
+  // já grava em `obj.modificadoEm` o carimbo REAL do remoto; sem isto, o `commit()` do fim
+  // reescreveria para "agora", e o aparelho pareceria sempre o mais novo logo após baixar,
+  // reenviando (e arriscando sobrescrever) o que outro aparelho tiver editado nesse meio-tempo.
+  // A importação manual de um arquivo (config.js) não passa opts — continua carimbando "agora",
+  // que é o comportamento certo ali (é uma edição local decidida pelo usuário neste instante).
+  async importarBackup(obj, opts) {
     // Aceita os DOIS formatos: o plano (coleções no topo, backups antigos e cofres já na
     // nuvem) e o multi-perfil (perfis[]). A conversão de um para o outro é do init.
     const pareceBackup =
       obj && typeof obj === "object" && obj.meta && (Array.isArray(obj.topicos) || Array.isArray(obj.perfis));
     if (!pareceBackup) throw new Error("Arquivo inválido — não parece um backup do Mentor Concurso.");
+    // `saveState` (persistence.estadoParaGravar) TIRA `paginas`/`embeddings` do JSON antes de
+    // gravar, confiando que o conteúdo já está nas chaves próprias (`pag:<doc>`/`emb:<perfil>`)
+    // — é assim que a gravação normal funciona (persist() grava os blobs sujos ANTES do
+    // estado). Um backup vindo da nuvem/arquivo nunca passou por ali: sem escrever os blobs
+    // aqui primeiro, `saveState` descartaria o texto extraído antes de ele tocar o disco, e o
+    // material chegaria com o corpo vazio em todo aparelho que só recebe dados por sync (o que
+    // importou o PDF continua com os blobs escritos pelo fluxo normal, por isso só ele via).
+    if (blobsDisponiveis()) {
+      const perfis = Array.isArray(obj.perfis) ? obj.perfis : [obj];
+      for (const p of perfis) {
+        for (const d of p.documentos || []) {
+          if (Array.isArray(d.paginas) && d.paginas.length) await setBlob(`pag:${d.id}`, { paginas: d.paginas });
+        }
+        if (p.id && p.embeddings && Array.isArray(p.embeddings.itens) && p.embeddings.itens.length) {
+          await setBlob(`emb:${p.id}`, p.embeddings);
+        }
+      }
+    }
     await saveState(obj);
     await this.init(); // recarrega e normaliza (backfills)
-    commit();
+    commit(opts && opts.semCarimbo ? { semCarimbo: true } : undefined);
     return state;
   },
 

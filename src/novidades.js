@@ -8,6 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.8",
+    data: "agosto/2026",
+    titulo: "O texto extraído do material voltava vazio em quem só recebia por sincronização",
+    itens: [
+      "CORREÇÃO GRAVE — no navegador e no celular (que só recebem material por sincronização, nunca importam o PDF), o texto extraído das páginas e os tópicos do sumário apareciam vazios. A sincronização baixava o conteúdo certo, mas o app o descartava antes de gravá-lo em disco. No computador que importou o PDF nunca deu para notar, porque ele grava o texto pelo caminho normal (extração), não pela sincronização.",
+      "Corrigido também um efeito colateral: baixar dados da nuvem fazia o aparelho parecer sempre \"o mais novo\", arriscando reenviar (e sobrescrever) o que outro aparelho tivesse acabado de editar.",
+      "Sumário do material: o nome do tópico do edital, quando muito longo, agora encurta com \"…\" e mostra o nome inteiro ao passar o mouse — mesmo tratamento que já existia nos tópicos vinculados do cartão do material.",
+    ],
+  },
+  {
     v: "0.8.7",
     data: "agosto/2026",
     titulo: "O cronômetro flutuante não liga mais sozinho, e desiste com elegância onde não funciona",
