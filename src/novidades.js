@@ -8,6 +8,14 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.10",
+    data: "agosto/2026",
+    titulo: "Olho da senha de sincronização — faltava no campo de Configurações",
+    itens: [
+      "CORREÇÃO — o campo de senha da sincronização em Configurações > Dados nunca teve o botão de mostrar/ocultar (só o do onboarding tinha). Digitar uma frase longa sem poder conferir é erro na certa. Agora tem o mesmo olho dos outros campos de senha do app.",
+    ],
+  },
+  {
     v: "0.8.9",
     data: "agosto/2026",
     titulo: "A guarda de sincronização agora protege o CONTEÚDO dos materiais, não só a quantidade",

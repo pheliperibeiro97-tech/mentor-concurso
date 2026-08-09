@@ -472,7 +472,10 @@ export default function renderConfig(root, app) {
                    }
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-frase">Senha</label>
-                     <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
+                     <div class="campo-senha">
+                       <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
+                       <button type="button" class="ver-senha" data-action="ver-senha" data-alvo="nuvem-frase" aria-label="Mostrar a senha" data-tip="Mostrar/ocultar a senha">${icone("eye")}</button>
+                     </div>
                    </div>
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-dica">Dica <span class="muted">(opcional)</span></label>
@@ -645,6 +648,20 @@ export default function renderConfig(root, app) {
       app.refresh();
     },
     "ajuda-senha": () => abrirAjudaSenha(),
+    // Olho do CAMPO onde a senha é digitada (antes de conectar) — mesmo padrão do onboarding.
+    // Não usa app.refresh() de propósito — o refresh reconstruiria o campo e apagaria o que
+    // já estava digitado.
+    "ver-senha": (el) => {
+      const inp = root.querySelector("#" + el.getAttribute("data-alvo"));
+      if (!inp) return;
+      const mostrando = inp.type === "text";
+      inp.type = mostrando ? "password" : "text";
+      el.innerHTML = icone(mostrando ? "eye" : "eye-off");
+      el.setAttribute("aria-label", mostrando ? "Mostrar a senha" : "Ocultar a senha");
+      inp.focus();
+    },
+    // "Ver senha" DEPOIS de já conectado (revela a frase guardada neste aparelho, com botão
+    // de copiar) — feature diferente do olho acima, que é só do campo de digitação.
     "nuvem-ver-senha": () => { senhaVisivel = !senhaVisivel; app.refresh(); },
     "nuvem-copiar-senha": async () => {
       const frase = (store.get().config.syncNuvem || {}).frase || "";
