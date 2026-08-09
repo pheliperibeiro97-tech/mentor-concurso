@@ -486,13 +486,24 @@ export default function renderConfig(root, app) {
             }
             ${
               sn.pendente
-                ? `<div class="sync-conflito">
-                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> (aqui: <b>${Number(sn.pendente.local) || 0} itens</b> · na nuvem: <b>${Number(sn.pendente.remoto) || 0} itens</b>). Isso costuma acontecer quando um aparelho <b>vazio</b> se conecta. Por segurança, nada foi alterado. O que usar?</p>
+                ? (() => {
+                    const p = sn.pendente;
+                    // Mesma contagem de itens dos dois lados, mas ainda assim "reduziria": foi o
+                    // peso de TEXTO que disparou a guarda (os documentos continuam lá, mas o
+                    // conteúdo extraído de dentro deles sumiu de um dos lados — foi exatamente o
+                    // que aconteceu em 09/08/2026).
+                    const soTexto = Number(p.local) === Number(p.remoto) && p.textoLocal !== undefined && p.textoRemoto !== undefined;
+                    const motivo = soTexto
+                      ? `o <b>texto extraído dos materiais</b> encolheu muito de um lado para o outro (mesmo número de documentos, mas o conteúdo de dentro deles não). Costuma acontecer quando um aparelho ficou com o material vazio antes.`
+                      : `costuma acontecer quando um aparelho <b>vazio</b> se conecta.`;
+                    return `<div class="sync-conflito">
+                    <p class="small u-m-0 u-mb-8"><b>${icone("triangle-alert")} A sincronização reduziria os seus dados</b> (aqui: <b>${Number(p.local) || 0} itens</b> · na nuvem: <b>${Number(p.remoto) || 0} itens</b>). Isso ${motivo} Por segurança, nada foi alterado. O que usar?</p>
                     <div class="form-acoes">
                       <button class="btn btn-primary btn-sm" data-action="nuvem-manter-local">Manter os daqui (enviar p/ a nuvem)</button>
                       <button class="btn btn-soft btn-sm" data-action="nuvem-usar-nuvem">Usar os da nuvem (substitui os daqui)</button>
                     </div>
-                  </div>`
+                  </div>`;
+                  })()
                 : ""
             }
             <details class="ed-ajuda u-mt-12">

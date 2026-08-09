@@ -8,6 +8,14 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.9",
+    data: "agosto/2026",
+    titulo: "A guarda de sincronização agora protege o CONTEÚDO dos materiais, não só a quantidade",
+    itens: [
+      "CORREÇÃO GRAVE — a guarda anti-perda da sincronização só olhava a QUANTIDADE de itens (documentos, tópicos...). Um aparelho que já tinha ficado com o texto de um material vazio (o bug da v0.8.8) continuava com o MESMO NÚMERO de documentos, então a guarda não via problema e deixava ele sobrescrever o cofre bom com uma cópia sem texto nenhum. Agora a guarda também pesa o texto extraído de dentro dos materiais — se ele encolher demais, pede confirmação em vez de sobrescrever sozinha.",
+    ],
+  },
+  {
     v: "0.8.8",
     data: "agosto/2026",
     titulo: "O texto extraído do material voltava vazio em quem só recebia por sincronização",

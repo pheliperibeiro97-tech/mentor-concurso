@@ -103,6 +103,31 @@ export function encolheria(de, para) {
   return de >= 8 && para < Math.ceil(de * 0.5);
 }
 
+// "Peso de TEXTO" = total de caracteres do conteúdo extraído (páginas do material, ou o
+// texto direto onde não há páginas). Existe porque o `peso()` por item NÃO PEGA o caso real
+// de 2026-08-09: um aparelho manteve os MESMOS 21 documentos (a contagem bateu), mas o
+// conteúdo de DENTRO deles tinha sumido (bug de importarBackup) — "subiu" por cima do cofre
+// bom porque nenhuma coleção encolheu. Preciso pesar o que está dentro do documento, não só
+// quantos documentos existem.
+export function pesoTexto(snap) {
+  if (!snap) return 0;
+  const conta = (o) => {
+    if (!o || !Array.isArray(o.documentos)) return 0;
+    let n = 0;
+    for (const d of o.documentos) {
+      if (Array.isArray(d.paginas)) for (const p of d.paginas) n += p && p.texto ? p.texto.length : 0;
+      else if (typeof d.texto === "string") n += d.texto.length;
+    }
+    return n;
+  };
+  return conta(snap) + (snap.perfis || []).reduce((n, p) => n + conta(p), 0);
+}
+// Mesma lógica do encolheria(), mas para o peso de texto — limiar mais alto (50 mil
+// caracteres ≈ um material pequeno) porque um app sem nenhum material ainda é uso legítimo.
+export function encolheriaTexto(de, para) {
+  return de >= 50000 && para < Math.ceil(de * 0.5);
+}
+
 // Chaves de config que são do APARELHO, não da conta: cada máquina escolhe o seu provedor
 // de IA (o Claude Code local só existe no desktop; o celular precisa do Gemini). Enquanto
 // subiam junto, escolher um provedor num aparelho o empurrava para o outro, onde não

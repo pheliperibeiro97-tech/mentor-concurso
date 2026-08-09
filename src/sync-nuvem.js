@@ -21,6 +21,8 @@ import {
   decidir,
   peso,
   encolheria,
+  pesoTexto,
+  encolheriaTexto,
   dispositivoId,
   guardarBackupConflito,
 } from "./sync.js";
@@ -248,16 +250,21 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
     const agora = new Date().toISOString();
     const acao = decidir(localSnap, remoto);
     const pl = peso(localSnap), pr = peso(remoto);
+    // Peso de TEXTO (caracteres de página/material): pega o caso que o peso por item não vê
+    // — os MESMOS documentos continuam lá, mas o conteúdo de dentro deles sumiu (foi o que
+    // aconteceu em 2026-08-09: um aparelho com texto vazio "subiu" por cima do cofre bom
+    // porque nenhuma coleção encolheu, só o miolo dos documentos).
+    const tl = pesoTexto(localSnap), tr = pesoTexto(remoto);
 
     // GUARDA ANTI-PERDA (mesma do sync.js): não deixa encolher demais sem o usuário decidir.
-    if (acao === "baixar" && encolheria(pl, pr)) {
+    if (acao === "baixar" && (encolheria(pl, pr) || encolheriaTexto(tl, tr))) {
       await guardarBackupConflito(localSnap);
-      marcar({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "baixar", local: pl, remoto: pr }, ultimoConflitoEm: agora, erro: "" });
+      marcar({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "baixar", local: pl, remoto: pr, textoLocal: tl, textoRemoto: tr }, ultimoConflitoEm: agora, erro: "" });
       return { ok: false, motivo: "reduziria", local: pl, remoto: pr };
     }
-    if (acao === "subir" && encolheria(pr, pl)) {
+    if (acao === "subir" && (encolheria(pr, pl) || encolheriaTexto(tr, tl))) {
       if (remoto) await guardarBackupConflito(remoto);
-      marcar({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "subir", local: pl, remoto: pr }, ultimoConflitoEm: agora, erro: "" });
+      marcar({ sincronizando: false, ultimoResultado: "reduziria", pendente: { dir: "subir", local: pl, remoto: pr, textoLocal: tl, textoRemoto: tr }, ultimoConflitoEm: agora, erro: "" });
       return { ok: false, motivo: "reduziria", local: pl, remoto: pr };
     }
 
