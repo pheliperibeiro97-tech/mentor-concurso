@@ -17,7 +17,8 @@ import * as crono from "../cronometro.js";
 function novoEstado() {
   return { subModo: "treino", filtroTop: { sel: [], aberto: false }, filtroStatus: "todas", addState: { aberto: false }, editandoId: null, refazer: new Set(),
     focoAtivo: false, focoFila: [], focoIdx: 0, focoPlacar: {}, focoAnimEntrada: false,
-    focoStreak: 0, focoMelhorSeq: 0 }; // Modo Foco: quiz imersivo (+ sequência de acertos da sessão)
+    focoStreak: 0, focoMelhorSeq: 0, // Modo Foco: quiz imersivo (+ sequência de acertos da sessão)
+    focoSelecao: null, focoRiscadas: new Set(), focoTagsOcultas: false }; // seleção pendente de confirmação, alternativas riscadas (não contam como resposta) e tags do cabeçalho ocultáveis
 }
 const S = { mc: novoEstado(), ce: novoEstado() };
 
@@ -376,6 +377,84 @@ function renderTreino(root, app, formato) {
       }
       if (t) toast(t.acertou ? "Acertou!" : "Errou. Registrado no caderno.", t.acertou ? "ok" : "erro");
     },
+    // Modo Foco (só lá: fora dele o clique na alternativa já responde direto, via `responder`
+    // acima): clicar SELECIONA — só marca, não registra. Troca de ideia à vontade antes de
+    // confirmar. Se a alternativa estava riscada, selecioná-la também desfaz o risco (clicar
+    // para escolher uma alternativa que você tinha descartado é, na prática, mudar de ideia).
+    // Atualização LOCAL (toggle de classe/atributo nos elementos já no DOM) — chamar
+    // atualizarOverlayFoco aqui reconstruía o cabeçalho + placar inteiros a cada clique, o que
+    // piscava a tela (o usuário via como "a página recarregando").
+    "selecionar-alt": (el) => {
+      const qId = el.getAttribute("data-q");
+      const i = parseInt(el.getAttribute("data-i"), 10);
+      s.focoSelecao = { qId, i };
+      const key = `${qId}:${i}`;
+      const eraRiscada = s.focoRiscadas.has(key);
+      if (eraRiscada) s.focoRiscadas.delete(key);
+      const qcard = el.closest(".fq-qcard");
+      if (qcard) {
+        qcard.querySelectorAll(".fq-qalts .alt-wrap").forEach((wrap) => {
+          const alt = wrap.querySelector(".alt");
+          if (!alt) return;
+          const souEu = alt === el;
+          alt.classList.toggle("selected", souEu);
+          alt.setAttribute("aria-pressed", souEu ? "true" : "false");
+          if (souEu && eraRiscada) {
+            alt.classList.remove("riscada");
+            const riscarBtn = wrap.querySelector(".alt-riscar");
+            if (riscarBtn) { riscarBtn.setAttribute("data-tip", "Riscar esta alternativa"); riscarBtn.setAttribute("aria-label", "Riscar alternativa"); }
+          }
+        });
+        const confirmar = qcard.querySelector(".fq-confirmar");
+        if (confirmar) confirmar.hidden = false;
+      }
+    },
+    // Risca/desrisca (tesoura no hover) — puramente visual, não é resposta nem seleção. Também
+    // local: só alterna a classe do card e o tip/aria-label do próprio botão.
+    "riscar-alt": (el) => {
+      const qId = el.getAttribute("data-q");
+      const i = el.getAttribute("data-i");
+      const key = `${qId}:${i}`;
+      const riscada = s.focoRiscadas.has(key);
+      if (riscada) s.focoRiscadas.delete(key);
+      else s.focoRiscadas.add(key);
+      const novaRiscada = !riscada;
+      el.closest(".alt-wrap")?.querySelector(".alt")?.classList.toggle("riscada", novaRiscada);
+      el.setAttribute("data-tip", novaRiscada ? "Reexibir esta alternativa" : "Riscar esta alternativa");
+      el.setAttribute("aria-label", novaRiscada ? "Reexibir alternativa" : "Riscar alternativa");
+    },
+    // Confirma a seleção pendente: SÓ AQUI a resposta é de fato registrada (clique no botão
+    // ou tecla Enter). Reusa a mesma contabilidade de placar/sequência do `responder` acima.
+    "confirmar-resposta": (el) => {
+      const qId = el.getAttribute("data-q");
+      if (!s.focoSelecao || s.focoSelecao.qId !== qId) return;
+      const escolha = s.focoSelecao.i;
+      s.focoSelecao = null;
+      const t = store.registrarTentativa({ questaoId: qId, escolha });
+      s.refazer.delete(qId);
+      if (t) {
+        s.focoPlacar[qId] = t.acertou;
+        if (t.acertou) {
+          s.focoStreak = (s.focoStreak || 0) + 1;
+          if (s.focoStreak > (s.focoMelhorSeq || 0)) s.focoMelhorSeq = s.focoStreak;
+        } else {
+          s.focoStreak = 0;
+        }
+      }
+      atualizarOverlayFoco(root, store, s, formato); // reconstrói o chrome inteiro (placar incluso)
+    },
+    // Tópico/tags do cabeçalho: um só toggle esconde a linha inteira (poluição visual);
+    // o nome do tópico, quando visível, também expande/recolhe (trunca por padrão). Local:
+    // só alterna `hidden` na linha de tags e troca o ícone/tip do próprio botão.
+    "foco-tags-toggle": (el) => {
+      s.focoTagsOcultas = !s.focoTagsOcultas;
+      const tags = el.closest(".fq-tags-bar")?.querySelector(".fq-tags");
+      if (tags) tags.hidden = s.focoTagsOcultas;
+      el.innerHTML = icone(s.focoTagsOcultas ? "eye" : "eye-off");
+      el.setAttribute("data-tip", s.focoTagsOcultas ? "Mostrar tópico/tags" : "Ocultar tópico/tags");
+      el.setAttribute("aria-label", s.focoTagsOcultas ? "Mostrar tags" : "Ocultar tags");
+    },
+    "foco-tag-expandir": (el) => { el.classList.toggle("expandido"); },
     // Motivo do erro em 1 toque (antes era um select). Tocar de novo no mesmo chip
     // desmarca — classificar continua sendo opcional. Redesenha SÓ a linha de chips:
     // um app.refresh() aqui rolaria a página e tiraria o card de baixo do olho.
@@ -446,15 +525,22 @@ function renderTreino(root, app, formato) {
       else if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qcard [data-action="comentar-questao"]:not([disabled])')?.click(); }
       return;
     }
-    // Ainda não respondida: seleciona a alternativa (C/E nos itens, 1–6 na múltipla).
-    // Detecta o formato pelo DOM da questão atual (sessão pode ser mista).
-    if (root.querySelector(".fq-qalts.ce")) {
-      if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="0"]')?.click(); }
-      else if (e.key === "e" || e.key === "E") { e.preventDefault(); root.querySelector('.fq-qalts [data-i="1"]')?.click(); }
+    // Enter CONFIRMA a seleção pendente (se houver) — as letras só selecionam, não respondem.
+    if (e.key === "Enter") {
+      const confirmar = root.querySelector('[data-action="confirmar-resposta"]');
+      if (confirmar) { e.preventDefault(); confirmar.click(); }
       return;
     }
-    const idx = { "1": 0, "2": 1, "3": 2, "4": 3, "5": 4, "6": 5 }[e.key];
-    if (idx !== undefined) { e.preventDefault(); root.querySelectorAll('.fq-qalts [data-action="responder"]')[idx]?.click(); }
+    // Ainda não respondida: as teclas SELECIONAM (C/E nos itens, A–F na múltipla). Detecta o
+    // formato pelo DOM da questão atual (sessão pode ser mista).
+    if (root.querySelector(".fq-qalts.ce")) {
+      if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('.fq-qalts [data-action="selecionar-alt"][data-i="0"]')?.click(); }
+      else if (e.key === "e" || e.key === "E") { e.preventDefault(); root.querySelector('.fq-qalts [data-action="selecionar-alt"][data-i="1"]')?.click(); }
+      return;
+    }
+    const letraDig = e.key.length === 1 ? e.key.toUpperCase() : "";
+    const idx = letraDig >= "A" && letraDig <= "F" ? letraDig.charCodeAt(0) - 65 : undefined;
+    if (idx !== undefined) { e.preventDefault(); root.querySelectorAll('.fq-qalts [data-action="selecionar-alt"]')[idx]?.click(); }
   }
   document.addEventListener("keydown", onKey);
   const offTick = ligarTickCrono(root);
@@ -487,7 +573,7 @@ function editFormHTML(st, q, opcoesVincular, formato) {
       <h3>${icone("square-pen")} Editar questão</h3>
       <div class="form-row">
         <label>Tópico (opcional) <select id="qe-top">${opTop}</select></label>
-        <label>Nível <select id="qe-nivel"><option value="">—</option>${["Fácil", "Média", "Difícil"].map((n) => `<option ${q.nivel === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label>Nível <select id="qe-nivel"><option value="">—</option>${["Fácil", "Média", "Difícil", "Muito difícil", "Avançada"].map((n) => `<option ${q.nivel === n ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       </div>
       <label>Enunciado <textarea id="qe-enun" rows="2">${esc(q.enunciado)}</textarea></label>
       <label>Alternativas (uma por linha)
@@ -599,7 +685,7 @@ function questaoHTML(st, q, formato, s) {
       <div class="questao-meta">
         ${(() => { const v = vinculoQuestao(st, q); return v ? `<span class="tag-topico">${esc(v)}</span>` : ""; })()}
         ${ce ? `<span class="mini-tag">Certo/Errado</span>` : ""}
-        ${q.nivel ? `<span class="nivel-badge nivel-${esc(q.nivel.toLowerCase())}">${esc(q.nivel)}</span>` : ""}
+        ${q.nivel ? `<span class="nivel-badge nivel-${esc(q.nivel.toLowerCase().replace(/\s+/g, "-"))}">${esc(q.nivel)}</span>` : ""}
         ${seloBadge(q.selo, q.fonte)}
         <div class="questao-acoes-meta">
           ${q.referencia ? `<span class="questao-ref-chip" data-tip-pos="cima-dir" data-tip="Referência / numeração de origem.">${icone("paperclip")} ${esc(q.referencia)}</span>` : ""}
@@ -632,8 +718,8 @@ function focoOverlayHTML(st, s, formato, anim = "in") {
   const rodape = !q
     ? `<kbd>Esc</kbd> sair`
     : q.formato === "ce" // legenda por questão (sessão pode ser mista, ex.: refazer erros)
-      ? `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>C</kbd> certo · <kbd>E</kbd> errado · <kbd>Espaço</kbd> próxima`
-      : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>1</kbd>–<kbd>${Math.min(q.alternativas.length, 6)}</kbd> responder · <kbd>Espaço</kbd> próxima · <kbd>C</kbd> comentar`;
+      ? `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>C</kbd> certo · <kbd>E</kbd> errado · <kbd>Enter</kbd> confirma · <kbd>Espaço</kbd> próxima`
+      : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>A</kbd>–<kbd>${String.fromCharCode(65 + Math.min(q.alternativas.length, 6) - 1)}</kbd> selecionam · <kbd>Enter</kbd> confirma · <kbd>Espaço</kbd> próxima · <kbd>C</kbd> comentar`;
   return focoShellHTML({
     idx, total, fim: !q, anim,
     placar: { acertos, erros, seq: s.focoStreak || 0 },
@@ -704,6 +790,20 @@ function focoQuestaoHTML(st, q, formato, s) {
     ? `<span class="fq-tag fq-tag-hist" data-tip="Seu histórico nesta questão (todas as tentativas)">${icone("rotate-ccw")} ${nTent} ${nTent === 1 ? "tentativa" : "tentativas"} · <b class="hist-ok">${icone("check")} ${acT}</b> <b class="hist-err">${icone("x")} ${nTent - acT}</b>${!respondida ? " · nova conta" : ""}</span>`
     : "";
 
+  // Alternativa não respondida ainda: CLICAR SELECIONA (não responde). Riscar (tesoura,
+  // aparece no hover) é independente da seleção — só um lembrete visual de "descartei essa",
+  // reversível. Confirmar (botão ou Enter) é que efetivamente registra. Sem <kbd> por
+  // alternativa: a letra já está no alt-letra/rótulo; a legenda de teclas fica só no rodapé.
+  const selAtual = s.focoSelecao && s.focoSelecao.qId === q.id ? s.focoSelecao.i : null;
+  const altPendenteHTML = (i, rotuloHTML) => {
+    const riscada = s.focoRiscadas.has(`${q.id}:${i}`);
+    const selecionada = selAtual === i;
+    return `<div class="alt-wrap">
+        <button class="alt alt-btn${selecionada ? " selected" : ""}${riscada ? " riscada" : ""}" data-action="selecionar-alt" data-q="${q.id}" data-i="${i}" aria-pressed="${selecionada}">${rotuloHTML}</button>
+        <button type="button" class="alt-riscar" data-action="riscar-alt" data-q="${q.id}" data-i="${i}" data-tip="${riscada ? "Reexibir esta alternativa" : "Riscar esta alternativa"}" aria-label="${riscada ? "Reexibir alternativa" : "Riscar alternativa"}">${icone("scissors")}</button>
+      </div>`;
+  };
+
   let alts;
   if (ce) {
     alts = [0, 1].map((i) => {
@@ -713,7 +813,7 @@ function focoQuestaoHTML(st, q, formato, s) {
         const tag = i === q.gabarito ? ` ${icone("check")}` : i === ultima.escolha ? ` ${icone("x")}` : "";
         return `<div class="${cls}">${rot}${tag}</div>`;
       }
-      return `<button class="alt alt-btn" data-action="responder" data-q="${q.id}" data-i="${i}">${rot}<kbd class="alt-key">${i === 0 ? "C" : "E"}</kbd></button>`;
+      return altPendenteHTML(i, rot);
     }).join("");
   } else {
     alts = q.alternativas.map((a, i) => {
@@ -722,9 +822,15 @@ function focoQuestaoHTML(st, q, formato, s) {
         const tag = i === q.gabarito ? ` ${icone("check")}` : i === ultima.escolha ? ` ${icone("x")}` : "";
         return `<div class="${cls}"><span class="alt-letra">${letra(i)}</span> ${esc(a)}${tag}</div>`;
       }
-      return `<button class="alt alt-btn" data-action="responder" data-q="${q.id}" data-i="${i}"><span class="alt-letra">${letra(i)}</span> <span class="alt-txt">${esc(a)}</span>${i < 6 ? `<kbd class="alt-key">${i + 1}</kbd>` : ""}</button>`;
+      return altPendenteHTML(i, `<span class="alt-letra">${letra(i)}</span> <span class="alt-txt">${esc(a)}</span>`);
     }).join("");
   }
+  // Sempre no DOM (só oculto por atributo) quando não respondida: selecionar-alt/riscar-alt
+  // fazem atualização LOCAL (toggle de classe), sem reconstruir o cabeçalho/placar — reconstruir
+  // tudo a cada clique de riscar/selecionar piscava a tela inteira (parecia "recarregar a página").
+  const confirmarHTML = respondida
+    ? ""
+    : `<div class="fq-confirmar"${selAtual === null ? " hidden" : ""}><button class="btn btn-primary" data-action="confirmar-resposta" data-q="${q.id}">${icone("check")} Confirmar resposta</button><span class="muted small">ou tecla Enter</span></div>`;
 
   let feedback = "";
   if (respondida) {
@@ -742,22 +848,31 @@ function focoQuestaoHTML(st, q, formato, s) {
       </div>`;
   }
 
-  return `
-    <div class="fq-qcard ${respondida ? "is-answered" : ""} ${respondida && q.comentarioIA ? "fq-qcard--ia" : ""}" data-id="${q.id}">
-      <div class="fq-tags">
-        ${vinc ? `<span class="fq-tag">${esc(vinc)}</span>` : ""}
+  // Tags do cabeçalho: ocultáveis por inteiro (botão de olho) e o nome do tópico — que pode
+  // ser longo ("Disciplina · Tópico") — trunca com reticências e expande no clique.
+  const tagsOcultas = !!s.focoTagsOcultas;
+  const tagsHTML = `<div class="fq-tags-bar">
+      <div class="fq-tags"${tagsOcultas ? " hidden" : ""}>
+        ${vinc ? `<button type="button" class="fq-tag fq-tag-topico" data-action="foco-tag-expandir" data-tip="Clique para expandir/recolher.">${esc(vinc)}</button>` : ""}
         ${ce ? `<span class="fq-tag fq-tag-ce">Certo ou errado?</span>` : q.nivel ? `<span class="fq-tag">${esc(q.nivel)}</span>` : ""}
         ${histChip}
       </div>
+      ${vinc || histChip ? `<button type="button" class="fq-tags-toggle" data-action="foco-tags-toggle" data-tip="${tagsOcultas ? "Mostrar tópico/tags" : "Ocultar tópico/tags"}" aria-label="${tagsOcultas ? "Mostrar tags" : "Ocultar tags"}">${icone(tagsOcultas ? "eye" : "eye-off")}</button>` : ""}
+    </div>`;
+
+  return `
+    <div class="fq-qcard ${respondida ? "is-answered" : ""} ${respondida && q.comentarioIA ? "fq-qcard--ia" : ""}" data-id="${q.id}">
+      ${tagsHTML}
       <div class="fq-qenun">${enunTreino(q, respondida)}</div>
       <div class="fq-qalts ${ce ? "ce" : ""}">${alts}</div>
+      ${confirmarHTML}
       ${
         respondida
           ? ""
           : `<div class="fc-atalhos muted small">${icone("keyboard")} ${
               ce
-                ? `<b>C</b> certo · <b>E</b> errado`
-                : `teclas <b>1</b>–<b>${Math.min(q.alternativas.length, 6)}</b> para responder`
+                ? `<b>C</b> certo · <b>E</b> errado · <b>Enter</b> confirma`
+                : `teclas <b>A</b>–<b>${String.fromCharCode(65 + Math.min(q.alternativas.length, 6) - 1)}</b> selecionam · <b>Enter</b> confirma`
             }</div>`
       }
       ${feedback}

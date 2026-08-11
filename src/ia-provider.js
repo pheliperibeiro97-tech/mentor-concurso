@@ -336,7 +336,8 @@ function focoTopico(topico, banca) {
     `no nível de profundidade típico dela.`;
 }
 
-// Calibragem da dificuldade. Aceita "facil" | "medio" | "dificil" (default medio).
+// Calibragem da dificuldade. Aceita "facil" | "medio" | "dificil" | "muito_dificil" |
+// "avancada" (default medio).
 function nivelDiretriz(dificuldade, banca) {
   const d = String(dificuldade || "medio").toLowerCase();
   const b = (banca || "").trim();
@@ -348,6 +349,16 @@ function nivelDiretriz(dificuldade, banca) {
   if (d === "dificil") {
     return ` Nível de dificuldade: DIFÍCIL. Explore pegadinhas, exceções à regra, ` +
       `casos concretos/aplicação a situações, jurisprudência e interpretação fina${estilo}.`;
+  }
+  if (d === "muito_dificil") {
+    return ` Nível de dificuldade: MUITO DIFÍCIL. Combine duas ou mais exceções/institutos no mesmo ` +
+      `item, explore divergência entre correntes doutrinárias ou entre tribunais (STJ×STF, turmas), ` +
+      `e redija alternativas com distratores plausíveis que exigem discriminação fina${estilo}.`;
+  }
+  if (d === "avancada") {
+    return ` Nível de dificuldade: AVANÇADA (banca pesada/prova discursiva). Cobre entendimento ` +
+      `minoritário ou recentíssimo, situações-limite não pacificadas, articulação entre vários ramos ` +
+      `do direito no mesmo item, e argumentação que só quem domina o tema a fundo resolve com segurança${estilo}.`;
   }
   return ` Nível de dificuldade: MÉDIO. Exija APLICAÇÃO do conceito a situações ` +
     `simples, indo além da mera literalidade${estilo}.`;

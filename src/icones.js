@@ -154,6 +154,7 @@ import indentIncrease from "lucide-static/icons/indent-increase.svg?raw";
 import indentDecrease from "lucide-static/icons/indent-decrease.svg?raw";
 import heading from "lucide-static/icons/heading.svg?raw";
 import pictureInPicture2 from "lucide-static/icons/picture-in-picture-2.svg?raw";
+import scissors from "lucide-static/icons/scissors.svg?raw";
 
 const MAPA = {
   "picture-in-picture-2": pictureInPicture2,
@@ -298,6 +299,7 @@ const MAPA = {
   "indent-increase": indentIncrease,
   "indent-decrease": indentDecrease,
   heading,
+  scissors,
 };
 
 // Retorna o SVG do ícone como string, pronto p/ injetar em innerHTML/template.

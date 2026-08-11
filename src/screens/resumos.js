@@ -1,7 +1,7 @@
 // Resumos: anotações em texto rico (negrito, itálico, sublinhado, marcador, cores,
 // listas), vinculadas a uma disciplina e (opcional) a um tópico. Importa de PDF/texto,
 // permite editar e imprimir.
-import { bindActions, toast, toastCarregando, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc, comOcupado, dicaArquivo } from "../ui.js";
+import { bindActions, toast, toastCarregando, header, vazio, confirmar, imprimir, botaoImprimir, avisoIA, ligarDropZone, escolher, escolherTopicos, focarItem, iconImprimir, pedirNumero, abrirJanela, iconMapa , plural, skeletonDoc, comOcupado, dicaArquivo } from "../ui.js";
 import { ligarImportArquivo } from "../pdf.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
 import { esc, fmtData, todayISO } from "../util.js";
@@ -236,20 +236,33 @@ const FONTES_RESUMO = [
 // de layout que motivava o toggle por `hidden` na versão inline.
 function abrirGerarResumo(app) {
   const { store } = app;
+  // "todos" | array de topicoIds — seleção múltipla via escolherTopicos (antes era um <select>
+  // de 1 tópico só; sem seleção nenhuma = todos os tópicos, igual ao <select> antigo).
+  let escopoSel = "todos";
   abrirJanela({
     titulo: "Gerar resumo do seu conteúdo",
     corpoHTML: gerarPanelHTML(store.get(), true),
     aoMontar: (overlay, fechar) => {
       const corpo = overlay.querySelector(".mm-corpo");
+      const atualizarBotaoEscopo = () => {
+        const btn = corpo.querySelector("#ger-escopo-btn .escopo-txt");
+        if (!btn) return;
+        btn.textContent = escopoSel === "todos" ? "Todos os tópicos" : `${plural(escopoSel.length, "tópico selecionado", "tópicos selecionados")}`;
+      };
       bindActions(corpo, {
         // Síntese por ESCOPO (tópico → aula → subtópico, ou material): fecha este modal e
         // abre o seletor de escopo unificado (mesmo das outras telas).
         "gerar-escopo": () => { fechar(); abrirSeletorEscopo(app, { tipo: "resumo", titulo: "Sintetizar resumo" }); },
+        "escopo-topicos": async () => {
+          const ids = await escolherTopicos(store.get(), "Gerar resumo de quais tópicos? (nenhum marcado = todos)", { pre: Array.isArray(escopoSel) ? escopoSel : [] });
+          if (ids === null) return; // cancelou
+          escopoSel = ids.length ? ids : "todos";
+          atualizarBotaoEscopo();
+        },
         gerar: () => {
           const fontes = [...corpo.querySelectorAll(".ger-fonte:checked")].map((c) => c.value);
           if (!fontes.length) return toast("Marque pelo menos uma fonte.", "erro");
-          const escopo = corpo.querySelector("#ger-escopo-top").value;
-          const r = store.gerarResumoMulti(fontes, escopo);
+          const r = store.gerarResumoMulti(fontes, escopoSel);
           if (r) { toast("Resumo compilado. Edite se quiser."); fechar(); app.refresh(); }
           else toast("Sem conteúdo nessas fontes/escopo.", "erro");
         },
@@ -257,7 +270,7 @@ function abrirGerarResumo(app) {
           if (!store.iaDisponivel()) return avisoIA(app, "Sintetizar resumo com IA");
           const fontes = [...corpo.querySelectorAll(".ger-fonte:checked")].map((c) => c.value);
           if (!fontes.length) return toast("Marque pelo menos uma fonte.", "erro");
-          const escopo = corpo.querySelector("#ger-escopo-top").value;
+          const escopo = escopoSel;
           el.classList.add("lnk-disabled");
           el.setAttribute("disabled", "");
           const skel = document.createElement("div");
@@ -281,7 +294,6 @@ function abrirGerarResumo(app) {
 }
 
 function gerarPanelHTML(st, aberto) {
-  const opcoesTopico = `<option value="todos">Todos os tópicos</option>` + st.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`).join("");
   return `
     <div class="card gerar-panel" ${aberto ? "" : "hidden"}>
       <h3><span class="orb orb-sm" aria-hidden="true" style="display:inline-block;vertical-align:middle"></span> Gerar resumo a partir do seu conteúdo</h3>
@@ -290,7 +302,9 @@ function gerarPanelHTML(st, aberto) {
         ${FONTES_RESUMO.map(([v, n]) => `<label class="ger-fonte-chip"><input type="checkbox" class="ger-fonte" value="${v}" ${v === "material" ? "checked" : ""} /> ${n}</label>`).join("")}
       </div>
       <div class="form-row" style="align-items:flex-end; gap:12px; margin-top:10px">
-        <label class="inline">Escopo: <select id="ger-escopo-top">${opcoesTopico}</select></label>
+        <label class="inline">Escopo
+          <button type="button" id="ger-escopo-btn" class="rsx-topsel-btn" data-action="escopo-topicos" data-tip="Marque um ou mais tópicos; sem nenhum marcado, considera todos."><span class="escopo-txt">Todos os tópicos</span>${icone("chevron-down")}</button>
+        </label>
         <button class="btn btn-primary btn-sm" data-action="gerar" data-tip="Compila um rascunho fiel (offline): apenas concatena o seu conteúdo, sem IA.">Compilar (offline)</button>
         <button class="btn btn-ghost btn-sm" data-action="sintetizar-ia" data-tip="A IA condensa e organiza o MESMO conteúdo num resumo didático (com selo de origem, confira).">${icone("sparkles")} Sintetizar com IA</button>
       </div>

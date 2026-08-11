@@ -36,7 +36,9 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
   const store = app.store;
   if (!store.iaDisponivel()) return avisoIA(app, titulo);
   const cfg = TIPOS[tipo] || TIPOS.flashcards;
-  const estado = { docId: "", matBloco: "", n: cfg.padrao, dificuldade: "medio" };
+  // matBlocos: subtópicos (índices) marcados — pode ser mais de um, para gerar combinando
+  // vários de uma vez (pedido do usuário: "e se eu quiser dois?"). Vazio = material inteiro.
+  const estado = { docId: "", matBlocos: [], n: cfg.padrao, dificuldade: "medio" };
   let ocupado = false;
   let rerender = () => {};
   let fecharJanela = () => {};
@@ -54,11 +56,12 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     app.navigate(DESTINO[tipo] || "flashcards", { lote, loteRotulo: rot });
   }
 
-  // Escopo = 1 material (com bloco/subtópico opcional).
+  // Escopo = 1 material (com subtópico(s) opcionais — pode marcar mais de um).
   function escopoAtual() {
     if (!estado.docId) return { texto: "", modo: "material" };
-    const bi = estado.matBloco !== "" ? parseInt(estado.matBloco, 10) : null;
-    return store.resolverEscopo({ docId: estado.docId, bi });
+    const bis = estado.matBlocos.length ? estado.matBlocos : null;
+    const bi = bis && bis.length === 1 ? bis[0] : null;
+    return store.resolverEscopo({ docId: estado.docId, bi, bis });
   }
 
   async function gerar() {
@@ -115,7 +118,7 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     const doc = estado.docId ? docs.find((d) => d.id === estado.docId) : null;
     if (estado.docId && !doc) estado.docId = "";
     const blocos = (doc && doc.estrutura && doc.estrutura.blocos) || [];
-    if (estado.matBloco !== "" && !blocos[parseInt(estado.matBloco, 10)]) estado.matBloco = "";
+    estado.matBlocos = estado.matBlocos.filter((bi) => blocos[bi]);
     const ctx = doc ? contextoDoMaterial(st, doc) : "";
     return `
       <label class="inline u-mb-8 u-block">Material (aula)
@@ -127,12 +130,10 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       ${ctx ? `<p class="muted small u-mt-4 u-mb-4">${icone("list-checks")} ${esc(ctx)}</p>` : ""}
       ${
         blocos.length
-          ? `<label class="inline u-mt-8 u-block">Subtópico (índice)
-              <select data-se="matbloco" style="max-width:360px">
-                <option value="">Material inteiro</option>
-                ${blocos.map((b, bi) => `<option value="${bi}" ${estado.matBloco === String(bi) ? "selected" : ""}>${esc(`${b.numero || ""} ${b.titulo}`.trim())}</option>`).join("")}
-              </select>
-            </label>`
+          ? `<label class="inline u-block u-mt-8">Subtópicos (índice) <span class="muted small">— marque um ou mais; nenhum marcado = material inteiro</span></label>
+             <div class="escopo-blocos">
+               ${blocos.map((b, bi) => `<label class="escolha-item escolha-check escopo-bloco-item"><input type="checkbox" data-se="matbloco" value="${bi}" ${estado.matBlocos.includes(bi) ? "checked" : ""} /> <span class="escolha-item-txt">${esc(`${b.numero || ""} ${b.titulo}`.trim())}</span></label>`).join("")}
+             </div>`
           : doc
             ? `<p class="muted small u-mt-8">Este material não tem índice aplicado — será usado inteiro.</p>`
             : ""
@@ -163,6 +164,8 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
                           <option value="facil" ${estado.dificuldade === "facil" ? "selected" : ""}>Fácil</option>
                           <option value="medio" ${estado.dificuldade === "medio" ? "selected" : ""}>Médio</option>
                           <option value="dificil" ${estado.dificuldade === "dificil" ? "selected" : ""}>Difícil</option>
+                          <option value="muito_dificil" ${estado.dificuldade === "muito_dificil" ? "selected" : ""}>Muito difícil</option>
+                          <option value="avancada" ${estado.dificuldade === "avancada" ? "selected" : ""}>Avançada (banca pesada)</option>
                         </select>
                       </label>`
                 }
@@ -182,13 +185,17 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       // ---- listeners (reatados a cada rerender) ----
       corpo.querySelector('[data-se="mat"]')?.addEventListener("change", (e) => {
         estado.docId = e.target.value;
-        estado.matBloco = "";
+        estado.matBlocos = [];
         rerender();
       });
-      corpo.querySelector('[data-se="matbloco"]')?.addEventListener("change", (e) => {
-        estado.matBloco = e.target.value;
-        rerender();
-      });
+      corpo.querySelectorAll('[data-se="matbloco"]').forEach((chk) =>
+        chk.addEventListener("change", (e) => {
+          const bi = parseInt(e.target.value, 10);
+          if (e.target.checked) { if (!estado.matBlocos.includes(bi)) estado.matBlocos.push(bi); }
+          else estado.matBlocos = estado.matBlocos.filter((x) => x !== bi);
+          rerender();
+        })
+      );
       // Quantidade/nível: atualizam o estado SEM rerender (não perder foco do campo).
       corpo.querySelector('[data-se="n"]')?.addEventListener("input", (e) => {
         estado.n = Math.max(1, Math.min(30, parseInt(e.target.value, 10) || cfg.padrao));

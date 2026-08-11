@@ -1,7 +1,7 @@
 // Revisão de tópico (dir.2): curva do esquecimento do CONTEÚDO estudado (24h/7d/30d...).
 // Releitura/recordação das palavras-chave do tópico, com botões graduados (Esqueci/
 // Lembrei/Fácil) que movem a escada [1,7,15,30,60,120] — generaliza a "memória" de lei/juris.
-import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural, revelarTexto, comOcupado, md } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, avisoIA, pedirNumero, plural, revelarTexto, comOcupado, md, escolherTopicos } from "../ui.js";
 import { esc, fmtData, todayISO, daysBetween } from "../util.js";
 import { icone } from "../icones.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
@@ -13,6 +13,7 @@ let recallFeedback = null; // feedback da IA sobre o brain-dump
 let avaliando = false; // chamada de IA em andamento
 let braindumpTexto = ""; // preserva o texto digitado entre re-renders
 let feedbackFalou = false; // stream do feedback da IA só 1x quando ele chega (não re-digita a cada re-render)
+let extraTopicos = []; // topicoIds ADICIONAIS marcados p/ combinar na geração de flashcards/questões (opt-in)
 
 export default function renderRevTopico(root, app) {
   const { store } = app;
@@ -33,6 +34,7 @@ export default function renderRevTopico(root, app) {
       recallFeedback = null;
       braindumpTexto = "";
       feedbackFalou = false;
+      extraTopicos = [];
     }
   }
 
@@ -164,8 +166,9 @@ function reviewHTML(store, topico) {
                 <span class="muted small">Aproveitar esta revisão:</span>
                 <button class="lnk" data-action="exp-resumo" data-tip-pos="cima-esq" data-tip="Salvar um resumo com o que você escreveu + a avaliação.">${icone("file-text")} Resumo</button>
                 <button class="lnk" data-action="exp-erro" data-tip-pos="cima-esq" data-tip="Registrar no Caderno de Erros os pontos que faltaram.">${icone("flag")} Caderno de Erros</button>
-                <button class="lnk" data-action="exp-flashcards" data-tip-pos="cima-esq" data-tip="Gerar flashcards (IA) do conteúdo deste tópico.">${icone("layers")} Flashcards</button>
-                <button class="lnk" data-action="exp-questoes" data-tip-pos="cima-esq" data-tip="Gerar questões (IA) do conteúdo deste tópico.">${icone("notebook-pen")} Questões</button>
+                <button class="lnk" data-action="exp-flashcards" data-tip-pos="cima-esq" data-tip="Gerar flashcards (IA) do conteúdo deste tópico${extraTopicos.length ? " + dos tópicos extras marcados" : ""}.">${icone("layers")} Flashcards</button>
+                <button class="lnk" data-action="exp-questoes" data-tip-pos="cima-esq" data-tip="Gerar questões (IA) do conteúdo deste tópico${extraTopicos.length ? " + dos tópicos extras marcados" : ""}.">${icone("notebook-pen")} Questões</button>
+                <button class="lnk" data-action="exp-outros-topicos" data-tip-pos="cima-esq" data-tip="Considerar também o conteúdo de outros tópicos na geração (um lote só, combinando tudo).">${icone("list-checks")} ${extraTopicos.length ? `+ ${plural(extraTopicos.length, "tópico extra", "tópicos extras")}` : "+ incluir outros tópicos"}</button>
               </div>
             </div>`
           : ""
@@ -270,14 +273,27 @@ function bindReview(root, app, store, topico) {
       });
       toast("Registrado no Caderno de Erros.");
     },
+    // Marca tópicos EXTRAS para combinar na mesma geração (um lote só, considerando o
+    // conteúdo INTEIRO de cada tópico marcado — não só o principal). O tópico em revisão
+    // fica travado (sempre incluso; não faz sentido tirá-lo da própria geração dele).
+    "exp-outros-topicos": async () => {
+      const st2 = store.get();
+      const ids = await escolherTopicos(st2, "Combinar a geração com quais outros tópicos?", {
+        pre: [topico.id, ...extraTopicos],
+        travados: [topico.id],
+      });
+      if (ids === null) return;
+      extraTopicos = ids.filter((id) => id !== topico.id);
+      app.refresh();
+    },
     "exp-flashcards": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const r = await pedirNumero("Quantos flashcards a IA deve gerar?", { padrao: 5, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      const rot = `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
+      const rot = extraTopicos.length ? `de «${(topico.nome || "tópico").slice(0, 30)}» + ${extraTopicos.length}` : `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
       const lote = store.iniciarLoteGeracao(rot);
-      const cs = await comOcupado(() => store.gerarFlashcardsDeTopico(topico.id, fonteExport(store, topico), n, dificuldade), { botao: el, msg: "Gerando flashcards (tópico + avaliação)…" });
+      const cs = await comOcupado(() => store.gerarFlashcardsDeTopicos(topico.id, fonteExport(store, topico), extraTopicos, n, dificuldade), { botao: el, msg: "Gerando flashcards (tópico + avaliação)…" });
       store.encerrarLoteGeracao();
       if (cs == null) return;
       toast(`${plural(cs.length, "flashcard criado", "flashcards criados")}.`);
@@ -288,9 +304,9 @@ function bindReview(root, app, store, topico) {
       const r = await pedirNumero("Quantas questões a IA deve gerar?", { padrao: 3, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      const rot = `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
+      const rot = extraTopicos.length ? `de «${(topico.nome || "tópico").slice(0, 30)}» + ${extraTopicos.length}` : `do tópico «${(topico.nome || "tópico").slice(0, 40)}»`;
       const lote = store.iniciarLoteGeracao(rot);
-      const qs = await comOcupado(() => store.gerarQuestoesDeTopico(topico.id, fonteExport(store, topico), n, dificuldade), { botao: el, msg: "Gerando questões (tópico + avaliação)…" });
+      const qs = await comOcupado(() => store.gerarQuestoesDeTopicos(topico.id, fonteExport(store, topico), extraTopicos, n, dificuldade), { botao: el, msg: "Gerando questões (tópico + avaliação)…" });
       store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(`${plural(qs.length, "questão criada", "questões criadas")}.`);

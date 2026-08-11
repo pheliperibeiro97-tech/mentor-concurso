@@ -2221,19 +2221,22 @@ export const store = {
     for (const item of estrutura || []) {
       const nome = (item.nome || "").trim();
       if (!nome) continue;
-      const topicoIds = [];
+      // Resolve a disciplina da aula PELO CABEÇALHO ("DISCIPLINA: ...") ANTES de casar os
+      // tópicos, para que o casamento já nasça ancorado nela — sem isso um tópico de OUTRA
+      // disciplina com nome parecido "rouba" o vínculo (ex.: "Prescrição" do Penal casando
+      // dentro da aula de Civil). Mesma lição de acharTopicoDoBloco (estrutura.js).
       let disciplinaId = null;
-      for (const tn of item.topicos || []) {
-        const t = this.acharTopicoPorNome(tn);
-        if (t) { if (!topicoIds.includes(t.id)) topicoIds.push(t.id); if (!disciplinaId) disciplinaId = t.disciplinaId; }
-        else naoCasados.push(tn);
-      }
-      // Sem casar por tópico: tenta a disciplina indicada no plano (cabeçalho "DISCIPLINA: ...").
-      if (!disciplinaId && item.disciplina) {
+      if (item.disciplina) {
         const dn = item.disciplina.toLowerCase();
         const d = state.disciplinas.find((x) => (x.nome || "").toLowerCase() === dn)
           || state.disciplinas.find((x) => { const xn = (x.nome || "").toLowerCase(); return xn && (xn.includes(dn) || dn.includes(xn)); });
         disciplinaId = d ? d.id : null;
+      }
+      const topicoIds = [];
+      for (const tn of item.topicos || []) {
+        const t = this.acharTopicoPorNome(tn, { disciplinaId });
+        if (t) { if (!topicoIds.includes(t.id)) topicoIds.push(t.id); if (!disciplinaId) disciplinaId = t.disciplinaId; }
+        else naoCasados.push(tn);
       }
       state.aulas.push({ id: uid("aula"), nome, topicoIds, disciplinaId, disciplinaNome: item.disciplina || null, assuntos: item.topicos || [] });
       criadas++;
@@ -2265,6 +2268,11 @@ export const store = {
       if (!t.aliases.some((al) => al.toLowerCase() === m.assunto.toLowerCase())) t.aliases.push(m.assunto);
       for (const a of state.aulas) {
         if ((a.assuntos || []).some((asn) => (asn || "").toLowerCase() === m.assunto.toLowerCase())) {
+          // A IA casa por texto, sem saber a disciplina da aula — se a aula já tem uma
+          // disciplina conhecida, um match de OUTRA disciplina é recusado aqui (mesma
+          // vinculação errada que "Prescrição" Penal→Civil), mesmo que a alias já tenha sido
+          // registrada acima (útil se outra aula, sem disciplina definida, usar o mesmo termo).
+          if (a.disciplinaId && t.disciplinaId !== a.disciplinaId) continue;
           if (!Array.isArray(a.topicoIds)) a.topicoIds = [];
           if (!a.topicoIds.includes(t.id)) a.topicoIds.push(t.id);
           if (!a.disciplinaId) a.disciplinaId = t.disciplinaId;
@@ -4051,7 +4059,7 @@ export const store = {
     // para o caso de ter começado mas ainda não terminado).
     if (missaoId && concluirMissao) {
       const m = state.missoes.find((x) => x.id === missaoId);
-      if (m) m.concluida = true;
+      if (m) { m.concluida = true; m.concluidaEm = todayISO(); }
     }
     // Marcar o TÓPICO como finalizado ao registrar (botão explícito da tela) — usa o
     // mesmo campo `concluido` do toggle do edital.
@@ -4203,7 +4211,7 @@ export const store = {
       ind.lido = !ind.lido;
       ind.lidoEm = ind.lido ? nowISO() : null; // datetime p/ "leu N hoje" e histórico de leitura
       const m = state.missoes.find((mm) => mm.indicacaoId === id);
-      if (m) m.concluida = ind.lido;
+      if (m) { m.concluida = ind.lido; m.concluidaEm = ind.lido ? todayISO() : null; }
       commit();
     }
   },
@@ -4217,7 +4225,7 @@ export const store = {
       ind.lido = !!valor;
       ind.lidoEm = valor ? nowISO() : null;
       const m = state.missoes.find((mm) => mm.indicacaoId === ind.id);
-      if (m) m.concluida = !!valor;
+      if (m) { m.concluida = !!valor; m.concluidaEm = valor ? todayISO() : null; }
       n++;
     }
     if (n) commit();
@@ -4793,23 +4801,69 @@ export const store = {
     return iaProv.avaliarRecall(state.config, { topico: t ? t.nome : "", referencia: ref ? ref.texto : "", texto });
   },
   // Exportações a partir da revisão de tópico (brain-dump + feedback da IA), vinculadas ao tópico.
-  async gerarFlashcardsDeTopico(topicoId, texto, n = 5, dificuldade = "medio") {
+  // `contexto` opcional sobrescreve o nome do tópico no prompt (default: o nome do próprio tópico).
+  async gerarFlashcardsDeTopico(topicoId, texto, n = 5, dificuldade = "medio", contexto = null) {
     const t = state.topicos.find((x) => x.id === topicoId);
     const cards = await iaProv.gerarFlashcards(state.config, {
-      texto, contexto: t ? t.nome : "geral", n,
+      texto, contexto: contexto || (t ? t.nome : "geral"), n,
       ...iaExtras(state, { topicoId, dificuldade }),
     });
     const fonte = { tipo: "revisao", titulo: t ? t.nome : "Revisão de tópico" };
     return cards.map((c) => this.addFlashcard({ ...c, topicoId, fonte, selo: "amarelo" }));
   },
-  async gerarQuestoesDeTopico(topicoId, texto, n = 3, dificuldade = "medio") {
+  async gerarQuestoesDeTopico(topicoId, texto, n = 3, dificuldade = "medio", contexto = null) {
     const t = state.topicos.find((x) => x.id === topicoId);
     const qs = await iaProv.gerarQuestoes(state.config, {
-      texto, contexto: t ? t.nome : "geral", n,
+      texto, contexto: contexto || (t ? t.nome : "geral"), n,
       ...iaExtras(state, { topicoId, dificuldade }),
     });
     const fonte = { tipo: "revisao", titulo: t ? t.nome : "Revisão de tópico" };
     return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte }));
+  },
+  // O prompt da IA CORTA o texto num limite de caracteres (ver corta() em ia-provider.js —
+  // 6000 p/ questões/flashcards, 8000 p/ mapa mental) — se só concatenássemos os tópicos e
+  // deixássemos o corte acontecer no fim, o PRIMEIRO tópico comeria o limite inteiro. E MESMO
+  // sem cortar nada, medido na prática (2 tópicos curtos, bem dentro do limite): pedir "N
+  // questões" de um texto com 2 assuntos NÃO garante que a IA distribua — ela pode gerar as N
+  // inteiras só do assunto que "rendeu mais". A única forma confiável de garantir que TODO
+  // tópico marcado realmente vira conteúdo gerado é decidir a divisão DETERMINISTICAMENTE
+  // aqui (nesse código, não confiando no modelo) — cada tópico gera sua FATIA de N, numa
+  // chamada de IA própria com o conteúdo dele INTEIRO (sem concatenar, então sem risco de
+  // corte por outro tópico), e o resultado final é a soma de todas — ainda assim UM lote só do
+  // ponto de vista do usuário, com cada item já vinculado ao tópico certo (não só ao principal).
+  // Pública (usada também fora do store, ex.: documentos.js, ao gerar de vários blocos de um
+  // material) — divide N o mais igual possível entre `partes` fatias.
+  distribuirN(n, partes) {
+    const total = Math.max(0, n | 0);
+    const base = Math.floor(total / partes);
+    let resto = total % partes;
+    return Array.from({ length: partes }, () => { const extra = resto > 0 ? 1 : 0; if (resto > 0) resto--; return base + extra; });
+  },
+  async gerarFlashcardsDeTopicos(topicoId, texto, extraTopicoIds = [], n = 5, dificuldade = "medio") {
+    if (!extraTopicoIds.length) return this.gerarFlashcardsDeTopico(topicoId, texto, n, dificuldade);
+    const extras = extraTopicoIds.map((id) => state.topicos.find((x) => x.id === id)).filter(Boolean);
+    const fatias = this.distribuirN(n, 1 + extras.length);
+    const resultados = [];
+    if (fatias[0]) resultados.push(...await this.gerarFlashcardsDeTopico(topicoId, texto, fatias[0], dificuldade));
+    for (let i = 0; i < extras.length; i++) {
+      if (!fatias[i + 1]) continue;
+      const t = extras[i];
+      resultados.push(...await this.gerarFlashcardsDeTopico(t.id, `Tópico: ${t.nome}\n${this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
+    }
+    return resultados;
+  },
+  async gerarQuestoesDeTopicos(topicoId, texto, extraTopicoIds = [], n = 3, dificuldade = "medio") {
+    if (!extraTopicoIds.length) return this.gerarQuestoesDeTopico(topicoId, texto, n, dificuldade);
+    const extras = extraTopicoIds.map((id) => state.topicos.find((x) => x.id === id)).filter(Boolean);
+    const fatias = this.distribuirN(n, 1 + extras.length);
+    const resultados = [];
+    if (fatias[0]) resultados.push(...await this.gerarQuestoesDeTopico(topicoId, texto, fatias[0], dificuldade));
+    for (let i = 0; i < extras.length; i++) {
+      if (!fatias[i + 1]) continue;
+      const t = extras[i];
+      resultados.push(...await this.gerarQuestoesDeTopico(t.id, `Tópico: ${t.nome}\n${this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
+    }
+    return resultados;
   },
   // Tópicos cuja revisão venceu (proxima <= hoje), prontos para revisar. Mais atrasados primeiro.
   revisoesTopicoVencidas() {
@@ -5873,6 +5927,10 @@ export const store = {
     const m = state.missoes.find((x) => x.id === id);
     if (m) {
       m.concluida = !m.concluida;
+      // Data em que foi concluída (só o dia, não hora) — usada para as tarefas AVULSAS
+      // continuarem visíveis em "Hoje" no dia em que foram feitas, e sumirem no dia seguinte
+      // (igual às tarefas datadas, que somem por só existirem no dia marcado).
+      m.concluidaEm = m.concluida ? todayISO() : null;
       // sincroniza com a indicação de leitura (lei seca / jurisprudência), se vinculada
       if (m.indicacaoId) {
         const ind = state.indicacoes.find((i) => i.id === m.indicacaoId);
@@ -6082,6 +6140,28 @@ export const store = {
       }));
     return [...rot, ...datadas];
   },
+  // Tarefas AVULSAS (sem dia marcado) para o "Plano de hoje": as ainda PENDENTES (sempre) +
+  // as que foram concluídas HOJE (ficam visíveis só no dia em que você as fez — igual uma
+  // tarefa datada, que só aparece no dia marcado; no dia seguinte, some). Mesmo formato de
+  // tarefasDoDia, para reusar o mesmo card. Elas nunca apareciam em "Hoje" porque tarefasDoDia
+  // só pega `m.data === dataISO`, e avulsa é justamente a missão SEM `data`.
+  tarefasAvulsasHoje() {
+    const hoje = todayISO();
+    return state.missoes
+      .filter((m) => !m.data && (!m.concluida || m.concluidaEm === hoje))
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))
+      .map((m) => ({
+        tipo: "missao",
+        id: m.id,
+        titulo: m.titulo,
+        topicoId: m.topicoId,
+        categoria: m.categoria,
+        comentario: m.comentario || "",
+        estimMin: m.estimMin || 0,
+        concluida: m.concluida,
+        data: null,
+      }));
+  },
 
   // ---------- redações / correção de texto ----------
   // Gera uma pergunta discursiva (ou tema de redação) pela IA, a partir de um tópico,
@@ -6247,9 +6327,13 @@ export const store = {
   // tópico ("todos" ou um topicoId). Devolve as seções {rotulo, html, texto} encontradas.
   // Fonte ÚNICA de coleta — usada tanto pela compilação offline (HTML) quanto pela síntese
   // por IA (texto puro). NÃO inventa: só reúne o que já é do usuário.
+  // `escopo` aceita "todos", UM topicoId, ou um ARRAY de topicoIds (gera considerando vários
+  // tópicos de uma vez — sem cap de tamanho: cada seção reúne o texto INTEIRO das fontes que
+  // cobrem qualquer um dos tópicos do escopo, não só o primeiro).
   _coletarSecoesResumo(fontes, escopo) {
     const escH = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const noEscopo = (topId) => escopo === "todos" || topId === escopo;
+    const escopoArr = Array.isArray(escopo) ? escopo : null;
+    const noEscopo = (topId) => escopo === "todos" || (escopoArr ? escopoArr.includes(topId) : topId === escopo);
     const secao = (fonte) => {
       if (fonte === "material") {
         const docs = state.documentos.filter((d) => docTops(d).some(noEscopo) && (d.texto || "").trim());
@@ -6306,10 +6390,12 @@ export const store = {
       const d = state.disciplinas.find((x) => x.id === t.disciplinaId);
       return `${d ? d.nome + " · " : ""}${t.nome}`;
     };
+    // escopo: "todos" | 1 topicoId | array de topicoIds (gera considerando vários de uma vez).
+    const nomesEscopo = () => (Array.isArray(escopo) ? escopo : [escopo]).map(nomeTop).filter(Boolean).join(" + ");
     const partes = this._coletarSecoesResumo(fontes, escopo);
     if (!partes.length) return null;
-    const topicoId = escopo !== "todos" ? escopo : null;
-    const titulo = "Resumo compilado" + (escopo !== "todos" ? ` — ${nomeTop(escopo)}` : "");
+    const topicoId = escopo === "todos" ? null : Array.isArray(escopo) ? escopo[0] : escopo;
+    const titulo = "Resumo compilado" + (escopo !== "todos" ? ` — ${nomesEscopo()}` : "");
     const html = partes.map((p) => `<h3>${escH(p.rotulo)}</h3>${p.html}`).join("");
     return this.addResumo({ titulo, conteudoHTML: html, topicoId, origem: { tipo: "compilado", fonte: (fontes || []).join("+") } });
   },
@@ -6328,14 +6414,17 @@ export const store = {
       const d = state.disciplinas.find((x) => x.id === t.disciplinaId);
       return `${d ? d.nome + " · " : ""}${t.nome}`;
     };
+    const nomesEscopo = () => (Array.isArray(escopo) ? escopo : [escopo]).map(nomeTop).filter(Boolean).join(" + ");
     const partes = this._coletarSecoesResumo(fontes, escopo);
     if (!partes.length) return null;
+    // Texto bruto SEM cortar: cada seção já reuniu o conteúdo INTEIRO de cada tópico do
+    // escopo (ver _coletarSecoesResumo) — com 2+ tópicos, todos entram, não só o primeiro.
     const textoBruto = partes.map((p) => `## ${p.rotulo}\n${p.texto}`).join("\n\n");
-    const topicoId = escopo !== "todos" ? escopo : null;
-    const contexto = topicoId ? nomeContexto(state, topicoId) : (state.concurso ? `${state.concurso.banca || ""} ${state.concurso.cargo || ""}`.trim() || "geral" : "geral");
+    const topicoId = escopo === "todos" ? null : Array.isArray(escopo) ? escopo[0] : escopo;
+    const contexto = topicoId ? nomesEscopo() : (state.concurso ? `${state.concurso.banca || ""} ${state.concurso.cargo || ""}`.trim() || "geral" : "geral");
     const conteudoHTML = await iaProv.sintetizarResumo(state.config, { texto: textoBruto, contexto });
     if (!conteudoHTML || !conteudoHTML.trim()) return null;
-    const titulo = "Resumo sintetizado (IA)" + (escopo !== "todos" ? ` — ${nomeTop(escopo)}` : "");
+    const titulo = "Resumo sintetizado (IA)" + (escopo !== "todos" ? ` — ${nomesEscopo()}` : "");
     return this.addResumo({ titulo, conteudoHTML, topicoId, origem: { tipo: "ia-sintese", fonte: (fontes || []).join("+") } });
   },
   editarResumo(id, patch) {
@@ -6509,14 +6598,43 @@ export const store = {
     });
     return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId: m.topicoId, fonte }));
   },
+  // Conteúdo COMPLETO de um tópico (materiais que o cobrem + resumos vinculados), SEM cortar
+  // — usado sempre que a geração precisa do tópico inteiro, não só o começo. Base para
+  // gerarMapaMentalDeTopico(s) e para combinar múltiplos tópicos numa só geração.
+  conteudoDeTopico(topicoId) {
+    const t = state.topicos.find((x) => x.id === topicoId);
+    if (!t) return "";
+    const mats = state.documentos.filter((d) => docCobre(d, topicoId)).map((d) => d.texto).filter(Boolean);
+    const res = state.resumos.filter((r) => r.topicoId === topicoId).map((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ")).filter(Boolean);
+    return [...mats, ...res].join("\n\n").trim() || t.nome;
+  },
   async gerarMapaMentalDeTopico(topicoId) {
     const t = state.topicos.find((x) => x.id === topicoId);
     if (!t) return null;
-    const mats = state.documentos.filter((d) => docCobre(d, topicoId)).map((d) => d.texto).filter(Boolean);
-    const res = state.resumos.filter((r) => r.topicoId === topicoId).map((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ")).filter(Boolean);
-    const texto = [...mats, ...res].join("\n\n").trim() || t.nome;
+    const texto = this.conteudoDeTopico(topicoId);
     const arv = await iaProv.gerarMapaMental(state.config, { texto, contexto: nomeContexto(state, topicoId) });
     return this.addMapaMental({ titulo: arv.titulo, arvore: arv, topicoId, origem: "topico" });
+  },
+  // Mesma coisa, mas para VÁRIOS tópicos de uma vez: junta o conteúdo INTEIRO de cada um
+  // (rotulado, sem cortar nenhum) num só texto e gera UM mapa combinando todos. O mapa fica
+  // vinculado ao PRIMEIRO tópico da lista (não dá para vincular a vários ao mesmo tempo).
+  async gerarMapaMentalDeTopicos(topicoIds) {
+    const ids = (topicoIds || []).filter(Boolean);
+    if (!ids.length) return null;
+    if (ids.length === 1) return this.gerarMapaMentalDeTopico(ids[0]);
+    const nomes = [];
+    const blocos = ids.map((id) => {
+      const t = state.topicos.find((x) => x.id === id);
+      if (t) nomes.push(t.nome);
+      return `Tópico: ${t ? t.nome : "?"}\n${this.conteudoDeTopico(id)}`;
+    });
+    // Fatia igual do orçamento por tópico — sem isso, se a soma passar dos 8000 chars que o
+    // ia-provider corta, o 1º tópico da lista comeria o limite inteiro e os outros sumiriam.
+    const cota = Math.floor(8000 / blocos.length);
+    const texto = blocos.map((b) => (b.length > cota ? b.slice(0, cota) + "\n[...]" : b)).join("\n\n---\n\n");
+    const contexto = nomes.join(" + ") || nomeContexto(state, ids[0]);
+    const arv = await iaProv.gerarMapaMental(state.config, { texto, contexto });
+    return this.addMapaMental({ titulo: arv.titulo, arvore: arv, topicoId: ids[0], origem: "topico" });
   },
   async gerarMapaMentalDeMaterial(docId, bloco = null) {
     const d = state.documentos.find((x) => x.id === docId);
@@ -6680,17 +6798,37 @@ export const store = {
     }
     return out;
   },
-  // Resolve o escopo escolhido na UI. Dois modos:
+  // Resolve o escopo escolhido na UI. Três modos:
   //  - "material": 1 material (com bloco opcional) → delega ao ctxDeDoc (fonte/topicoId prontos).
+  //  - "material-multi": o MESMO material, vários subtópicos (blocos) do índice marcados de
+  //    uma vez — cada gerador por-contagem (flashcards/questões/CE) chama o gerador de UM bloco
+  //    várias vezes com a quantidade dividida entre os blocos (garante que todo bloco marcado
+  //    entra de fato, não só o primeiro — ver distribuirN); mapa/resumo combinam o texto todo.
   //  - "agregado": vários tópicos/materiais → soma os textos (só blocos casados quando há índice)
   //    + resumos dos tópicos; topicoId = tópico único (ou null se vários).
-  resolverEscopo({ topicoIds = [], aulaId = null, docId = null, bi = null } = {}) {
+  resolverEscopo({ topicoIds = [], aulaId = null, docId = null, bi = null, bis = null } = {}) {
     const ids = (topicoIds || []).filter(Boolean);
-    // Modo material: um bloco específico, ou um material inteiro escolhido diretamente.
+    // Modo material: um bloco específico, vários blocos, ou um material inteiro.
     if (docId) {
       const d = state.documentos.find((x) => x.id === docId);
       if (d) {
-        const bloco = bi != null && bi >= 0 && d.estrutura ? d.estrutura.blocos[bi] || null : null;
+        const bisArr = Array.isArray(bis) ? bis.filter((i) => i != null && i >= 0) : [];
+        if (bisArr.length > 1 && d.estrutura) {
+          const blocos = bisArr.map((i) => d.estrutura.blocos[i]).filter(Boolean);
+          if (blocos.length > 1) {
+            const ctxs = blocos.map((b) => ctxDeDoc(d, b));
+            const texto = ctxs.map((c) => c.texto).filter(Boolean).join("\n\n---\n\n");
+            const topsUnicos = [...new Set(ctxs.map((c) => c.topicoId).filter(Boolean))];
+            const contexto = blocos.map((b) => `${b.numero || ""} ${b.titulo}`.trim()).filter(Boolean).join(" + ") || d.titulo;
+            return {
+              texto, topicoId: topsUnicos.length === 1 ? topsUnicos[0] : null,
+              fonte: { tipo: "material", titulo: d.titulo }, banca: (ctxs[0] && ctxs[0].banca) || null,
+              contexto, docIds: [d.id], bloco: null, blocos, modo: "material-multi",
+            };
+          }
+        }
+        const biUnico = bisArr.length === 1 ? bisArr[0] : bi;
+        const bloco = biUnico != null && biUnico >= 0 && d.estrutura ? d.estrutura.blocos[biUnico] || null : null;
         const ctx = ctxDeDoc(d, bloco);
         return { texto: ctx.texto, topicoId: ctx.topicoId, fonte: ctx.fonte, banca: ctx.banca, contexto: ctx.fonte.titulo, docIds: [d.id], bloco, modo: "material" };
       }
@@ -6714,11 +6852,23 @@ export const store = {
     return { texto, topicoId, fonte, contexto, docIds: mats.map((d) => d.id), bloco: null, modo: "agregado" };
   },
 
-  // Geradores por ESCOPO. modo "material" delega ao caminho *DeDoc já provado; "agregado"
+  // Geradores por ESCOPO. modo "material" delega ao caminho *DeDoc já provado; "material-multi"
+  // (vários subtópicos do MESMO material) divide a quantidade pedida entre os blocos marcados —
+  // MESMO raciocínio de gerarQuestoesDeTopicos: um só texto combinado com "gere N" não garante
+  // que a IA cubra todos os blocos, então a divisão é decidida aqui, não pelo modelo. "agregado"
   // chama a IA com o texto somado e vincula fonte/topicoId do escopo a cada item.
   async gerarFlashcardsDeEscopo(escopo, n = 6, dificuldade = "medio") {
     if (!escopo || !escopo.texto) return [];
     if (escopo.modo === "material") return this.gerarFlashcardsDeDoc(escopo.docIds[0], n, dificuldade, escopo.bloco || null);
+    if (escopo.modo === "material-multi") {
+      const fatias = this.distribuirN(n, escopo.blocos.length);
+      const resultados = [];
+      for (let i = 0; i < escopo.blocos.length; i++) {
+        if (!fatias[i]) continue;
+        resultados.push(...await this.gerarFlashcardsDeDoc(escopo.docIds[0], fatias[i], dificuldade, escopo.blocos[i]));
+      }
+      return resultados;
+    }
     const cards = await iaProv.gerarFlashcards(state.config, {
       texto: escopo.texto, contexto: escopo.contexto || "geral", n,
       ...iaExtras(state, { topicoId: escopo.topicoId, dificuldade }),
@@ -6728,6 +6878,15 @@ export const store = {
   async gerarQuestoesDeEscopo(escopo, n = 5, dificuldade = "medio") {
     if (!escopo || !escopo.texto) return [];
     if (escopo.modo === "material") return this.gerarQuestoesDeDoc(escopo.docIds[0], n, dificuldade, escopo.bloco || null);
+    if (escopo.modo === "material-multi") {
+      const fatias = this.distribuirN(n, escopo.blocos.length);
+      const resultados = [];
+      for (let i = 0; i < escopo.blocos.length; i++) {
+        if (!fatias[i]) continue;
+        resultados.push(...await this.gerarQuestoesDeDoc(escopo.docIds[0], fatias[i], dificuldade, escopo.blocos[i]));
+      }
+      return resultados;
+    }
     const qs = await iaProv.gerarQuestoes(state.config, {
       texto: escopo.texto, contexto: escopo.contexto || "geral", n,
       ...iaExtras(state, { topicoId: escopo.topicoId, dificuldade }),
@@ -6737,25 +6896,48 @@ export const store = {
   async gerarQuestoesCEDeEscopo(escopo, n = 6, dificuldade = "medio") {
     if (!escopo || !escopo.texto) return [];
     if (escopo.modo === "material") return this.gerarQuestoesCEDeDoc(escopo.docIds[0], n, dificuldade, escopo.bloco || null);
+    if (escopo.modo === "material-multi") {
+      const fatias = this.distribuirN(n, escopo.blocos.length);
+      const resultados = [];
+      for (let i = 0; i < escopo.blocos.length; i++) {
+        if (!fatias[i]) continue;
+        resultados.push(...await this.gerarQuestoesCEDeDoc(escopo.docIds[0], fatias[i], dificuldade, escopo.blocos[i]));
+      }
+      return resultados;
+    }
     const itens = await iaProv.gerarQuestoesCE(state.config, {
       texto: escopo.texto, contexto: escopo.contexto || "geral", n,
       ...iaExtras(state, { topicoId: escopo.topicoId, dificuldade }),
     });
     return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId: escopo.topicoId, fonte: escopo.fonte }));
   },
+  // Mapa mental é UMA árvore só (não tem "quantidade" pra dividir) — o texto combinado de
+  // material-multi (cada bloco já rotulado, ver resolverEscopo) cai direto aqui.
   async gerarMapaMentalDeEscopo(escopo) {
     if (!escopo || !escopo.texto) return null;
     if (escopo.modo === "material") return this.gerarMapaMentalDeMaterial(escopo.docIds[0], escopo.bloco || null);
     const arv = await iaProv.gerarMapaMental(state.config, { texto: escopo.texto, contexto: escopo.contexto || "geral" });
     return this.addMapaMental({ titulo: arv.titulo || escopo.contexto, arvore: arv, topicoId: escopo.topicoId || null, origem: "topico" });
   },
-  // Extração (best-effort): só faz sentido para 1 material (com/sem bloco). Multi-material → [].
+  // Extração (best-effort): 1 material, com bloco/blocos ou inteiro. Multi-material → [].
   async extrairQuestoesDeEscopo(escopo) {
-    if (escopo && escopo.modo === "material") return this.extrairQuestoesDeDoc(escopo.docIds[0], escopo.bloco || null);
+    if (!escopo) return [];
+    if (escopo.modo === "material") return this.extrairQuestoesDeDoc(escopo.docIds[0], escopo.bloco || null);
+    if (escopo.modo === "material-multi") {
+      const out = [];
+      for (const b of escopo.blocos) out.push(...await this.extrairQuestoesDeDoc(escopo.docIds[0], b));
+      return out;
+    }
     return [];
   },
   async extrairQuestoesCEDeEscopo(escopo) {
-    if (escopo && escopo.modo === "material") return this.extrairQuestoesCEDeDoc(escopo.docIds[0], escopo.bloco || null);
+    if (!escopo) return [];
+    if (escopo.modo === "material") return this.extrairQuestoesCEDeDoc(escopo.docIds[0], escopo.bloco || null);
+    if (escopo.modo === "material-multi") {
+      const out = [];
+      for (const b of escopo.blocos) out.push(...await this.extrairQuestoesCEDeDoc(escopo.docIds[0], b));
+      return out;
+    }
     return [];
   },
   // Sintetiza UM resumo a partir do escopo (mesma IA do gerarResumoSinteseIA, sobre o
@@ -6858,11 +7040,23 @@ export const store = {
 
   // Acha um tópico pelo nome (casamento flexível) — usado para vincular as ações
   // sugeridas pelo mentor aos tópicos reais do edital.
-  acharTopicoPorNome(nome) {
+  // `disciplinaId` (opcional) ancora o casamento na disciplina conhecida (ex.: cabeçalho da
+  // aula do cursinho): tenta exato→contém DENTRO dela primeiro; só sai dela para um match
+  // EXATO (nunca "contém", que é o que causava colisão por 1 palavra em comum — mesmo
+  // problema documentado em acharTopicoDoBloco/estrutura.js, ver o comentário lá).
+  acharTopicoPorNome(nome, { disciplinaId } = {}) {
     const alvo = String(nome || "").trim().toLowerCase();
     if (!alvo) return null;
     // Todos os nomes pelos quais o tópico é conhecido: o nome + os aliases (Fase 2).
     const nomes = (t) => [t.nome, ...(t.aliases || [])].map((s) => String(s).toLowerCase());
+    if (disciplinaId) {
+      const daCasa = state.topicos.filter((t) => t.disciplinaId === disciplinaId);
+      const exatoCasa = daCasa.find((t) => nomes(t).includes(alvo));
+      if (exatoCasa) return exatoCasa;
+      const contemCasa = daCasa.find((t) => nomes(t).some((n) => n.includes(alvo) || alvo.includes(n)));
+      if (contemCasa) return contemCasa;
+      return state.topicos.find((t) => t.disciplinaId !== disciplinaId && nomes(t).includes(alvo)) || null;
+    }
     return (
       // 1) match EXATO no nome ou em algum alias
       state.topicos.find((t) => nomes(t).includes(alvo)) ||

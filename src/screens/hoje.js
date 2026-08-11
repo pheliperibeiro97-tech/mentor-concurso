@@ -93,13 +93,22 @@ export default function renderHoje(root, app) {
   // sugerido pelo Mentor vive apenas no card-herói acima — repeti-lo aqui era duplicação
   // na mesma viewport (achado P-05 da auditoria). Contadores contam só o que resta.
   const tarefasDia = store.tarefasDoDia(todayISO());
+  // Tarefas AVULSAS (sem dia marcado): antes só apareciam em Planejamento → Tarefas avulsas,
+  // nunca em "Hoje" — mesmo sendo, por definição, coisa que dá pra fazer em qualquer dia,
+  // inclusive hoje. Entram como um bloco à parte (não contam nos contadores de "hoje", que
+  // seguem só o que foi planejado PARA hoje). As PENDENTES ficam sempre; as que você concluiu
+  // aparecem só no dia em que concluiu (igual uma tarefa datada, que só existe no dia marcado).
+  const tarefasAvulsas = store.tarefasAvulsasHoje();
+  const avulsasPendentes = tarefasAvulsas.filter((t) => !t.concluida).length;
+  const avulsasFeitasHoje = tarefasAvulsas.length - avulsasPendentes;
   const nPlano = tarefasDia.length;
   const minPlano = tarefasDia.reduce((a, x) => a + (x.estimMin || 0), 0);
   const pbTask = (it) => {
     const cor = it.tipo === "rotina" ? "#f472b6" : "#818cf8";
+    const tag = it.tipo === "rotina" ? "Rotina" : it.data ? "Tarefa" : "Avulsa";
     return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${!it.concluida && (it.topicoId || it.estimMin) ? ` data-action="focar-topico"${it.topicoId ? ` data-top="${it.topicoId}"` : ""} data-min="${it.estimMin || ""}"${it.tipo === "missao" ? ` data-missao="${it.id}"` : ""}` : ""}>
         <span class="pb-stripe"></span>
-        <div class="pb-top"><span class="pb-tag">${it.tipo === "rotina" ? "Rotina" : "Tarefa"}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : "Você planejou"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}</div>
+        <div class="pb-top"><span class="pb-tag">${tag}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : it.data ? "Você planejou" : "Sem dia marcado"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}</div>
         <h4><span class="pb-chk" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}"${it.concluida ? " data-on" : ""}></span>${esc(it.titulo)}</h4>
       </div>`;
   };
@@ -112,6 +121,8 @@ export default function renderHoje(root, app) {
           <span class="pb-add-pl">${icone("plus")}</span><span class="pb-add-t">Adicionar ao dia</span><span class="pb-add-m">Outra matéria, tarefa ou sessão</span>
         </button>
       </div>
+      ${tarefasAvulsas.length ? `<div class="plano-avulsas-h muted small">${icone("clipboard-list")} ${plural(avulsasPendentes, "tarefa avulsa pendente", "tarefas avulsas pendentes")}${avulsasFeitasHoje ? ` · ${plural(avulsasFeitasHoje, "concluída hoje", "concluídas hoje")}` : ""} (sem dia marcado)</div>
+      <div class="plano-blocos">${tarefasAvulsas.map(pbTask).join("")}</div>` : ""}
     </section>`;
 
   // Recomposição visual (gap nº1): o card de FOCO é o herói (topo) e é o ÚNICO lugar do
@@ -506,7 +517,9 @@ function rotuloTopico(st, t) {
 }
 
 // Seletor de foco: lista as DISCIPLINAS e, sob cada uma, os TÓPICOS — o usuário escolhe
-// (não é sugestão automática). Reaproveita a janela modal premium (abrirJanela).
+// (não é sugestão automática). Reaproveita a janela modal premium (abrirJanela). Cada
+// disciplina é um <details> recolhido (evita todos os tópicos de todas as disciplinas
+// aparecendo de uma vez); com muitos tópicos, ganha busca que auto-abre quem casa.
 function abrirSeletorTopico(store, onPick) {
   const st = store.get();
   const grupos = st.disciplinas
@@ -514,15 +527,17 @@ function abrirSeletorTopico(store, onPick) {
     .filter((g) => g.tops.length);
   const soltos = ordenarTopicosPorBase(st, st.topicos.filter((t) => !st.disciplinas.some((d) => d.id === t.disciplinaId)));
   if (soltos.length) grupos.push({ d: { id: "", nome: "Sem disciplina" }, tops: soltos });
+  const totalTop = grupos.reduce((n, g) => n + g.tops.length, 0);
   const corpo = `<div class="seltop">
+    ${totalTop > 12 ? `<input type="search" class="seltop-busca busca-input" placeholder="Buscar tópico…" aria-label="Buscar tópico" />` : ""}
     ${grupos
       .map(
-        ({ d, tops }) => `<div class="seltop-disc">
-          <div class="seltop-disc-nome"><span class="disc-cor" style="background:${d.id ? store.corDisciplina(d.id) : "var(--border-strong)"}"></span>${esc(d.nome)}</div>
+        ({ d, tops }) => `<details class="seltop-disc">
+          <summary class="seltop-disc-nome"><span class="disc-cor" style="background:${d.id ? store.corDisciplina(d.id) : "var(--border-strong)"}"></span>${esc(d.nome)}</summary>
           <div class="seltop-tops">
-            ${tops.map((t) => `<button class="seltop-top" data-top="${t.id}">${esc(t.nome)}</button>`).join("")}
+            ${tops.map((t) => `<button class="seltop-top" data-top="${t.id}" data-busca="${esc(t.nome.toLowerCase())}">${esc(t.nome)}</button>`).join("")}
           </div>
-        </div>`
+        </details>`
       )
       .join("")}
   </div>`;
@@ -536,6 +551,16 @@ function abrirSeletorTopico(store, onPick) {
           fechar();
         })
       );
+      el.querySelector(".seltop-busca")?.addEventListener("input", (e) => {
+        const t = e.target.value.trim().toLowerCase();
+        el.querySelectorAll(".seltop-disc").forEach((g) => {
+          const itens = [...g.querySelectorAll("[data-top]")];
+          if (!t) { itens.forEach((it) => { it.hidden = false; }); g.hidden = false; g.open = false; return; }
+          const temMatch = itens.some((it) => { const casa = it.getAttribute("data-busca").includes(t); it.hidden = !casa; return casa; });
+          g.hidden = !temMatch;
+          if (temMatch) g.open = true;
+        });
+      });
     },
   });
 }

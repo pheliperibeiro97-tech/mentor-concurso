@@ -1442,6 +1442,27 @@ body.onboarding #crono-fab { display: none !important; }
 .cf-reg svg { width: 16px; height: 16px; }
 @media (max-width: 560px) { .cf { right: 22px; bottom: 146px; } .cf-pop { width: calc(100vw - 24px); } }
 
+/* Tela cheia do cronômetro: fundo desfocado + relógio centralizado (independente do PiP/flutuar,
+   funciona em qualquer navegador/aparelho). */
+.cf-full { position: fixed; inset: 0; z-index: var(--z-tooltip); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px; text-align: center;
+  background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(18px) saturate(1.1); -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  animation: modal-in .16s ease; }
+.cf-full[hidden] { display: none; }
+.cf-full-fechar { position: absolute; top: 22px; right: 24px; width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2); cursor: pointer; display: grid; place-items: center; box-shadow: var(--elev-2); }
+.cf-full-fechar:hover { color: var(--text); border-color: var(--primary); }
+.cf-full-fechar svg { width: 18px; height: 18px; }
+.cf-full-big { font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; font-weight: var(--fw-black);
+  font-size: clamp(3.2rem, 12vw, 7rem); line-height: 1; font-variant-numeric: tabular-nums; color: var(--crono-cor, var(--primary)); }
+.cf-full-cap { font-size: 1rem; color: var(--muted); }
+.cf-full-ctrl { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+.cf-full-ctrl .cf-play { width: 64px; height: 64px; }
+.cf-full-ctrl .cf-play svg { width: 28px; height: 28px; }
+.cf-full-ctrl .cf-sec { width: 48px; height: 48px; }
+.cf-full-ctrl .cf-sec svg { width: 20px; height: 20px; }
+@media (max-width: 560px) { .cf-full-fechar { top: 16px; right: 16px; } }
+
 /* Relógio flutuante: "pill" arrastável (padrão) + modo "foco" (tela cheia). Montado fora do #app. */
 /* CSS do antigo cronômetro-pill flutuante (classe .crono-fab, modos pill/focus, arrastável)
    REMOVIDO — o widget atual é #crono-fab.cf (ver bloco .cf acima), e a janela flutuante usa
@@ -1806,9 +1827,20 @@ body.onboarding #crono-fab { display: none !important; }
 .ft-painel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: var(--fs-sm); }
 .ft-painel input[type="checkbox"] { width: auto; margin: 0; }
 .ft-todos { font-weight: var(--fw-medium); border-bottom: 1px solid var(--border); padding-bottom: 8px !important; margin-bottom: 6px; }
-.ft-grupo { margin: 8px 0; }
-.ft-disc { margin-top: 6px; }
+.ft-busca { margin-bottom: 6px; }
+/* Disciplina = <details> recolhido (só abre sozinho quando já tem tópico marcado dentro) —
+   evitar TODAS as disciplinas expandidas de uma vez era a poluição visual reclamada. */
+.ft-grupo { margin: 2px 0; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
+.ft-grupo:last-child { border-bottom: 0; }
+.ft-grupo[hidden] { display: none; }
+.ft-disc-h { list-style: none; cursor: pointer; font-size: var(--fs-sm); padding: 6px 0; user-select: none; display: flex; align-items: center; gap: 6px; }
+.ft-disc-h::-webkit-details-marker { display: none; }
+.ft-disc-h::before { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform var(--dur-1); flex: none; }
+.ft-grupo[open] > .ft-disc-h::before { transform: rotate(45deg); }
+.ft-disc { padding-left: 20px !important; font-weight: var(--fw-medium); }
 .ft-top { padding-left: 24px !important; color: var(--muted); }
+.ft-top[hidden] { display: none; }
 /* Revisão espaçada da memória (Lei Seca / Jurisprudência) */
 .ls-rev { margin: 8px 0 2px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .ls-rev-due { background: var(--warn-soft, rgba(234,179,8,0.12)); border: 1px solid rgba(234,179,8,0.4); border-radius: 8px; padding: 8px 12px; }
@@ -1890,6 +1922,8 @@ details.ajuda-sec[open] > summary { border-bottom: 1px solid var(--borda, #e5e7e
 .nivel-fácil, .nivel-facil { background: var(--tint-green-bg); color: var(--ink-verde); }
 .nivel-média, .nivel-media { background: #fef9c3; color: #a16207; }
 .nivel-difícil, .nivel-dificil { background: #fee2e2; color: var(--ink-vermelho); }
+.nivel-muito-difícil, .nivel-muito-dificil { background: #fecaca; color: #991b1b; }
+.nivel-avançada, .nivel-avancada { background: #ede9fe; color: #6d28d9; }
 .questao-alts { display: flex; flex-direction: column; gap: 8px; }
 .alt { display: flex; gap: 10px; align-items: center; padding: 12px 12px; border: 1px solid var(--border);
   border-radius: 8px; background: var(--surface); text-align: left; width: 100%; cursor: default; font-size: var(--fs-base); }
@@ -2394,9 +2428,22 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .fq-front .fq-q::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
 .fq-back { transform: rotateY(180deg); }
 .fq-tags { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; position: absolute; top: 20px; left: 0; right: 0; }
+.fq-tags[hidden] { display: none; }
 .fq-tag { font-size: var(--fs-2xs); font-weight: var(--fw-bold); letter-spacing: .03em; text-transform: uppercase; padding: 4px 12px; border-radius: var(--radius-pill);
   color: var(--primary-d); background: var(--primary-soft); }
 .fq-tag-ce { color: var(--accent-d); background: var(--accent-soft); }
+/* Nome do tópico como TAG: pode ser longo ("Disciplina · Tópico") — trunca por padrão e
+   expande no clique (poluição visual reclamada quando ficava sempre por extenso). */
+button.fq-tag-topico { border: 0; cursor: pointer; font: inherit; letter-spacing: .03em; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.fq-tag-topico.expandido { max-width: none; white-space: normal; text-align: left; }
+/* Barra que envolve as tags do cabeçalho do foco + o botão de ocultar tudo. */
+.fq-tags-bar { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
+.fq-qcard .fq-tags-bar { position: static; }
+.fq-tags-bar .fq-tags { flex: 1; justify-content: flex-start; }
+.fq-tags-toggle { flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); background: transparent;
+  color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.fq-tags-toggle:hover { border-color: var(--primary); color: var(--primary-d); }
+.fq-tags-toggle .ico { width: 13px; height: 13px; }
 .fq-q { font-size: clamp(1.5rem, 3.4vw, 2.15rem); font-weight: var(--fw-semibold); line-height: 1.25; letter-spacing: -0.02em; color: var(--text); white-space: pre-wrap; max-width: 30ch; }
 .fq-q-sm { font-size: clamp(1.15rem, 2.4vw, 1.4rem); margin: 6px 0 2px; }
 .fq-mostrar { display: inline-flex; align-items: center; gap: 8px; padding: 12px 26px; border-radius: var(--radius-pill); border: none; cursor: pointer;
@@ -2461,6 +2508,12 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .fq-qalts { display: flex; flex-direction: column; gap: 10px; }
 .fq-qalts.ce { flex-direction: row; gap: 12px; }
 .fq-qalts.ce > * { flex: 1; justify-content: center; font-weight: var(--fw-bold); padding: 16px; }
+/* Alternativa ainda NÃO respondida = .alt-wrap (o .alt vira <button> de SELECIONAR; a tesoura
+   de riscar é um <button> irmão, não aninhado — HTML válido e os dois continuam focáveis por
+   teclado). Respondida continua sendo o <div class="alt correta/errada/alt-off"> direto, sem wrap. */
+.alt-wrap { position: relative; }
+.fq-qalts.ce > .alt-wrap { padding: 0; font-weight: normal; justify-content: stretch; }
+.fq-qalts.ce > .alt-wrap > .alt { flex: 1; justify-content: center; font-weight: var(--fw-bold); padding: 16px; }
 /* Alternativas no foco: reaproveita .alt/.alt-btn, com contraste sobre o vidro */
 .fq-qcard .alt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
   padding: 14px 16px; border-radius: 12px; border: 1.5px solid var(--border); background: color-mix(in srgb, var(--surface) 70%, transparent);
@@ -2475,12 +2528,26 @@ body:has(#chat-panel:not(.oculto)) #lem-fab { display: none; }
 .fq-qcard .alt.errada .alt-letra { background: var(--danger); color: #fff; }
 .fq-qcard .alt.alt-off { opacity: .5; }
 .fq-qcard .alt .ico { width: 18px; height: 18px; margin-left: auto; }
-/* Tecla de atalho no próprio botão da alternativa: deixa claro que 1→A, 2→B… (e C/E no Certo-Errado) */
+/* Selecionada (ainda não confirmada) — precisa vencer .fq-qcard .alt em especificidade. */
+.fq-qcard .alt.selected { border-color: var(--primary); background: var(--primary-soft); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 30%, transparent) inset; }
+.fq-qcard .alt.selected .alt-letra { background: var(--primary); color: #fff; }
+/* Riscada: lembrete visual de "descartei essa" — reversível, não é resposta nem seleção. */
+.fq-qcard .alt.riscada .alt-txt, .fq-qcard .alt.riscada .alt-letra, .fq-qcard .alt.riscada { text-decoration: line-through; }
+.fq-qcard .alt.riscada { opacity: .55; text-decoration: none; }
+.alt-riscar { position: absolute; top: 6px; right: 6px; width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center; opacity: 0; transition: opacity var(--dur-1); z-index: 1; }
+.alt-wrap:hover .alt-riscar, .alt-riscar:focus-visible, .alt-wrap:has(.riscada) .alt-riscar { opacity: 1; }
+.alt-riscar:hover { border-color: var(--danger); color: var(--danger); }
+.alt-riscar .ico { width: 13px; height: 13px; }
+/* Tecla de atalho no próprio botão da alternativa: deixa claro que A, B, C… (e C/E no Certo-Errado) */
 .fq-qcard .alt-txt { flex: 1; }
 .fq-qcard .alt-key { opacity: .8; }
 .fq-qalts:not(.ce) .alt-key { margin-left: auto; }
 .fq-qalts.ce .alt-key { margin-left: 8px; }
 .fq-qcard button.alt-btn:hover .alt-key { border-color: color-mix(in srgb, var(--primary) 50%, transparent); color: var(--primary-d); opacity: 1; }
+/* Confirmar a resposta selecionada (Enter é o atalho) */
+.fq-confirmar { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.fq-confirmar[hidden] { display: none; }
 /* Feedback + explicação */
 .fq-qfeedback { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
 .fq-qfeedback .feedback { display: inline-flex; align-items: center; gap: 8px; font-weight: var(--fw-bold); font-size: var(--fs-md); }
@@ -3358,7 +3425,14 @@ mark { background: #fde68a; color: #1f2937; border-radius: 3px; padding: 0 2px; 
 }
 
 /* ===== Dossiê ===== */
-.dossie-disc { margin-bottom: 22px; }
+/* Disciplina = <details> recolhido (só a 1ª abre sozinha) — mesma ideia do accordion do Edital. */
+.dossie-disc { margin-bottom: 10px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.dossie-disc:last-child { border-bottom: 0; }
+.dossie-disc > summary { cursor: pointer; list-style: none; user-select: none; }
+.dossie-disc > summary::-webkit-details-marker { display: none; }
+.dossie-disc > summary::before { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform var(--dur-1); flex: none; }
+.dossie-disc[open] > summary::before { transform: rotate(45deg); }
 .dossie-tops { display: grid; grid-template-columns: repeat(auto-fill, minmax(244px, 1fr)); gap: 12px; }
 .dossie-card { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   padding: 12px 14px; cursor: pointer; box-shadow: var(--shadow-sm); transition: border-color var(--dur-2), box-shadow var(--dur-2), transform var(--dur-2);
@@ -4422,6 +4496,9 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
    com \n\n; sem isto tudo colapsa num bloco só e ninguém lê até o fim. */
 .modal-msg { margin: 0 0 18px; line-height: 1.55; white-space: pre-line; }
 .modal-acoes { display: flex; gap: 8px; justify-content: flex-end; }
+/* Escolha em PÍLULAS (escolher() sem lista, ex.: "Gerar a partir de quê?") — centralizado, não
+   à direita (não é uma barra de confirmar/cancelar, é o próprio corpo da pergunta). */
+.modal-acoes.u-wrap { justify-content: center; }
 /* Seletor "qual tipo?" (Questões/Revisar): opções iguais, em lista, com ícone — sem destacar só a 1ª. */
 .modal-lista .escolha-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
   white-space: normal; height: auto; line-height: 1.35; padding: 12px 14px; font-weight: var(--fw-medium); }
@@ -4430,6 +4507,32 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .modal-lista .escolha-item:hover svg { color: var(--primary); }
 .escolha-item-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .escolha-item-desc { font-size: var(--fs-xs); color: var(--muted); font-weight: var(--fw-regular); }
+/* Seletor de tópico AGRUPADO por disciplina (escolher com opts.grupos): cada disciplina é um
+   <details> recolhido — mostrar todos os tópicos de todas as disciplinas de uma vez era a
+   poluição visual reclamada em Registrar sessão/Vincular questão/filtros. */
+.escolha-grupos .escolha-grupo { border-bottom: 1px solid var(--border); padding: 4px 0; }
+.escolha-grupos .escolha-grupo:last-child { border-bottom: 0; }
+.escolha-grupos .escolha-grupo[hidden] { display: none; }
+.escolha-grupo-h { list-style: none; cursor: pointer; font-weight: var(--fw-semibold); font-size: var(--fs-sm);
+  color: var(--text); padding: 8px 6px; display: flex; align-items: center; gap: 6px; user-select: none; }
+.escolha-grupo-h::-webkit-details-marker { display: none; }
+.escolha-grupo-h::before { content: ""; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform var(--dur-1); flex: none; }
+.escolha-grupo[open] > .escolha-grupo-h::before { transform: rotate(45deg); }
+.escolha-grupo-itens { display: flex; flex-direction: column; gap: 4px; padding: 2px 0 6px; }
+.escolha-grupos .escolha-item { padding: 8px 12px; font-size: var(--fs-sm); }
+.escolha-extra { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.escolha-extra .escolha-item { padding: 8px 12px; font-size: var(--fs-sm); }
+/* Seletor de VÁRIOS tópicos (escolherTopicos): checkbox em vez de botão — mesma casca visual. */
+.escolha-check { border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); transition: border-color var(--dur-1); }
+.escolha-check:hover { border-color: var(--primary); }
+.escolha-check input[type="checkbox"] { width: auto; margin: 0; flex: none; }
+.escolha-check.travado { opacity: .75; cursor: default; }
+.escolha-check.travado:hover { border-color: var(--border); }
+/* Checklist de subtópicos do material (seletor-escopo.js) — vários de uma vez. */
+.escopo-blocos { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px; margin-top: 4px; }
+.escopo-bloco-item { font-size: var(--fs-sm); padding: 6px 10px; }
 .num-presets { display: flex; gap: 8px; margin: 0 0 12px; }
 .num-presets .btn { min-width: 48px; }
 .num-linha { display: flex; align-items: center; gap: 8px; margin: 0 0 18px; font-size: var(--fs-base); color: var(--text-2); }
@@ -5229,13 +5332,22 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .foco-meta .fm-k { font-size: var(--fs-2xs); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: var(--fw-bold); }
 .foco-meta .fm-v { font-family: var(--font-mono); font-size: var(--fs-lg); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; color: var(--text); line-height: 1.1; }
 .foco-hero .foco-retomar { margin: 0 0 14px; }
-/* Seletor de disciplina → tópico (dentro da janela modal) */
-.seltop { display: flex; flex-direction: column; gap: 16px; }
-.seltop-disc-nome { display: flex; align-items: center; gap: 8px; font-weight: var(--fw-bold); font-size: var(--fs-sm); margin-bottom: 8px; color: var(--text); }
-.seltop-tops { display: flex; flex-direction: column; gap: 4px; }
+/* Seletor de disciplina → tópico (dentro da janela modal). Disciplina = <details> recolhido —
+   evita todas as disciplinas com todos os tópicos abertas de uma vez. */
+.seltop { display: flex; flex-direction: column; gap: 6px; }
+.seltop-busca { margin-bottom: 6px; }
+.seltop-disc[hidden] { display: none; }
+.seltop-disc:not(:last-child) { border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+.seltop-disc-nome { display: flex; align-items: center; gap: 8px; font-weight: var(--fw-bold); font-size: var(--fs-sm); padding: 8px 0; color: var(--text); cursor: pointer; list-style: none; user-select: none; }
+.seltop-disc-nome::-webkit-details-marker { display: none; }
+.seltop-disc-nome::after { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg); transition: transform var(--dur-1); margin-left: auto; flex: none; }
+.seltop-disc[open] > .seltop-disc-nome::after { transform: rotate(45deg); }
+.seltop-tops { display: flex; flex-direction: column; gap: 4px; padding-bottom: 8px; }
 .seltop-top { text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 8px 12px; cursor: pointer; color: var(--text-2); font-size: var(--fs-sm); font-family: inherit; transition: border-color var(--dur-1), color var(--dur-1), background var(--dur-1); }
 .seltop-top:hover { border-color: var(--primary); color: var(--text); background: var(--surface); }
+.seltop-top[hidden] { display: none; }
 /* Fase 3b: grid (herói | lateral) + anéis + card do Mentor com voz */
 .hoje-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
 @media (max-width: 1200px) { .hoje-grid { grid-template-columns: 1fr; } }
@@ -5278,6 +5390,8 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .plano-h a { font-size: var(--fs-xs); color: var(--primary); text-decoration: none; font-weight: var(--fw-medium); cursor: pointer; }
 .plano-h a:hover { color: var(--primary-d); text-decoration: underline; text-underline-offset: 2px; }
 .plano-blocos { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
+.plano-avulsas-h { display: flex; align-items: center; gap: 6px; margin: 16px 0 8px; }
+.plano-avulsas-h .ico { width: 14px; height: 14px; }
 .pb { position: relative; border-radius: var(--radius); padding: 15px 15px 15px 17px; cursor: pointer; overflow: hidden;
   background: var(--surface); border: 1px solid var(--border); text-align: left; font-family: inherit; width: 100%;
   transition: transform var(--dur-2) var(--ease-std), border-color var(--dur-2), box-shadow var(--dur-2); }
@@ -5374,6 +5488,13 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 
 /* Disciplina·tópico (um só seletor) + marcar finalizado logo abaixo + aula */
 .rsx-topsel { width: 100%; }
+/* Botão que abre o seletor agrupado (escolherTopico) — mesma caixa visual de um <select>. */
+.rsx-topsel-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left;
+  width: 100%; min-height: var(--field-h, 40px); padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  font-size: var(--fs-sm); font-family: inherit; color: var(--text); background: var(--surface); margin-top: 4px; cursor: pointer; }
+.rsx-topsel-btn:hover { border-color: var(--border-hover); }
+.rsx-topsel-btn svg { width: 16px; height: 16px; color: var(--muted); flex: none; }
+.rsx-topsel-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rsx-topfin { margin-top: 10px; animation: riseIn var(--dur-3) var(--ease-decel) both; }
 .rsx-topfin .rsx-check { margin: 0; }
 .rsx-aula { margin-top: 14px; animation: riseIn var(--dur-3) var(--ease-decel) both; }
@@ -5500,6 +5621,12 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .ddx-disc-tit .lnk:hover { color: var(--primary-d); }
 .ddx-disc-tit .lnk:hover .mapa-abrir-ico { opacity: 1; }
 .ddx-disc-cont { font: 700 .78rem/1 var(--font-mono); color: var(--text-2); }
+/* Só na visão-resumo do Dossiê (dossieResumoHTML): nome vira <span> (o <summary> inteiro já
+   expande/recolhe) e o link "abrir painel" fica pequeno/discreto — a variante "grade" acima
+   (gradeEstados) continua com o nome como .lnk grande, intocada. */
+.ddx-disc-tit .ddx-disc-nome { font-size: 1rem; font-weight: var(--fw-bold); color: var(--text); letter-spacing: -0.01em; }
+.ddx-disc-tit .ddx-disc-abrir { font-size: var(--fs-xs); font-weight: var(--fw-regular); color: var(--muted); margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.ddx-disc-tit .ddx-disc-abrir:hover { color: var(--primary-d); }
 .ddx-disc-hint { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; opacity: 0; transition: opacity var(--dur-2); }
 .ddx-disc-hint .ico { width: 14px; height: 14px; }
 .dossie-disc:hover .ddx-disc-hint { opacity: 1; }

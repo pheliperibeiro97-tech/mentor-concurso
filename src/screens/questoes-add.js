@@ -3,7 +3,7 @@
 // existentes ou gerar por IA. Usado no Treino e no setup do Simulado, em DOIS
 // formatos: 'mc' (múltipla escolha, padrão) e 'ce' (Certo/Errado). O estado
 // {aberto} é mantido pela tela que usa.
-import { toast, avisoIA, ligarDropZone, pedirNumero, abrirJanelaFluxo , plural, comOcupado } from "../ui.js";
+import { toast, avisoIA, ligarDropZone, pedirNumero, abrirJanelaFluxo , plural, comOcupado, escolherTopico } from "../ui.js";
 import { lerArquivoTexto } from "../pdf.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
@@ -31,6 +31,7 @@ export function addQuestoesPanelHTML(st, estado, formato) {
   const opcoesVincular =
     `<option value="">— sem tópico —</option>` +
     st.topicos.map((t) => `<option value="${t.id}" ${vinc === t.id ? "selected" : ""}>${esc(nomeTopico(st, t))}</option>`).join("");
+  const vincTopico = vinc && st.topicos.find((t) => t.id === vinc);
   const opcoesDocs = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");
   const temDocs = !!st.documentos.length;
 
@@ -62,7 +63,10 @@ Prazo da apelação? | *15 dias úteis | 5 dias | 10 dias`;
 
       <div class="add-via">
         <div class="add-via-linha">
-          <label class="inline" style="flex:1; min-width:220px">Vincular todas ao tópico <select id="q-add-top">${opcoesVincular}</select></label>
+          <div class="inline" style="flex:1; min-width:220px">Vincular todas ao tópico
+            <select id="q-add-top" hidden aria-hidden="true" tabindex="-1">${opcoesVincular}</select>
+            <button type="button" id="q-add-top-btn" class="rsx-topsel-btn"><span class="rsx-topsel-txt">${vincTopico ? esc(nomeTopico(st, vincTopico)) : "— sem tópico —"}</span>${icone("chevron-down")}</button>
+          </div>
           <label class="btn btn-ghost btn-sm btn-file" data-tip-pos="bottom-dir" data-tip="Importar de um PDF ou arquivo .txt. Você também pode arrastar o arquivo para cá.">${icone("paperclip")} Importar de arquivo
             <input id="q-add-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" hidden />
           </label>
@@ -252,7 +256,10 @@ function provaImportHTML(st, estado) {
               </select>
             </label>
           </div>
-          <label class="inline">Vincular ao tópico <select id="prova-topico">${opcoesVincular}</select></label>
+          <div class="inline">Vincular ao tópico
+            <select id="prova-topico" hidden aria-hidden="true" tabindex="-1">${opcoesVincular}</select>
+            <button type="button" id="prova-topico-btn" class="rsx-topsel-btn"><span class="rsx-topsel-txt">${pf.topicoId && st.topicos.find((t) => t.id === pf.topicoId) ? esc(nomeTopico(st, st.topicos.find((t) => t.id === pf.topicoId))) : "— sem tópico —"}</span>${icone("chevron-down")}</button>
+          </div>
           ${sites.length ? `<div class="muted small u-mt-8">Baixar no site da banca: ${sites.map((b) => `<a href="${esc(b.siteOficial)}" target="_blank" rel="noopener">${esc(b.nome)}</a>`).join(" · ")}</div>` : ""}
         </div>
       </details>
@@ -395,11 +402,30 @@ function abrirAddQuestoes(app, estado, formato) {
       ligarAddQuestoesArquivo(corpo, app, formato); // wira #q-add-file, #prova-file, #gab-file (no corpo)
       ligarSeloTopico(corpo); // sincroniza o selo "sugerido"/"sua escolha" ao trocar o tópico no preview
       // Persiste o "Vincular todas ao tópico" no estado do fluxo, para sobreviver a re-renders
-      // (ex.: abrir/fechar seções) e ser aplicado a cada questão ao revisar.
-      corpo.querySelector("#q-add-top")?.addEventListener("change", (e) => { estado.vincularTop = e.target.value || ""; });
+      // (ex.: abrir/fechar seções) e ser aplicado a cada questão ao revisar. O <select> real
+      // fica oculto; o botão abre o seletor agrupado/pesquisável (escolherTopico) — evita a
+      // lista flat de centenas de tópicos que estourava a linha.
+      const topSel = corpo.querySelector("#q-add-top");
+      topSel?.addEventListener("change", (e) => { estado.vincularTop = e.target.value || ""; });
+      corpo.querySelector("#q-add-top-btn")?.addEventListener("click", async () => {
+        const escolhido = await escolherTopico(st, "Vincular todas ao tópico", { atual: topSel.value });
+        if (escolhido === null) return;
+        topSel.value = escolhido;
+        const t = escolhido && st.topicos.find((x) => x.id === escolhido);
+        corpo.querySelector("#q-add-top-btn .rsx-topsel-txt").textContent = t ? nomeTopico(st, t) : "— sem tópico —";
+        topSel.dispatchEvent(new Event("change"));
+      });
       // "De uma prova anterior" agora é <details> nativo — sincroniza o aberto/fechado no estado
       // para sobreviver a re-renders (ex.: importar arquivo re-renderiza o painel).
       corpo.querySelector(".prova-details")?.addEventListener("toggle", (e) => { estado.provaAberto = e.target.open; });
+      const provaTopSel = corpo.querySelector("#prova-topico");
+      corpo.querySelector("#prova-topico-btn")?.addEventListener("click", async () => {
+        const escolhido = await escolherTopico(st, "Vincular ao tópico", { atual: provaTopSel.value });
+        if (escolhido === null) return;
+        provaTopSel.value = escolhido;
+        const t = escolhido && st.topicos.find((x) => x.id === escolhido);
+        corpo.querySelector("#prova-topico-btn .rsx-topsel-txt").textContent = t ? nomeTopico(st, t) : "— sem tópico —";
+      });
     },
     handlers: ({ rerender, fechar, corpo }) => {
       // Fecha a janela e zera o transitório do fluxo.

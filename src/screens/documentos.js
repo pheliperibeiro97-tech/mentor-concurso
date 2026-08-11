@@ -6,7 +6,7 @@
 // Gemini só entra nas PÁGINAS-LACUNA (sem camada de texto) e SOB CLIQUE — nunca
 // transcreve o PDF inteiro. Offline, as páginas sem texto ficam como pendência
 // registrada até a IA estar conectada.
-import { bindActions, toast, toastCarregando, header, seloBadge, vazio, confirmar, escolher, avisoIA, ligarDropZone, focarItem, pedirNumero, faixaIA, abrirJanela, iconMapa, plural, comOcupado } from "../ui.js";
+import { bindActions, toast, toastCarregando, header, seloBadge, vazio, confirmar, escolher, escolherVarios, avisoIA, ligarDropZone, focarItem, pedirNumero, faixaIA, abrirJanela, iconMapa, plural, comOcupado } from "../ui.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
 import { extrairPdfPaginas, rasterizarPaginas, rasterizarPaginasStream, arquivoParaBase64 } from "../pdf.js";
@@ -506,31 +506,72 @@ export default function renderDocumentos(root, app) {
     if (res.length) app.navigate(tipo === "flashcards" ? "flashcards" : tipo === "ce" ? "pratica-ce" : "pratica", { lote, loteRotulo: rotLote }); // abre só os recém-gerados
   }
 
-  // Q7: se o material foi extraído em BLOCOS (sumário), pergunta de qual PARTE gerar —
-  // todo o material ou um subtópico específico. Retorna { bloco } (null = tudo) ou null (cancelou).
+  // Q7: se o material foi extraído em BLOCOS (sumário), pergunta de qual PARTE gerar — todo o
+  // material ou um ou MAIS subtópicos específicos (marca vários — pedido do usuário: "e se eu
+  // quiser dois?"). Retorna { bloco } (1 ou nenhum) ou { blocos } (2+, cada geração por-contagem
+  // divide N entre eles — ver distribuirN), ou null (cancelou).
   async function escolherEscopoGeracao(id) {
     const d = store.get().documentos.find((x) => x.id === id);
     const blocos = (d && d.estrutura && d.estrutura.blocos) || [];
     const nPag = ((d && d.paginas) || []).length;
     if (blocos.length < 2 && nPag < 2) return { bloco: null }; // nada a escolher → material inteiro
-    const opcoes = [
-      { label: "Todo o material", value: "-1", cls: "btn-soft" },
-      ...blocos.map((b, i) => ({ label: `${b.numero || ""} ${b.titulo}`.trim() || `Tópico ${i + 1}`, value: String(i) })),
+    if (blocos.length < 2) {
+      // Sem sumário (ou só 1 bloco): mantém o fluxo simples de antes (lista de 1 escolha).
+      const opcoes = [
+        { label: "Todo o material", value: "-1", cls: "btn-soft" },
+        ...blocos.map((b, i) => ({ label: `${b.numero || ""} ${b.titulo}`.trim() || `Tópico ${i + 1}`, value: String(i) })),
+        { label: `Escolher páginas… (1–${nPag})`, value: "pag" },
+      ];
+      const v = await escolher("Gerar a partir de qual parte do material?", opcoes, { lista: true });
+      if (v === null || v === undefined) return null;
+      if (v === "pag") {
+        const faixa = await pedirFaixaPaginas(nPag);
+        if (!faixa) return null;
+        return { bloco: { numero: "", titulo: `págs ${faixa.de}–${faixa.ate}`, pIni: faixa.de, pFim: faixa.ate, nivel: 1, topicoId: null, banca: null, tipo: "teoria" } };
+      }
+      const idx = parseInt(v, 10);
+      return { bloco: idx >= 0 ? blocos[idx] : null };
+    }
+    // 2+ blocos: pergunta o MODO primeiro, depois abre o checkbox múltiplo se for por subtópico.
+    const modoOpcoes = [
+      { label: "Todo o material", value: "inteiro" },
+      { label: "Um ou mais subtópicos do índice", value: "sub" },
     ];
-    if (nPag >= 2) opcoes.push({ label: `Escolher páginas… (1–${nPag})`, value: "pag" });
-    const v = await escolher("Gerar a partir de qual parte do material?", opcoes, { lista: true });
-    if (v === null || v === undefined) return null;
-    if (v === "pag") {
+    if (nPag >= 2) modoOpcoes.push({ label: `Escolher páginas… (1–${nPag})`, value: "pag" });
+    const modoV = await escolher("Gerar a partir de quê?", modoOpcoes);
+    if (!modoV) return null;
+    if (modoV === "inteiro") return { bloco: null };
+    if (modoV === "pag") {
       const faixa = await pedirFaixaPaginas(nPag);
       if (!faixa) return null;
-      // Bloco SINTÉTICO por faixa de páginas: ctxDeDoc fatia doc.paginas por [pIni, pFim].
       return { bloco: { numero: "", titulo: `págs ${faixa.de}–${faixa.ate}`, pIni: faixa.de, pFim: faixa.ate, nivel: 1, topicoId: null, banca: null, tipo: "teoria" } };
     }
-    const idx = parseInt(v, 10);
-    return { bloco: idx >= 0 ? blocos[idx] : null };
+    const opcoes = blocos.map((b, i) => ({ label: `${b.numero || ""} ${b.titulo}`.trim() || `Tópico ${i + 1}`, value: String(i) }));
+    const vals = await escolherVarios("De quais subtópicos? (marque um ou mais)", opcoes);
+    if (!vals || !vals.length) return null;
+    const idxs = vals.map((v) => parseInt(v, 10));
+    if (idxs.length === 1) return { bloco: blocos[idxs[0]] };
+    return { blocos: idxs.map((i) => blocos[i]).filter(Boolean) };
+  }
+  // Gera por-contagem (flashcards/questões/CE) considerando VÁRIOS blocos: divide N entre eles
+  // (distribuirN) e chama `gerarUm` uma vez por bloco — garante que todo bloco marcado entra de
+  // fato na geração (não só o primeiro), mesmo raciocínio já aplicado a tópicos/escopo.
+  async function gerarPorBlocos(id, blocos, n, dificuldade, gerarUm) {
+    const fatias = store.distribuirN(n, blocos.length);
+    const out = [];
+    for (let i = 0; i < blocos.length; i++) {
+      if (!fatias[i]) continue;
+      out.push(...await gerarUm(id, fatias[i], dificuldade, blocos[i]));
+    }
+    return out;
   }
   // Rótulo do lote de geração (para o filtro "só os recém-gerados" na tela de destino).
-  const rotuloDoc = (id, bloco) => { const d = store.get().documentos.find((x) => x.id === id); const t = (d && d.titulo) || "material"; return bloco ? `de «${(bloco.titulo || "").trim() || t}»` : `do material «${t}»`; };
+  const rotuloDoc = (id, bloco, blocos) => {
+    const d = store.get().documentos.find((x) => x.id === id);
+    const t = (d && d.titulo) || "material";
+    if (blocos && blocos.length) return `de «${blocos.map((b) => (b.titulo || "").trim()).filter(Boolean).join(" + ") || t}»`;
+    return bloco ? `de «${(bloco.titulo || "").trim() || t}»` : `do material «${t}»`;
+  };
 
   bindActions(root, {
     "toggle-form": () => abrirImportarMaterial(app),
@@ -872,6 +913,16 @@ export default function renderDocumentos(root, app) {
       const id = el.getAttribute("data-id");
       const escopo = await escolherEscopoGeracao(id);
       if (!escopo) return;
+      if (escopo.blocos) {
+        // Mapa é UMA árvore só (sem "quantidade" pra dividir): junta o conteúdo dos blocos
+        // marcados num bloco SINTÉTICO (textoOverride), fatia igual por bloco no orçamento de
+        // caracteres — mesmo raciocínio de gerarMapaMentalDeTopicos, pra nenhum ficar de fora.
+        const cota = Math.floor(8000 / escopo.blocos.length);
+        const partes = escopo.blocos.map((b) => { const t = (b.textoOverride || b.titulo || "").toString(); return t.length > cota ? t.slice(0, cota) + "\n[...]" : t; });
+        const sintetico = { numero: "", titulo: escopo.blocos.map((b) => (b.titulo || "").trim()).filter(Boolean).join(" + "), textoOverride: partes.join("\n\n---\n\n"), topicoId: null, banca: null };
+        gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeMaterial(id, sintetico));
+        return;
+      }
       gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeMaterial(id, escopo.bloco));
     },
     "doc-flashcards": async (el) => {
@@ -883,9 +934,12 @@ export default function renderDocumentos(root, app) {
       const r = await pedirNumero("Quantos flashcards a IA deve gerar?", { padrao: 6, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      const rot = rotuloDoc(id, escopo.bloco);
+      const rot = rotuloDoc(id, escopo.bloco, escopo.blocos);
       const lote = store.iniciarLoteGeracao(rot);
-      const cards = await comOcupado(() => store.gerarFlashcardsDeDoc(id, n, dificuldade, escopo.bloco), { botao: el, msg: "Gerando flashcards…" });
+      const cards = await comOcupado(
+        () => escopo.blocos ? gerarPorBlocos(id, escopo.blocos, n, dificuldade, store.gerarFlashcardsDeDoc.bind(store)) : store.gerarFlashcardsDeDoc(id, n, dificuldade, escopo.bloco),
+        { botao: el, msg: "Gerando flashcards…" }
+      );
       store.encerrarLoteGeracao();
       if (cards == null) return; // erro já sinalizado
       toast(cards.length ? `${plural(cards.length, "flashcard criado", "flashcards criados")}.` : "Nada gerado — confira se este material tem texto.", cards.length ? "ok" : "erro");
@@ -900,9 +954,12 @@ export default function renderDocumentos(root, app) {
       const r = await pedirNumero("Quantas questões a IA deve gerar?", { padrao: 5, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      const rot = rotuloDoc(id, escopo.bloco);
+      const rot = rotuloDoc(id, escopo.bloco, escopo.blocos);
       const lote = store.iniciarLoteGeracao(rot);
-      const qs = await comOcupado(() => store.gerarQuestoesDeDoc(id, n, dificuldade, escopo.bloco), { botao: el, msg: "Gerando questões…" });
+      const qs = await comOcupado(
+        () => escopo.blocos ? gerarPorBlocos(id, escopo.blocos, n, dificuldade, store.gerarQuestoesDeDoc.bind(store)) : store.gerarQuestoesDeDoc(id, n, dificuldade, escopo.bloco),
+        { botao: el, msg: "Gerando questões…" }
+      );
       store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão criada", "questões criadas")}.` : "Nada gerado.", qs.length ? "ok" : "erro");
@@ -917,9 +974,12 @@ export default function renderDocumentos(root, app) {
       const r = await pedirNumero("Quantos itens Certo/Errado a IA deve gerar?", { padrao: 6, min: 1, max: 30, nivel: true });
       if (!r) return;
       const { n, dificuldade } = r;
-      const rot = rotuloDoc(id, escopo.bloco);
+      const rot = rotuloDoc(id, escopo.bloco, escopo.blocos);
       const lote = store.iniciarLoteGeracao(rot);
-      const itens = await comOcupado(() => store.gerarQuestoesCEDeDoc(id, n, dificuldade, escopo.bloco), { botao: el, msg: "Gerando itens Certo/Errado…" });
+      const itens = await comOcupado(
+        () => escopo.blocos ? gerarPorBlocos(id, escopo.blocos, n, dificuldade, store.gerarQuestoesCEDeDoc.bind(store)) : store.gerarQuestoesCEDeDoc(id, n, dificuldade, escopo.bloco),
+        { botao: el, msg: "Gerando itens Certo/Errado…" }
+      );
       store.encerrarLoteGeracao();
       if (itens == null) return;
       toast(itens.length ? `${plural(itens.length, "item C/E criado", "itens C/E criados")}.` : "Nada gerado.", itens.length ? "ok" : "erro");
@@ -931,9 +991,15 @@ export default function renderDocumentos(root, app) {
       const id = el.getAttribute("data-id");
       const escopo = await escolherEscopoGeracao(id);
       if (!escopo) return;
-      const rotEx = rotuloDoc(id, escopo.bloco);
+      const rotEx = rotuloDoc(id, escopo.bloco, escopo.blocos);
       const loteEx = store.iniciarLoteGeracao(rotEx); // extrair também abre só o recém-criado
-      const qs = await comOcupado(() => store.extrairQuestoesDeDoc(id, escopo.bloco), { botao: el, msg: "Extraindo do material…" });
+      // Extração não tem "quantidade" pra dividir — cada bloco marcado é varrido por inteiro.
+      const qs = await comOcupado(
+        () => escopo.blocos
+          ? (async () => { const out = []; for (const b of escopo.blocos) out.push(...await store.extrairQuestoesDeDoc(id, b)); return out; })()
+          : store.extrairQuestoesDeDoc(id, escopo.bloco),
+        { botao: el, msg: "Extraindo do material…" }
+      );
       store.encerrarLoteGeracao();
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} (quando o gabarito estava no material).` : "Não encontrei questões prontas neste material.", qs.length ? "ok" : "erro");

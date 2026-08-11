@@ -12,7 +12,7 @@
 // O modelo (store.registrarSessao) ganhou campos ricos (aulaId, materiais,
 // marcarConcluido, revisaoEscada) mantendo os legados preenchidos pelo item principal,
 // então Acompanhamento e estatísticas seguem intactos.
-import { abrirJanela, toast, celebrarMeta } from "./ui.js";
+import { abrirJanela, toast, celebrarMeta, escolherTopico } from "./ui.js";
 import { icone } from "./icones.js";
 import { esc, fmtMMSS, fmtTempo, todayISO } from "./util.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "./ciclo.js";
@@ -104,7 +104,8 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
       ${baseCursinho ? `<label class="rsx-lbl">${icone("graduation-cap")} Aula do cursinho <span class="muted">(escolha a aula; o tópico segue)</span></label>
       <select id="rs-aula-sel" class="rsx-topsel"><option value="">— escolha a aula —</option>${(st.aulas || []).map((a) => `<option value="${a.id}">${esc(a.nome)}</option>`).join("")}</select>` : ""}
       <label class="rsx-lbl">${baseCursinho ? `Tópico do edital <span class="muted">(sincronizado com a aula)</span>` : "Disciplina · tópico"}</label>
-      <select id="rs-top" class="rsx-topsel"><option value="">— sem tópico —</option>${opcoesTopicoAgrup()}</select>
+      <select id="rs-top" class="rsx-topsel" hidden aria-hidden="true" tabindex="-1"><option value="">— sem tópico —</option>${opcoesTopicoAgrup()}</select>
+      <button type="button" id="rs-top-btn" class="rsx-topsel-btn"><span class="rsx-topsel-txt">${(() => { const t = topIni && st.topicos.find((x) => x.id === topIni); return t ? esc(rotuloTopico(st, t)) : "— sem tópico —"; })()}</span>${icone("chevron-down")}</button>
       ${revHoje.length ? `<div class="rsx-revsug"><span class="muted small">${icone("repeat-2")} Revisou hoje:</span> ${revHoje.map((r) => `<button type="button" class="rsx-chip rsx-revchip" data-rev-top="${r.topicoId}" data-tip="Preenche este tópico como Revisão.">${esc(r.nome)}</button>`).join("")}</div>` : ""}
       <div id="rs-concluir-wrap" class="rsx-topfin" hidden>
         <label class="rsx-check"><input type="checkbox" id="rs-concluir-topico" />
@@ -306,6 +307,11 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
       const top = q("#rs-top");
       const atualizarTopico = () => {
         const tid = top.value || null;
+        // Rótulo do botão que abre o seletor agrupado (fica em sincronia com QUALQUER caminho
+        // que mude top.value: o próprio seletor, o chip "Revisou hoje" ou a Aula do cursinho).
+        const tSel = tid && st.topicos.find((x) => x.id === tid);
+        const topBtnTxt = q("#rs-top-btn")?.querySelector(".rsx-topsel-txt");
+        if (topBtnTxt) topBtnTxt.textContent = tSel ? rotuloTopico(st, tSel) : "— sem tópico —";
         // Aula do cursinho: aparece sempre que há tópico; combobox (escolher OU digitar nova).
         // Prefill com a aula já vinculada ao tópico, se houver.
         const aulaWrap = q("#rs-aula-wrap");
@@ -336,6 +342,15 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
         sync();
       };
       top?.addEventListener("change", atualizarTopico);
+      // Botão "Disciplina · tópico": abre o seletor agrupado/pesquisável (escolherTopico) em
+      // vez do <select> nativo com 400 tópicos soltos. O <select> real fica oculto — só para
+      // não reescrever atualizarTopico/aulasDoTopico/etc., que continuam lendo/ouvindo ele.
+      q("#rs-top-btn")?.addEventListener("click", async () => {
+        const escolhido = await escolherTopico(st, "Disciplina · tópico", { atual: top.value });
+        if (escolhido === null) return; // cancelou
+        top.value = escolhido;
+        top.dispatchEvent(new Event("change"));
+      });
       // Sugestão "Revisou hoje": preenche o tópico e marca a fase Revisão (ponte Central → registro).
       scope.querySelectorAll(".rsx-revchip").forEach((c) =>
         c.addEventListener("click", () => {

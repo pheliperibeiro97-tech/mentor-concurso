@@ -93,18 +93,21 @@ export function dossieResumoHTML(store) {
       `<button class="btn btn-add" data-action="toggle-add-disc">${icone("plus")} Adicionar ao edital</button>`,
       icone("library")
     );
+  // Disciplina = <details> recolhido (só a 1ª vem aberta) — mostrar os tópicos de TODAS as
+  // disciplinas de uma vez era a poluição visual reclamada; igual ao accordion do Edital.
   return st.disciplinas
-    .map((d) => {
+    .map((d, i) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
       const cor = store.corDisciplina(d.id);
       const concl = tops.filter((t) => t.concluido).length;
       return `
-        <div class="dossie-disc">
-          <h3 class="ddx-disc-tit">
+        <details class="dossie-disc"${i === 0 ? " open" : ""}>
+          <summary class="ddx-disc-tit">
             <span class="cur-dot" style="background:${cor}"></span>
-            <button class="lnk" data-action="ir-dossie-disc" data-id="${d.id}" data-tip="Abrir o painel da disciplina: KPIs, semáforo por tópico e histórico." data-tip-pos="bottom-esq">${esc(d.nome)} <span class="mapa-abrir-ico">${icone("external-link")}</span></button>
+            <span class="ddx-disc-nome">${esc(d.nome)}</span>
             <span class="ddx-disc-cont">${concl}/${tops.length}</span>
-          </h3>
+            <button class="lnk ddx-disc-abrir" data-action="ir-dossie-disc" data-id="${d.id}" data-tip="Abrir o painel da disciplina: KPIs, semáforo por tópico e histórico." data-tip-pos="bottom-esq">painel ${icone("external-link")}</button>
+          </summary>
           <div class="dossie-tops">
             ${
               tops.length
@@ -134,7 +137,7 @@ export function dossieResumoHTML(store) {
                 : `<p class="muted">Sem tópicos.</p>`
             }
           </div>
-        </div>`;
+        </details>`;
     })
     .join("");
 }

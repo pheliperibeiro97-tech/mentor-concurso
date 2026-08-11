@@ -206,20 +206,36 @@ export function confirmar(msg) {
 // opts.lista = true → renderiza as opções como LISTA vertical (largura total, texto que
 // quebra, com rolagem). Ideal para escolher 1 item entre MUITOS com rótulos longos
 // (ex.: "DISCIPLINA · Tópico"), que estouravam o modal no layout de pílulas.
+// opts.grupos (em vez de `opcoes`) = [{ rotulo, aberto?, itens: [{label,value,desc?,ico?}] }]
+// → cada grupo vira um <details> RECOLHIDO por padrão (só abre se `aberto` ou tiver item
+// marcado): é o seletor de tópico agrupado por DISCIPLINA — evitar 400 tópicos soltos numa
+// lista só foi o pedido recorrente (registrar sessão, vincular questão, filtros). A busca
+// filtra os itens E auto-abre/fecha os grupos conforme o que casa.
 export function escolher(msg, opcoes, opts = {}) {
   return new Promise((resolve) => {
     const ov = document.createElement("div");
     ov.className = "modal-overlay";
+    const grupos = opts.grupos;
+    const itemHTML = (o) =>
+      `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}" data-busca="${esc(((o.label || "") + " " + (o.desc || "")).toLowerCase())}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`;
     // Lista longa (vincular tópico chega a 300 opções) ganha um campo de BUSCA. Sem ele, o
     // único caminho era rolar um contêiner de ~55vh — inviável no celular.
-    const comBusca = opts.lista && opcoes.length > 12;
-    const corpo = opts.lista
+    const totalItens = grupos ? grupos.reduce((n, g) => n + g.itens.length, 0) : opcoes.length;
+    const comBusca = (grupos || opts.lista) && totalItens > 12;
+    const corpo = grupos
       ? `${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
-        <div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55dvh;overflow:auto;margin-top:8px">
-          ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"} escolha-item" data-v="${esc(o.value)}" data-busca="${esc(((o.label || "") + " " + (o.desc || "")).toLowerCase())}">${o.ico ? icone(o.ico) : ""}<span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span></button>`).join("")}
+        ${opts.extra ? `<div class="escolha-extra">${opts.extra.map(itemHTML).join("")}</div>` : ""}
+        <div class="modal-lista escolha-grupos" style="max-height:55dvh;overflow:auto;margin-top:8px">
+          ${grupos.map((g, gi) => `<details class="escolha-grupo" data-gi="${gi}" data-aberto="${g.aberto ? 1 : 0}"${g.aberto ? " open" : ""}><summary class="escolha-grupo-h">${esc(g.rotulo)}</summary><div class="escolha-grupo-itens">${g.itens.map(itemHTML).join("")}</div></details>`).join("")}
         </div>
         ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}`
-      : `<div class="modal-acoes u-wrap">
+      : opts.lista
+        ? `${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
+        <div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55dvh;overflow:auto;margin-top:8px">
+          ${opcoes.map(itemHTML).join("")}
+        </div>
+        ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}`
+        : `<div class="modal-acoes u-wrap">
           ${opcoes.map((o) => `<button class="btn ${o.cls || "btn-ghost"}" data-v="${esc(o.value)}">${esc(o.label)}</button>`).join("")}
         </div>`;
     ov.innerHTML = `
@@ -236,6 +252,7 @@ export function escolher(msg, opcoes, opts = {}) {
     const busca = ov.querySelector(".escolha-busca");
     if (busca) {
       const itens = [...ov.querySelectorAll(".escolha-item")];
+      const gruposEls = [...ov.querySelectorAll(".escolha-grupo")];
       const semNada = ov.querySelector(".escolha-vazia");
       busca.addEventListener("input", () => {
         const t = busca.value.trim().toLowerCase();
@@ -245,6 +262,12 @@ export function escolher(msg, opcoes, opts = {}) {
           b.hidden = !casa;
           if (casa) n++;
         });
+        gruposEls.forEach((g) => {
+          if (!t) { g.hidden = false; g.open = g.getAttribute("data-aberto") === "1"; return; }
+          const temMatch = [...g.querySelectorAll(".escolha-item")].some((b) => !b.hidden);
+          g.hidden = !temMatch;
+          if (temMatch) g.open = true;
+        });
         if (semNada) semNada.hidden = n > 0;
       });
     }
@@ -252,6 +275,167 @@ export function escolher(msg, opcoes, opts = {}) {
       const b = e.target.closest("[data-v]");
       if (!b && e.target !== ov) return;
       fim(b ? b.getAttribute("data-v") : null);
+    });
+  });
+}
+
+// Monta os grupos por disciplina para o seletor de tópico agrupado (escolher com opts.grupos).
+// `atual` marca o item já selecionado — o grupo dele abre sozinho, os demais ficam recolhidos.
+export function gruposTopicosPara(st, { atual } = {}) {
+  return (st.disciplinas || [])
+    .map((d) => {
+      const tops = (st.topicos || []).filter((t) => t.disciplinaId === d.id);
+      if (!tops.length) return null;
+      return { rotulo: d.nome, aberto: tops.some((t) => t.id === atual), itens: tops.map((t) => ({ label: t.nome, value: t.id })) };
+    })
+    .filter(Boolean);
+}
+
+// Seletor de tópico agrupado por disciplina + busca (substitui os <select> flat com centenas
+// de opções). Devolve o topicoId escolhido, "" (opção "sem tópico") ou null (cancelou).
+export async function escolherTopico(st, msg, { atual, semTopico = true } = {}) {
+  const grupos = gruposTopicosPara(st, { atual });
+  if (!grupos.length) { toast("Você ainda não tem tópicos cadastrados.", "erro"); return null; }
+  const extra = semTopico ? [{ label: "— sem tópico —", value: "" }] : null;
+  return escolher(msg, [], { grupos, extra });
+}
+
+// Seletor de VÁRIOS tópicos ao mesmo tempo (checkboxes), mesma casca agrupada/pesquisável do
+// escolherTopico — para gerar considerando mais de um tópico de uma vez. `pre` pré-marca (ex.:
+// o tópico principal); `travados` fica marcado e não pode ser desmarcado (não faz sentido tirar
+// o tópico principal da própria geração dele). Devolve array de topicoIds, ou null se cancelar.
+export function escolherTopicos(st, msg, { pre = [], travados = [] } = {}) {
+  return new Promise((resolve) => {
+    const grupos = gruposTopicosPara(st, {});
+    if (!grupos.length) { toast("Você ainda não tem tópicos cadastrados.", "erro"); resolve(null); return; }
+    const sel = new Set(pre);
+    const travadosSet = new Set(travados);
+    grupos.forEach((g) => { if (g.itens.some((it) => sel.has(it.value))) g.aberto = true; });
+    const totalItens = grupos.reduce((n, g) => n + g.itens.length, 0);
+    const comBusca = totalItens > 12;
+    const itemHTML = (it) => {
+      const checked = sel.has(it.value);
+      const travado = travadosSet.has(it.value);
+      return `<label class="escolha-item escolha-check${travado ? " travado" : ""}" data-busca="${esc((it.label || "").toLowerCase())}">
+        <input type="checkbox" value="${esc(it.value)}" ${checked ? "checked" : ""} ${travado ? "disabled" : ""} />
+        <span class="escolha-item-txt">${esc(it.label)}</span>
+      </label>`;
+    };
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <p class="modal-msg">${esc(msg)}</p>
+        ${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
+        <div class="modal-lista escolha-grupos" style="max-height:55dvh;overflow:auto;margin-top:8px">
+          ${grupos.map((g, gi) => `<details class="escolha-grupo" data-gi="${gi}" data-aberto="${g.aberto ? 1 : 0}"${g.aberto ? " open" : ""}><summary class="escolha-grupo-h">${esc(g.rotulo)}</summary><div class="escolha-grupo-itens">${g.itens.map(itemHTML).join("")}</div></details>`).join("")}
+        </div>
+        ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}
+        <div class="modal-acoes u-mt-12">
+          <button class="btn btn-ghost" data-v="cancelar">Cancelar</button>
+          <button class="btn btn-primary" data-v="confirmar">Confirmar<span class="escolha-n"></span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const soltarFoco = prenderFoco(ov);
+    const fim = (v) => { soltarFoco(); fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === "Escape") fim(null); };
+    document.addEventListener("keydown", onKey);
+    const contadorEl = ov.querySelector(".escolha-n");
+    const atualizarContador = () => { contadorEl.textContent = sel.size ? ` (${sel.size})` : ""; };
+    atualizarContador();
+    ov.querySelectorAll('input[type="checkbox"]').forEach((cb) =>
+      cb.addEventListener("change", () => {
+        if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+        atualizarContador();
+      })
+    );
+    const busca = ov.querySelector(".escolha-busca");
+    if (busca) {
+      const itens = [...ov.querySelectorAll(".escolha-item")];
+      const gruposEls = [...ov.querySelectorAll(".escolha-grupo")];
+      const semNada = ov.querySelector(".escolha-vazia");
+      busca.addEventListener("input", () => {
+        const t = busca.value.trim().toLowerCase();
+        let n = 0;
+        itens.forEach((b) => { const casa = !t || b.getAttribute("data-busca").includes(t); b.hidden = !casa; if (casa) n++; });
+        gruposEls.forEach((g) => {
+          if (!t) { g.hidden = false; g.open = g.getAttribute("data-aberto") === "1"; return; }
+          const temMatch = [...g.querySelectorAll(".escolha-item")].some((b) => !b.hidden);
+          g.hidden = !temMatch;
+          if (temMatch) g.open = true;
+        });
+        if (semNada) semNada.hidden = n > 0;
+      });
+    }
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) return fim(null);
+      const b = e.target.closest("[data-v]");
+      if (!b) return;
+      const v = b.getAttribute("data-v");
+      if (v === "cancelar") fim(null);
+      else if (v === "confirmar") fim([...sel]);
+    });
+  });
+}
+
+// Seletor de VÁRIOS itens quaisquer (checkboxes), lista FLAT (sem agrupar por disciplina) — usa
+// a mesma casca do escolherTopicos, para casos como subtópicos de um material (índice), que não
+// têm disciplina para agrupar. `opcoes`: [{label, value, desc?}]. Devolve array de values, ou
+// null se cancelar.
+export function escolherVarios(msg, opcoes, { pre = [] } = {}) {
+  return new Promise((resolve) => {
+    if (!opcoes || !opcoes.length) { toast("Nada para escolher.", "erro"); resolve(null); return; }
+    const sel = new Set(pre);
+    const comBusca = opcoes.length > 12;
+    const itemHTML = (o) => `<label class="escolha-item escolha-check" data-busca="${esc((o.label || "").toLowerCase())}">
+        <input type="checkbox" value="${esc(o.value)}" ${sel.has(o.value) ? "checked" : ""} />
+        <span class="escolha-item-txt">${esc(o.label)}${o.desc ? `<span class="escolha-item-desc">${esc(o.desc)}</span>` : ""}</span>
+      </label>`;
+    const ov = document.createElement("div");
+    ov.className = "modal-overlay";
+    ov.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true">
+        <p class="modal-msg">${esc(msg)}</p>
+        ${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
+        <div class="modal-lista" style="display:flex;flex-direction:column;gap:6px;max-height:55dvh;overflow:auto;margin-top:8px">
+          ${opcoes.map(itemHTML).join("")}
+        </div>
+        ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}
+        <div class="modal-acoes u-mt-12">
+          <button class="btn btn-ghost" data-v="cancelar">Cancelar</button>
+          <button class="btn btn-primary" data-v="confirmar">Confirmar<span class="escolha-n"></span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const soltarFoco = prenderFoco(ov);
+    const fim = (v) => { soltarFoco(); fecharAnimado(ov); document.removeEventListener("keydown", onKey); resolve(v); };
+    const onKey = (e) => { if (e.key === "Escape") fim(null); };
+    document.addEventListener("keydown", onKey);
+    const contadorEl = ov.querySelector(".escolha-n");
+    const atualizarContador = () => { contadorEl.textContent = sel.size ? ` (${sel.size})` : ""; };
+    atualizarContador();
+    ov.querySelectorAll('input[type="checkbox"]').forEach((cb) =>
+      cb.addEventListener("change", () => { if (cb.checked) sel.add(cb.value); else sel.delete(cb.value); atualizarContador(); })
+    );
+    const busca = ov.querySelector(".escolha-busca");
+    if (busca) {
+      const itens = [...ov.querySelectorAll(".escolha-item")];
+      const semNada = ov.querySelector(".escolha-vazia");
+      busca.addEventListener("input", () => {
+        const t = busca.value.trim().toLowerCase();
+        let n = 0;
+        itens.forEach((b) => { const casa = !t || b.getAttribute("data-busca").includes(t); b.hidden = !casa; if (casa) n++; });
+        if (semNada) semNada.hidden = n > 0;
+      });
+    }
+    ov.addEventListener("click", (e) => {
+      if (e.target === ov) return fim(null);
+      const b = e.target.closest("[data-v]");
+      if (!b) return;
+      const v = b.getAttribute("data-v");
+      if (v === "cancelar") fim(null);
+      else if (v === "confirmar") fim([...sel]);
     });
   });
 }
@@ -411,7 +595,7 @@ export function abrirJanelaFluxo({ titulo = "", telaCheia = false, render, handl
 // Atalhos rápidos (1 clique) + campo para um valor personalizado. Resolve com o número
 // (entre min e max) ou null se cancelar/fechar fora.
 //
-// Opção `nivel`: quando true, mostra também um seletor de NÍVEL (Fácil/Médio/Difícil)
+// Opção `nivel`: quando true, mostra também um seletor de NÍVEL (Fácil…Avançada)
 // e a Promise resolve com { n, dificuldade } em vez de só o número (ou null se cancelar).
 // Default `nivel:false` mantém o comportamento antigo (resolve só o número) — chamadas
 // existentes NÃO mudam. `nivelPadrao` define o nível pré-selecionado ("medio").
@@ -426,6 +610,8 @@ export function pedirNumero(
       { v: "facil", rot: "Fácil" },
       { v: "medio", rot: "Médio" },
       { v: "dificil", rot: "Difícil" },
+      { v: "muito_dificil", rot: "Muito difícil" },
+      { v: "avancada", rot: "Avançada" },
     ];
     const blocoNivel = nivel
       ? `<div class="num-linha">Nível

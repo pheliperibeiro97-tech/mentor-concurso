@@ -1,6 +1,6 @@
 // Tela "Mapas mentais": cria (Gerar / import), lista (com filtro por tópico), abre,
 // imprime (individual ou seleção), revisa (escada da memória) e gera flashcards/questões.
-import { bindActions, toast, header, vazio, confirmar, escolher, pedirTexto, avisoIA, imprimir, iconMapa, plural } from "../ui.js";
+import { bindActions, toast, header, vazio, confirmar, escolher, escolherTopico, escolherTopicos, pedirTexto, avisoIA, imprimir, iconMapa, plural } from "../ui.js";
 import { esc, fmtData, todayISO } from "../util.js";
 import { icone } from "../icones.js";
 import { abrirMapaCompleto, gerarEAbrirMapa } from "../mapa-mental.js";
@@ -219,19 +219,18 @@ export default function renderMapas(root, app) {
     },
     "vincular-topico": async (el) => {
       const id = el.getAttribute("data-id");
-      const opcoes = [{ value: "__none__", label: "— Sem tópico —" }].concat(
-        st.topicos.map((t) => ({ value: t.id, label: nomeTop(st, { topicoId: t.id }) || t.nome }))
-      );
-      if (opcoes.length === 1) return toast("Você ainda não tem tópicos cadastrados.", "erro");
-      const escolhido = await escolher("Vincular a qual tópico?", opcoes.slice(0, 300), { lista: true });
+      const m = st.mapasMentais.find((x) => x.id === id);
+      // Seletor agrupado por disciplina (era uma lista flat de até 300 tópicos soltos).
+      const escolhido = await escolherTopico(st, "Vincular a qual tópico?", { atual: m && m.topicoId });
       if (escolhido == null) return; // cancelou
-      store.setTopicoMapa(id, escolhido === "__none__" ? null : escolhido);
+      store.setTopicoMapa(id, escolhido === "" ? null : escolhido);
       toast("Vínculo de tópico atualizado.");
       app.refresh();
     },
     "gerar-mapa": async () => {
       let fonte = await escolher("Criar mapa mental a partir de quê?", [
         { value: "escopo", label: "Material importado" },
+        { value: "topico", label: "Tópico do edital" },
         { value: "resumo", label: "Resumo" },
         { value: "tema", label: "Tema livre" },
         { value: "arquivo", label: "Arquivo (PDF/imagem)" },
@@ -282,17 +281,20 @@ export default function renderMapas(root, app) {
         return gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeTema(tema));
       }
       const s = store.get();
+      // Tópico do edital: seleção MÚLTIPLA (pode marcar mais de um tópico da mesma disciplina
+      // — a IA gera UM mapa considerando o conteúdo inteiro de todos, não só o primeiro).
+      if (fonte === "topico") {
+        const ids = await escolherTopicos(s, "De quais tópicos?");
+        if (!ids || !ids.length) return;
+        return gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeTopicos(ids));
+      }
       let opcoes = [];
-      if (fonte === "topico") opcoes = s.topicos.map((t) => ({ value: t.id, label: nomeTop(s, { topicoId: t.id }) || t.nome }));
-      else if (fonte === "material") opcoes = s.documentos.filter((d) => (d.texto || "").trim()).map((d) => ({ value: d.id, label: d.titulo || "Material" }));
+      if (fonte === "material") opcoes = s.documentos.filter((d) => (d.texto || "").trim()).map((d) => ({ value: d.id, label: d.titulo || "Material" }));
       else if (fonte === "resumo") opcoes = s.resumos.filter((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ").trim()).map((r) => ({ value: r.id, label: r.titulo || "Resumo" }));
       if (!opcoes.length) return toast("Nada disponível nessa fonte ainda.", "erro");
       const id = await escolher("Escolha a fonte do mapa:", opcoes.slice(0, 80), { lista: true });
       if (!id) return;
-      const ger =
-        fonte === "topico" ? () => store.gerarMapaMentalDeTopico(id)
-        : fonte === "material" ? () => store.gerarMapaMentalDeMaterial(id)
-        : () => store.gerarMapaMentalDeResumo(id);
+      const ger = fonte === "material" ? () => store.gerarMapaMentalDeMaterial(id) : () => store.gerarMapaMentalDeResumo(id);
       return gerarEAbrirMapa(store, app, ger);
     },
     // (Agendar/cancelar a revisão espaçada vivem no modal do mapa, em mapa-mental.js —

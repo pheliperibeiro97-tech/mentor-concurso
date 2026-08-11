@@ -40,22 +40,28 @@ export function filtroTopicosBotaoHTML(st, sel, aberto) {
   return `<button class="btn btn-ghost btn-sm" data-ft="toggle" data-tip-pos="cima-esq" data-tip="Escolha vários tópicos ou disciplinas inteiras.">Tópicos: ${esc(resumoTopicos(st, sel))} ${aberto ? icone("chevron-up") : icone("chevron-down")}</button>`;
 }
 
-// Painel de checkboxes (bloco; renderizar ABAIXO da barra de filtros).
+// Painel de checkboxes (bloco; renderizar ABAIXO da barra de filtros). Cada disciplina é um
+// <details> — aberto por padrão só quando já tem tópico marcado nela (o resto some poluição
+// visual). Com muitos tópicos, ganha um campo de busca que filtra e auto-abre quem casa.
 export function filtroTopicosPainelHTML(st, sel, aberto) {
   if (!aberto) return "";
+  const totalTop = st.topicos.length;
   const grupos = st.disciplinas
     .map((d) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === d.id);
       if (!tops.length) return "";
       const todos = tops.every((t) => sel.includes(t.id));
-      return `<div class="ft-grupo">
-          <label class="ft-disc"><input type="checkbox" data-ft-disc="${d.id}" ${todos ? "checked" : ""} /> <b>${esc(d.nome)}</b> <span class="muted small">(disciplina toda)</span></label>
-          ${tops.map((t) => `<label class="ft-top"><input type="checkbox" data-ft-topico="${t.id}" ${sel.includes(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}
-        </div>`;
+      const marcados = tops.filter((t) => sel.includes(t.id)).length;
+      return `<details class="ft-grupo"${marcados > 0 ? " open" : ""}>
+          <summary class="ft-disc-h"><b>${esc(d.nome)}</b>${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>
+          <label class="ft-disc"><input type="checkbox" data-ft-disc="${d.id}" ${todos ? "checked" : ""} /> disciplina toda</label>
+          ${tops.map((t) => `<label class="ft-top" data-ft-busca="${esc(t.nome.toLowerCase())}"><input type="checkbox" data-ft-topico="${t.id}" ${sel.includes(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}
+        </details>`;
     })
     .join("");
   return `<div class="card ft-painel">
       <label class="ft-todos"><input type="checkbox" data-ft="todos" ${sel.length ? "" : "checked"} /> Todos os tópicos</label>
+      ${totalTop > 12 ? `<input type="search" class="ft-busca busca-input" placeholder="Buscar tópico…" aria-label="Buscar tópico" />` : ""}
       ${grupos || `<p class="muted small">Nenhum tópico cadastrado ainda.</p>`}
     </div>`;
 }
@@ -65,6 +71,23 @@ export function ligarFiltroTopicos(root, app, estado) {
   root.querySelector('[data-ft="toggle"]')?.addEventListener("click", () => {
     estado.aberto = !estado.aberto;
     app.refresh();
+  });
+  // Busca: filtra os tópicos (não re-renderiza) e auto-abre/fecha o <details> da disciplina
+  // conforme tiver match — igual ao seletor agrupado de escolher() em ui.js.
+  root.querySelector(".ft-busca")?.addEventListener("input", (e) => {
+    const t = e.target.value.trim().toLowerCase();
+    root.querySelectorAll(".ft-grupo").forEach((g) => {
+      const itens = [...g.querySelectorAll(".ft-top")];
+      if (!t) { itens.forEach((it) => { it.hidden = false; }); g.hidden = false; g.open = g.querySelectorAll('[data-ft-topico]:checked').length > 0; return; }
+      let temMatch = false;
+      itens.forEach((it) => {
+        const casa = it.getAttribute("data-ft-busca").includes(t);
+        it.hidden = !casa;
+        if (casa) temMatch = true;
+      });
+      g.hidden = !temMatch;
+      if (temMatch) g.open = true;
+    });
   });
   root.querySelector('[data-ft="todos"]')?.addEventListener("change", () => {
     estado.sel = [];

@@ -284,7 +284,7 @@ function oficialDiffHTML(d) {
 // Parser dedicado das aulas: "Nome da aula: t1; t2; t3" por linha (nome antes do 1º ":",
 // assuntos depois, separados por ;). Aceita também "Nome:" sozinho + assuntos nas linhas
 // seguintes. Linha sem ":" e sem aula atual vira o nome de uma aula.
-function parseAulas(texto) {
+function parseAulas(texto, disciplinas) {
   const linhas = String(texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const aulas = [];
   let atual = null;
@@ -300,10 +300,24 @@ function parseAulas(texto) {
   // gráfica. Fonemas" (formato de grade do Estratégia/Gran). Rótulo antes do traço = nome; o
   // restante = assuntos (assim liga ao edital e o título exibido reconstrói a linha original).
   const mTracoRe = /^(aula\s*\d+\p{L}*)\s*[-–—]\s+(.+)$/iu;
+  // Muitas grades NÃO escrevem a palavra "Disciplina:" — só soltam o nome da matéria em maiúsculas
+  // como linha própria ("DIREITO CONSTITUCIONAL") separando os blocos de aula. Sem reconhecer isso,
+  // "Aula 00" (e todas as outras da seção) ficavam sem disciplina — mesmo já tendo tópicos —, porque
+  // aquela linha "solta" virava uma aula fantasma e nunca atualizava `disciplinaAtual`.
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const discNomes = (disciplinas || []).map((d) => d.nome).filter(Boolean);
+  const achaCabecalhoDisciplina = (l) => {
+    if (!l || l.length > 60 || l.includes(":") || mTracoRe.test(l) || /^aula\s*\d+/i.test(l)) return null;
+    const ln = norm(l);
+    if (!ln) return null;
+    return discNomes.find((dn) => { const dnl = norm(dn); return dnl.length >= 4 && (dnl === ln || ln.startsWith(dnl) || dnl.startsWith(ln)); }) || null;
+  };
   for (const l of linhas) {
     // Cabeçalho de disciplina: "DISCIPLINA: Nome" / "Disciplina - Nome" → muda o contexto, não vira aula.
     const mDisc = l.match(/^disciplina\s*[:\-–]\s*(.+)$/i);
     if (mDisc) { disciplinaAtual = mDisc[1].trim(); continue; }
+    const bateuDisc = achaCabecalhoDisciplina(l);
+    if (bateuDisc) { disciplinaAtual = bateuDisc; continue; }
     const i = l.indexOf(":");
     const mTraco = i < 0 ? l.match(mTracoRe) : null;
     if (i > 0) {
@@ -693,11 +707,11 @@ function abrirAdicionarAulas(app, modoInicial = "acrescentar") {
         if (!texto.trim()) return toast("Traga a divisão de aulas.", "erro");
         estado.texto = texto;
         if (estado.modo === "atualizar") {
-          const diff = store.diffAulasCursinho(parseAulas(texto));
+          const diff = store.diffAulasCursinho(parseAulas(texto, store.get().disciplinas));
           if (!diff.novas.length && !diff.removidas.length) { fechar(); return toast("Nenhuma diferença em relação à grade atual.", "ok"); }
           estado.diff = diff; rerender();
         } else {
-          const estrutura = parseAulas(texto).map((a) => ({ nome: a.nome || "", topicos: [...(a.topicos || [])], disciplina: a.disciplina || null }));
+          const estrutura = parseAulas(texto, store.get().disciplinas).map((a) => ({ nome: a.nome || "", topicos: [...(a.topicos || [])], disciplina: a.disciplina || null }));
           if (!estrutura.length) return toast("Não reconheci aulas no texto.", "erro");
           estado.preview = estrutura; rerender();
         }
@@ -977,11 +991,16 @@ function aulasDiffHTML(d) {
 }
 function aulaTopEditorHTML(st, a) {
   const sel = new Set(a.topicoIds || []);
+  // Cada disciplina é um <details> recolhido — mostrar as 400+ tópicos de TODAS as
+  // disciplinas de uma vez era a poluição visual que o usuário reclamou (só a disciplina da
+  // própria aula, quando conhecida, já abre sozinha; as outras o usuário abre se precisar).
   const grupos = st.disciplinas
     .map((disc) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === disc.id);
       if (!tops.length) return "";
-      return `<div class="ft-grupo"><div class="ft-disc"><b>${esc(disc.nome)}</b></div>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</div>`;
+      const marcados = tops.filter((t) => sel.has(t.id)).length;
+      const aberta = disc.id === a.disciplinaId || marcados > 0;
+      return `<details class="ft-grupo"${aberta ? " open" : ""}><summary class="ft-disc"><b>${esc(disc.nome)}</b>${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</details>`;
     })
     .join("");
   return `<div class="aula-top-editor"><div class="muted small u-mt-8 u-mb-8">${icone("files")} Tópicos que esta aula cobre — marque todos (uma aula pode cobrir vários). Salva na hora.</div>${grupos || `<p class="muted small">Sem tópicos cadastrados.</p>`}<div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="aula-topicos" data-id="${a.id}">Fechar</button></div></div>`;
@@ -1054,7 +1073,7 @@ function aulasListaHTML(store, st) {
         ${(() => {
           // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital: no preview
           // aparecem, mas o plano só mostrava os tópicos casados — mostramos os pendentes (não some nada).
-          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn));
+          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId }));
           return naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : "";
         })()}
         ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a) : ""}
@@ -1474,7 +1493,7 @@ export default function renderEdital(root, app) {
     "importar-aulas": () => {
       const texto = root.querySelector("#aulas-texto").value;
       if (!texto.trim()) return toast("Cole a divisão do cursinho.", "erro");
-      const estrutura = parseAulas(texto).map((a) => ({ nome: a.nome || "", topicos: [...(a.topicos || [])], disciplina: a.disciplina || null }));
+      const estrutura = parseAulas(texto, store.get().disciplinas).map((a) => ({ nome: a.nome || "", topicos: [...(a.topicos || [])], disciplina: a.disciplina || null }));
       if (!estrutura.length) return toast("Não reconheci aulas no texto.", "erro");
       aulasTextoSalvo = texto;
       aulasPreview = estrutura;

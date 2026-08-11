@@ -333,6 +333,7 @@ function montarWidget() {
              Início do iPad) onde não abre. Um botão só porque a decisão pode MUDAR depois da
              primeira tentativa — o iPad aceita o pedido e não abre nada, e isso só se descobre
              tentando; com dois botões, o widget precisaria ser remontado no meio. -->
+        <button class="cf-x" data-cf-tela-cheia aria-label="Tela cheia" title="Tela cheia, com o relógio centralizado.">${icone("maximize-2")}</button>
         <button class="cf-x cf-pip" data-cf-flutuar aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>
         <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
       </div>
@@ -370,7 +371,17 @@ function montarWidget() {
         <button class="cf-reg" data-cf-registrar>Registrar sessão</button>
       </div>
     </div>
-    <button class="cf-btn" data-cf-abrir aria-label="Abrir o cronômetro">${icone("clock-3")}<span class="cf-btn-t">Cronômetro</span></button>`;
+    <button class="cf-btn" data-cf-abrir aria-label="Abrir o cronômetro">${icone("clock-3")}<span class="cf-btn-t">Cronômetro</span></button>
+    <div class="cf-full" hidden role="dialog" aria-modal="true" aria-label="Cronômetro em tela cheia">
+      <button class="cf-full-fechar" data-cf-full-fechar aria-label="Fechar tela cheia">${icone("x")}</button>
+      <div class="cf-full-big">00:00</div>
+      <div class="cf-full-cap"></div>
+      <div class="cf-full-ctrl">
+        <button class="cf-play" data-cf-full-toggle aria-label="Iniciar ou pausar">${icone("play")}</button>
+        <button class="cf-sec" data-cf-full-zerar title="Zerar" aria-label="Zerar">${icone("rotate-ccw")}</button>
+        <button class="cf-sec cf-full-skip" data-cf-full-pular title="Pular fase" aria-label="Pular fase">${icone("skip-forward")}</button>
+      </div>
+    </div>`;
   document.body.appendChild(widget);
 
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
@@ -384,9 +395,13 @@ function montarWidget() {
       toast("Não consegui abrir a janela do cronômetro.", "erro");
     }
   };
+  // No celular o PiP de vídeo não compensa (tela pequena, comportamento inconsistente entre
+  // navegadores) — nem tenta, vai direto para "abrir só o cronômetro". No desktop segue
+  // tentando o PiP normalmente. Mesmo breakpoint usado para o resto do app tratar "mobile".
+  const ehMobile = () => window.matchMedia("(max-width: 560px), (pointer: coarse)").matches;
   on("[data-cf-flutuar]", "click", async (e) => {
     e.stopPropagation();
-    if (!pipDisponivel()) return abrirSoCronometro();
+    if (ehMobile() || !pipDisponivel()) return abrirSoCronometro();
     try {
       await alternarPip({
         estado: () => ({
@@ -418,6 +433,12 @@ function montarWidget() {
   on("[data-cf-zerar]", "click", zerar);
   on("[data-cf-pular]", "click", pularFase);
   on("[data-cf-registrar]", "click", () => { if (aoPedirRegistro) aoPedirRegistro(); else if (app) app.navigate("hoje"); });
+  on("[data-cf-tela-cheia]", "click", (e) => { e.stopPropagation(); abrirTelaCheia(); });
+  on("[data-cf-full-fechar]", "click", fecharTelaCheia);
+  on("[data-cf-full-toggle]", "click", toggle);
+  on("[data-cf-full-zerar]", "click", zerar);
+  on("[data-cf-full-pular]", "click", pularFase);
+  widget.querySelector(".cf-full")?.addEventListener("click", (e) => { if (e.target === widget.querySelector(".cf-full")) fecharTelaCheia(); });
   widget.querySelectorAll(".cf-modo").forEach((b) =>
     b.addEventListener("click", () => {
       const novo = b.getAttribute("data-modo");
@@ -451,7 +472,11 @@ function montarWidget() {
   // um botão externo (ex.: "Cronômetro" do Hoje), o clique que dispara a abertura não é
   // interpretado como "clique fora" — no pointerdown desse gatilho, popAberto ainda é false.
   document.addEventListener("pointerdown", (e) => { if (popAberto && !widget.contains(e.target)) setPopAberto(false); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && popAberto) setPopAberto(false); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (telaCheiaAberta) fecharTelaCheia();
+    else if (popAberto) setPopAberto(false);
+  });
 }
 
 function setPopAberto(v) {
@@ -460,6 +485,46 @@ function setPopAberto(v) {
   if (pop) pop.hidden = !popAberto;
   if (widget) widget.classList.toggle("cf-open", popAberto);
   if (popAberto) atualizarWidget();
+}
+
+// ===== Tela cheia: fundo desfocado + relógio centralizado (voltou por pedido do usuário —
+// tinha sumido quando o "flutuar" ganhou o popover). Independente do PiP: é só CSS/DOM, então
+// funciona em qualquer navegador (inclusive iPad, onde o PiP de vídeo não existe). =====
+let telaCheiaAberta = false;
+function abrirTelaCheia() {
+  if (!widget) return;
+  telaCheiaAberta = true;
+  setPopAberto(false);
+  const full = widget.querySelector(".cf-full");
+  if (full) full.hidden = false;
+  atualizarTelaCheia();
+}
+function fecharTelaCheia() {
+  telaCheiaAberta = false;
+  const full = widget && widget.querySelector(".cf-full");
+  if (full) full.hidden = true;
+}
+function atualizarTelaCheia() {
+  if (!widget || !telaCheiaAberta) return;
+  const over = emOvertime();
+  const pausadoSeg = !s.running && s.base > 0 ? Math.max(0, (Date.now() - (s.pausedAt || Date.now())) / 1000) : 0;
+  const big = widget.querySelector(".cf-full-big");
+  if (big) big.textContent = (over ? "+" : "") + fmtMMSS(displaySeg());
+  const cap = widget.querySelector(".cf-full-cap");
+  if (cap) {
+    if (pausadoSeg > 0) cap.textContent = `Em pausa ${fmtMMSS(pausadoSeg)}`;
+    else if (s.modo === "pomodoro") cap.textContent = `${POMO_ROTULO[s.pomoFase]} · sessão ${s.pomoSessao} de ${pomoSessoesTotal()}`;
+    else if (over) cap.textContent = "Tempo extra — pause quando terminar";
+    else if (s.modo === "progressivo") cap.textContent = "Contando o tempo de estudo";
+    else cap.textContent = "Conta regressiva do bloco";
+  }
+  const playBtn = widget.querySelector("[data-cf-full-toggle]");
+  if (playBtn) playBtn.innerHTML = s.running ? icone("pause") : icone("play");
+  const temTempo = s.running || s.base > 0;
+  const zerarBtn = widget.querySelector("[data-cf-full-zerar]");
+  if (zerarBtn) zerarBtn.style.display = temTempo ? "" : "none";
+  const skipBtn = widget.querySelector("[data-cf-full-pular]");
+  if (skipBtn) skipBtn.style.display = s.modo === "pomodoro" ? "" : "none";
 }
 
 // Retrocompat: entradas antigas ("Começar agora"/"Cronômetro" do Hoje) abrem o popover.
@@ -494,6 +559,7 @@ function atualizarWidget() {
   // Botão FAB: tempo ao vivo quando ativo; "Cronômetro" quando ocioso.
   const btnT = widget.querySelector(".cf-btn-t");
   if (btnT) btnT.textContent = ativo() ? (over ? "+" : "") + fmtMMSS(displaySeg()) : "Cronômetro";
+  atualizarTelaCheia(); // independente do popover — a tela cheia pode estar aberta com o pop fechado
   if (!popAberto) return; // só atualiza o miolo do popover quando aberto
   widget.querySelectorAll(".cf-modo").forEach((b) => b.classList.toggle("on", b.getAttribute("data-modo") === s.modo));
   const showTimer = s.modo === "regressivo", showPomo = s.modo === "pomodoro";
