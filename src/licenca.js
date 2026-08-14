@@ -4,7 +4,8 @@
 // - Cada instalação tem um ID de máquina estável (vem do Rust, crate machine-uid).
 // - O usuário ativa com uma CHAVE. O app consulta o "porteiro" (um Web App em
 //   Google Apps Script + Planilha que o desenvolvedor gerencia), que vincula a
-//   chave àquela máquina e devolve uma validade (exp) + assinatura HMAC (sig).
+//   chave àquela máquina e devolve uma validade (exp) + uma ASSINATURA RSA
+//   (sigRsa), feita com a chave PRIVADA que só o porteiro tem.
 // - O app guarda {chave, maquina, exp, sig} no SQLite (fora do estado, sobrevive
 //   ao "apagar todos os dados"). Dentro da validade, abre offline. Vencida, revalida
 //   online; se a chave foi revogada/atingiu o limite de máquinas, bloqueia.
@@ -13,8 +14,16 @@
 // o portão é transparente — nada é exigido. A chamada ao porteiro passa pelo
 // tauri-plugin-http (feita pelo Rust) para não esbarrar em CORS do Apps Script.
 //
+// Por que ASSIMÉTRICA (mudou em 14/08/2026): antes a assinatura era um HMAC, e o
+// segredo precisava estar AQUI para o app conferir. Como este arquivo viaja dentro
+// de todo instalador e está num repositório público, esse segredo era público —
+// e quem o tivesse forjaria uma licença eterna para qualquer máquina, sem nunca
+// falar com o porteiro (a revogação deixava de alcançar). Agora o app carrega só a
+// chave PÚBLICA: ela verifica, não assina. Pode ser lida por qualquer um sem risco,
+// exatamente como a pubkey do updater no tauri.conf.json.
+//
 // >>> ANTES DE EMPACOTAR PARA DISTRIBUIR <<<
-// Preencha PORTEIRO_URL e PORTEIRO_SEGREDO abaixo com os valores do seu Apps Script
+// Preencha PORTEIRO_URL e PORTEIRO_PUBKEY abaixo com os valores do seu Apps Script
 // (veja empacotamento/licenca/GUIA_DEPLOY.md). Enquanto estiverem com o texto
 // "COLE_AQUI...", o portão fica DESLIGADO (útil para builds de teste).
 
@@ -27,11 +36,13 @@ const EMAIL_CONTATO = EMAIL_SUPORTE;
 
 // === CONFIGURAÇÃO DO PORTEIRO (preencher antes de distribuir) ===
 const PORTEIRO_URL = "https://script.google.com/macros/s/AKfycbwee3Zn6XFLZc18tETBwoEltkSAlDoKhjnBetxkyEvrEXyIKcMf_4zVV-4Pn3ggrExuEg/exec";
-const PORTEIRO_SEGREDO = "8a8404c13e1f1b9af59308399dc4f9c06e4f496c385e178ed04484011951b41d";
+// Chave PÚBLICA do porteiro (SPKI, base64). VERIFICA — não assina. Pode ser pública.
+const PORTEIRO_PUBKEY =
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA+iJTRNV2WMANEz6AulK+CdFeLJmN/zMVAcaTXZArlffxOwbU7PcsR8KaFKyfAXQWPhywabBM4xCXEMsGaFWN1TXdBn9dgSxw4uL8k3SqteiphTpmoruRq02Vhjrdj7kojITRAybFiGlZ0liJn6DVoIUQ1z0hSwedSytLcz9UpdorGrk2Y6wxJA6o0tFwxDoQaM6uQw2NrDzwxFFfmvdXFe2Oio19y8UfE6CkrmHeRfl6Vh6tfQRYYUVk/e9t+A9NLN3FAuFLS4mHpA22o/jhfUuLD2pQziDdBxT8S1P8noK3ouu2xw35Wt5HyQfJ/jh0oF06RYV2iRIkS2//o9jv3wIDAQAB";
 // =================================================================
 
 export const PORTEIRO_CONFIGURADO =
-  !PORTEIRO_URL.startsWith("COLE_AQUI") && !PORTEIRO_SEGREDO.startsWith("COLE_AQUI");
+  !PORTEIRO_URL.startsWith("COLE_AQUI") && !PORTEIRO_PUBKEY.startsWith("COLE_AQUI");
 
 function ehDesktop() {
   // No Tauri v2, window.__TAURI__ só existe com withGlobalTauri; o marcador sempre
@@ -85,37 +96,58 @@ async function limparLicenca() {
   } catch (_) {}
 }
 
-// HMAC-SHA256 em hex (mesmo cálculo do porteiro), via Web Crypto do webview.
-async function hmacHex(mensagem, segredo) {
-  const enc = new TextEncoder();
-  const chave = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(segredo),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const buf = await crypto.subtle.sign("HMAC", chave, enc.encode(mensagem));
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+// Verificação da assinatura do porteiro (RSASSA-PKCS1-v1_5 + SHA-256), via Web Crypto
+// do webview. Só VERIFICA: com a chave pública não se produz assinatura nenhuma.
+function b64ParaBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
-function assinatura(chave, maquina, exp) {
-  return hmacHex(`${APP_ID}|${chave}|${maquina}|${exp}`, PORTEIRO_SEGREDO);
+let _chavePub = null;
+async function chavePublica() {
+  if (!_chavePub) {
+    _chavePub = await crypto.subtle.importKey(
+      "spki",
+      b64ParaBytes(PORTEIRO_PUBKEY),
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+  }
+  return _chavePub;
+}
+
+// Mensagem assinada: "mentor-concurso|<chave>|<maquina>|<exp>" (a mesma do porteiro).
+async function assinaturaConfere(chave, maquina, exp, sigB64) {
+  if (!sigB64) return false;
+  try {
+    const msg = new TextEncoder().encode(`${APP_ID}|${chave}|${maquina}|${exp}`);
+    return await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      await chavePublica(),
+      b64ParaBytes(sigB64),
+      msg
+    );
+  } catch (_) {
+    return false; // base64 malformado, chave inválida, etc.
+  }
 }
 
 async function licencaOk(lic, maquina) {
   if (!lic || !lic.chave || !lic.maquina || !lic.exp || !lic.sig) return false;
   if (lic.maquina !== maquina) return false; // licença copiada de outra máquina
   if (agoraSeg() >= Number(lic.exp)) return false; // vencida → precisa revalidar
-  const sig = await assinatura(lic.chave, lic.maquina, lic.exp);
-  return sig === lic.sig; // detecta adulteração local (ex.: esticar a validade)
+  // detecta adulteração local (ex.: esticar a validade no banco)
+  return assinaturaConfere(lic.chave, lic.maquina, lic.exp, lic.sig);
 }
 
 async function consultar(chave, maquina) {
   const resp = await porteiroFetch(PORTEIRO_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chave, maquina, app: APP_ID, v: 1 }),
+    body: JSON.stringify({ chave, maquina, app: APP_ID, v: 2 }),
   });
   return resp.json();
 }
@@ -133,9 +165,11 @@ export async function ativar(chaveDigitada) {
     return { ok: false, motivo: "offline" };
   }
   if (!data || !data.ok) return { ok: false, motivo: (data && data.motivo) || "erro" };
-  const sig = await assinatura(chave, maquina, data.exp);
-  if (sig !== data.sig) return { ok: false, motivo: "assinatura" };
-  await gravarLicenca({ chave, maquina, exp: Number(data.exp), sig: data.sig, titular: data.titular || "" });
+  const sig = data.sigRsa || "";
+  if (!(await assinaturaConfere(chave, maquina, data.exp, sig))) {
+    return { ok: false, motivo: "assinatura" };
+  }
+  await gravarLicenca({ chave, maquina, exp: Number(data.exp), sig, alg: "RS256", titular: data.titular || "" });
   return { ok: true };
 }
 
@@ -148,9 +182,11 @@ async function revalidar(lic, maquina) {
     return { ok: false, motivo: "offline" };
   }
   if (data && data.ok) {
-    const sig = await assinatura(lic.chave, maquina, data.exp);
-    if (sig !== data.sig) return { ok: false, motivo: "assinatura" };
-    await gravarLicenca({ ...lic, exp: Number(data.exp), sig: data.sig, titular: data.titular || lic.titular || "" });
+    const sig = data.sigRsa || "";
+    if (!(await assinaturaConfere(lic.chave, maquina, data.exp, sig))) {
+      return { ok: false, motivo: "assinatura" };
+    }
+    await gravarLicenca({ ...lic, exp: Number(data.exp), sig, alg: "RS256", titular: data.titular || lic.titular || "" });
     return { ok: true };
   }
   // chave revogada ou inexistente: apaga a licença local para exigir nova ativação.
