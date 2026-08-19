@@ -25,6 +25,28 @@ export const NOVIDADES = [
     ],
   },
   {
+    v: "0.8.12",
+    data: "agosto/2026",
+    titulo: "Licença: a chave de assinatura saiu de dentro do aplicativo",
+    itens: [
+      "SEGURANÇA — o servidor de licenças assinava com um segredo que precisava estar também dentro do app para ele conferir. Como o aplicativo é instalado em cada máquina e o código é público, esse segredo era público: com ele daria para forjar uma licença eterna para qualquer máquina, e uma licença revogada nunca mais seria alcançada. Agora o servidor assina com chave privada (que só ele tem) e o app apenas verifica com a chave pública — verificar não dá poder de assinar. É o mesmo modelo que o app já usava para conferir as atualizações.",
+      "A licença se revalida sozinha na primeira abertura com internet: não é preciso digitar chave nenhuma. Máquinas ainda na versão antiga continuam funcionando durante a transição.",
+    ],
+  },
+  {
+    v: "0.8.11",
+    data: "agosto/2026",
+    titulo: "Escolher tópico ficou usável, e a IA passou a gerar para vários de uma vez",
+    itens: [
+      "Todo lugar em que se escolhe um tópico (Registrar Sessão, vincular questões, filtro, Hoje, Dossiê, Mapas Mentais) trocou a lista corrida de centenas de opções por uma lista agrupada por disciplina, com busca.",
+      "Gerar com IA passou a aceitar VÁRIOS tópicos de uma vez (materiais, flashcards, questões, mapa mental, resumo, revisão): a quantidade pedida é dividida entre os selecionados, garantindo que todos entrem na geração — antes só o primeiro entrava.",
+      "Modo Foco: dá para riscar alternativa (tesoura, reversível), a resposta agora é selecionar + confirmar em vez de valer no primeiro clique, e a tela não recarrega mais a cada ação. Atalhos por letra (A–F).",
+      "Cronômetro: tela cheia voltou como opção própria; a janelinha flutuante foi desabilitada no celular, onde não funciona.",
+      "Plano do cursinho: o app passou a reconhecer o nome da disciplina como cabeçalho de bloco mesmo sem escrever \"Disciplina:\".",
+      "Plano de hoje mostra as tarefas avulsas pendentes e as concluídas no dia; mais níveis de dificuldade na geração de questões.",
+    ],
+  },
+  {
     v: "0.8.10",
     data: "agosto/2026",
     titulo: "Olho da senha de sincronização — faltava no campo de Configurações",
