@@ -10,9 +10,30 @@ import { abrirRegistroSessao } from "../registro-sessao.js";
 import { progressRing } from "../viz.js";
 import { lembretesListaHTML, abrirLembretes, tratarCliqueLembrete } from "../lembretes.js";
 
-let sel = { fase: null, topicoId: null, blocoMin: null, missaoId: null }; // blocoMin: tempo do bloco; missaoId: tarefa planejada em foco (pré-seleciona no registro)
+// Foco de agora. `tarefaId`/`tarefaTipo` apontam a TAREFA em foco — o foco não é mais só um
+// tópico: "ler lei seca" e "ver informativo" são tarefas legítimas e muitas nem têm tópico
+// (as importadas de cronograma nunca têm). `manual` marca que o usuário escolheu o tópico à
+// mão, para a semente do plano não atropelar a escolha dele. `dia` faz o foco expirar na virada.
+let sel = { fase: null, topicoId: null, blocoMin: null, missaoId: null, tarefaId: null, tarefaTipo: null, faseDeTarefa: null, manual: false, dia: null };
 let anelAnimou = false; // count-up dos anéis só na 1ª renderização da sessão (não re-anima a cada ação)
 let mentorFalou = false; // streaming do texto do Mentor só uma vez por sessão (não re-digita a cada ação)
+
+// Categoria da tarefa → fase do estudo. É o único uso funcional da categoria no app: sem isso
+// ela é só uma etiqueta colorida no Planejamento.
+const CAT_FASE = { "Prática": "A", "Revisão": "R", "Materiais": "E", "Lei Seca": "E", "Jurisprudência": "E" };
+// Põe uma tarefa no foco. Aplicada tanto pela semente do plano quanto pelo clique — antes cada
+// caminho fazia uma coisa diferente, e a categoria só virava fase na primeiríssima renderização.
+function aplicarTarefaAoFoco(t, st) {
+  sel.tarefaId = t.id;
+  sel.tarefaTipo = t.tipo;
+  sel.missaoId = t.tipo === "missao" ? t.id : null;
+  sel.blocoMin = t.estimMin || null;
+  // Tópico é OPCIONAL: tarefa sem tópico (lei seca, informativo, importada de cronograma) vira
+  // foco do mesmo jeito e não arrasta um tópico velho junto, que confundiria o registro.
+  sel.topicoId = t.topicoId && (st.topicos || []).some((x) => x.id === t.topicoId) ? t.topicoId : null;
+  // A fase vem da categoria a cada troca de tarefa; trocar de aba depois continua livre.
+  if (CAT_FASE[t.categoria] && sel.faseDeTarefa !== t.id) { sel.fase = CAT_FASE[t.categoria]; sel.faseDeTarefa = t.id; }
+}
 
 // "Por quê" data-driven do foco de hoje (voz de IA de verdade, não filler): usa SÓ sinais
 // que existem no app — revisão vencida, desempenho fraco, flashcards vencidos, relevância.
@@ -46,39 +67,46 @@ export default function renderHoje(root, app) {
   const lembTotal = store.lembretes().length;
   const lembPend = store.lembretesPendentes ? store.lembretesPendentes() : 0;
 
-  // O foco do dia segue o PLANO quando existe um: a primeira tarefa pendente com tópico, na
-  // ordem em que você planejou. Antes o foco vinha sempre do ciclo (score, revisão vencida,
-  // ordem das aulas) e ignorava o que você tinha planejado para hoje — a tela dizia uma coisa
-  // no "Plano de hoje" e outra no card de foco, e o cronômetro e o registro herdavam a segunda.
-  // Tarefa AVULSA (sem dia marcado) não entra sozinha: ela vira foco só se você clicar nela.
-  const tarefasDia = store.tarefasDoDia(todayISO());
-  const CAT_FASE = { "Prática": "A", "Revisão": "R", "Materiais": "E", "Lei Seca": "E", "Jurisprudência": "E" };
-  const tarefaFoco = tarefasDia.find((t) => !t.concluida && t.topicoId && st.topicos.some((x) => x.id === t.topicoId));
-  if (!sel.topicoId && tarefaFoco) {
-    sel.topicoId = tarefaFoco.topicoId;
-    sel.missaoId = tarefaFoco.tipo === "missao" ? tarefaFoco.id : null;
-    sel.blocoMin = tarefaFoco.estimMin || null;
-    if (!sel.fase && CAT_FASE[tarefaFoco.categoria]) sel.fase = CAT_FASE[tarefaFoco.categoria];
+  // ===== Foco de agora =====
+  // O foco segue o PLANO quando existe um: a primeira tarefa pendente do dia, na ordem em que
+  // você planejou — COM OU SEM tópico. Antes o foco vinha sempre do ciclo (score, revisão
+  // vencida, ordem das aulas) e exigia tópico, então "ler lei seca" e qualquer tarefa vinda de
+  // importação de cronograma (que nasce sem tópico) nunca podiam ser o foco.
+  // Tarefa AVULSA (sem dia marcado) não entra sozinha: vira foco só no clique.
+  const hojeISO = todayISO();
+  if (sel.dia !== hojeISO) sel = { fase: null, topicoId: null, blocoMin: null, missaoId: null, tarefaId: null, tarefaTipo: null, faseDeTarefa: null, manual: false, dia: hojeISO };
+  const tarefasDia = store.tarefasDoDia(hojeISO);
+  const tarefasTodas = [...tarefasDia, ...store.tarefasAvulsasHoje()];
+  // A tarefa em foco é relida a cada render: concluída, apagada ou de outro dia, ela cai
+  // sozinha e o foco volta a se semear — em vez de grudar até recarregar o app.
+  let tarefaFoco = sel.tarefaId ? tarefasTodas.find((t) => t.id === sel.tarefaId && t.tipo === sel.tarefaTipo && !t.concluida) : null;
+  if (sel.tarefaId && !tarefaFoco) { sel.tarefaId = null; sel.tarefaTipo = null; sel.missaoId = null; sel.blocoMin = null; }
+  if (!tarefaFoco && !sel.manual) {
+    tarefaFoco = tarefasDia.find((t) => !t.concluida);
+    if (tarefaFoco) aplicarTarefaAoFoco(tarefaFoco, st);
   }
   if (!sel.fase) sel.fase = plano.fase;
   if (app.params && app.params.reta) {
     sel.fase = "R";
     app.params.reta = null;
   }
-  if (!sel.topicoId && plano.topico) sel.topicoId = plano.topico.id;
+  // Sem tarefa em foco, o tópico do ciclo assume. COM tarefa em foco, não: uma tarefa sem
+  // tópico tem de poder ficar sem tópico, senão o registro grava a sessão no tópico errado.
+  if (!sel.topicoId && !tarefaFoco && plano.topico) sel.topicoId = plano.topico.id;
   // Quando ocioso e em modo regressivo, alinha o alvo ao tempo do BLOCO planejado em foco
   // (se houver) ou, na falta dele, ao bloco padrão das configurações.
   if (crono.snapshot().modo === "regressivo") crono.setTargetIfIdle((sel.blocoMin || st.config.pomodoroFoco || 25) * 60);
 
   const faseInfo = FASES[sel.fase] || plano.faseInfo;
-  const topicoSel = st.topicos.find((t) => t.id === sel.topicoId) || plano.topico;
+  const topicoSel = st.topicos.find((t) => t.id === sel.topicoId) || (tarefaFoco ? null : plano.topico);
   // O foco só é "sugerido pelo Mentor" quando FASE **e** TÓPICO batem com a sugestão
   // (plano.fase + plano.topico). Trocar a aba (Estudo/Prática/Revisão) OU o tópico já é
   // escolha do usuário — senão o selo afirmaria uma sugestão que o Mentor não fez.
   const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id && sel.fase === plano.fase);
   // Foco que veio do PLANO leva selo próprio: dizer "sugerido pelo Mentor" no que o usuário
   // mesmo planejou seria atribuir ao app uma escolha que é dele.
-  const focoDoPlano = !!(topicoSel && tarefaFoco && topicoSel.id === tarefaFoco.topicoId);
+  // Basta a tarefa estar em foco — ela não precisa ter tópico para o selo ser verdadeiro.
+  const focoDoPlano = !!tarefaFoco;
 
   const vencidos = store.flashcardsVencidos().length;
   const metas = store.metas();
@@ -122,9 +150,13 @@ export default function renderHoje(root, app) {
   const pbTask = (it) => {
     const cor = it.tipo === "rotina" ? "#f472b6" : "#818cf8";
     const tag = it.tipo === "rotina" ? "Rotina" : it.data ? "Tarefa" : "Avulsa";
-    return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}" style="--c:${cor}"${!it.concluida && (it.topicoId || it.estimMin) ? ` data-action="focar-topico"${it.topicoId ? ` data-top="${it.topicoId}"` : ""} data-min="${it.estimMin || ""}"${it.tipo === "missao" ? ` data-missao="${it.id}"` : ""}` : ""}>
+    // TODA tarefa pendente é clicável, com ou sem tópico e com ou sem tempo: antes só era
+    // clicável quando tinha um dos dois, e tarefa de cronograma importado não tem nenhum —
+    // ficava impossível colocá-la em foco.
+    const emFoco = !it.concluida && sel.tarefaId === it.id && sel.tarefaTipo === it.tipo;
+    return `<div class="pb pb-task${it.concluida ? " pb-done" : ""}${emFoco ? " pb-foco" : ""}" style="--c:${cor}"${!it.concluida ? ` data-action="focar-tarefa" data-tarefa="${it.id}" data-tarefa-tipo="${it.tipo}"` : ""}>
         <span class="pb-stripe"></span>
-        <div class="pb-top"><span class="pb-tag">${tag}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : it.data ? "Você planejou" : "Sem dia marcado"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}</div>
+        <div class="pb-top"><span class="pb-tag">${tag}</span><span class="pb-src pb-you">${it.tipo === "rotina" ? "Sua rotina" : it.data ? "Você planejou" : "Sem dia marcado"}</span>${it.estimMin ? `<span class="pb-tm">≈ ${fmtMin(it.estimMin)}</span>` : ""}${emFoco ? `<span class="pb-tm pb-emfoco">em foco</span>` : ""}</div>
         <h4><span class="pb-chk" data-action="th-toggle" data-tipo="${it.tipo}" data-id="${it.id}"${it.concluida ? " data-on" : ""}></span>${esc(it.titulo)}</h4>
       </div>`;
   };
@@ -145,6 +177,16 @@ export default function renderHoje(root, app) {
   // foco sugerido — o "Plano de hoje" abaixo lista só o que o usuário planejou.
   const porqueHoje = topicoSel ? porqueFoco(store, st, topicoSel) : "";
   const discFoco = topicoSel ? st.disciplinas.find((d) => d.id === topicoSel.disciplinaId) : null;
+  // O que o Mentor tem a propor além do que já está em foco: o tópico do ciclo (quando não é o
+  // que você já está vendo) e as revisões pendentes. Vira botão no card dele.
+  const revPendentes = store.flashcardsVencidos().length + store.revisoesTopicoCount() + store.memoriasParaRevisar() + store.resumosParaRevisar() + store.mapasParaRevisar();
+  const sugestaoMentor = {
+    topico: plano.topico || null,
+    fase: plano.fase || "",
+    jaEmFoco: !!(plano.topico && topicoSel && plano.topico.id === topicoSel.id && !tarefaFoco),
+    revisoes: revPendentes,
+    topicoRev: revFoco && revFoco.proxima && revFoco.proxima <= todayISO() && topicoSel ? topicoSel.id : "",
+  };
   const ondePareiFase = ultimaSess ? (FASES[ultimaSess.fase] && FASES[ultimaSess.fase].nome) || "" : "";
 
   root.innerHTML = `
@@ -169,10 +211,11 @@ export default function renderHoje(root, app) {
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>
       </div>
-      ${discFoco ? `<div class="foco-disc">${esc(discFoco.nome)}</div>` : ""}
+      ${tarefaFoco ? `<div class="foco-disc">${esc(tarefaFoco.categoria && tarefaFoco.categoria !== "Não definida" ? tarefaFoco.categoria : (tarefaFoco.data ? "Tarefa de hoje" : "Tarefa avulsa"))}${discFoco ? ` · ${esc(discFoco.nome)}` : ""}</div>`
+        : discFoco ? `<div class="foco-disc">${esc(discFoco.nome)}</div>` : ""}
       <div class="foco-topline">
-        <div class="foco-topico-nome">${topicoSel ? esc(topicoSel.nome) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
-        ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="Escolher outra disciplina e tópico.">${icone("repeat-2")} Trocar tópico</button>` : ""}
+        <div class="foco-topico-nome">${tarefaFoco ? esc(tarefaFoco.titulo) : topicoSel ? esc(topicoSel.nome) : st.topicos.length ? "Escolha um tópico" : "Monte seu edital para o Mentor montar seu dia"}</div>
+        ${st.topicos.length ? `<button class="btn btn-ghost btn-sm foco-trocar" data-action="trocar-topico" data-tip="${tarefaFoco && !topicoSel ? "Vincular um tópico do edital a esta tarefa (opcional)." : "Escolher outra disciplina e tópico."}">${icone("repeat-2")} ${tarefaFoco && !topicoSel ? "Vincular tópico" : "Trocar tópico"}</button>` : ""}
       </div>
       ${
         st.topicos.length
@@ -194,7 +237,7 @@ export default function renderHoje(root, app) {
     </section>
       <aside class="hoje-side">
         ${ringsHTML(store)}
-        ${mentorVozHTML(store, st, topicoSel, focoRevVenceHoje ? `A revisão de ${topicoSel.nome} vence hoje — quer resolver agora?` : porqueHoje || (pontoInsight ? pontoInsight.txt : ""))}
+        ${mentorVozHTML(store, st, topicoSel, focoRevVenceHoje ? `A revisão de ${topicoSel.nome} vence hoje — quer resolver agora?` : porqueHoje || (pontoInsight ? pontoInsight.txt : ""), sugestaoMentor)}
       </aside>
     </div>
 
@@ -236,11 +279,13 @@ export default function renderHoje(root, app) {
   function atualizaVinculo() {
     const t = st.topicos.find((x) => x.id === sel.topicoId);
     // Espelha o vínculo no cronômetro global (para o registro e o rótulo do mini-relógio).
+    // Sem tópico, o rótulo é o TÍTULO DA TAREFA: o cronômetro flutuante mostrava só a fase
+    // ("Estudo") quando o foco era "ler lei seca", e não dava para saber o que estava rodando.
     crono.vincular({
       fase: sel.fase,
       topicoId: sel.topicoId,
       faseNome: FASES[sel.fase]?.nome || "",
-      topicoLabel: t ? rotuloTopico(st, t) : "",
+      topicoLabel: t ? rotuloTopico(st, t) : (tarefaFoco ? tarefaFoco.titulo : ""),
       cor: FASES[sel.fase]?.cor,
     });
   }
@@ -301,9 +346,16 @@ export default function renderHoje(root, app) {
     // Trocar o tópico em foco: seletor disciplina → tópico (o usuário escolhe, não o sistema).
     "trocar-topico": () => {
       abrirSeletorTopico(store, (topId) => {
-        sel.topicoId = topId;
-        sel.blocoMin = null; // escolha manual não é bloco planejado
-        sel.missaoId = null;
+        // Com uma tarefa em foco, escolher tópico é VINCULAR o tópico a ela (a tarefa continua
+        // em foco, com o bloco de tempo dela). Sem tarefa, é a escolha manual de sempre.
+        if (sel.tarefaId) {
+          sel.topicoId = topId;
+        } else {
+          sel.topicoId = topId;
+          sel.blocoMin = null; // escolha manual não é bloco planejado
+          sel.missaoId = null;
+          sel.manual = true; // não deixa a semente do plano atropelar a escolha do usuário
+        }
         app.refresh();
       });
     },
@@ -324,33 +376,34 @@ export default function renderHoje(root, app) {
       else store.toggleMissao(id);
       app.refresh();
     },
-    // Clicar num item do plano / numa tarefa → torna-o o FOCO atual (rola até o card de foco).
-    "focar-topico": (el) => {
-      const top = el.getAttribute("data-top") || el.getAttribute("data-topico");
-      const min = Number(el.getAttribute("data-min"));
-      sel.missaoId = el.getAttribute("data-missao") || null; // tarefa do bloco → pré-seleciona no registro
-      if (top) {
-        // Tarefa COM tópico → vira o "foco de agora" (tópico + tempo do bloco no cronômetro).
-        sel.topicoId = top;
-        const f = el.getAttribute("data-fase");
-        if (f && FASES[f]) sel.fase = f;
-        sel.blocoMin = min > 0 ? min : null;
-        if (sel.blocoMin) {
-          const snap = crono.snapshot();
-          if (!snap.running && snap.elapsed === 0) { crono.setModo("regressivo"); crono.setTarget(sel.blocoMin * 60); }
-        }
-        app.refresh();
-        requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
-        toast("Foco atualizado — comece quando quiser.");
-      } else if (min > 0) {
-        // Tarefa SÓ com tempo (sem tópico real) → é um bloco de tempo puro: vai direto pro
-        // cronômetro em modo Timer e abre o relógio, SEM associar um tópico falso ao foco.
+    // Clicar numa tarefa (do plano ou avulsa) → ela vira o FOCO, com ou sem tópico.
+    "focar-tarefa": (el) => {
+      const id = el.getAttribute("data-tarefa");
+      const tipo = el.getAttribute("data-tarefa-tipo");
+      const t = [...store.tarefasDoDia(todayISO()), ...store.tarefasAvulsasHoje()].find((x) => x.id === id && x.tipo === tipo);
+      if (!t) return;
+      aplicarTarefaAoFoco(t, store.get());
+      sel.manual = false; // a escolha passa a ser a tarefa; a semente do plano volta a valer quando ela sair
+      if (sel.blocoMin) {
         const snap = crono.snapshot();
-        const ocioso = !snap.running && snap.elapsed === 0;
-        if (ocioso) { crono.setModo("regressivo"); crono.setTarget(min * 60); }
-        crono.setModoTela("focus");
-        toast(ocioso ? `Timer de ${min} min pronto — dê play quando quiser.` : "Cronômetro em uso — finalize a sessão atual antes.");
+        if (!snap.running && snap.elapsed === 0) { crono.setModo("regressivo"); crono.setTarget(sel.blocoMin * 60); }
       }
+      app.refresh();
+      requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      toast(sel.topicoId ? "Foco atualizado — comece quando quiser." : "Foco atualizado — esta tarefa não tem tópico, e tudo bem.");
+    },
+    // Sugestão do Mentor (tópico do ciclo ou revisão) → vira o foco, do mesmo jeito que uma
+    // tarefa do plano. Antes a sugestão era só texto: não dava para aceitá-la em um clique.
+    "focar-sugestao": (el) => {
+      const top = el.getAttribute("data-top");
+      const f = el.getAttribute("data-fase");
+      sel.tarefaId = null; sel.tarefaTipo = null; sel.missaoId = null; sel.blocoMin = null;
+      sel.manual = true; // sugestão aceita à mão: a semente do plano não sobrescreve
+      if (top) sel.topicoId = top;
+      if (f && FASES[f]) { sel.fase = f; sel.faseDeTarefa = null; }
+      app.refresh();
+      requestAnimationFrame(() => root.querySelector(".foco-hero")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      toast("Foco atualizado — comece quando quiser.");
     },
     "ir-pratica": async () => {
       sel.fase = "A";
@@ -430,9 +483,19 @@ function ringsHTML(store) {
 
 // Card do Mentor com voz: o "porquê" do foco agora (banca/erros/flashcards), ou a revisão
 // que vence, ou um ponto de atenção — tudo aqui, NÃO no card de foco + sugestões (propõe, não executa).
-function mentorVozHTML(store, st, topicoSel, insightTxt) {
+function mentorVozHTML(store, st, topicoSel, insightTxt, sugestao) {
   const nomeTop = topicoSel ? rotuloTopico(st, topicoSel) : "";
   const sug = (q, lbl) => `<button class="chip hmv-sug" data-action="mentor-sug" data-q="${esc(q)}">${esc(lbl)}</button>`;
+  // O que o Mentor sugere vira BOTÃO, não só texto: aceitar a sugestão em um clique é o mesmo
+  // gesto de clicar numa tarefa do plano. Antes o card só falava, e trocar o foco era manual.
+  const sugFoco = [
+    sugestao && sugestao.revisoes
+      ? `<button class="chip hmv-sug hmv-sug-foco" data-action="focar-sugestao" data-fase="R"${sugestao.topicoRev ? ` data-top="${sugestao.topicoRev}"` : ""} data-tip="Põe a Revisão em foco agora.">${icone("repeat-2")} Revisar (${sugestao.revisoes} ${sugestao.revisoes === 1 ? "pendente" : "pendentes"})</button>`
+      : "",
+    sugestao && sugestao.topico && !sugestao.jaEmFoco
+      ? `<button class="chip hmv-sug hmv-sug-foco" data-action="focar-sugestao" data-top="${sugestao.topico.id}" data-fase="${sugestao.fase || ""}" data-tip="Põe este tópico em foco agora.">${icone("target")} Estudar ${esc(sugestao.topico.nome.length > 42 ? sugestao.topico.nome.slice(0, 42) + "…" : sugestao.topico.nome)}</button>`
+      : "",
+  ].filter(Boolean).join("");
   // Fase 3: PLANO NOVO ainda não visto tem prioridade no card — a fala genuína da IA
   // (auto-análise do boot) aparece AQUI, não escondida numa aba.
   const planoNovo = store.mentorPlanoNaoVisto && store.mentorPlanoNaoVisto() ? st.config.mentorPlano : null;
@@ -456,6 +519,7 @@ function mentorVozHTML(store, st, topicoSel, insightTxt) {
       <div class="hmv-head"><span class="orb orb-sm" aria-hidden="true"></span><b>Mentor <span class="txt-ia">IA</span></b><span class="hmv-badge">sugere</span></div>
       <p class="hmv-porque${insightTxt ? "" : " muted"}">${insightTxt ? `${icone("sparkles")} <span class="hmv-txt" data-stream>${txt}</span>` : `<span class="hmv-txt">${txt}</span>`}</p>
       <div class="hmv-sugs">
+        ${sugFoco}
         ${topicoSel ? sug(`Gere 10 questões de ${nomeTop}`, "Gerar questões") : ""}
         ${topicoSel ? sug(`Faça um resumo de ${nomeTop}`, "Resumir o tópico") : ""}
         <button class="chip hmv-sug" data-action="refazer-plano" data-tip="Abre o Mentor IA e reanalisa seu progresso — metas, tarefas e revisões.">${icone("refresh-cw")} Refazer meu plano</button>

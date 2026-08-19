@@ -8,6 +8,20 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.18",
+    data: "agosto/2026",
+    titulo: "O foco de hoje aceita qualquer tarefa do plano, com ou sem tópico",
+    itens: [
+      "CORREÇÃO — o foco só conseguia ser um TÓPICO, então tarefa como \"ler lei seca\" ou \"ver informativo\" nunca virava foco. E toda tarefa vinda de importação de cronograma nasce sem tópico (o formulário de importação não tem esse campo), o que deixava boa parte do plano de fora. Agora o foco é a TAREFA: o card mostra o título dela, e o tópico é opcional.",
+      "Clicar em qualquer tarefa pendente — do plano ou avulsa, com ou sem tópico, com ou sem tempo — coloca ela em foco. Antes só funcionava se a tarefa tivesse tópico ou tempo estimado, e a avulsa sem tópico só abria o cronômetro sem mudar o foco.",
+      "A categoria da tarefa passa a definir a fase TODA vez que o foco muda (Prática→Prática, Revisão→Revisão, Materiais/Lei Seca/Jurisprudência→Estudo). Antes isso valia só na primeira abertura do app e nunca mais.",
+      "O foco expira sozinho: ao virar o dia, ou quando a tarefa em foco é concluída ou apagada, ele volta a seguir o plano. Antes uma escolha antiga grudava até você recarregar o app.",
+      "O cronômetro flutuante mostra o título da tarefa quando ela não tem tópico — antes exibia só a fase (\"Estudo\") e não dava para saber o que estava rodando.",
+      "O card do Mentor agora tem botões: \"Estudar <tópico>\" e \"Revisar (N pendentes)\" trocam o foco em um clique, do mesmo jeito que clicar numa tarefa. Antes a sugestão era só texto.",
+      "No Plano do cursinho: o nome da aula e o contador de tópicos ficam na mesma linha, os títulos do \"Ver por tópico\" deixaram de sair desalinhados, e a barra ganhou dois controles separados — um recolhe as disciplinas, outro os vínculos de cada linha.",
+    ],
+  },
+  {
     v: "0.8.17",
     data: "agosto/2026",
     titulo: "O foco de hoje passa a seguir o SEU plano do dia",

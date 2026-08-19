@@ -1048,9 +1048,24 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .cur-edit:hover { background: var(--surface-2); color: var(--text); }
 .cur-edit .ico { width: 15px; height: 15px; }
 .cur-aula-tops { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+/* Rótulo + ação andam juntos: como filhos soltos do flex da barra, "Disciplinas:" e "recolher"
+   quebravam em linhas diferentes quando o espaço apertava. */
+.cur-ctrl { display: inline-flex; align-items: baseline; gap: 5px; white-space: nowrap; }
+/* Foco de agora: destaque da tarefa em foco na lista do plano */
+.pb-foco { box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 45%, transparent); }
+.pb-emfoco { color: var(--primary-d); font-weight: var(--fw-medium); }
+.hmv-sug-foco { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); }
+/* Título da aula/tópico + o contador de vínculos NA MESMA LINHA; o contador desce sozinho
+   quando o título não deixa espaço, e ao abrir os chips ocupam uma linha inteira embaixo. */
+.cur-aula-titulo { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.cur-aula-acc { flex: 0 1 auto; min-width: 0; }
+.cur-aula-acc[open] { flex-basis: 100%; }
+/* Nome do tópico dentro de <button>: o padrão do navegador é centralizar, e um nome longo
+   quebrado em duas linhas saía centralizado ao lado de outro alinhado à esquerda. */
+.cur-aula-titulo .lnk, .cur-top-lnk { text-align: left; }
 /* Tópicos da aula recolhidos: só o contador na linha, os chips abrem sob demanda */
 .cur-aula-acc > summary.cur-aula-acc-sum { list-style: none; cursor: pointer; user-select: none; display: inline-flex;
-  align-items: center; gap: 6px; margin-top: 6px; font-size: var(--fs-xs); color: var(--muted); }
+  align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 .cur-aula-acc > summary.cur-aula-acc-sum::-webkit-details-marker { display: none; }
 .cur-aula-acc > summary.cur-aula-acc-sum:hover { color: var(--text-2); }
 .cur-aula-acc > summary .ico { width: 14px; height: 14px; transition: transform var(--dur-2) var(--ease-std); }
@@ -5423,7 +5438,7 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
 .pb:hover { transform: translateY(-2px); border-color: var(--border-hover); box-shadow: var(--elev-1); }
 .pb-stripe { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c, var(--primary)); }
 .pb-ai .pb-stripe { background: var(--ai-grad); }
-.pb-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pb-top { display: flex; align-items: center; gap: 8px 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .pb-tag { font-size: 0.7rem; font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 8px; border-radius: var(--radius-xs); color: var(--c, var(--primary)); background: color-mix(in srgb, var(--c, var(--primary)) 15%, transparent); white-space: nowrap; flex: none; }
 .pb-src { font-size: 0.7rem; font-weight: var(--fw-bold); text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; border-radius: var(--radius-xs); white-space: nowrap; flex: none; }
 .pb-ai-src { color: var(--accent-d); background: var(--accent-soft); display: inline-flex; align-items: center; gap: 3px; }

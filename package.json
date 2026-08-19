@@ -1,7 +1,7 @@
 {
   "name": "mentor-concurso",
   "private": true,
-  "version": "0.8.17",
+  "version": "0.8.18",
   "type": "module",
   "description": "Mentor Concurso — app de estudo e organização para concursos",
   "scripts": {

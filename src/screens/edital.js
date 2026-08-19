@@ -1155,9 +1155,27 @@ function aulasListaHTML(store, st) {
       const discIds = [...new Set(tops.map((t) => t.disciplinaId).filter(Boolean))];
       const multi = discIds.length > 1;
       const concl = tops.filter((t) => t.concluido).length;
+      // Assuntos do cursinho que ainda não casaram com tópico do edital (no preview aparecem;
+      // aqui não podem sumir). Calculado antes do cabeçalho porque o contador vive nele.
+      const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId, restrito: !!a.disciplinaId }));
+      const rotuloTops = [
+        tops.length ? `${tops.length} ${tops.length === 1 ? "tópico do edital" : "tópicos do edital"}` : "",
+        naoCasados.length ? `${naoCasados.length} sem tópico` : "",
+      ].filter(Boolean).join(" · ");
       return `<div class="cur-aula-row">
         <div class="cur-aula-head">
-          <b class="cur-aula-nome">${esc(tituloAulaNoGrupo(a, grupoNome))}</b>
+          <div class="cur-aula-titulo">
+            <b class="cur-aula-nome">${esc(tituloAulaNoGrupo(a, grupoNome))}</b>
+            ${tops.length || naoCasados.length
+              ? `<details class="cur-aula-acc" data-aula-acc="${a.id}" ${curTopsAbertos.has(a.id) ? "open" : ""}>
+                  <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${rotuloTops}</span></summary>
+                  <div class="cur-aula-tops">
+                    ${tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")}
+                  </div>
+                  ${naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : ""}
+                </details>`
+              : `<span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span>`}
+          </div>
           ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
           ${tops.length ? `<span class="cur-prog" data-tip="Tópicos desta aula concluídos.">${concl}/${tops.length}</span>` : ""}
@@ -1172,29 +1190,6 @@ function aulasListaHTML(store, st) {
             </div>
           </details>
         </div>
-        ${(() => {
-          // Os tópicos do edital são PARÁGRAFOS inteiros ("(31) Mandado de Segurança… 18 itens"):
-          // um chip por tópico em 61 aulas vira paredão. Ficam recolhidos atrás do contador e
-          // abrem sob demanda — mesma solução já usada nos materiais. O nome da aula, esse, fica
-          // sempre inteiro: é por ele que se acha a aula na lista.
-          // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital entram
-          // no mesmo bloco (no preview aparecem; aqui não podem sumir).
-          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId, restrito: !!a.disciplinaId }));
-          if (!tops.length && !naoCasados.length) {
-            return `<div class="cur-aula-tops"><span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span></div>`;
-          }
-          const rotulo = [
-            tops.length ? `${tops.length} ${tops.length === 1 ? "tópico do edital" : "tópicos do edital"}` : "",
-            naoCasados.length ? `${naoCasados.length} sem tópico` : "",
-          ].filter(Boolean).join(" · ");
-          return `<details class="cur-aula-acc" data-aula-acc="${a.id}" ${curTopsAbertos.has(a.id) ? "open" : ""}>
-            <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${rotulo}</span></summary>
-            <div class="cur-aula-tops">
-              ${tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")}
-            </div>
-            ${naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : ""}
-          </details>`;
-        })()}
         ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a, discPorAula.get(a.id)) : ""}
       </div>`;
   };
@@ -1242,14 +1237,16 @@ function aulasListaHTML(store, st) {
       }).join("");
       return `<div class="cur-aula-row">
         <div class="cur-aula-head">
-          <b class="cur-aula-nome"><button class="lnk cur-top-lnk" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico">${icone("external-link")}</span></button></b>
+          <div class="cur-aula-titulo">
+            <b class="cur-aula-nome"><button class="lnk cur-top-lnk" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico">${icone("external-link")}</span></button></b>
+            ${aulasT.length
+              ? `<details class="cur-aula-acc" data-aula-acc="top:${t.id}" ${curTopsAbertos.has("top:" + t.id) ? "open" : ""}>
+                  <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${plural(aulasT.length, "aula do cursinho", "aulas do cursinho")}</span></summary>
+                  <div class="cur-aula-tops">${chips}</div>
+                </details>`
+              : `<span class="cur-sem muted small">${icone("link")} sem aula do cursinho — nem todo tópico precisa de uma</span>`}
+          </div>
         </div>
-        ${aulasT.length
-          ? `<details class="cur-aula-acc" data-aula-acc="top:${t.id}" ${curTopsAbertos.has("top:" + t.id) ? "open" : ""}>
-              <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${plural(aulasT.length, "aula do cursinho", "aulas do cursinho")}</span></summary>
-              <div class="cur-aula-tops">${chips}</div>
-            </details>`
-          : `<div class="cur-aula-tops"><span class="cur-sem muted small">${icone("link")} sem aula do cursinho — nem todo tópico precisa de uma</span></div>`}
       </div>`;
     }).join("");
     return grupoHTML(d.nome, cor, `${tps.length} tópico${tps.length === 1 ? "" : "s"}`, rows);
@@ -1258,6 +1255,13 @@ function aulasListaHTML(store, st) {
     ? grupos.map((g) => g.disc)
     : st.disciplinas.filter((d) => st.topicos.some((t) => t.disciplinaId === d.id)).map((d) => d.nome);
   const algumGrupoAberto = nomesGrupos.some((n) => !curAcFechada.has(n));
+  // Dois controles com finalidades diferentes: um abre/fecha as DISCIPLINAS (os blocos
+  // coloridos), outro abre/fecha os VÍNCULOS dentro de cada linha. Antes só existia o primeiro,
+  // e para ver os tópicos de 61 aulas era clicar 61 vezes.
+  const idsExpansiveis = cursinhoView === "aula"
+    ? aulas.filter((a) => (a.topicoIds || []).length || (a.assuntos || []).length).map((a) => a.id)
+    : st.topicos.filter((t) => st.aulas.some((a) => (a.topicoIds || []).includes(t.id))).map((t) => "top:" + t.id);
+  const algumTopAberto = idsExpansiveis.some((id) => curTopsAbertos.has(id));
   const vinculosFora = store.vinculosForaDaDisciplina();
   const cursosPendentes = store.cursosDoPlanoNaoMapeados();
   return `
@@ -1270,7 +1274,8 @@ function aulasListaHTML(store, st) {
         <button class="${cursinhoView === "topico" ? "on" : ""}" data-action="cur-view" data-v="topico">Tópico</button>
       </span>
       <span class="spacer"></span>
-      ${nomesGrupos.length ? `<button class="lnk small" data-action="${algumGrupoAberto ? "cur-recolher" : "cur-expandir"}" data-tip-pos="cima-esq" data-tip="${algumGrupoAberto ? "Recolher todas as disciplinas." : "Abrir todas as disciplinas."}">${algumGrupoAberto ? "Recolher tudo" : "Expandir tudo"}</button>` : ""}
+      ${nomesGrupos.length ? `<span class="cur-ctrl"><span class="filtro-lbl muted small">Disciplinas:</span><button class="lnk small" data-action="${algumGrupoAberto ? "cur-recolher" : "cur-expandir"}" data-tip-pos="cima-esq" data-tip="${algumGrupoAberto ? "Recolher todas as disciplinas (os blocos coloridos)." : "Abrir todas as disciplinas."}">${algumGrupoAberto ? "recolher" : "expandir"}</button></span>` : ""}
+      ${idsExpansiveis.length ? `<span class="cur-ctrl"><span class="filtro-lbl muted small">${cursinhoView === "aula" ? "Tópicos" : "Aulas"}:</span><button class="lnk small" data-action="${algumTopAberto ? "cur-tops-recolher" : "cur-tops-expandir"}" data-tip-pos="cima-esq" data-tip="${algumTopAberto ? `Recolher os vínculos de todas as ${cursinhoView === "aula" ? "aulas" : "tópicos"} — sem fechar as disciplinas.` : `Abrir de uma vez os vínculos de todas as ${cursinhoView === "aula" ? "aulas" : "tópicos"}.`}">${algumTopAberto ? "recolher" : "expandir"}</button></span>` : ""}
       <button class="btn btn-soft btn-sm" data-action="aulas-adicionar" data-tip="Trazer aulas: acrescentar à lista, ou atualizar a grade (comparar e preservar seus ajustes).">${icone("download")} Adicionar aulas</button>
       <details class="doc-mais ed-barra-mais">
         <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Compatibilizar com IA, aula avulsa, revisão de vínculos e limpeza do plano.">${icone("ellipsis")} Mais</summary>
@@ -1828,6 +1833,14 @@ export default function renderEdital(root, app) {
       app.refresh();
     },
     "cur-expandir": () => { curAcFechada.clear(); app.refresh(); },
+    "cur-tops-expandir": () => {
+      const ids = cursinhoView === "aula"
+        ? st.aulas.filter((a) => (a.topicoIds || []).length || (a.assuntos || []).length).map((a) => a.id)
+        : st.topicos.filter((t) => st.aulas.some((a) => (a.topicoIds || []).includes(t.id))).map((t) => "top:" + t.id);
+      ids.forEach((id) => curTopsAbertos.add(id));
+      app.refresh();
+    },
+    "cur-tops-recolher": () => { curTopsAbertos.clear(); app.refresh(); },
     "dossie-expandir": () => { st.disciplinas.forEach((d) => dossieAcAberta.add(d.id)); app.refresh(); },
     "dossie-recolher": () => { dossieAcAberta.clear(); app.refresh(); },
     "ir-config-base": () => app.navigate("config"),
