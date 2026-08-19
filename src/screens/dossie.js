@@ -37,7 +37,7 @@ let dossieEscondido = new Set(); // seções que o usuário tirou do dossiê (vo
 //
 // Aqui os índices são montados em UMA passada por coleção, o que resolve (2) de graça e
 // permite a linha enxuta que resolve (1).
-export function dossieCompactoHTML(store) {
+export function dossieCompactoHTML(store, abertas) {
   const st = store.get();
   const indice = (arr, chave) => {
     const m = new Map();
@@ -70,14 +70,14 @@ export function dossieCompactoHTML(store) {
         estados: [Boolean(mat.get(t.id)), Boolean(qs.get(t.id)), Boolean(fcs.get(t.id)), Boolean(t.concluido)],
       }));
       return `
-        <div class="dossie-disc">
-          <h3 class="ddx-disc-tit">
+        <details class="dossie-disc" data-dossie-grupo="${d.id}" ${!abertas || abertas.has(d.id) ? "open" : ""}>
+          <summary class="ddx-disc-tit">
             <span class="cur-dot" style="background:${store.corDisciplina(d.id)}"></span>
             <button class="lnk" data-action="ir-dossie-disc" data-id="${d.id}">${esc(d.nome)} <span class="mapa-abrir-ico">${icone("external-link")}</span></button>
             <span class="ddx-disc-cont">${concl}/${tops.length}</span>
-          </h3>
+          </summary>
           ${itens.length ? gradeEstados({ itens, etapas: ETAPAS, acao: "ir-dossie" }) : `<p class="muted">Sem tópicos.</p>`}
-        </div>`;
+        </details>`;
     })
     .join("");
 }
@@ -85,7 +85,7 @@ export function dossieCompactoHTML(store) {
 // Visão de TODO o edital: cards por tópico (agrupados por disciplina) com as
 // estatísticas resumidas. Reutilizado pelo Edital (modo "Resumo"). Cada card usa
 // data-action="ir-dossie" — quem renderiza decide o que fazer ao abrir.
-export function dossieResumoHTML(store) {
+export function dossieResumoHTML(store, abertas) {
   const st = store.get();
   if (!st.disciplinas.length)
     return vazio(
@@ -101,7 +101,7 @@ export function dossieResumoHTML(store) {
       const cor = store.corDisciplina(d.id);
       const concl = tops.filter((t) => t.concluido).length;
       return `
-        <details class="dossie-disc"${i === 0 ? " open" : ""}>
+        <details class="dossie-disc" data-dossie-grupo="${d.id}" ${(abertas ? abertas.has(d.id) : i === 0) ? "open" : ""}>
           <summary class="ddx-disc-tit">
             <span class="cur-dot" style="background:${cor}"></span>
             <span class="ddx-disc-nome">${esc(d.nome)}</span>

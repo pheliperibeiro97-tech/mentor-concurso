@@ -2216,75 +2216,219 @@ export const store = {
   // Importa a estrutura parseada (separarEdital): cada "disciplina" = uma AULA; seus itens
   // são os tópicos que ela cobre (casados por nome+aliases). Reporta os que não casaram.
   importarAulasCursinho(estrutura) {
+    const itens = (estrutura || []).filter((i) => (i.nome || "").trim());
+    const discIds = this._disciplinasDoPlano(itens);
+    const declarouAlgum = itens.some((i) => String(i.disciplina || "").trim());
     let criadas = 0;
     const naoCasados = [];
-    for (const item of estrutura || []) {
-      const nome = (item.nome || "").trim();
-      if (!nome) continue;
-      // Resolve a disciplina da aula PELO CABEÇALHO ("DISCIPLINA: ...") ANTES de casar os
-      // tópicos, para que o casamento já nasça ancorado nela — sem isso um tópico de OUTRA
-      // disciplina com nome parecido "rouba" o vínculo (ex.: "Prescrição" do Penal casando
-      // dentro da aula de Civil). Mesma lição de acharTopicoDoBloco (estrutura.js).
-      let disciplinaId = null;
-      if (item.disciplina) {
-        const dn = item.disciplina.toLowerCase();
-        const d = state.disciplinas.find((x) => (x.nome || "").toLowerCase() === dn)
-          || state.disciplinas.find((x) => { const xn = (x.nome || "").toLowerCase(); return xn && (xn.includes(dn) || dn.includes(xn)); });
-        disciplinaId = d ? d.id : null;
-      }
+    itens.forEach((item, k) => {
+      const disciplinaId = discIds[k];
+      const d = disciplinaId ? state.disciplinas.find((x) => x.id === disciplinaId) : null;
+      // Disciplina declarada e ausente do edital: a aula entra no plano, sem vínculo nenhum.
+      const foraDoEdital = declarouAlgum && !disciplinaId;
       const topicoIds = [];
       for (const tn of item.topicos || []) {
-        const t = this.acharTopicoPorNome(tn, { disciplinaId });
-        if (t) { if (!topicoIds.includes(t.id)) topicoIds.push(t.id); if (!disciplinaId) disciplinaId = t.disciplinaId; }
+        const t = foraDoEdital ? null : this.acharTopicoPorNome(tn, { disciplinaId, restrito: !!disciplinaId });
+        if (t) { if (!topicoIds.includes(t.id)) topicoIds.push(t.id); }
         else naoCasados.push(tn);
       }
-      state.aulas.push({ id: uid("aula"), nome, topicoIds, disciplinaId, disciplinaNome: item.disciplina || null, assuntos: item.topicos || [] });
+      state.aulas.push({ id: uid("aula"), nome: (item.nome || "").trim(), topicoIds, disciplinaId, disciplinaNome: item.disciplina || (d ? d.nome : null), assuntos: item.topicos || [] });
       criadas++;
-    }
+    });
     commit();
-    return { criadas, naoCasados };
+    // Plano que não declarou disciplina teve a sua DEDUZIDA: quem importou precisa saber qual,
+    // porque é ela que limitou o casamento — e a correção é um campo de texto no preview.
+    const declarou = itens.some((i) => (i.disciplina || "").trim());
+    const nomes = [...new Set(discIds.filter(Boolean).map((id) => (state.disciplinas.find((x) => x.id === id) || {}).nome).filter(Boolean))];
+    return { criadas, naoCasados, deduzida: !declarou && nomes.length === 1 ? nomes[0] : null };
+  },
+  // A disciplina de CADA item do plano importado, na ordem em que veio — é ela que limita o
+  // casamento dos assuntos com os tópicos do edital. Três fontes, nesta ordem:
+  //   1. a disciplina declarada no próprio item (cabeçalho "DISCIPLINA: ...", campo do preview);
+  //   2. a sequência do plano: item sem disciplina herda a do bloco em que está (a aula 00 é
+  //      introdutória e abre o bloco seguinte, por isso a herança olha primeiro para frente);
+  //   3. plano inteiro sem disciplina nenhuma (curso de matéria só, em que a IA devolve o campo
+  //      vazio de propósito): deduz a disciplina DOMINANTE pelo voto dos assuntos e a aplica a
+  //      todos — melhor um contexto único deduzido do que casar cada assunto no edital inteiro.
+  _disciplinasDoPlano(itens) {
+    const resolver = (nome) => {
+      const dn = String(nome || "").trim().toLowerCase();
+      if (!dn) return null;
+      const d = state.disciplinas.find((x) => (x.nome || "").toLowerCase() === dn)
+        || state.disciplinas.find((x) => { const xn = (x.nome || "").toLowerCase(); return xn && (xn.includes(dn) || dn.includes(xn)); });
+      return d ? d.id : null;
+    };
+    // Disciplina DECLARADA que não existe no edital ("Outra", no preview) é resposta, não lacuna:
+    // o curso é de matéria que o usuário não vai cobrar aqui, então não se vincula nada — e muito
+    // menos se deixa a dedução por voto empurrá-lo para dentro de alguma disciplina existente.
+    const declarou = itens.some((i) => String(i.disciplina || "").trim());
+    const ids = itens.map((i) => resolver(i.disciplina));
+    let prox = null;
+    for (let i = ids.length - 1; i >= 0; i--) { if (ids[i]) prox = ids[i]; else ids[i] = prox; }
+    let ant = null;
+    for (let i = 0; i < ids.length; i++) { if (ids[i]) ant = ids[i]; else ids[i] = ant; }
+    if (declarou) return ids;
+    // Só vota o assunto INEQUÍVOCO — o que casa numa disciplina só. "Prescrição" existe em Penal,
+    // Civil e Administrativo: como prova de contexto não vale nada, e num empate era ela quem
+    // decidia, pela ordem do array. "Contratos", que só existe em Civil, é que diz de onde é o plano.
+    const voto = new Map();
+    for (const i of itens) {
+      for (const tn of i.topicos || []) {
+        const dids = [...new Set(this.acharTodosTopicosPorNome(tn).map((t) => t.disciplinaId).filter(Boolean))];
+        if (dids.length === 1) voto.set(dids[0], (voto.get(dids[0]) || 0) + 1);
+      }
+    }
+    const vencedor = [...voto.entries()].sort((a, b) => b[1] - a[1])[0];
+    return ids.map(() => (vencedor ? vencedor[0] : null));
   },
   // Casa, via IA, os ASSUNTOS das aulas do cursinho ainda sem tópico com os TÓPICOS do edital
   // (vira sinônimo do tópico + vincula a aula). Retorna { casados, total }.
+  // Uma chamada POR DISCIPLINA, levando só os tópicos dela: assim a IA não tem como casar um
+  // assunto de Penal num tópico de Civil — antes ela recebia o edital inteiro e o filtro vinha
+  // depois, tarde demais para o sinônimo que já havia sido gravado no tópico errado.
   async compatibilizarCursinhoComEdital() {
-    const naoCasados = new Map();
+    const regua = this.disciplinaDePlano();
+    const grupos = new Map(); // disciplinaId (ou "") -> Map(assunto em minúsculas -> texto)
     for (const a of state.aulas) {
+      // A disciplina é a da RÉGUA (a mesma que a tela mostra), não só o campo da aula: assim a
+      // aula antiga, importada sem disciplina, também entra restrita. Aula de disciplina fora do
+      // edital não tem tópico a casar, e casar no edital inteiro seria o vazamento de volta.
+      const d = regua.get(a.id);
+      if (d && !d.id) continue;
+      const discId = d ? d.id : null;
+      const chave = discId || "";
       for (const asn of a.assuntos || []) {
         const txt = (asn || "").trim();
-        if (!txt || this.acharTopicoPorNome(txt)) continue;
-        if (!naoCasados.has(txt.toLowerCase())) naoCasados.set(txt.toLowerCase(), txt);
+        if (!txt || this.acharTopicoPorNome(txt, { disciplinaId: discId, restrito: !!discId })) continue;
+        if (!grupos.has(chave)) grupos.set(chave, new Map());
+        grupos.get(chave).set(txt.toLowerCase(), txt);
       }
     }
-    const itens = [...naoCasados.values()].map((assunto) => ({ assunto }));
-    if (!itens.length) return { casados: 0, total: 0 };
-    const topicos = state.topicos.map((t) => ({ nome: t.nome, aliases: t.aliases || [] }));
-    const matches = await iaProv.compatibilizarAulasTopicos(state.config, { itens, topicos });
     let casados = 0;
-    for (const m of matches || []) {
-      if (!m || !m.assunto || !m.topicoNome) continue;
-      const t = state.topicos.find((x) => x.nome === m.topicoNome) || this.acharTopicoPorNome(m.topicoNome);
-      if (!t) continue;
-      if (!Array.isArray(t.aliases)) t.aliases = [];
-      if (!t.aliases.some((al) => al.toLowerCase() === m.assunto.toLowerCase())) t.aliases.push(m.assunto);
-      for (const a of state.aulas) {
-        if ((a.assuntos || []).some((asn) => (asn || "").toLowerCase() === m.assunto.toLowerCase())) {
-          // A IA casa por texto, sem saber a disciplina da aula — se a aula já tem uma
-          // disciplina conhecida, um match de OUTRA disciplina é recusado aqui (mesma
-          // vinculação errada que "Prescrição" Penal→Civil), mesmo que a alias já tenha sido
-          // registrada acima (útil se outra aula, sem disciplina definida, usar o mesmo termo).
-          if (a.disciplinaId && t.disciplinaId !== a.disciplinaId) continue;
+    let total = 0;
+    for (const [discId, mapa] of grupos) {
+      const itens = [...mapa.values()].map((assunto) => ({ assunto }));
+      total += itens.length;
+      const escopo = discId ? state.topicos.filter((t) => t.disciplinaId === discId) : state.topicos;
+      if (!itens.length || !escopo.length) continue;
+      const topicos = escopo.map((t) => ({ nome: t.nome, aliases: t.aliases || [] }));
+      const matches = await iaProv.compatibilizarAulasTopicos(state.config, { itens, topicos });
+      for (const m of matches || []) {
+        if (!m || !m.assunto || !m.topicoNome) continue;
+        const t = escopo.find((x) => x.nome === m.topicoNome)
+          || this.acharTopicoPorNome(m.topicoNome, { disciplinaId: discId || undefined, restrito: !!discId });
+        if (!t || (discId && t.disciplinaId !== discId)) continue;
+        let aplicou = false;
+        for (const a of state.aulas) {
+          const da = regua.get(a.id);
+          if (((da && da.id) || "") !== discId) continue;
+          if (!(a.assuntos || []).some((asn) => (asn || "").toLowerCase() === m.assunto.toLowerCase())) continue;
           if (!Array.isArray(a.topicoIds)) a.topicoIds = [];
           if (!a.topicoIds.includes(t.id)) a.topicoIds.push(t.id);
           if (!a.disciplinaId) a.disciplinaId = t.disciplinaId;
+          aplicou = true;
         }
+        if (!aplicou) continue;
+        // O sinônimo só entra no tópico quando o casamento foi de fato aplicado: alias gravado
+        // à toa contamina o acharTopicoPorNome de toda importação seguinte.
+        if (!Array.isArray(t.aliases)) t.aliases = [];
+        if (!t.aliases.some((al) => al.toLowerCase() === m.assunto.toLowerCase())) t.aliases.push(m.assunto);
+        casados++;
       }
-      casados++;
     }
     commit();
-    return { casados, total: itens.length };
+    return { casados, total };
   },
-  addAula(nome) {
-    state.aulas.push({ id: uid("aula"), nome: (nome || "").trim() || "Nova aula", topicoIds: [] });
+  // A disciplina em que cada aula do plano APARECE — régua única, usada pela tela do Plano do
+  // cursinho, pela compatibilização com IA e pela correção de vínculos. Map(aulaId -> {id, nome}),
+  // com `id` nulo quando a disciplina não está no edital (curso trazido como "Outra"). A aula sem
+  // disciplina própria herda a da sequência: primeiro da seguinte (a 00 abre o bloco), depois da
+  // anterior (aula de revisão no fim do bloco).
+  // Régua única (a implementação mora em ciclo.js, junto da ordem de estudo, para que a tela e o
+  // Hoje não possam divergir). `herdar: false` = só a disciplina que a própria aula declara.
+  disciplinaDePlano(opts) {
+    return ciclo.disciplinaDePlanoDe(state, opts);
+  },
+  // O plano na ordem em que se estuda: disciplinas na ordem de aparição, aulas pelo número.
+  aulasEmOrdem() {
+    return ciclo.aulasEmOrdem(state);
+  },
+  // Vínculos que apontam para FORA da disciplina em que a aula aparece. É o estrago das
+  // importações antigas, que casavam o assunto no edital inteiro — e que a compatibilização com
+  // IA não desfaz, porque ela só acrescenta vínculo e nunca revisita assunto que já casou.
+  vinculosForaDaDisciplina() {
+    const mapa = this.disciplinaDePlano({ herdar: false });
+    const fora = [];
+    for (const a of state.aulas) {
+      const d = mapa.get(a.id);
+      if (!d || !d.id) continue; // sem disciplina PRÓPRIA não há régua segura: não se mexe
+      for (const tid of a.topicoIds || []) {
+        const t = state.topicos.find((x) => x.id === tid);
+        if (!t || t.disciplinaId === d.id) continue;
+        const dt = state.disciplinas.find((x) => x.id === t.disciplinaId);
+        fora.push({ aulaId: a.id, aulaNome: a.nome, disciplina: d.nome, topicoId: tid, topicoNome: t.nome, topicoDisciplina: dt ? dt.nome : "—" });
+      }
+    }
+    return fora;
+  },
+  // Remove os vínculos de fora e recasa os assuntos DENTRO da disciplina da aula. Só mexe em aula
+  // com disciplina conhecida, e só tira vínculo que cruza disciplina — o que está na disciplina
+  // certa fica, inclusive o que o usuário ligou à mão.
+  corrigirVinculosDoPlano() {
+    const fora = this.vinculosForaDaDisciplina();
+    if (!fora.length) return { removidos: 0, recasados: 0, aulas: 0 };
+    const mapa = this.disciplinaDePlano({ herdar: false });
+    const porAula = new Map();
+    for (const f of fora) {
+      if (!porAula.has(f.aulaId)) porAula.set(f.aulaId, new Set());
+      porAula.get(f.aulaId).add(f.topicoId);
+    }
+    let removidos = 0;
+    let recasados = 0;
+    const antes = []; // fotografia para o desfazer
+    for (const [aulaId, tids] of porAula) {
+      const a = state.aulas.find((x) => x.id === aulaId);
+      const d = mapa.get(aulaId);
+      if (!a || !d || !d.id) continue;
+      antes.push({ id: a.id, topicoIds: [...(a.topicoIds || [])], disciplinaId: a.disciplinaId, disciplinaNome: a.disciplinaNome });
+      a.topicoIds = (a.topicoIds || []).filter((id) => !tids.has(id));
+      removidos += tids.size;
+      if (!a.disciplinaId) a.disciplinaId = d.id; // grava a régua que a tela já mostrava
+      for (const asn of a.assuntos || []) {
+        const t = this.acharTopicoPorNome(asn, { disciplinaId: d.id, restrito: true });
+        if (t && !a.topicoIds.includes(t.id)) { a.topicoIds.push(t.id); recasados++; }
+      }
+    }
+    commit();
+    return { removidos, recasados, aulas: porAula.size, antes };
+  },
+  // Desfaz a correção, devolvendo vínculos e disciplina exatamente como estavam.
+  restaurarVinculosDoPlano(antes) {
+    let n = 0;
+    for (const snap of antes || []) {
+      const a = state.aulas.find((x) => x.id === snap.id);
+      if (!a) continue;
+      a.topicoIds = [...(snap.topicoIds || [])];
+      a.disciplinaId = snap.disciplinaId;
+      a.disciplinaNome = snap.disciplinaNome;
+      n++;
+    }
+    if (n) commit();
+    return n;
+  },
+  addAula(nome, disciplinaId = null) {
+    const d = disciplinaId ? state.disciplinas.find((x) => x.id === disciplinaId) : null;
+    state.aulas.push({ id: uid("aula"), nome: (nome || "").trim() || "Nova aula", topicoIds: [], disciplinaId: d ? d.id : null, disciplinaNome: d ? d.nome : null });
+    commit();
+  },
+  // Define a disciplina da aula à mão. É o que destrava a revisão de vínculos numa aula legada
+  // com vínculos de várias disciplinas: sem disciplina própria, não há régua para corrigir nada.
+  setAulaDisciplina(id, disciplinaId) {
+    const a = state.aulas.find((x) => x.id === id);
+    if (!a) return;
+    const d = disciplinaId ? state.disciplinas.find((x) => x.id === disciplinaId) : null;
+    a.disciplinaId = d ? d.id : null;
+    a.disciplinaNome = d ? d.nome : null;
     commit();
   },
   renomearAula(id, nome) {
@@ -2299,23 +2443,9 @@ export const store = {
     state.aulas = state.aulas.filter((x) => x.id !== id);
     commit();
   },
-  moverAula(id, dir) {
-    const i = state.aulas.findIndex((x) => x.id === id);
-    const j = i + (dir === "cima" ? -1 : 1);
-    if (i < 0 || j < 0 || j >= state.aulas.length) return;
-    [state.aulas[i], state.aulas[j]] = [state.aulas[j], state.aulas[i]];
-    commit();
-  },
-  // Arrastar-para-reordenar: insere a aula arrastada ANTES da aula alvo.
-  reordenarAula(dragId, alvoId) {
-    if (!dragId || !alvoId || dragId === alvoId) return;
-    const from = state.aulas.findIndex((x) => x.id === dragId);
-    if (from < 0) return;
-    const [item] = state.aulas.splice(from, 1);
-    const to = state.aulas.findIndex((x) => x.id === alvoId);
-    state.aulas.splice(to < 0 ? state.aulas.length : to, 0, item);
-    commit();
-  },
+  // Sem reordenar aula à mão (arrastar/subir/descer, removidos em 19/08/2026): a ordem do plano é
+  // derivada do NÚMERO da aula dentro da disciplina (ciclo.aulasEmOrdem). Mover à mão só criava a
+  // chance de a ordem guardada — que é a ordem de estudo — divergir do que a tela mostra.
   limparAulas() {
     state.aulas = [];
     commit();
@@ -2334,11 +2464,16 @@ export const store = {
   // renomeações por similaridade. NÃO mexe nas aulas mantidas (preserva a curadoria do usuário).
   diffAulasCursinho(estrutura) {
     const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
-    const novasTodas = (estrutura || []).map((e) => ({ nome: (e.nome || "").trim(), topicos: e.topicos || [], _n: norm(e.nome) })).filter((e) => e.nome);
+    // A identidade da aula é DISCIPLINA + NOME. Só o nome fazia a "Aula 00" de Penal e a de Civil
+    // serem a mesma aula: num plano de várias disciplinas, uma delas sumia do diff em silêncio.
+    const regua = this.disciplinaDePlano();
+    const chaveAula = (a) => { const d = regua.get(a.id); return norm((d && d.nome) || "") + "§" + norm(a.nome); };
+    const chaveNova = (e) => norm(e.disciplina || "") + "§" + norm(e.nome);
+    const novasTodas = (estrutura || []).map((e) => ({ nome: (e.nome || "").trim(), topicos: e.topicos || [], disciplina: e.disciplina || null, _n: chaveNova(e) })).filter((e) => e.nome);
     const setNovo = new Set(novasTodas.map((e) => e._n));
-    const setAtual = new Set(state.aulas.map((a) => norm(a.nome)));
+    const setAtual = new Set(state.aulas.map(chaveAula));
     const novas = novasTodas.filter((e) => !setAtual.has(e._n));
-    const removidas = state.aulas.filter((a) => !setNovo.has(norm(a.nome)));
+    const removidas = state.aulas.filter((a) => !setNovo.has(chaveAula(a)));
     // Tokens: mantém NÚMEROS (ex.: "Aula 1" ≠ "Aula 4") e palavras ≥3 letras (ignora "de","e").
     const toks = (s) => new Set((String(s || "").toLowerCase().match(/[a-zçãõáéíóúâêôà0-9]+/g) || []).filter((w) => /\d/.test(w) || w.length >= 3));
     const sim = (a, b) => {
@@ -2356,27 +2491,35 @@ export const store = {
         const s = sim(r.nome, n.nome);
         if (s > bs) { bs = s; best = n; }
       }
-      if (best && bs >= 0.5) { usados.add(best._n); renomeacoes.push({ aulaId: r.id, de: r.nome, para: best.nome }); }
+      if (best && bs >= 0.5) { usados.add(best._n); renomeacoes.push({ aulaId: r.id, de: r.nome, para: best.nome, paraChave: best._n }); }
     }
     return { novas, removidas, renomeacoes };
   },
   aplicarAulasDiff(diff, renomearIds, removerIds) {
     const renIds = new Set(renomearIds || []);
     const remIds = new Set(removerIds || []);
-    const renAlvoNomes = new Set();
+    // Chave disciplina+nome, não só o nome: renomear uma "Aula 00" não pode cancelar a criação
+    // da "Aula 00" de outra disciplina.
+    const renAlvos = new Set();
     for (const rn of diff.renomeacoes || []) {
       if (!renIds.has(rn.aulaId)) continue;
       const a = state.aulas.find((x) => x.id === rn.aulaId);
-      if (a) { a.nome = rn.para; renAlvoNomes.add(rn.para.toLowerCase()); }
+      if (a) { a.nome = rn.para; renAlvos.add(rn.paraChave || rn.para.toLowerCase()); }
     }
     let add = 0;
-    for (const e of diff.novas || []) {
-      if (renAlvoNomes.has(e.nome.toLowerCase())) continue; // já virou rename de uma existente
+    const novas = diff.novas || [];
+    const discIds = this._disciplinasDoPlano(novas);
+    const declarouAlgum = novas.some((e) => String(e.disciplina || "").trim());
+    novas.forEach((e, k) => {
+      if (renAlvos.has(e._n)) return; // já virou rename de uma existente
+      const disciplinaId = discIds[k];
+      const d = disciplinaId ? state.disciplinas.find((x) => x.id === disciplinaId) : null;
+      const foraDoEdital = declarouAlgum && !disciplinaId;
       const topicoIds = [];
-      for (const tn of e.topicos || []) { const t = this.acharTopicoPorNome(tn); if (t && !topicoIds.includes(t.id)) topicoIds.push(t.id); }
-      state.aulas.push({ id: uid("aula"), nome: e.nome, topicoIds, assuntos: e.topicos || [] });
+      for (const tn of e.topicos || []) { const t = foraDoEdital ? null : this.acharTopicoPorNome(tn, { disciplinaId, restrito: !!disciplinaId }); if (t && !topicoIds.includes(t.id)) topicoIds.push(t.id); }
+      state.aulas.push({ id: uid("aula"), nome: e.nome, topicoIds, disciplinaId, disciplinaNome: e.disciplina || (d ? d.nome : null), assuntos: e.topicos || [] });
       add++;
-    }
+    });
     let rem = 0;
     for (const a of diff.removidas || []) {
       if (renIds.has(a.id)) continue; // foi renomeada, não remove
@@ -2385,7 +2528,7 @@ export const store = {
       rem++;
     }
     commit();
-    return { add, rem, ren: renAlvoNomes.size };
+    return { add, rem, ren: renAlvos.size };
   },
   togglePrevisao(id) {
     const t = state.topicos.find((x) => x.id === id);
@@ -7044,7 +7187,9 @@ export const store = {
   // aula do cursinho): tenta exato→contém DENTRO dela primeiro; só sai dela para um match
   // EXATO (nunca "contém", que é o que causava colisão por 1 palavra em comum — mesmo
   // problema documentado em acharTopicoDoBloco/estrutura.js, ver o comentário lá).
-  acharTopicoPorNome(nome, { disciplinaId } = {}) {
+  // `restrito`: com a disciplina conhecida, NÃO sai dela nem em match exato. "Prescrição" de uma
+  // aula de Penal não pode virar a "Prescrição" do Civil só porque o Penal não tem o tópico.
+  acharTopicoPorNome(nome, { disciplinaId, restrito = false } = {}) {
     const alvo = String(nome || "").trim().toLowerCase();
     if (!alvo) return null;
     // Todos os nomes pelos quais o tópico é conhecido: o nome + os aliases (Fase 2).
@@ -7055,6 +7200,7 @@ export const store = {
       if (exatoCasa) return exatoCasa;
       const contemCasa = daCasa.find((t) => nomes(t).some((n) => n.includes(alvo) || alvo.includes(n)));
       if (contemCasa) return contemCasa;
+      if (restrito) return null;
       return state.topicos.find((t) => t.disciplinaId !== disciplinaId && nomes(t).includes(alvo)) || null;
     }
     return (

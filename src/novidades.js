@@ -8,6 +8,23 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.13",
+    data: "agosto/2026",
+    titulo: "Plano do cursinho: cada aula fica na sua disciplina, e o vínculo não atravessa mais o edital",
+    itens: [
+      "CORREÇÃO GRAVE — os assuntos de uma aula eram casados com o edital INTEIRO. Uma aula de Direito Penal com o assunto \"Prescrição\" podia se vincular ao tópico \"Prescrição\" de Civil ou de Administrativo, o que joga a aula (e o progresso dela) na disciplina errada. Agora a disciplina da aula limita o casamento: aula de Penal só casa com tópico de Penal.",
+      "O plano passa a se organizar pela disciplina do CURSINHO, não pela vinculação ao edital. A \"Aula 00\", que é introdutória e não casa com tópico nenhum, ficava jogada em \"Sem disciplina\" — agora fica no bloco a que pertence, de 00 até o fim.",
+      "\"Compatibilizar com IA\" agora faz uma chamada por disciplina, levando só os tópicos dela: a IA não tem como sugerir um tópico de outra matéria. E o sinônimo só é gravado no tópico quando o casamento é de fato aplicado (antes, um palpite recusado já contaminava as importações seguintes).",
+      "Na revisão da importação, a disciplina é ESCOLHIDA na lista do seu edital, com a opção \"Outra (fora do meu edital)\" — digitar \"Const.\" onde o edital diz \"Direito Constitucional\" não casava nada, e o erro só aparecia depois. Plano com várias disciplinas mostra um seletor por aula.",
+      "Um mesmo texto pode trazer VÁRIAS disciplinas: basta separar em blocos começando pelo nome da matéria (\"DIREITO PENAL\" ou \"Disciplina: Direito Penal\"). Cada bloco pode ter a sua \"Aula 00\" sem conflito — antes elas se atropelavam na hora de atualizar a grade. A ajuda \"Como o app monta o mapa\" foi reescrita conforme o que o app realmente aceita.",
+      "NOVO — \"Revisar vínculos\", no menu Mais do plano: encontra os vínculos herdados das importações antigas que apontam para outra disciplina, mostra a lista antes de mexer, corrige e permite DESFAZER. O que já está na disciplina certa não é tocado, inclusive o que você ligou à mão.",
+      "NOVO — \"Definir disciplina\" no menu de cada aula, e botão de recolher/expandir tudo no Plano do cursinho e no Dossiê por tópico.",
+      "As aulas agora se ordenam pelo NÚMERO dentro da disciplina, e o arrastar saiu. A ordem guardada é a ordem de estudo do Hoje: arrastar na fronteira de duas disciplinas embaralhava essa ordem sem mudar nada na tela — dava para bagunçar o estudo sem perceber.",
+      "\"Base de estudo\" mudou-se para Configurações › Estudo, que é onde moram os ajustes do app inteiro (ela muda a ordem das sugestões do Hoje). No plano ficou o atalho.",
+      "No registro de sessão, digitar o nome de uma aula que não existe criava-a sem disciplina e podia grudar na aula homônima de outra matéria. Agora casa pelo nome dentro da disciplina do tópico registrado.",
+    ],
+  },
+  {
     v: "0.8.10",
     data: "agosto/2026",
     titulo: "Olho da senha de sincronização — faltava no campo de Configurações",

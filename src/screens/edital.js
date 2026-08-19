@@ -1,6 +1,6 @@
 // Tela Edital: gerenciar disciplinas, tópicos e destaques a qualquer momento
 // (o onboarding monta a estrutura inicial; aqui você acrescenta/edita depois).
-import { bindActions, toast, toastCarregando, comOcupado, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, ligarArrastar, dicaArquivo } from "../ui.js";
+import { bindActions, toast, toastCarregando, comOcupado, header, seloBadge, vazio, confirmar, botaoImprimir, imprimir, ligarDropZone, escolher, avisoIA, pedirTexto, abrirJanela, abrirJanelaFluxo, plural, dicaArquivo } from "../ui.js";
 import { progressRing } from "../viz.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
@@ -15,8 +15,11 @@ let aulasTextoSalvo = "";
 let aulaTopAberto = null; // aulaId com o editor de tópicos da aula aberto (Fase 4)
 let aulasImportAberto = false; // mostrar a caixa de importar aulas mesmo já tendo aulas
 let topSort = "custom"; // ordem dos tópicos DENTRO da disciplina: "custom" | "relevancia"
-let aulasSort = "custom"; // ordem de EXIBIÇÃO das aulas: "custom" | "nome" | "topicos" (só na renderização)
 let cursinhoView = "aula"; // Plano do cursinho: ver "aula" (aula→tópicos) ou "topico" (tópico→aula)
+let curAcFechada = new Set(); // grupos do plano do cursinho RECOLHIDOS (padrão: todos abertos)
+let desfazerVinculos = null; // fotografia da última revisão de vínculos, para desfazer na sessão
+let dossieAcAberta = new Set(); // Dossiê por tópico: disciplinas com o accordion ABERTO
+let dossieAcInit = false; // 1ª vez na sessão: preserva o padrão de cada densidade (ver resumoBody)
 let topSel = new Set(); // tópicos selecionados para ações em lote (mover/unificar/nova disciplina)
 let selMode = false; // modo de seleção (mostra as caixas de seleção; fora dele só aparece o ✓ Concluído)
 let discAcAberta = new Set(); // disciplinas com o accordion ABERTO (persiste na sessão)
@@ -353,13 +356,24 @@ function aulasConviteHTML() {
     <div class="form-acoes" style="justify-content:flex-start"><button class="btn btn-primary" data-action="importar-aulas-mais">${icone("download")} Trazer a divisão do cursinho</button></div>
   </div>`;
 }
+// Exemplo e ajuda do formato do texto — UM lugar só. Existem duas portas para a mesma
+// importação (a caixa embutida e o modal "Adicionar aulas"), e a ajuda tinha divergido entre
+// elas: a do modal falava de várias disciplinas, a embutida ainda descrevia o formato antigo.
+const EXEMPLO_AULAS = "Ex.:\nDIREITO CONSTITUCIONAL\nAula 00: Apresentação do curso\nAula 01: Princípios fundamentais; Direitos e garantias\n\nDIREITO ADMINISTRATIVO\nAula 00: Apresentação\nAula 01: Atos administrativos";
+function ajudaMapaHTML() {
+  return `<details class="ed-ajuda"><summary>Como o app monta o mapa</summary><div class="ed-ajuda-corpo">
+      <p class="u-m-0">Cada aula é uma linha. O app aceita as duas formas que as grades usam: <b>Aula 01: assunto; assunto</b> (nome antes do "<b>:</b>") e <b>Aula 01 - assunto. assunto</b> (nome antes do traço). Os assuntos são separados por "<b>;</b>", por ponto final seguido de maiúscula, por bullets ou por numeração; um subtópico com ":" e vírgulas ("Classes de palavras: substantivo, adjetivo") fica inteiro. Linha sem "<b>:</b>" e sem traço é continuação da aula anterior.</p>
+      <p><b>Mais de uma disciplina no mesmo texto</b>: separe em blocos, cada um começando por uma linha com o nome da disciplina — solto (<b>DIREITO PENAL</b>, desde que o nome bata com uma disciplina do seu edital) ou com rótulo (<b>Disciplina: Direito Penal</b>, que sempre funciona). As aulas seguintes pertencem a esse bloco, e cada bloco pode ter a sua "Aula 00" sem conflito. <b>É a disciplina que limita o vínculo</b>: uma aula de Penal só casa com tópicos de Penal. Sem nenhum cabeçalho, o app trata tudo como uma disciplina só — você escolhe qual na revisão.</p>
+      <p class="u-m-0">Cada assunto é ligado aos seus tópicos pelo nome (＋ sinônimos), montando o mapa aula ↔ tópico ↔ edital. <b>Nada disso muda a sua estrutura</b>: o que não casar fica listado como pendente na aula.</p>
+    </div></details>`;
+}
 function aulasImportHTML(texto = "") {
   return `<div class="card cursinho-card">
     <h3>${icone("library")} Trazer a divisão do cursinho</h3>
     <p class="muted small">Traga a divisão de aulas do seu cursinho — uma aula por bloco, com os assuntos que ela cobre.</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
-    <textarea id="aulas-texto" rows="6" placeholder="${esc("Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias fundamentais\nAula 2: Atos administrativos\nAula 3: Atos administrativos; Poderes administrativos")}">${esc(texto)}</textarea>
-    <details class="ed-ajuda"><summary>Como o app monta o mapa</summary><div class="ed-ajuda-corpo"><p>Cada <b>aula</b> é uma linha começando pelo nome (ex.: "Aula 1:") + os assuntos separados por "<b>;</b>". (Também aceita o nome da aula numa linha e os assuntos nas linhas seguintes.)</p><p>O app liga cada assunto aos <b>seus tópicos</b> (pelo nome + sinônimos) e monta o mapa <b>aula ↔ tópico ↔ edital</b>. <b>Não muda a sua estrutura</b>; é uma visão por aula. Você revisa e edita antes de montar.</p></div></details>
+    <textarea id="aulas-texto" rows="7" placeholder="${esc(EXEMPLO_AULAS)}">${esc(texto)}</textarea>
+    ${ajudaMapaHTML()}
     <div class="form-acoes"><button class="btn btn-ghost" data-action="importar-aulas-fechar">Cancelar</button><button class="btn btn-primary" data-action="importar-aulas">Revisar</button></div>
   </div>`;
 }
@@ -582,30 +596,52 @@ function abrirAddEdital(app) {
 // Disciplina do lote, quando todas as aulas vieram do mesmo arquivo (é o caso do cursinho:
 // um PDF por disciplina). Um campo só, no topo, em vez de repetir a mesma coisa em 47 cards.
 // Importa porque é o que liga a aula à disciplina quando os assuntos não casam com tópicos.
-function aulasDisciplinaHTML(aulas) {
+// A disciplina é ESCOLHIDA na lista do edital, não digitada: digitar "Const." onde o edital diz
+// "Direito Constitucional" não casa nada, e o erro só aparece depois, no plano montado. "Outra"
+// existe para o curso de matéria que não está no edital — aí nada é vinculado, de propósito.
+function aulasDisciplinaHTML(aulas, disciplinas) {
   const nomes = new Set((aulas || []).map((a) => (a.disciplina || "").trim()));
   if (nomes.size !== 1) return "";
   const disc = [...nomes][0];
+  const doEdital = (disciplinas || []).find((d) => (d.nome || "").toLowerCase() === disc.toLowerCase());
+  const outra = !!disc && !doEdital;
   return `<label class="ed-prev-disc-lote">
-    <span class="muted small">Disciplina destas aulas</span>
-    <input class="prev-inp aula-disc-lote" value="${esc(disc)}" placeholder="Ex.: Direito Ambiental" />
+    <span class="muted small">Disciplina destas aulas${disc ? "" : " — escolha: os assuntos só casam com tópicos dela"}</span>
+    <select class="prev-inp aula-disc-sel">
+      <option value="" ${!disc ? "selected" : ""}>Escolha a disciplina…</option>
+      ${(disciplinas || []).map((d) => `<option value="${esc(d.nome)}" ${doEdital && doEdital.id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
+      <option value="__outra" ${outra ? "selected" : ""}>Outra (fora do meu edital)</option>
+    </select>
+    <input class="prev-inp aula-disc-lote" value="${esc(outra ? disc : "")}" placeholder="Nome da disciplina" ${outra ? "" : "hidden"} />
+    <span class="muted small aula-disc-aviso" ${outra ? "" : "hidden"}>Fora do edital: as aulas ficam no plano, mas sem vínculo com tópico nenhum.</span>
   </label>`;
 }
 
 // Preview EDITÁVEL das aulas do cursinho: cada aula é um card com nome + assuntos editáveis.
-function aulasPreviewHTML(aulas) {
+function aulasPreviewHTML(aulas, disciplinas) {
+  // Plano com mais de uma disciplina (cabeçalhos no texto): o campo único não serve, e esconder
+  // a disciplina de cada aula obrigaria a confiar no parser sem poder conferir nem corrigir.
+  const porAula = new Set((aulas || []).map((a) => (a.disciplina || "").trim())).size > 1;
   return `<div class="card cursinho-card">
     <div class="plano-h"><h2>Revisar ${plural(aulas.length, "aula", "aulas")} antes de montar o plano</h2></div>
     <p class="muted small u-m-0 u-mb-12">Edite o nome da aula e os assuntos; remova (✕) o que não quiser. Os assuntos serão ligados aos seus tópicos pelo nome (＋ sinônimos).</p>
-    ${aulasDisciplinaHTML(aulas)}
+    ${aulasDisciplinaHTML(aulas, disciplinas)}
+    ${porAula ? `<p class="muted small u-mb-8">${icone("shuffle")} Este plano tem <b>mais de uma disciplina</b>: confira a de cada aula abaixo (veio dos cabeçalhos do texto).</p>` : ""}
     <div class="ed-prev-lista">
       ${aulas
         .map((a, ai) => {
+          const dsc = (a.disciplina || "").trim();
+          const noEdital = (disciplinas || []).find((d) => (d.nome || "").toLowerCase() === dsc.toLowerCase());
           return `<div class="prev-card m-pratica ed-prev-disc">
             <div class="prev-card-l1">
               <input class="prev-inp aula-nome" data-a="${ai}" value="${esc(a.nome || "")}" placeholder="Aula" />
               <button class="prev-remover" data-action="remover-aula-prev" data-a="${ai}" data-tip-pos="cima-dir" data-tip="Remover esta aula">${icone("x")}</button>
             </div>
+            ${porAula ? `<select class="prev-inp aula-disc-uma u-mt-8" data-a="${ai}" data-tip="Disciplina desta aula — só os tópicos dela podem ser vinculados.">
+              <option value="" ${!dsc ? "selected" : ""}>Sem disciplina…</option>
+              ${(disciplinas || []).map((d) => `<option value="${esc(d.nome)}" ${noEdital && noEdital.id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
+              ${dsc && !noEdital ? `<option value="${esc(dsc)}" selected>${esc(dsc)} (fora do edital)</option>` : ""}
+            </select>` : ""}
             <ul class="ed-prev-tops">
               ${(a.topicos || [])
                 .map((t, ti) => `<li class="ed-prev-top">
@@ -639,10 +675,36 @@ function aulasAddInputHTML(estado) {
     </div>
     <p class="muted small u-m-0 u-mb-8">${atualizar ? "Traga a nova grade — o app compara com a atual e mostra o que entrou, saiu e renomeações, preservando seus ajustes." : "Traga a divisão de aulas — uma aula por bloco, com os assuntos que ela cobre."}</p>
     <label class="btn btn-ghost btn-sm btn-file u-mb-8" data-tip="PDF ou .txt. Pode arrastar aqui.">${icone("paperclip")} Importar de arquivo<input id="aulas-file" type="file" accept=".pdf,.txt,.md,application/pdf,text/plain" hidden /></label>
-    <textarea id="aulas-texto" rows="6" placeholder="${esc(atualizar ? "nova grade do cursinho…" : "Ex.:\nAula 1: Princípios fundamentais; Direitos e garantias\nAula 2: Atos administrativos")}">${esc(estado.texto || "")}</textarea>
-    <details class="ed-ajuda"><summary>Como o app monta o mapa</summary><div class="ed-ajuda-corpo"><p class="u-m-0">Cada aula é uma linha: o nome antes do "<b>:</b>", os assuntos depois, separados por "<b>;</b>". O app liga cada assunto aos seus tópicos (nome + sinônimos), montando o mapa aula ↔ tópico ↔ edital. Não muda a sua estrutura.</p></div></details>
+    <textarea id="aulas-texto" rows="7" placeholder="${esc(atualizar ? "nova grade do cursinho…" : EXEMPLO_AULAS)}">${esc(estado.texto || "")}</textarea>
+    ${ajudaMapaHTML()}
     <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-add-cancelar">Cancelar</button><button class="btn btn-primary" data-action="aulas-add-continuar">${atualizar ? "Conferir o que mudou" : "Revisar"}</button></div>
   </div>`;
+}
+
+// Liga o seletor de disciplina do preview às aulas em edição: escolha do edital, ou "Outra",
+// que revela o campo de texto. Um só lugar, porque o preview aparece em dois (tela e modal).
+function ligarDiscLote(raiz, aulas) {
+  const sel = raiz.querySelector(".aula-disc-sel");
+  const inp = raiz.querySelector(".aula-disc-lote");
+  const aviso = raiz.querySelector(".aula-disc-aviso");
+  if (!aulas) return;
+  // Plano de várias disciplinas: um seletor por aula, e não o do lote.
+  raiz.querySelectorAll(".aula-disc-uma").forEach((el) =>
+    el.addEventListener("change", () => {
+      const a = parseInt(el.getAttribute("data-a"), 10);
+      if (aulas[a]) aulas[a].disciplina = el.value.trim() || null;
+    })
+  );
+  if (!sel) return;
+  const aplicar = (v) => aulas.forEach((a) => (a.disciplina = v || null));
+  sel.addEventListener("change", () => {
+    const outra = sel.value === "__outra";
+    if (inp) inp.hidden = !outra;
+    if (aviso) aviso.hidden = !outra;
+    if (outra) { if (inp) { inp.focus(); aplicar(inp.value.trim()); } }
+    else aplicar(sel.value);
+  });
+  inp?.addEventListener("input", () => { if (sel.value === "__outra") aplicar(inp.value.trim()); });
 }
 
 // Adicionar aulas UNIFICADO: um modal com toggle Acrescentar (parse→preview→cria) ou Atualizar
@@ -654,13 +716,13 @@ function abrirAdicionarAulas(app, modoInicial = "acrescentar") {
     titulo: "Adicionar aulas",
     render: (corpo, { rerender }) => {
       if (estado.preview) {
-        corpo.innerHTML = aulasPreviewHTML(estado.preview);
+        corpo.innerHTML = aulasPreviewHTML(estado.preview, store.get().disciplinas);
         corpo.querySelectorAll(".aula-nome").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); if (estado.preview[a]) estado.preview[a].nome = el.value; }));
         corpo.querySelectorAll(".aula-top").forEach((el) => el.addEventListener("input", () => { const a = +el.getAttribute("data-a"); const t = +el.getAttribute("data-t"); if (estado.preview[a] && estado.preview[a].topicos) estado.preview[a].topicos[t] = el.value; }));
-        corpo.querySelector(".aula-disc-lote")?.addEventListener("input", (ev) => estado.preview.forEach((a) => (a.disciplina = ev.target.value.trim() || null)));
+        ligarDiscLote(corpo, estado.preview);
         return;
       }
-      if (estado.diff) { corpo.innerHTML = aulasDiffHTML(estado.diff); return; }
+      if (estado.diff) { corpo.innerHTML = aulasDiffHTML(estado.diff, store.get()); return; }
       corpo.innerHTML = aulasAddInputHTML(estado);
       const aulasFile = corpo.querySelector("#aulas-file");
       if (!aulasFile) return;
@@ -970,12 +1032,13 @@ function abrirOficial(app) {
   });
 }
 
-function aulasDiffHTML(d) {
+function aulasDiffHTML(d, st) {
+  const discDe = (a) => { const x = (st.disciplinas || []).find((y) => y.id === a.disciplinaId); return x ? x.nome : (a.disciplinaNome || ""); };
   const novas = d.novas.length
-    ? `<ul class="oficial-lista">${d.novas.map((e) => `<li class="oficial-lac"><span class="oficial-ref">${icone("plus")} ${esc(e.nome)} <span class="muted small">(${plural((e.topicos || []).length, "assunto", "assuntos")})</span></span></li>`).join("")}</ul>`
+    ? `<ul class="oficial-lista">${d.novas.map((e) => `<li class="oficial-lac"><span class="oficial-ref">${icone("plus")} ${e.disciplina ? `<span class="muted small">${esc(e.disciplina)} · </span>` : ""}${esc(e.nome)} <span class="muted small">(${plural((e.topicos || []).length, "assunto", "assuntos")})</span></span></li>`).join("")}</ul>`
     : `<p class="muted small u-mt-4 u-mb-8">— nenhuma —</p>`;
   const removidas = d.removidas.length
-    ? `<ul class="oficial-lista">${d.removidas.map((a) => `<li class="oficial-lac"><input type="checkbox" class="aula-rem-cb" data-id="${a.id}" checked /> <span class="oficial-ref">${icone("minus")} ${esc(a.nome)}</span></li>`).join("")}</ul>`
+    ? `<ul class="oficial-lista">${d.removidas.map((a) => `<li class="oficial-lac"><input type="checkbox" class="aula-rem-cb" data-id="${a.id}" checked /> <span class="oficial-ref">${icone("minus")} ${discDe(a) ? `<span class="muted small">${esc(discDe(a))} · </span>` : ""}${esc(a.nome)}</span></li>`).join("")}</ul>`
     : `<p class="muted small u-mt-4 u-mb-8">— nenhuma —</p>`;
   const renoms = d.renomeacoes.length
     ? `<div class="muted small u-mt-12 u-mb-4">${icone("repeat-2")} <b>Possíveis renomeações</b> (mantém os tópicos da aula):</div>
@@ -989,18 +1052,26 @@ function aulasDiffHTML(d) {
     <div class="form-acoes"><button class="btn btn-ghost" data-action="aulas-cancelar-diff">Cancelar</button><button class="btn btn-primary" data-action="aulas-aplicar-diff">Aplicar mudanças</button></div>
   </div>`;
 }
-function aulaTopEditorHTML(st, a) {
+function aulaTopEditorHTML(st, a, discDaAula) {
   const sel = new Set(a.topicoIds || []);
   // Cada disciplina é um <details> recolhido — mostrar as 400+ tópicos de TODAS as
   // disciplinas de uma vez era a poluição visual que o usuário reclamou (só a disciplina da
   // própria aula, quando conhecida, já abre sozinha; as outras o usuário abre se precisar).
-  const grupos = st.disciplinas
+  // A disciplina da AULA vem primeiro e sinalizada: as outras aparecem marcadas como fora dela,
+  // porque marcar ali cria exatamente o vínculo cruzado que a revisão de vínculos vai apontar.
+  const discId = discDaAula && discDaAula.id ? discDaAula.id : a.disciplinaId;
+  const ordenadas = discId ? [...st.disciplinas].sort((x, y) => (x.id === discId ? -1 : y.id === discId ? 1 : 0)) : st.disciplinas;
+  const grupos = ordenadas
     .map((disc) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === disc.id);
       if (!tops.length) return "";
+      const daAula = discId && disc.id === discId;
       const marcados = tops.filter((t) => sel.has(t.id)).length;
-      const aberta = disc.id === a.disciplinaId || marcados > 0;
-      return `<details class="ft-grupo"${aberta ? " open" : ""}><summary class="ft-disc"><b>${esc(disc.nome)}</b>${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</details>`;
+      const aberta = daAula || marcados > 0;
+      const etiqueta = daAula
+        ? ` <span class="mini-tag" data-tip="Disciplina desta aula.">${icone("check")} desta aula</span>`
+        : discId ? ` <span class="muted small">fora da disciplina desta aula</span>` : "";
+      return `<details class="ft-grupo${daAula ? " ft-grupo-daaula" : ""}"${aberta ? " open" : ""}><summary class="ft-disc"><b>${esc(disc.nome)}</b>${etiqueta}${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</details>`;
     })
     .join("");
   return `<div class="aula-top-editor"><div class="muted small u-mt-8 u-mb-8">${icone("files")} Tópicos que esta aula cobre — marque todos (uma aula pode cobrir vários). Salva na hora.</div>${grupos || `<p class="muted small">Sem tópicos cadastrados.</p>`}<div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="aula-topicos" data-id="${a.id}">Fechar</button></div></div>`;
@@ -1016,39 +1087,25 @@ function aulasListaHTML(store, st) {
     const d = st.disciplinas.find((x) => x.id === t.disciplinaId);
     return (d ? d.nome + " · " : "") + t.nome;
   };
-  // Ordem de EXIBIÇÃO (só na tela; não toca no store). "custom" = ordem real do array,
-  // na qual o mover ↑/↓ atua. Em "nome"/"topicos" o mover fica desabilitado (a numeração
-  // # mostra a posição real para não confundir).
-  const nTops = (a) => (a.topicoIds || []).filter((id) => st.topicos.some((t) => t.id === id)).length;
-  let display = aulas.map((a, idx) => ({ a, idx }));
-  if (aulasSort === "nome") display = [...display].sort((x, y) => x.a.nome.localeCompare(y.a.nome, "pt", { sensitivity: "base" }));
-  else if (aulasSort === "topicos") display = [...display].sort((x, y) => nTops(y.a) - nTops(x.a));
-  const custom = aulasSort === "custom";
-  const discDeAula = (a) => {
-    if (a.disciplinaId) { const d = st.disciplinas.find((x) => x.id === a.disciplinaId); if (d) return d.nome; }
-    const tps = (a.topicoIds || []).map((id) => st.topicos.find((t) => t.id === id)).filter(Boolean);
-    const dids = [...new Set(tps.map((t) => t.disciplinaId).filter(Boolean))];
-    if (dids.length === 1) { const d = st.disciplinas.find((x) => x.id === dids[0]); if (d) return d.nome; }
-    return a.disciplinaNome || "Sem disciplina";
-  };
+  // Ordem: a MESMA que o Hoje usa para estudar (disciplina na ordem de aparição, aulas pelo
+  // número). Não há ordenação de tela nem reordenação à mão — a tela não pode divergir do estudo.
+  const display = store.aulasEmOrdem().map((a) => ({ a }));
+  // A disciplina de uma aula é a do CURSINHO, não a vinculação por edital: a aula 00, que é
+  // introdutória e não casa com tópico nenhum, pertence à disciplina do bloco em que veio.
+  // A régua mora no store (disciplinaDePlano), porque a correção de vínculos usa a mesma.
+  const discPorAula = store.disciplinaDePlano();
+  const discDeAula = (a) => { const d = discPorAula.get(a.id); return d && d.nome ? d.nome : "Sem disciplina"; };
   const discNomeDe = (t) => { const d = st.disciplinas.find((x) => x.id === t.disciplinaId); return d ? d.nome : ""; };
   // AULA protagonista: nome da aula em cima; os TÓPICOS do edital que ela cobre embaixo
   // (cada um clicável, abre o dossiê). Bolinha com a cor da disciplina; sem títulos de
   // disciplina no meio (lista corrida na ordem das aulas).
-  const aulaRow = ({ a, idx }) => {
+  const aulaRow = ({ a }) => {
       const tops = (a.topicoIds || []).map((id) => st.topicos.find((t) => t.id === id)).filter(Boolean);
       const discIds = [...new Set(tops.map((t) => t.disciplinaId).filter(Boolean))];
       const multi = discIds.length > 1;
       const concl = tops.filter((t) => t.concluido).length;
-      return `<div class="cur-aula-row" data-drag-id="${a.id}">
+      return `<div class="cur-aula-row">
         <div class="cur-aula-head">
-          <span class="drag-grip" data-tip="Arraste para reordenar" aria-hidden="true">${icone("grip-vertical")}</span>
-          ${
-            custom
-              ? `<button class="lnk toque-reord" data-action="aula-subir" data-id="${a.id}" ${idx > 0 ? "" : "disabled"} data-tip="Subir" data-tip-pos="cima-dir">${icone("chevron-up")}</button>
-                 <button class="lnk toque-reord" data-action="aula-descer" data-id="${a.id}" ${idx < aulas.length - 1 ? "" : "disabled"} data-tip="Descer" data-tip-pos="cima-dir">${icone("chevron-down")}</button>`
-              : ""
-          }
           <b class="cur-aula-nome">${esc(tituloAula(a))}</b>
           ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
@@ -1057,9 +1114,8 @@ function aulasListaHTML(store, st) {
           <details class="doc-mais ed-top-mais">
             <summary class="ed-top-mais-sum" data-tip-pos="cima-dir" data-tip="Mais ações para esta aula.">${icone("ellipsis")}</summary>
             <div class="doc-mais-pop" role="menu">
-              <button class="menu-item" data-action="aula-subir" data-id="${a.id}" ${custom && idx > 0 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-up")}</span> Subir</button>
-              <button class="menu-item" data-action="aula-descer" data-id="${a.id}" ${custom && idx < aulas.length - 1 ? "" : "disabled"} ${custom ? "" : `data-tip="Mude a ordenação para 'Como cadastrei' para mover manualmente."`}><span class="menu-ico">${icone("arrow-down")}</span> Descer</button>
-              <button class="menu-item" data-action="aula-renomear" data-id="${a.id}"><span class="menu-ico">${icone("square-pen")}</span> Renomear</button>
+              <button class="menu-item" data-action="aula-renomear" data-id="${a.id}" data-tip="O número no nome define a posição da aula na disciplina."><span class="menu-ico">${icone("square-pen")}</span> Renomear</button>
+              <button class="menu-item" data-action="aula-disciplina" data-id="${a.id}" data-tip="Define a disciplina desta aula. É ela que limita quais tópicos podem ser vinculados."><span class="menu-ico">${icone("library")}</span> Definir disciplina</button>
               <div class="menu-sep"></div>
               <button class="menu-item menu-item-danger" data-action="aula-remover" data-id="${a.id}"><span class="menu-ico">${icone("x")}</span> Remover aula</button>
             </div>
@@ -1073,10 +1129,10 @@ function aulasListaHTML(store, st) {
         ${(() => {
           // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital: no preview
           // aparecem, mas o plano só mostrava os tópicos casados — mostramos os pendentes (não some nada).
-          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId }));
+          const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId, restrito: !!a.disciplinaId }));
           return naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : "";
         })()}
-        ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a) : ""}
+        ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a, discPorAula.get(a.id)) : ""}
       </div>`;
   };
   // Agrupa as aulas por DISCIPLINA (numeração das aulas reinicia por disciplina no
@@ -1093,10 +1149,10 @@ function aulasListaHTML(store, st) {
   const cards = grupos.map((g) => {
     const d = st.disciplinas.find((x) => x.nome === g.disc);
     const cor = d ? store.corDisciplina(d.id) : "var(--muted)";
-    return `<div class="cur-disc" style="--acc:${cor}">
-      <div class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(g.disc)}</span><span class="cur-grupo-n">${g.itens.length} aula${g.itens.length === 1 ? "" : "s"}</span></div>
-      <div class="cur-aula-list">${g.itens.map(aulaRow).join("")}</div>
-    </div>`;
+    return `<details class="cur-disc" style="--acc:${cor}" data-cur-grupo="${esc(g.disc)}" ${curAcFechada.has(g.disc) ? "" : "open"}>
+      <summary class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(g.disc)}</span><span class="cur-grupo-n">${g.itens.length} aula${g.itens.length === 1 ? "" : "s"}</span><span class="spacer"></span><span class="cur-disc-chev">${icone("chevron-down")}</span></summary>
+      <div class="cur-aula-list">${g.itens.map((it, i, arr) => aulaRow(it, i, arr)).join("")}</div>
+    </details>`;
   }).join("");
   // Modo "por tópico": os tópicos do edital (por disciplina, ordem do edital) mostrando
   // a(s) aula(s) do cursinho que os cobrem — o inverso do modo "por aula".
@@ -1106,8 +1162,14 @@ function aulasListaHTML(store, st) {
     const cor = store.corDisciplina(d.id);
     const rows = tps.map((t) => {
       const aulasT = st.aulas.filter((a) => (a.topicoIds || []).includes(t.id));
+      // "Aula 01" existe em toda disciplina: a chip só identifica a aula se disser de onde ela é
+      // quando vier de OUTRA disciplina (o caso que a revisão de vínculos aponta).
       const ref = aulasT.length
-        ? aulasT.map((a) => `<span class="cur-aula-chip">${esc(a.nome)}</span>`).join("")
+        ? aulasT.map((a) => {
+            const da = discPorAula.get(a.id);
+            const outra = da && da.nome && da.nome !== d.nome;
+            return `<span class="cur-aula-chip${outra ? " cur-aula-chip-fora" : ""}"${outra ? ` data-tip="Esta aula é de ${esc(da.nome)} — vínculo fora da disciplina."` : ""}>${outra ? `${esc(da.nome)} · ` : ""}${esc(a.nome)}</span>`;
+          }).join("")
         : `<span class="cur-sem muted small">${icone("link")} não vinculado a nenhuma aula</span>`;
       return `<div class="cur-aula-row">
         <div class="cur-aula-head">
@@ -1116,37 +1178,40 @@ function aulasListaHTML(store, st) {
         <div class="cur-aula-ref">${ref}</div>
       </div>`;
     }).join("");
-    return `<div class="cur-disc" style="--acc:${cor}">
-      <div class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(d.nome)}</span><span class="cur-grupo-n">${tps.length} tópico${tps.length === 1 ? "" : "s"}</span></div>
+    return `<details class="cur-disc" style="--acc:${cor}" data-cur-grupo="${esc(d.nome)}" ${curAcFechada.has(d.nome) ? "" : "open"}>
+      <summary class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(d.nome)}</span><span class="cur-grupo-n">${tps.length} tópico${tps.length === 1 ? "" : "s"}</span><span class="spacer"></span><span class="cur-disc-chev">${icone("chevron-down")}</span></summary>
       <div class="cur-aula-list">${rows}</div>
-    </div>`;
+    </details>`;
   }).join("");
+  const nomesGrupos = cursinhoView === "aula"
+    ? grupos.map((g) => g.disc)
+    : st.disciplinas.filter((d) => st.topicos.some((t) => t.disciplinaId === d.id)).map((d) => d.nome);
+  const algumGrupoAberto = nomesGrupos.some((n) => !curAcFechada.has(n));
+  const vinculosFora = store.vinculosForaDaDisciplina();
   return `
     <p class="muted small cursinho-nota">As aulas <b>agrupam os seus tópicos</b> na ordem do cursinho — <b>não criam estrutura nova</b>. Com a base "Cursinho", o app estuda na <b>ordem das aulas</b> (aqui e no Hoje); o conteúdo, o progresso e a cobertura continuam os mesmos do seu edital.</p>
     <div class="barra-acoes cursinho-barra">
-      <label class="inline" data-tip="Muda só a ordem do estudo e das sugestões do Hoje: Edital segue as disciplinas; Cursinho segue a sequência das aulas — conteúdo, progresso e cobertura são os mesmos.">Base de estudo:
-        <select id="base-estudo">
-          <option value="edital" ${base === "edital" ? "selected" : ""}>Edital (por disciplina)</option>
-          <option value="cursinho" ${base === "cursinho" ? "selected" : ""}>Cursinho (por aula)</option>
-        </select>
-      </label>
+      <span class="muted small" data-tip="A base de estudo é um ajuste do app inteiro (muda a ordem das sugestões do Hoje) — por isso mora em Configurações › Estudo.">Base de estudo: <b>${base === "cursinho" ? "Cursinho (ordem das aulas)" : "Edital (por disciplina)"}</b> <button class="lnk" data-action="ir-config-base">alterar</button></span>
       <span class="filtro-lbl muted small">Ver por:</span>
       <span class="seg seg-sm" role="tablist" data-tip="Só muda a forma de ver nesta tela (não altera nada do estudo).">
         <button class="${cursinhoView === "aula" ? "on" : ""}" data-action="cur-view" data-v="aula">Aula</button>
         <button class="${cursinhoView === "topico" ? "on" : ""}" data-action="cur-view" data-v="topico">Tópico</button>
       </span>
       <span class="spacer"></span>
-      <button class="btn btn-soft btn-sm" data-action="compatibilizar-aulas-ia" data-tip="A IA casa os assuntos das aulas com os tópicos do seu edital (vira sinônimo), sem você marcar um por um.">${icone("bot")} Compatibilizar com IA</button>
+      ${nomesGrupos.length ? `<button class="lnk small" data-action="${algumGrupoAberto ? "cur-recolher" : "cur-expandir"}" data-tip-pos="cima-esq" data-tip="${algumGrupoAberto ? "Recolher todas as disciplinas." : "Abrir todas as disciplinas."}">${algumGrupoAberto ? "Recolher tudo" : "Expandir tudo"}</button>` : ""}
       <button class="btn btn-soft btn-sm" data-action="aulas-adicionar" data-tip="Trazer aulas: acrescentar à lista, ou atualizar a grade (comparar e preservar seus ajustes).">${icone("download")} Adicionar aulas</button>
       <details class="doc-mais ed-barra-mais">
-        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Limpar o plano do cursinho.">${icone("ellipsis")} Mais</summary>
+        <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Compatibilizar com IA, aula avulsa, revisão de vínculos e limpeza do plano.">${icone("ellipsis")} Mais</summary>
         <div class="doc-mais-pop" role="menu">
+          <button class="menu-item" data-action="compatibilizar-aulas-ia" data-tip="A IA casa os assuntos das aulas com os tópicos do seu edital (vira sinônimo), sem você marcar um por um. Uma chamada por disciplina — não sai dela."><span class="menu-ico">${icone("bot")}</span> Compatibilizar com IA</button>
+          ${vinculosFora.length ? `<button class="menu-item" data-action="corrigir-vinculos" data-tip="Tira os vínculos que apontam para tópicos de outra disciplina e recasa os assuntos dentro da disciplina da aula."><span class="menu-ico">${icone("link")}</span> Revisar vínculos (${vinculosFora.length} fora da disciplina)</button>` : ""}
+          ${desfazerVinculos ? `<button class="menu-item" data-action="desfazer-vinculos" data-tip="Volta as aulas ao estado anterior à última revisão de vínculos (vale nesta sessão)."><span class="menu-ico">${icone("repeat-2")}</span> Desfazer revisão de vínculos</button>` : ""}
+          <div class="menu-sep"></div>
           <button class="menu-item menu-item-danger" data-action="limpar-aulas">Limpar plano</button>
         </div>
       </details>
     </div>
     ${cursinhoView === "aula" ? cards : bodyTopico}
-    ${cursinhoView === "aula" ? `<div class="cur-add-aula"><button class="btn btn-ghost btn-sm" data-action="add-aula" data-tip="Adicionar uma aula em branco para preencher à mão.">${icone("plus")} Nova aula</button></div>` : ""}
     ${cursinhoView === "aula" && soltos.length ? `<div class="card cursinho-soltos muted small">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> (não estão na divisão do cursinho): ${soltos.map((t) => esc(t.nome)).join(" · ")}</div>` : ""}`;
 }
 
@@ -1255,6 +1320,14 @@ export default function renderEdital(root, app) {
   // entra sozinha. O usuário troca quando quiser — a escolha manual vence o automático.
   const totalTops = st.topicos.length;
   const compacto = edCompacto === null ? totalTops > 60 : edCompacto;
+  // 1ª visita da sessão: cada densidade tem o seu padrão — a compacta mostra tudo (é uma linha
+  // por tópico), os cards abrem só a primeira disciplina (o paredão de cards é o que cansa).
+  if (!dossieAcInit && st.disciplinas.length) {
+    dossieAcInit = true;
+    if (compacto) st.disciplinas.forEach((d) => dossieAcAberta.add(d.id));
+    else dossieAcAberta.add(st.disciplinas[0].id);
+  }
+  const algumDossieAberto = st.disciplinas.some((d) => dossieAcAberta.has(d.id));
   const resumoBody = `
     <div class="u-flex-12 u-between u-items-end u-wrap u-mb-12">
       <p class="muted small u-m-0">${
@@ -1262,14 +1335,17 @@ export default function renderEdital(root, app) {
           ? "Uma linha por tópico: material, questão, cartão e concluído. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele."
           : "Cada tópico com seus números (materiais, questões, erros, flashcards, tempo) e a relevância. <b>Abra um tópico</b> para ver o <b>dossiê</b> dele."
       }</p>
-      <button class="btn btn-ghost btn-sm u-nowrap" data-action="ed-densidade" data-tip="${
-        compacto ? "Ver os cards com os números de cada tópico." : "Ver uma linha por tópico — melhor para edital grande."
-      }">${icone(compacto ? "table" : "list-tree")} ${compacto ? "Ver em cards" : "Ver compacto"}</button>
+      <div class="u-flex-12 u-nowrap">
+        ${st.disciplinas.length ? `<button class="lnk small" data-action="${algumDossieAberto ? "dossie-recolher" : "dossie-expandir"}" data-tip-pos="cima-dir" data-tip="${algumDossieAberto ? "Recolher todas as disciplinas." : "Abrir todas as disciplinas."}">${algumDossieAberto ? "Recolher tudo" : "Expandir tudo"}</button>` : ""}
+        <button class="btn btn-ghost btn-sm u-nowrap" data-action="ed-densidade" data-tip="${
+          compacto ? "Ver os cards com os números de cada tópico." : "Ver uma linha por tópico — melhor para edital grande."
+        }">${icone(compacto ? "table" : "list-tree")} ${compacto ? "Ver em cards" : "Ver compacto"}</button>
+      </div>
     </div>
-    <div class="dossie-lista">${compacto ? dossieCompactoHTML(store) : dossieResumoHTML(store)}</div>`;
+    <div class="dossie-lista">${compacto ? dossieCompactoHTML(store, dossieAcAberta) : dossieResumoHTML(store, dossieAcAberta)}</div>`;
 
   let cursinhoBody;
-  if (aulasPreview) cursinhoBody = aulasPreviewHTML(aulasPreview) + (st.aulas.length ? aulasListaHTML(store, st) : "");
+  if (aulasPreview) cursinhoBody = aulasPreviewHTML(aulasPreview, st.disciplinas) + (st.aulas.length ? aulasListaHTML(store, st) : "");
   else if (aulasImportAberto) cursinhoBody = aulasImportHTML(aulasTextoSalvo) + (st.aulas.length ? aulasListaHTML(store, st) : "");
   else if (st.aulas.length === 0) cursinhoBody = aulasConviteHTML();
   else cursinhoBody = aulasListaHTML(store, st);
@@ -1390,14 +1466,18 @@ export default function renderEdital(root, app) {
       finally { fim(); }
     });
   }
-  root.querySelector("#base-estudo")?.addEventListener("change", (e) => {
-    store.setBaseEstudo(e.target.value);
-  });
-  // Arrastar-para-reordenar as aulas do cursinho (dentro de cada disciplina).
-  root.querySelectorAll(".cur-disc").forEach((disc) =>
-    ligarArrastar(disc, ".cur-aula-row[data-drag-id]", (id, alvo) => {
-      store.reordenarAula(id, alvo);
-      app.refresh();
+  // Plano do cursinho: persiste (sem re-render) qual grupo está recolhido.
+  root.querySelectorAll("details.cur-disc[data-cur-grupo]").forEach((det) =>
+    det.addEventListener("toggle", () => {
+      const nome = det.getAttribute("data-cur-grupo");
+      if (det.open) curAcFechada.delete(nome); else curAcFechada.add(nome);
+    })
+  );
+  // Dossiê por tópico: persiste (sem re-render) qual disciplina está aberta.
+  root.querySelectorAll("details.dossie-disc[data-dossie-grupo]").forEach((det) =>
+    det.addEventListener("toggle", () => {
+      const id = det.getAttribute("data-dossie-grupo");
+      if (det.open) dossieAcAberta.add(id); else dossieAcAberta.delete(id);
     })
   );
   // Accordion: persiste (sem re-render) qual disciplina está aberta/fechada.
@@ -1444,9 +1524,7 @@ export default function renderEdital(root, app) {
       if (aulasPreview && aulasPreview[a] && aulasPreview[a].topicos) aulasPreview[a].topicos[t] = el.value;
     })
   );
-  root.querySelector(".aula-disc-lote")?.addEventListener("input", (ev) => {
-    if (aulasPreview) aulasPreview.forEach((a) => (a.disciplina = ev.target.value.trim() || null));
-  });
+  ligarDiscLote(root, aulasPreview);
 
   bindActions(root, {
     "compatibilizar-aulas-ia": async () => {
@@ -1469,7 +1547,7 @@ export default function renderEdital(root, app) {
       }
     },
     imprimir: () => edModo === "cursinho"
-      ? imprimir("Plano do cursinho — Mentor Concurso", printCursinho(st))
+      ? imprimir("Plano do cursinho — Mentor Concurso", printCursinho(st, store))
       : imprimir("Edital — Mentor Concurso", printEdital(st)),
     "modo-estrutura": () => {
       edModo = "estrutura";
@@ -1537,7 +1615,7 @@ export default function renderEdital(root, app) {
       aulasTextoSalvo = "";
       toast(
         r.criadas
-          ? `${plural(r.criadas, "aula criada", "aulas criadas")}.${r.naoCasados.length ? ` ${plural(r.naoCasados.length, "assunto não casou", "assuntos não casaram")} com seus tópicos (use sinônimos ou crie os tópicos).` : ""}`
+          ? `${plural(r.criadas, "aula criada", "aulas criadas")}.${r.deduzida ? ` Disciplina assumida: ${r.deduzida} — os assuntos casaram só com tópicos dela.` : ""}${r.naoCasados.length ? ` ${plural(r.naoCasados.length, "assunto não casou", "assuntos não casaram")} com seus tópicos (use sinônimos ou crie os tópicos).` : ""}`
           : "Não reconheci aulas no texto.",
         r.criadas ? "ok" : "erro"
       );
@@ -1552,17 +1630,23 @@ export default function renderEdital(root, app) {
       aulasTextoSalvo = "";
       app.refresh();
     },
-    "add-aula": async () => {
-      const nome = await pedirTexto("Nome da aula:", { valor: "Aula " + (store.get().aulas.length + 1), rotuloOk: "Adicionar" });
-      if (nome) store.addAula(nome);
-    },
     "aula-renomear": async (el) => {
       const a = store.get().aulas.find((x) => x.id === el.getAttribute("data-id"));
       const nome = await pedirTexto("Renomear aula:", { valor: a ? a.nome : "" });
       if (nome) store.renomearAula(el.getAttribute("data-id"), nome);
     },
-    "aula-subir": (el) => store.moverAula(el.getAttribute("data-id"), "cima"),
-    "aula-descer": (el) => store.moverAula(el.getAttribute("data-id"), "baixo"),
+    "aula-disciplina": async (el) => {
+      const id = el.getAttribute("data-id");
+      const a = st.aulas.find((x) => x.id === id);
+      if (!a) return;
+      if (!st.disciplinas.length) return toast("Cadastre as disciplinas do edital primeiro.", "erro");
+      const opcoes = [...st.disciplinas.map((d) => ({ label: d.nome, value: d.id })), { label: "— sem disciplina —", value: "" }];
+      const escolhida = await escolher(`Disciplina de "${a.nome}":`, opcoes, { lista: true });
+      if (escolhida === null) return;
+      store.setAulaDisciplina(id, escolhida || null);
+      const fora = store.vinculosForaDaDisciplina().filter((f) => f.aulaId === id).length;
+      toast(fora ? `Disciplina definida. ${plural(fora, "vínculo ficou", "vínculos ficaram")} fora dela — use "Revisar vínculos" em Mais.` : "Disciplina definida.");
+    },
     "aula-topicos": (el) => {
       const id = el.getAttribute("data-id");
       aulaTopAberto = aulaTopAberto === id ? null : id;
@@ -1571,6 +1655,26 @@ export default function renderEdital(root, app) {
     "cur-view": (el) => { cursinhoView = el.getAttribute("data-v") === "topico" ? "topico" : "aula"; app.refresh(); },
     "aula-remover": async (el) => {
       if (await confirmar("Remover esta aula? (não apaga os tópicos, só a aula)")) store.removerAula(el.getAttribute("data-id"));
+    },
+    "corrigir-vinculos": async () => {
+      const fora = store.vinculosForaDaDisciplina();
+      if (!fora.length) return toast("Nenhum vínculo fora da disciplina.");
+      const amostra = fora.slice(0, 8).map((f) => `• ${f.aulaNome} (${f.disciplina}) → ${f.topicoNome} [${f.topicoDisciplina}]`).join("\n");
+      const resto = fora.length > 8 ? `\n… e mais ${fora.length - 8}.` : "";
+      const ok = await confirmar(
+        `Remover ${plural(fora.length, "vínculo que aponta", "vínculos que apontam")} para tópico de OUTRA disciplina e recasar os assuntos dentro da disciplina da aula?\n\n${amostra}${resto}\n\nOs vínculos que já estão na disciplina certa não são tocados.`
+      );
+      if (!ok) return;
+      const r = store.corrigirVinculosDoPlano();
+      desfazerVinculos = r.antes && r.antes.length ? r.antes : null;
+      toast(`${plural(r.removidos, "vínculo removido", "vínculos removidos")} em ${plural(r.aulas, "aula", "aulas")}${r.recasados ? `; ${plural(r.recasados, "assunto recasado", "assuntos recasados")} na disciplina certa` : ""}. Dá para desfazer em "Mais".`);
+    },
+    "desfazer-vinculos": async () => {
+      if (!desfazerVinculos) return;
+      if (!(await confirmar("Desfazer a revisão de vínculos? As aulas voltam exatamente como estavam antes dela."))) return;
+      const n = store.restaurarVinculosDoPlano(desfazerVinculos);
+      desfazerVinculos = null;
+      toast(`${plural(n, "aula restaurada", "aulas restauradas")}.`);
     },
     "limpar-aulas": async () => {
       if (await confirmar("Limpar todo o plano do cursinho? (não apaga os tópicos)")) store.limparAulas();
@@ -1635,6 +1739,14 @@ export default function renderEdital(root, app) {
     "toggle-selmode": () => { selMode = !selMode; if (!selMode) topSel.clear(); app.refresh(); },
     "ed-expandir": () => { st.disciplinas.forEach((d) => discAcAberta.add(d.id)); app.refresh(); },
     "ed-recolher": () => { discAcAberta.clear(); app.refresh(); },
+    "cur-recolher": () => {
+      root.querySelectorAll(".cur-disc[data-cur-grupo]").forEach((el) => curAcFechada.add(el.getAttribute("data-cur-grupo")));
+      app.refresh();
+    },
+    "cur-expandir": () => { curAcFechada.clear(); app.refresh(); },
+    "dossie-expandir": () => { st.disciplinas.forEach((d) => dossieAcAberta.add(d.id)); app.refresh(); },
+    "dossie-recolher": () => { dossieAcAberta.clear(); app.refresh(); },
+    "ir-config-base": () => app.navigate("config"),
     "add-link-top": (el) => abrirAnexarLink(app, el.getAttribute("data-id")),
     "ir-dossie": (el) => {
       dossieTopicoId = el.getAttribute("data-id");
@@ -1891,14 +2003,30 @@ function printEdital(st) {
     .join("");
 }
 // Impressão do PLANO DO CURSINHO: aulas na ordem, agrupadas por disciplina, com os tópicos.
-function printCursinho(st) {
+function printCursinho(st, store) {
   const aulas = st.aulas || [];
   if (!aulas.length) return "<p>Nenhuma aula no plano do cursinho.</p>";
   const nomeTop = (id) => { const t = st.topicos.find((x) => x.id === id); return t ? esc(t.nome) : ""; };
-  return aulas
-    .map((a, i) => {
-      const tops = (a.topicoIds || []).map((id) => nomeTop(id)).filter(Boolean);
-      return `<div class="print-aula"><b>${i + 1}. ${esc(tituloAula(a))}</b>${tops.length ? `<div class="print-meta">No edital: ${tops.join(" · ")}</div>` : ""}</div>`;
+  // Mesma divisão da tela: uma seção por disciplina, aulas numeradas DENTRO dela. A lista corrida
+  // numerava 1..N atravessando disciplinas — o papel não batia com o que se via no app.
+  const regua = store.disciplinaDePlano();
+  const grupos = [];
+  const idx = new Map();
+  for (const a of aulas) {
+    const d = regua.get(a.id);
+    const nome = (d && d.nome) || "Sem disciplina";
+    if (!idx.has(nome)) { idx.set(nome, grupos.length); grupos.push({ nome, itens: [] }); }
+    grupos[idx.get(nome)].itens.push(a);
+  }
+  return grupos
+    .map((g) => {
+      const linhas = g.itens
+        .map((a, i) => {
+          const tops = (a.topicoIds || []).map((id) => nomeTop(id)).filter(Boolean);
+          return `<div class="print-aula"><b>${i + 1}. ${esc(tituloAula(a))}</b>${tops.length ? `<div class="print-meta">No edital: ${tops.join(" · ")}</div>` : ""}</div>`;
+        })
+        .join("");
+      return `<h2>${esc(g.nome)}</h2>${linhas}`;
     })
     .join("");
 }

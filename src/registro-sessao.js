@@ -517,12 +517,16 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
         let aulaId = null;
         const aulaNome = (q("#rs-aula")?.value || "").trim();
         if (aulaNome && topicoId) {
-          const ex = (store.get().aulas || []).find((a) => a.nome.trim().toLowerCase() === aulaNome.toLowerCase());
+          // O nome sozinho não identifica a aula: "Aula 00" existe em toda disciplina. Casa-se
+          // pelo nome DENTRO da disciplina do tópico, e a aula nova já nasce com ela.
+          const discId = (store.get().topicos || []).find((t) => t.id === topicoId)?.disciplinaId || null;
+          const mesmoNome = (store.get().aulas || []).filter((a) => a.nome.trim().toLowerCase() === aulaNome.toLowerCase());
+          const ex = mesmoNome.find((a) => a.disciplinaId === discId) || (discId ? null : mesmoNome[0]);
           if (ex) {
             aulaId = ex.id;
             if (!ex.topicoIds.includes(topicoId)) store.setAulaTopicos(ex.id, [...ex.topicoIds, topicoId]);
           } else {
-            store.addAula(aulaNome);
+            store.addAula(aulaNome, discId);
             const nova = store.get().aulas.slice(-1)[0];
             store.setAulaTopicos(nova.id, [topicoId]);
             aulaId = nova.id;

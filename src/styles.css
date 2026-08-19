@@ -1029,6 +1029,11 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
   border-radius: 12px; box-shadow: var(--elev-1), var(--stroke-inner); overflow: hidden; }
 .cur-disc::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc); }
 .cur-disc-h { display: flex; align-items: center; gap: 8px; padding: 14px 16px 10px 19px; }
+.cur-disc > summary.cur-disc-h { list-style: none; cursor: pointer; user-select: none; }
+.cur-disc > summary.cur-disc-h::-webkit-details-marker { display: none; }
+.cur-disc > summary.cur-disc-h:hover { background: var(--surface-2); }
+.cur-disc-chev { display: inline-flex; color: var(--muted); flex: none; transition: transform var(--dur-2) var(--ease-std); }
+.cur-disc[open] > summary .cur-disc-chev { transform: rotate(180deg); }
 .cur-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
 .cur-disc-nome { font-weight: var(--fw-bold); font-size: .95rem; letter-spacing: -.01em; color: var(--text); }
 .cur-grupo-n { color: var(--muted); font-size: .75rem; font-weight: var(--fw-medium); }
@@ -1057,6 +1062,7 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .cur-aula-ref { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .cur-aula-chip { display: inline-flex; align-items: center; font-size: .82rem; font-weight: var(--fw-regular); color: var(--text-2);
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
+.cur-aula-chip-fora { border-style: dashed; border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
 .cur-aula-pend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .cur-assunto-chip { display: inline-flex; align-items: center; font-size: .8rem; color: var(--text-2); background: color-mix(in srgb, var(--amber) 9%, var(--surface-2)); border: 1px dashed color-mix(in srgb, var(--amber) 40%, var(--border)); border-radius: 8px; padding: 3px 8px; }
 .cur-top { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: var(--fw-regular); color: var(--text);
@@ -1821,7 +1827,6 @@ body.onboarding #crono-fab { display: none !important; }
 .add-via-alt > summary:hover { color: var(--text); }
 .add-via-alt[open] > summary { margin-bottom: 10px; }
 /* "+ Nova aula" inline no fim da lista do plano de cursinho. */
-.cur-add-aula { margin-top: 12px; }
 .filtro-bar { margin-top: 4px; }
 .ft-painel { padding: 12px 14px; margin: 8px 0; max-height: 340px; overflow-y: auto; }
 .ft-painel label { display: flex; align-items: center; gap: 8px; padding: 3px 0; cursor: pointer; font-size: var(--fs-sm); }
@@ -1833,6 +1838,7 @@ body.onboarding #crono-fab { display: none !important; }
 .ft-grupo { margin: 2px 0; border-bottom: 1px solid var(--border); padding-bottom: 2px; }
 .ft-grupo:last-child { border-bottom: 0; }
 .ft-grupo[hidden] { display: none; }
+.ft-grupo-daaula > .ft-disc { color: var(--text); }
 .ft-disc-h { list-style: none; cursor: pointer; font-size: var(--fs-sm); padding: 6px 0; user-select: none; display: flex; align-items: center; gap: 6px; }
 .ft-disc-h::-webkit-details-marker { display: none; }
 .ft-disc-h::before { content: ""; width: 6px; height: 6px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
@@ -3684,6 +3690,8 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 /* Disciplina do lote inteiro (um PDF de cursinho = uma disciplina), acima da lista de aulas */
 .ed-prev-disc-lote { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .ed-prev-disc-lote .prev-inp { font-weight: var(--fw-medium); }
+.ed-prev-disc-lote [hidden] { display: none; }
+.aula-disc-aviso { color: var(--amber, var(--muted)); }
 .ed-prev-disc .prev-inp { font-weight: var(--fw-medium); }
 .ed-prev-tops { list-style: none; margin: 6px 0 0; padding: 0 0 0 14px; display: flex; flex-direction: column; gap: 4px; border-left: 2px solid var(--border); }
 .ed-prev-top { display: flex; align-items: center; gap: 6px; }

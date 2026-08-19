@@ -74,7 +74,7 @@ export function topicoSugerido(state, fase) {
   // Base de estudo = CURSINHO: anda pela SEQUÊNCIA DAS AULAS (Aula 1 → 2 → ...).
   // Sugere o 1º tópico ainda NÃO concluído na ordem das aulas; se todas concluídas, cai no score.
   if (state.config && state.config.baseEstudo === "cursinho" && Array.isArray(state.aulas) && state.aulas.length) {
-    for (const a of state.aulas) {
+    for (const a of aulasEmOrdem(state)) {
       for (const tid of a.topicoIds || []) {
         const t = state.topicos.find((x) => x.id === tid);
         if (t && !t.concluido) return t;
@@ -91,8 +91,86 @@ export function ordenarTopicosPorBase(state, topicos) {
     return topicos;
   }
   const ordem = new Map();
-  state.aulas.forEach((a, ai) => (a.topicoIds || []).forEach((tid) => { if (!ordem.has(tid)) ordem.set(tid, ai); }));
+  aulasEmOrdem(state).forEach((a, ai) => (a.topicoIds || []).forEach((tid) => { if (!ordem.has(tid)) ordem.set(tid, ai); }));
   return [...topicos].sort((a, b) => (ordem.has(a.id) ? ordem.get(a.id) : 9999) - (ordem.has(b.id) ? ordem.get(b.id) : 9999));
+}
+
+// ===== Ordem do plano do cursinho =====
+// Mora aqui, e não na tela, porque a ordem do plano É a ordem de estudo da base "Cursinho":
+// se a tela ordenasse por conta própria, o que se vê e o que se estuda divergiriam em silêncio
+// (foi o que acontecia quando a ordem era a posição no array, movida à mão por arrastar).
+
+// A disciplina em que cada aula APARECE. `herdar: false` devolve só a que a própria aula declara
+// — é o que a correção de vínculos usa: herança serve para agrupar, nunca para apagar vínculo.
+export function disciplinaDePlanoDe(state, { herdar = true } = {}) {
+  const disciplinas = state.disciplinas || [];
+  const aulas = state.aulas || [];
+  const propria = (a) => {
+    if (a.disciplinaId) { const d = disciplinas.find((x) => x.id === a.disciplinaId); if (d) return { id: d.id, nome: d.nome }; }
+    const bruto = (a.disciplinaNome || "").trim();
+    if (bruto) {
+      const dn = bruto.toLowerCase();
+      const d = disciplinas.find((x) => (x.nome || "").toLowerCase() === dn)
+        || disciplinas.find((x) => { const xn = (x.nome || "").toLowerCase(); return xn && (xn.includes(dn) || dn.includes(xn)); });
+      return d ? { id: d.id, nome: d.nome } : { id: null, nome: bruto };
+    }
+    const tps = (a.topicoIds || []).map((id) => (state.topicos || []).find((t) => t.id === id)).filter(Boolean);
+    const dids = [...new Set(tps.map((t) => t.disciplinaId).filter(Boolean))];
+    if (dids.length === 1) { const d = disciplinas.find((x) => x.id === dids[0]); if (d) return { id: d.id, nome: d.nome }; }
+    return null;
+  };
+  const mapa = new Map();
+  if (!herdar) {
+    for (const a of aulas) mapa.set(a.id, propria(a));
+    return mapa;
+  }
+  // A aula sem disciplina própria herda a da sequência: primeiro da seguinte (a 00 abre o bloco),
+  // depois da anterior (aula de revisão no fim do bloco).
+  let prox = null;
+  for (let i = aulas.length - 1; i >= 0; i--) {
+    const p = propria(aulas[i]);
+    if (p) prox = p;
+    mapa.set(aulas[i].id, p || prox);
+  }
+  let ant = null;
+  for (const a of aulas) {
+    const r = mapa.get(a.id);
+    if (r) ant = r; else mapa.set(a.id, ant);
+  }
+  return mapa;
+}
+
+// Número da aula ("Aula 00" → 0; "Aula 14 - Exclusivamente PDF" → 14). Sem número, null.
+function numeroDaAula(nome) {
+  const m = String(nome || "").match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+// O plano na ordem em que se estuda: disciplinas na ordem em que aparecem, e dentro de cada uma
+// as aulas pelo NÚMERO. Aula sem número (ex.: "Revisão final") vai para o fim do bloco, na ordem
+// em que foi importada. O sort é estável, então empate mantém a ordem de importação.
+export function aulasEmOrdem(state) {
+  const aulas = state.aulas || [];
+  if (!aulas.length) return [];
+  const regua = disciplinaDePlanoDe(state);
+  const grupos = [];
+  const idx = new Map();
+  for (const a of aulas) {
+    const d = regua.get(a.id);
+    const chave = (d && d.nome) || "";
+    if (!idx.has(chave)) { idx.set(chave, grupos.length); grupos.push([]); }
+    grupos[idx.get(chave)].push(a);
+  }
+  return grupos.flatMap((g) =>
+    [...g].sort((x, y) => {
+      const nx = numeroDaAula(x.nome);
+      const ny = numeroDaAula(y.nome);
+      if (nx === null && ny === null) return 0;
+      if (nx === null) return 1;
+      if (ny === null) return -1;
+      return nx - ny;
+    })
+  );
 }
 
 // Plano do dia: a recomendação principal + visão do ciclo.

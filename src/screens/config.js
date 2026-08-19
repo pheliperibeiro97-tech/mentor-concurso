@@ -174,6 +174,17 @@ export default function renderConfig(root, app) {
     </section>
 
     <section class="card">
+      <h3>${icone("list-checks")} Base de estudo</h3>
+      <p class="muted small">Define a <b>ordem</b> em que o Hoje sugere os tópicos: pelo seu edital (disciplina por disciplina) ou pela sequência de aulas do cursinho. O conteúdo, o progresso e a cobertura são os mesmos nas duas — muda só a ordem. A opção só tem efeito se você tiver montado o <b>Plano do cursinho</b>, no Edital.</p>
+      <label class="inline">Seguir:
+        <select id="cfg-base-estudo" style="width:auto; margin-left:6px">
+          <option value="edital" ${(cfg.baseEstudo || "edital") === "edital" ? "selected" : ""}>Edital (por disciplina)</option>
+          <option value="cursinho" ${cfg.baseEstudo === "cursinho" ? "selected" : ""}>Cursinho (ordem das aulas)</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card">
       <h3>${icone("alarm-clock")} Som do alarme do cronômetro</h3>
       <p class="muted small">Quando o tempo do bloco termina, o cronômetro toca um sinal e segue contando o tempo extra. Escolha a duração do som.</p>
       <label class="inline">Alarme:
@@ -942,6 +953,12 @@ export default function renderConfig(root, app) {
   const aoMudarPre = (e) => { if (e.target.checked) salvarMetas(); };
   root.querySelector("#cfg-prova-pre")?.addEventListener("change", aoMudarPre);
   root.querySelector("#cfg-meta-pre")?.addEventListener("change", aoMudarPre);
+
+  // Base de estudo: mudou aqui, muda a ordem das sugestões do Hoje na hora.
+  root.querySelector("#cfg-base-estudo")?.addEventListener("change", (e) => {
+    store.setBaseEstudo(e.target.value);
+    toast(e.target.value === "cursinho" ? "O Hoje passa a seguir a ordem das aulas do cursinho." : "O Hoje volta a seguir a ordem do seu edital.");
+  });
 
   // Som do alarme: select salva na hora (o "Testar" continua como botão).
   root.querySelector("#cfg-alarme")?.addEventListener("change", (e) => {
