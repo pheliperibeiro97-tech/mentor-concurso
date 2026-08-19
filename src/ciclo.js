@@ -119,22 +119,27 @@ export function disciplinaDePlanoDe(state, { herdar = true } = {}) {
     const m = String(nome || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
     return m ? m[1].trim() : null;
   };
+  // `tipo`: "edital" (disciplina do edital, com id) · "curso" (curso do cursinho que não existe
+  // como disciplina do edital — "Legislação Penal Especial"). O curso ganha grupo PRÓPRIO na tela:
+  // dissolvê-lo dentro de uma disciplina do edital, como se fazia, sumia com a aula do lugar onde
+  // o usuário ia procurá-la ("cadê as aulas de Difusos e Coletivos?").
   const propria = (a, { comVinculos = true } = {}) => {
-    // 1) o que a importação/o usuário declarou. Nome que não existe no edital é resposta ("Outra"):
-    // a aula fica no plano sem vínculo nenhum.
+    // 1) o que a importação/o usuário declarou (inclusive "Outra" e o mapeamento de cursos).
     const bruto = (a.disciplinaNome || "").trim();
-    if (bruto) { const d = resolver(bruto); return d ? { id: d.id, nome: d.nome } : { id: null, nome: bruto }; }
-    // 2) o prefixo do NOME da aula, quando bate com uma disciplina do edital. Vem ANTES do
-    // disciplinaId gravado de propósito: nas importações antigas esse campo era preenchido com a
-    // disciplina do PRIMEIRO tópico casado — ou seja, herdava o erro do casamento sem disciplina,
-    // e uma aula de Tributário acabava marcada como Constitucional por causa do vínculo errado.
+    if (bruto) { const d = resolver(bruto); return d ? { id: d.id, nome: d.nome, tipo: "edital" } : { id: null, nome: bruto, tipo: "curso" }; }
+    // 2) o prefixo do NOME da aula ("Direito Tributário - Aula 01"). Vem ANTES do disciplinaId
+    // gravado de propósito: nas importações antigas esse campo era preenchido com a disciplina do
+    // PRIMEIRO tópico casado — ou seja, herdava o erro do casamento sem disciplina, e uma aula de
+    // Tributário acabava marcada como Constitucional por causa do vínculo errado.
     const pref = prefixoDaAula(a.nome);
-    if (pref) { const d = resolver(pref); if (d) return { id: d.id, nome: d.nome }; }
-    // 3) o campo gravado, e por último a única disciplina dos tópicos vinculados.
-    if (a.disciplinaId) { const d = disciplinas.find((x) => x.id === a.disciplinaId); if (d) return { id: d.id, nome: d.nome }; }
-    // Último recurso: a disciplina DOMINANTE entre os tópicos vinculados. Serve para agrupar na
-    // tela, mas NÃO para a correção de vínculos — ali seria circular (a régua sairia justamente
-    // dos vínculos que se quer conferir, e todo erro pareceria coerente consigo mesmo).
+    if (pref) {
+      const d = resolver(pref);
+      return d ? { id: d.id, nome: d.nome, tipo: "edital" } : { id: null, nome: pref, tipo: "curso" };
+    }
+    // 3) sem prefixo: o campo gravado e, por último, a disciplina DOMINANTE entre os vínculos —
+    // que serve para agrupar na tela, mas NÃO para a correção (ali seria circular: a régua sairia
+    // justamente dos vínculos que se quer conferir, e todo erro pareceria coerente consigo mesmo).
+    if (a.disciplinaId) { const d = disciplinas.find((x) => x.id === a.disciplinaId); if (d) return { id: d.id, nome: d.nome, tipo: "edital" }; }
     if (!comVinculos) return null;
     const conta = new Map();
     for (const id of a.topicoIds || []) {
@@ -142,7 +147,7 @@ export function disciplinaDePlanoDe(state, { herdar = true } = {}) {
       if (t && t.disciplinaId) conta.set(t.disciplinaId, (conta.get(t.disciplinaId) || 0) + 1);
     }
     const venc = [...conta.entries()].sort((x, y) => y[1] - x[1])[0];
-    if (venc) { const d = disciplinas.find((x) => x.id === venc[0]); if (d) return { id: d.id, nome: d.nome }; }
+    if (venc) { const d = disciplinas.find((x) => x.id === venc[0]); if (d) return { id: d.id, nome: d.nome, tipo: "edital" }; }
     return null;
   };
   const mapa = new Map();

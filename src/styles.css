@@ -1070,6 +1070,16 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .cur-aula-chip { display: inline-flex; align-items: center; font-size: .82rem; font-weight: var(--fw-regular); color: var(--text-2);
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; }
 .cur-aula-chip-fora { border-style: dashed; border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
+/* Chip de aula no modo "por tópico": mesma casca do chip de tópico, sem cursor de link */
+.cur-top-estatico { cursor: default; }
+.cur-top-fora { border-style: dashed; border-color: color-mix(in srgb, var(--amber) 45%, var(--border)); }
+/* Tópicos fora de qualquer aula: contagem na linha, nomes só se o usuário abrir */
+.cursinho-soltos { margin-top: 14px; }
+.cursinho-soltos > summary.cursinho-soltos-sum { list-style: none; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cursinho-soltos > summary.cursinho-soltos-sum::-webkit-details-marker { display: none; }
+.cursinho-soltos > summary .ico:last-child { margin-left: auto; transition: transform var(--dur-2) var(--ease-std); }
+.cursinho-soltos[open] > summary .ico:last-child { transform: rotate(180deg); }
+.cursinho-soltos-lista { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; max-height: 220px; overflow-y: auto; }
 .cur-aula-pend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .cur-assunto-chip { display: inline-flex; align-items: center; font-size: .8rem; color: var(--text-2); background: color-mix(in srgb, var(--amber) 9%, var(--surface-2)); border: 1px dashed color-mix(in srgb, var(--amber) 40%, var(--border)); border-radius: 8px; padding: 3px 8px; }
 .cur-top { display: inline-flex; align-items: center; gap: 6px; font-size: .85rem; font-weight: var(--fw-regular); color: var(--text);

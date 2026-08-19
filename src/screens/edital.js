@@ -348,6 +348,20 @@ function tituloAula(a) {
   const ass = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean);
   return ass.length ? `${a.nome} - ${ass.join(". ")}` : (a.nome || "");
 }
+// Dentro do grupo da própria disciplina, o prefixo "Direito Constitucional - " no nome da aula é
+// repetição do cabeçalho logo acima: some da linha (o dado continua intacto no nome da aula).
+function nomeCurtoAula(a, grupoNome) {
+  const nome = a.nome || "";
+  if (!grupoNome) return nome;
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const m = nome.match(/^(.+?)\s[-–—]\s*(.+)$/);
+  return m && norm(m[1]) === norm(grupoNome) ? m[2].trim() : nome;
+}
+function tituloAulaNoGrupo(a, grupoNome) {
+  const curto = nomeCurtoAula(a, grupoNome);
+  const ass = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean);
+  return ass.length ? `${curto} - ${ass.join(". ")}` : curto;
+}
 // Convite compacto quando AINDA não há aulas: o plano do cursinho é opcional.
 // Reusa a ação "importar-aulas-mais" (abre o importador completo) — sem novo handler.
 function aulasConviteHTML() {
@@ -1136,14 +1150,14 @@ function aulasListaHTML(store, st) {
   // AULA protagonista: nome da aula em cima; os TÓPICOS do edital que ela cobre embaixo
   // (cada um clicável, abre o dossiê). Bolinha com a cor da disciplina; sem títulos de
   // disciplina no meio (lista corrida na ordem das aulas).
-  const aulaRow = ({ a }) => {
+  const aulaRow = ({ a }, grupoNome) => {
       const tops = (a.topicoIds || []).map((id) => st.topicos.find((t) => t.id === id)).filter(Boolean);
       const discIds = [...new Set(tops.map((t) => t.disciplinaId).filter(Boolean))];
       const multi = discIds.length > 1;
       const concl = tops.filter((t) => t.concluido).length;
       return `<div class="cur-aula-row">
         <div class="cur-aula-head">
-          <b class="cur-aula-nome">${esc(tituloAula(a))}</b>
+          <b class="cur-aula-nome">${esc(tituloAulaNoGrupo(a, grupoNome))}</b>
           ${multi ? `<span class="mini-tag" data-tip="Esta aula cobre mais de uma disciplina.">${icone("shuffle")} ${discIds.length} disc.</span>` : ""}
           <span class="spacer"></span>
           ${tops.length ? `<span class="cur-prog" data-tip="Tópicos desta aula concluídos.">${concl}/${tops.length}</span>` : ""}
@@ -1193,19 +1207,26 @@ function aulasListaHTML(store, st) {
     if (!idxGrupo.has(dnome)) { idxGrupo.set(dnome, grupos.length); grupos.push({ disc: dnome, itens: [] }); }
     grupos[idxGrupo.get(dnome)].itens.push(item);
   }
-  // Uma TABELA por disciplina (igual ao Edital): a disciplina é a "caixa", as aulas são
-  // linhas. Bem menos boxes que um card por aula.
+  // Cabeçalho de um grupo — o MESMO nas duas visões: bolinha da cor, nome, contagem, chevron.
+  const grupoHTML = (nome, cor, contagem, corpo) => `<details class="cur-disc" style="--acc:${cor}" data-cur-grupo="${esc(nome)}" ${curAcFechada.has(nome) ? "" : "open"}>
+      <summary class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(nome)}</span><span class="cur-grupo-n">${contagem}</span><span class="spacer"></span><span class="cur-disc-chev">${icone("chevron-down")}</span></summary>
+      <div class="cur-aula-list">${corpo}</div>
+    </details>`;
   const cards = grupos.map((g) => {
     const d = st.disciplinas.find((x) => x.nome === g.disc);
     const cor = d ? store.corDisciplina(d.id) : "var(--muted)";
-    return `<details class="cur-disc" style="--acc:${cor}" data-cur-grupo="${esc(g.disc)}" ${curAcFechada.has(g.disc) ? "" : "open"}>
-      <summary class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(g.disc)}</span><span class="cur-grupo-n">${g.itens.length} aula${g.itens.length === 1 ? "" : "s"}</span><span class="spacer"></span><span class="cur-disc-chev">${icone("chevron-down")}</span></summary>
-      <div class="cur-aula-list">${g.itens.map((it, i, arr) => aulaRow(it, i, arr)).join("")}</div>
-    </details>`;
+    return grupoHTML(g.disc, cor, `${g.itens.length} aula${g.itens.length === 1 ? "" : "s"}`, g.itens.map((it) => aulaRow(it, g.disc)).join(""));
   }).join("");
-  // Modo "por tópico": os tópicos do edital (por disciplina, ordem do edital) mostrando
-  // a(s) aula(s) do cursinho que os cobrem — o inverso do modo "por aula".
-  const bodyTopico = st.disciplinas.map((d) => {
+  // Modo "por tópico": o inverso do "por aula". As disciplinas seguem a MESMA ordem da outra
+  // visão (a do plano; as que não têm aula vão para o fim) — duas ordens diferentes faziam as
+  // duas abas parecerem telas de apps distintos.
+  const ordemGrupo = new Map(grupos.map((g, i) => [g.disc, i]));
+  const discsOrdenadas = [...st.disciplinas].sort((a, b) => {
+    const ia = ordemGrupo.has(a.nome) ? ordemGrupo.get(a.nome) : 9999;
+    const ib = ordemGrupo.has(b.nome) ? ordemGrupo.get(b.nome) : 9999;
+    return ia - ib;
+  });
+  const bodyTopico = discsOrdenadas.map((d) => {
     const tps = st.topicos.filter((t) => t.disciplinaId === d.id);
     if (!tps.length) return "";
     const cor = store.corDisciplina(d.id);
@@ -1213,24 +1234,25 @@ function aulasListaHTML(store, st) {
       const aulasT = st.aulas.filter((a) => (a.topicoIds || []).includes(t.id));
       // "Aula 01" existe em toda disciplina: a chip só identifica a aula se disser de onde ela é
       // quando vier de OUTRA disciplina (o caso que a revisão de vínculos aponta).
-      const ref = aulasT.length
-        ? aulasT.map((a) => {
-            const da = discPorAula.get(a.id);
-            const outra = da && da.nome && da.nome !== d.nome;
-            return `<span class="cur-aula-chip${outra ? " cur-aula-chip-fora" : ""}"${outra ? ` data-tip="Esta aula é de ${esc(da.nome)} — vínculo fora da disciplina."` : ""}>${outra ? `${esc(da.nome)} · ` : ""}${esc(a.nome)}</span>`;
-          }).join("")
-        : `<span class="cur-sem muted small">${icone("link")} não vinculado a nenhuma aula</span>`;
+      // Mesma anatomia da outra visão: título em cima, vínculos no bloco recolhido embaixo.
+      const chips = aulasT.map((a) => {
+        const da = discPorAula.get(a.id);
+        const outra = da && da.nome && da.nome !== d.nome;
+        return `<span class="cur-top cur-top-estatico${outra ? " cur-top-fora" : ""}"${outra ? ` data-tip="Esta aula é de ${esc(da.nome)} — vínculo fora da disciplina."` : ""}>${outra ? `<span class="cur-top-disc">${esc(da.nome)}</span>` : ""}<span class="cur-top-nome">${esc(nomeCurtoAula(a, da && da.nome))}</span></span>`;
+      }).join("");
       return `<div class="cur-aula-row">
         <div class="cur-aula-head">
-          <button class="lnk ed-top-link cur-top-lnk" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico">${icone("external-link")}</span></button>
+          <b class="cur-aula-nome"><button class="lnk cur-top-lnk" data-action="ir-dossie" data-id="${t.id}">${esc(t.nome)}<span class="mapa-abrir-ico">${icone("external-link")}</span></button></b>
         </div>
-        <div class="cur-aula-ref">${ref}</div>
+        ${aulasT.length
+          ? `<details class="cur-aula-acc" data-aula-acc="top:${t.id}" ${curTopsAbertos.has("top:" + t.id) ? "open" : ""}>
+              <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${plural(aulasT.length, "aula do cursinho", "aulas do cursinho")}</span></summary>
+              <div class="cur-aula-tops">${chips}</div>
+            </details>`
+          : `<div class="cur-aula-tops"><span class="cur-sem muted small">${icone("link")} sem aula do cursinho — nem todo tópico precisa de uma</span></div>`}
       </div>`;
     }).join("");
-    return `<details class="cur-disc" style="--acc:${cor}" data-cur-grupo="${esc(d.nome)}" ${curAcFechada.has(d.nome) ? "" : "open"}>
-      <summary class="cur-disc-h"><span class="cur-dot" style="background:${cor}"></span><span class="cur-disc-nome">${esc(d.nome)}</span><span class="cur-grupo-n">${tps.length} tópico${tps.length === 1 ? "" : "s"}</span><span class="spacer"></span><span class="cur-disc-chev">${icone("chevron-down")}</span></summary>
-      <div class="cur-aula-list">${rows}</div>
-    </details>`;
+    return grupoHTML(d.nome, cor, `${tps.length} tópico${tps.length === 1 ? "" : "s"}`, rows);
   }).join("");
   const nomesGrupos = cursinhoView === "aula"
     ? grupos.map((g) => g.disc)
@@ -1263,7 +1285,10 @@ function aulasListaHTML(store, st) {
       </details>
     </div>
     ${cursinhoView === "aula" ? cards : bodyTopico}
-    ${cursinhoView === "aula" && soltos.length ? `<div class="card cursinho-soltos muted small">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> (não estão na divisão do cursinho): ${soltos.map((t) => esc(t.nome)).join(" · ")}</div>` : ""}`;
+    ${cursinhoView === "aula" && soltos.length ? `<details class="card cursinho-soltos muted small">
+      <summary class="cursinho-soltos-sum">${icone("pin")} <b>${soltos.length} ${soltos.length === 1 ? "tópico" : "tópicos"} fora de qualquer aula</b> — nem todo tópico do edital precisa de aula do cursinho. ${icone("chevron-down")}</summary>
+      <div class="cursinho-soltos-lista">${soltos.map((t) => `<span class="cur-assunto-chip">${esc(t.nome)}</span>`).join(" ")}</div>
+    </details>` : ""}`;
 }
 
 export default function renderEdital(root, app) {

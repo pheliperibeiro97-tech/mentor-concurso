@@ -8,6 +8,17 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.16",
+    data: "agosto/2026",
+    titulo: "As aulas de cursos como \"Difusos e Coletivos\" voltaram a aparecer, e as duas visões do plano viraram a mesma tela",
+    itens: [
+      "CORREÇÃO — aulas de cursos que não são disciplina do seu edital (\"Direitos Difusos e Coletivos\", \"Legislação Penal Especial\") eram dissolvidas dentro de alguma disciplina do edital: apareciam vinculadas no \"Ver por tópico\", mas não havia como achá-las no \"Ver por aula\". Agora cada curso desses tem o seu próprio bloco, com o nome que o cursinho usa.",
+      "O nome da aula não repete mais a disciplina do cabeçalho logo acima: dentro de Direito Constitucional, \"Direito Constitucional - Aula 01 - Considerações Iniciais\" vira \"Aula 01 - Considerações Iniciais\". O nome guardado continua completo.",
+      "\"Ver por aula\" e \"Ver por tópico\" pareciam telas de apps diferentes: ordem das disciplinas diferente e vínculos desenhados de outro jeito. Agora as duas seguem a mesma ordem e a mesma anatomia — título em cima, vínculos num bloco que abre sob demanda.",
+      "Os tópicos fora de qualquer aula viraram um bloco recolhido com a contagem, em vez de um parágrafo com 200 nomes. E o texto deixa claro o que já era verdade: nem todo tópico do edital precisa de aula do cursinho.",
+    ],
+  },
+  {
     v: "0.8.15",
     data: "agosto/2026",
     titulo: "Plano do cursinho enxuto, e os cursos que não são disciplina do edital deixam de ficar sem conferência",
