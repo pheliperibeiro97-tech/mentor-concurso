@@ -46,6 +46,20 @@ export default function renderHoje(root, app) {
   const lembTotal = store.lembretes().length;
   const lembPend = store.lembretesPendentes ? store.lembretesPendentes() : 0;
 
+  // O foco do dia segue o PLANO quando existe um: a primeira tarefa pendente com tópico, na
+  // ordem em que você planejou. Antes o foco vinha sempre do ciclo (score, revisão vencida,
+  // ordem das aulas) e ignorava o que você tinha planejado para hoje — a tela dizia uma coisa
+  // no "Plano de hoje" e outra no card de foco, e o cronômetro e o registro herdavam a segunda.
+  // Tarefa AVULSA (sem dia marcado) não entra sozinha: ela vira foco só se você clicar nela.
+  const tarefasDia = store.tarefasDoDia(todayISO());
+  const CAT_FASE = { "Prática": "A", "Revisão": "R", "Materiais": "E", "Lei Seca": "E", "Jurisprudência": "E" };
+  const tarefaFoco = tarefasDia.find((t) => !t.concluida && t.topicoId && st.topicos.some((x) => x.id === t.topicoId));
+  if (!sel.topicoId && tarefaFoco) {
+    sel.topicoId = tarefaFoco.topicoId;
+    sel.missaoId = tarefaFoco.tipo === "missao" ? tarefaFoco.id : null;
+    sel.blocoMin = tarefaFoco.estimMin || null;
+    if (!sel.fase && CAT_FASE[tarefaFoco.categoria]) sel.fase = CAT_FASE[tarefaFoco.categoria];
+  }
   if (!sel.fase) sel.fase = plano.fase;
   if (app.params && app.params.reta) {
     sel.fase = "R";
@@ -62,6 +76,9 @@ export default function renderHoje(root, app) {
   // (plano.fase + plano.topico). Trocar a aba (Estudo/Prática/Revisão) OU o tópico já é
   // escolha do usuário — senão o selo afirmaria uma sugestão que o Mentor não fez.
   const focoEhSugestao = !!(topicoSel && plano.topico && topicoSel.id === plano.topico.id && sel.fase === plano.fase);
+  // Foco que veio do PLANO leva selo próprio: dizer "sugerido pelo Mentor" no que o usuário
+  // mesmo planejou seria atribuir ao app uma escolha que é dele.
+  const focoDoPlano = !!(topicoSel && tarefaFoco && topicoSel.id === tarefaFoco.topicoId);
 
   const vencidos = store.flashcardsVencidos().length;
   const metas = store.metas();
@@ -89,10 +106,9 @@ export default function renderHoje(root, app) {
   // contagem genérica. Tem prioridade sobre o ponto de atenção comum.
   const revFoco = topicoSel ? store.revisaoTopicoDe(topicoSel.id) : null;
   const focoRevVenceHoje = !!(revFoco && revFoco.proxima && revFoco.proxima <= todayISO());
-  // "Plano de hoje": SÓ as tarefas planejadas pelo usuário + "Adicionar ao dia". O foco
-  // sugerido pelo Mentor vive apenas no card-herói acima — repeti-lo aqui era duplicação
-  // na mesma viewport (achado P-05 da auditoria). Contadores contam só o que resta.
-  const tarefasDia = store.tarefasDoDia(todayISO());
+  // "Plano de hoje": SÓ as tarefas planejadas pelo usuário + "Adicionar ao dia". O card-herói
+  // acima não repete o item, mas agora NASCE dele (ver o seed de `sel` no topo): o foco do dia
+  // é a primeira tarefa pendente do plano. Contadores contam só o que resta.
   // Tarefas AVULSAS (sem dia marcado): antes só apareciam em Planejamento → Tarefas avulsas,
   // nunca em "Hoje" — mesmo sendo, por definição, coisa que dá pra fazer em qualquer dia,
   // inclusive hoje. Entram como um bloco à parte (não contam nos contadores de "hoje", que
@@ -148,7 +164,7 @@ export default function renderHoje(root, app) {
     <div class="hoje-grid">
     <section class="card foco-hero" style="--cor:${faseInfo.cor}">
       <div class="foco-top">
-        <div class="foco-eyebrow"><span class="orb orb-xs" aria-hidden="true"></span> Seu foco agora${focoEhSugestao ? ` <span class="foco-selo">sugerido pelo Mentor</span>` : topicoSel ? ` <span class="foco-selo foco-selo-voce">sua escolha</span>` : ""}</div>
+        <div class="foco-eyebrow"><span class="orb orb-xs" aria-hidden="true"></span> Seu foco agora${focoDoPlano ? ` <span class="foco-selo foco-selo-voce">do seu plano de hoje</span>` : focoEhSugestao ? ` <span class="foco-selo">sugerido pelo Mentor</span>` : topicoSel ? ` <span class="foco-selo foco-selo-voce">sua escolha</span>` : ""}</div>
         <div class="seg seg-fases" role="tablist">
           ${ORDEM_FASES.map((f) => `<button class="${f === sel.fase ? "on" : ""}" data-sel-fase="${f}" style="--cor:${FASES[f].cor}" data-tip="${esc(FASES[f].desc)}">${FASES[f].nome}</button>`).join("")}
         </div>

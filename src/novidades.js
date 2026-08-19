@@ -8,6 +8,17 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.17",
+    data: "agosto/2026",
+    titulo: "O foco de hoje passa a seguir o SEU plano do dia",
+    itens: [
+      "CORREÇÃO — o card \"Seu foco agora\" ignorava o que você tinha planejado para hoje: ele vinha sempre do ciclo (revisão vencida, tópico menos estudado, ordem das aulas). A tela dizia uma coisa no \"Plano de hoje\" e outra no card de foco — e o cronômetro e o \"Registrar sessão\" herdavam a segunda. Agora, havendo plano para hoje, o foco é a primeira tarefa pendente dele, na ordem em que você planejou. Sem plano, continua como antes.",
+      "O bloco de tempo da tarefa também entra: o cronômetro já nasce com os minutos que você estimou, e o \"Registrar sessão\" abre com o tópico, a fase e a tarefa pré-selecionados — tudo continua editável, é sugestão, não trava.",
+      "A fase segue a categoria da tarefa: Prática vira Prática, Revisão vira Revisão, e Materiais/Lei Seca/Jurisprudência viram Estudo.",
+      "Tarefa AVULSA (sem dia marcado) não vira foco sozinha — só quando você clica nela, como já era. E o selo do card agora diz \"do seu plano de hoje\" quando o foco veio do plano, em vez de creditar a escolha ao Mentor.",
+    ],
+  },
+  {
     v: "0.8.16",
     data: "agosto/2026",
     titulo: "As aulas de cursos como \"Difusos e Coletivos\" voltaram a aparecer, e as duas visões do plano viraram a mesma tela",
