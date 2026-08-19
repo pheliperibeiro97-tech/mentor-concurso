@@ -11,6 +11,7 @@ import { FASES, ORDEM_FASES } from "../ciclo.js";
 import { gerarEAbrirMapa, abrirMapaCompleto } from "../mapa-mental.js";
 import { sanitize } from "./resumos.js"; // conteudoHTML pode vir de sync/import antigo sem passar pelo save
 import { gradeEstados, legendaEstadosHTML } from "../componentes.js";
+import { disciplinaDoDocumento, tituloCurtoDoc } from "../estrutura.js";
 
 // Ordenação/edição das SESSÕES do tópico (mesma lógica do Acompanhamento, sem as
 // colunas de disciplina/tópico — aqui já está tudo vinculado a um tópico).
@@ -216,7 +217,7 @@ export function renderDossieDetalhe(root, app, topicoId, onVoltar) {
   const CARDS = {
     material: { titulo: "Material", kpi: { val: dos.documentos.length, label: "materiais", tip: "Ver os materiais" }, print: "print-material",
       corpo: dos.documentos.length
-        ? dos.documentos.map((d) => { const pg = d.topicoPaginas && d.topicoPaginas[topicoId]; return `<button class="mini-item mini-link" data-action="abrir-doc" data-id="${d.id}" data-tip-pos="cima-esq" data-tip="Abrir em Materiais: ${esc(d.titulo)}"><span class="mini-txt">${esc(d.titulo)}${pg ? ` <span class="mini-tag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span> ${seloMini(d.selo, d.origem)}</button>`; }).join("")
+        ? dos.documentos.map((d) => { const pg = d.topicoPaginas && d.topicoPaginas[topicoId]; const dd = disciplinaDoDocumento(st, d); return `<button class="mini-item mini-link" data-action="abrir-doc" data-id="${d.id}" data-tip-pos="cima-esq" data-tip="Abrir em Materiais: ${esc(d.titulo)}"><span class="mini-txt">${esc(tituloCurtoDoc(d.titulo, dd && dd.nome))}${pg ? ` <span class="mini-tag">págs. ${pg[0]}–${pg[1]}</span>` : ""}</span> ${seloMini(d.selo, d.origem)}</button>`; }).join("")
         : vazioMini("Nenhum registro nesta seção. Importe em Materiais.") },
     resumos: { titulo: "Resumos", kpi: { val: dos.resumos.length, label: "resumos", tip: "Ver os resumos" }, print: "print-resumos",
       corpo: dos.resumos.length

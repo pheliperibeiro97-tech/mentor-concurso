@@ -2,7 +2,7 @@
 // (de um tópico, material ou tema livre) → você responde → a IA CORRIGE com feedback
 // rico (o que deveria constar, o que faltou, o que errou, como melhorar), com busca
 // na web opcional. Sem IA, ainda dá métricas estruturais offline.
-import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto, comOcupado, md } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, confirmar, avisoIA, ligarDropZone, imprimir, botaoImprimir, opcoesImpressao, plural, revelarTexto, comOcupado, md, campoMaterialHTML, ligarCampoMaterial } from "../ui.js";
 import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 import { setModo as setModoCrono, setTarget as setTargetCrono, iniciar as iniciarCrono } from "../cronometro.js";
@@ -205,7 +205,9 @@ export default function renderCorrecao(root, app) {
   root.querySelector("#gen-fonte").addEventListener("change", (e) => {
     genFonte = e.target.value; // escolha explícita: o automático para de interferir
     root.querySelector("#gen-alvo-wrap").innerHTML = alvoControl(genFonte, st, ehSentenca);
+    ligarCampoMaterial(root, st, { id: "gen-alvo", msg: "Gerar a partir de qual material?", incluirVazio: false });
   });
+  ligarCampoMaterial(root, st, { id: "gen-alvo", msg: "Gerar a partir de qual material?", incluirVazio: false });
 
   // Stream do feedback mais recente (o "digitando" do Mentor) na 1ª pintura por sessão:
   // revela o texto puro e, ao fim, restaura o HTML formatado (negrito/quebras). Respeita
@@ -354,8 +356,8 @@ function alvoControl(fonte, st, ehSentenca = false) {
     return `<span class="muted small" id="gen-alvo-vazio">Usa o texto do campo acima como instrução.</span>`;
   }
   if (fonte === "material") {
-    const ops = st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("");
-    return `<select id="gen-alvo">${ops || `<option value="">(importe um material primeiro)</option>`}</select>`;
+    if (!(st.documentos || []).length) return `<select id="gen-alvo"><option value="">(importe um material primeiro)</option></select>`;
+    return campoMaterialHTML(st, { id: "gen-alvo", vazio: "— escolher material —", incluirVazio: false });
   }
   if (fonte === "topico") {
     const ops = st.topicos

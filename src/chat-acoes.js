@@ -4,6 +4,7 @@
 // Cada função devolve uma frase de resultado (ou lança Error com mensagem amigável).
 import * as crono from "./cronometro.js";
 import { abrirMapaCompleto } from "./mapa-mental.js";
+import { rotuloDocumento } from "./estrutura.js";
 
 const ROTAS_VALIDAS = new Set([
   "hoje", "planejamento", "diagnostico", "mentor", "edital", "documentos", "leiseca",
@@ -156,7 +157,7 @@ export function motivoParaNaoExecutar(store, acao, params = {}) {
     // ser um subtema que a comparacao por palavras nao pegou. Por isso a resposta nao e um muro
     // — ela mostra o que existe, para voce apontar a fonte numa frase, sem precisar procurar.
     const nomes = [
-      ...(store.get().documentos || []).map((d) => d.titulo),
+      ...(store.get().documentos || []).map((d) => rotuloDocumento(store.get(), d)),
       ...(store.get().resumos || []).map((r) => r.titulo),
     ].filter(Boolean).slice(0, 6);
     const lista = nomes.length

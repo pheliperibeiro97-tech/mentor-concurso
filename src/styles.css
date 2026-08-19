@@ -845,6 +845,25 @@ input:disabled, select:disabled, textarea:disabled { background: var(--surface-2
 .foco-topico select,
 .sess-fase-sel select,
 .form-inline-mini select { width: auto; }
+/* ...mas nunca ALÉM do contêiner: `width:auto` num <select> pega a largura da opção mais
+   larga, e um material chamado "Direito Administrativo - Aula 21 - Sistema Financeiro
+   Habitacional e Outras Formas de Financiamento…" empurrava a caixa por cima dos botões da
+   linha (o `min-width:auto` padrão do flex impede o encolhimento). Valia só no celular. */
+.inline { min-width: 0; max-width: 100%; }
+/* `hidden` num <label> de formulário perde para o `display` da própria regra do formulário —
+   o campo "Nome do curso" aparecia mesmo sem "Outro curso" escolhido. */
+.form-row label[hidden], .form-row [hidden] { display: none; }
+/* Grupos de MATERIAIS recolhíveis (<details>): com uma aula por PDF, uma disciplina sozinha
+   ocupa dezenas de cartões e rolar até a próxima vira trabalho. */
+.doc-grupo > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }
+.doc-grupo > summary::-webkit-details-marker { display: none; }
+.doc-grupo > summary::marker { content: ""; }
+.doc-grupo > summary .doc-grupo-seta { transition: transform var(--dur-1); color: var(--muted); width: 16px; height: 16px; flex: none; }
+.doc-grupo[open] > summary .doc-grupo-seta { transform: rotate(90deg); }
+.inline select, .inline input,
+.foco-topico select,
+.sess-fase-sel select,
+.form-inline-mini select { max-width: 100%; min-width: 0; }
 .form-row { display: flex; gap: 12px; }
 .hm-campo { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
 .hm-campo input { width: 68px; }
@@ -4561,7 +4580,20 @@ mark.mk { border-radius: 3px; padding: 0 1px; color: inherit; cursor: default; }
 .escolha-grupo[open] > .escolha-grupo-h::before { transform: rotate(45deg); }
 .escolha-grupo-itens { display: flex; flex-direction: column; gap: 4px; padding: 2px 0 6px; }
 .escolha-grupos .escolha-item { padding: 8px 12px; font-size: var(--fs-sm); }
+/* Item de lista é texto, não rótulo de botão: alinhado à ESQUERDA e quebrando em várias linhas.
+   O shell disso existia só em `.modal-lista`; nos grupos e nos avulsos os itens herdavam o
+   centralizado do `.btn` e uma lista de aulas ficava com os nomes dançando no meio. */
+.escolha-grupos .escolha-item, .escolha-extra .escolha-item {
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%;
+  text-align: left; white-space: normal; height: auto; line-height: 1.35;
+}
+/* ...e o `display` acima não pode engolir o `hidden` da BUSCA: o filtro marca `hidden` nos
+   itens que não casam, e qualquer regra de display vence o none do navegador. Foi assim que a
+   busca "funcionava" no DOM e a lista continuava inteira na tela. */
+.escolha-grupos .escolha-item[hidden], .escolha-extra .escolha-item[hidden] { display: none; }
 .escolha-extra { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+/* Bloco de itens soltos DEPOIS dos grupos (materiais avulsos): a borda separa por cima. */
+.escolha-extra-fim { border-bottom: 0; border-top: 1px solid var(--border); padding-top: 8px; padding-bottom: 0; }
 .escolha-extra .escolha-item { padding: 8px 12px; font-size: var(--fs-sm); }
 /* Seletor de VÁRIOS tópicos (escolherTopicos): checkbox em vez de botão — mesma casca visual. */
 .escolha-check { border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); transition: border-color var(--dur-1); }

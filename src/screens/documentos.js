@@ -6,15 +6,19 @@
 // Gemini só entra nas PÁGINAS-LACUNA (sem camada de texto) e SOB CLIQUE — nunca
 // transcreve o PDF inteiro. Offline, as páginas sem texto ficam como pendência
 // registrada até a IA estar conectada.
-import { bindActions, toast, toastCarregando, header, seloBadge, vazio, confirmar, escolher, escolherVarios, avisoIA, ligarDropZone, focarItem, pedirNumero, faixaIA, abrirJanela, iconMapa, plural, comOcupado } from "../ui.js";
-import { esc } from "../util.js";
+import { bindActions, toast, toastCarregando, header, seloBadge, vazio, confirmar, escolher, escolherVarios, avisoIA, ligarDropZone, focarItem, pedirNumero, pedirTexto, faixaIA, abrirJanela, iconMapa, plural, comOcupado } from "../ui.js";
+import { esc, fmtData } from "../util.js";
 import { icone } from "../icones.js";
 import { extrairPdfPaginas, rasterizarPaginas, rasterizarPaginasStream, arquivoParaBase64 } from "../pdf.js";
 import { extrairTextoArquivo } from "../ia-provider.js";
 import { abrirVisualizadorPdf } from "../pdfviewer.js";
-import { filtroTopicosBotaoHTML, filtroTopicosPainelHTML, ligarFiltroTopicos, itemNoFiltro } from "./questoes-filtro.js";
 import { gerarEAbrirMapa } from "../mapa-mental.js";
-import { detectarEstrutura, limparRuidoDePaginas, ehEstruturaForte } from "../estrutura.js";
+import { detectarEstrutura, limparRuidoDePaginas, ehEstruturaForte, disciplinaDoDocumento, tituloCurtoDoc, ordenarDocumentos, cursosConhecidos, GRUPO_AVULSOS } from "../estrutura.js";
+
+// Grupos (disciplina/tópico) RECOLHIDOS na lista de materiais. Vive na sessão, como o
+// equivalente do Plano do cursinho: com uma aula por PDF, uma disciplina sozinha ocupa dezenas
+// de cartões e chegar à seguinte é rolagem pura.
+const gruposRecolhidos = new Set();
 
 // Mini-diálogo de FAIXA DE PÁGINAS (de–até) para gerar/extrair de um trecho por número de página.
 // Devolve { de, ate } (validado, 1..maxPag) ou null se cancelar.
@@ -53,7 +57,6 @@ function pedirFaixaPaginas(maxPag) {
 }
 
 let busca = "";
-const filtroTop = { sel: [], aberto: false }; // filtro multi-tópico da lista de materiais
 let abertoId = null;
 let detectDoc = null; // docId com o painel de "detectar tópicos" aberto
 let detectResultado = null; // [{topico, paginas}] detectados
@@ -382,7 +385,10 @@ export default function renderDocumentos(root, app) {
     .map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`)
     .join("");
 
-  const agrup = st.config.materialAgrupamento || "disciplina";
+  // "topico" saiu do seletor (agrupava pelo tópico primário e escondia o material dos demais
+  // que ele cobre). Quem tinha essa preferência gravada volta ao padrão em vez de ficar num
+  // modo sem opção correspondente na tela.
+  const agrup = st.config.materialAgrupamento === "nenhum" ? "nenhum" : "disciplina";
 
   root.innerHTML = `
     ${header("Materiais", "Importe o conteúdo das aulas (PDF, imagem ou texto) e pesquise por dentro dele.")}
@@ -408,16 +414,14 @@ export default function renderDocumentos(root, app) {
     <div class="barra-acoes">
       <button class="btn btn-add btn-sm" data-action="toggle-form" data-tip-pos="cima-esq" data-tip="Adicionar uma aula ou conteúdo à sua base de estudo.">${icone("plus")} Adicionar material</button>
       <span class="spacer"></span>
-      ${filtroTopicosBotaoHTML(st, filtroTop.sel, filtroTop.aberto)}
+      ${agrup !== "nenhum" ? `<button class="btn btn-ghost btn-sm" data-action="doc-grupos-toggle" data-tip="${gruposRecolhidos.size ? "Abrir todas as disciplinas." : "Fechar todas as disciplinas e ver só os títulos dos grupos."}" data-tip-pos="cima-dir">${icone(gruposRecolhidos.size ? "chevron-down" : "chevron-up")} ${gruposRecolhidos.size ? "Expandir" : "Recolher"}</button>` : ""}
       <label class="inline small u-nowrap">Agrupar por
         <select id="doc-group">
           <option value="disciplina" ${agrup === "disciplina" ? "selected" : ""}>Disciplina</option>
-          <option value="topico" ${agrup === "topico" ? "selected" : ""}>Tópico</option>
           <option value="nenhum" ${agrup === "nenhum" ? "selected" : ""}>Sem agrupar</option>
         </select>
       </label>
     </div>
-    ${filtroTopicosPainelHTML(st, filtroTop.sel, filtroTop.aberto)}
     ${figurasNudgeHTML(store, st)}
     ${visaoNudgeHTML(store, st)}
 
@@ -426,13 +430,26 @@ export default function renderDocumentos(root, app) {
     </div>`;
 
 
+  // Abrir/fechar um grupo à mão: guarda sem re-renderizar (re-render fecharia o que acabou de abrir).
+  // Também roda depois da busca, que reescreve a lista inteira sem passar pelo render da tela.
+  const ligarGrupos = () =>
+    root.querySelectorAll("details.doc-grupo[data-grupo]").forEach((det) =>
+      det.addEventListener("toggle", () => {
+        const nome = det.getAttribute("data-grupo");
+        if (det.open) gruposRecolhidos.delete(nome);
+        else gruposRecolhidos.add(nome);
+      })
+    );
+  ligarGrupos();
+
   const buscaEl = root.querySelector("#busca");
   buscaEl?.addEventListener("input", (e) => {
     busca = e.target.value;
     const lista = root.querySelector(".lista-docs");
-    lista.innerHTML = listaDocsHTML(store, st, docsFiltrados(store, st), st.config.materialAgrupamento || "disciplina", busca);
+    lista.innerHTML = listaDocsHTML(store, st, docsFiltrados(store, st), agrup, busca);
+    ligarGrupos();
   });
-  ligarFiltroTopicos(root, app, filtroTop);
+
 
   root.querySelector("#doc-group")?.addEventListener("change", (e) => {
     store.setConfig({ materialAgrupamento: e.target.value });
@@ -701,6 +718,48 @@ export default function renderDocumentos(root, app) {
       detectDoc = null;
       detectResultado = null;
       toast(`${plural(sel.length, "tópico vinculado", "tópicos vinculados")}${comPag ? ` (${comPag} com faixa de páginas)` : ""}.`);
+    },
+    // Recolher/expandir TODOS os grupos de uma vez. O estado de cada um também é lembrado
+    // quando o usuário abre ou fecha à mão (listener logo abaixo do render).
+    "doc-grupos-toggle": () => {
+      const titulos = [...root.querySelectorAll("details.doc-grupo")].map((d) => d.getAttribute("data-grupo"));
+      if (gruposRecolhidos.size) gruposRecolhidos.clear();
+      else titulos.forEach((t) => gruposRecolhidos.add(t));
+      app.refresh();
+    },
+    "doc-disciplina": async (el) => {
+      const id = el.getAttribute("data-id");
+      const st0 = store.get();
+      const d = st0.documentos.find((x) => x.id === id);
+      if (!d) return;
+      if (!st0.disciplinas.length) return toast("Cadastre as disciplinas do edital primeiro.", "erro");
+      const cursos = cursosConhecidos(st0);
+      const grupos = [
+        { rotulo: "Disciplinas do edital", aberto: true, itens: st0.disciplinas.map((x) => ({ label: x.nome, value: x.id })) },
+        ...(cursos.length ? [{ rotulo: "Cursos fora do edital", itens: cursos.map((c) => ({ label: c, value: `curso:${c}` })) }] : []),
+        { rotulo: "Outros", itens: [{ label: "Outro curso (digitar o nome)…", value: "__outro" }, { label: `— ${GRUPO_AVULSOS} —`, value: "" }] },
+      ];
+      const escolhida = await escolher(`Disciplina de "${d.titulo}":`, [], { grupos });
+      if (escolhida === null) return;
+      let discId = null, curso = null;
+      if (escolhida === "__outro") {
+        curso = (await pedirTexto("Nome do curso (fora do edital):", { valor: (disciplinaDoDocumento(st0, d) || {}).nome || "" }) || "").trim();
+        if (!curso) return;
+      } else if (escolhida.startsWith("curso:")) curso = escolhida.slice(6);
+      else if (escolhida) discId = escolhida;
+      store.setDocumentoDisciplina(id, discId, curso);
+      const n = (store.get().documentos.find((x) => x.id === id) || {}).topicoIds || [];
+      toast(discId
+        ? `Disciplina definida — ${plural(n.length, "tópico do edital vinculado", "tópicos do edital vinculados")} dentro dela.`
+        : curso ? `Curso "${curso}" definido (os vínculos seguem livres, como convém a curso fora do edital).` : "Material marcado como avulso.");
+      app.refresh();
+    },
+    "doc-renomear": async (el) => {
+      const id = el.getAttribute("data-id");
+      const d = store.get().documentos.find((x) => x.id === id);
+      if (!d) return;
+      const nome = await pedirTexto("Renomear material:", { valor: d.titulo });
+      if (nome && nome.trim()) { store.renomearDocumento(id, nome); app.refresh(); }
     },
     "editar-topicos": (el) => {
       const id = el.getAttribute("data-id");
@@ -1210,7 +1269,10 @@ async function processarOcr(app, store, doc, listaN) {
 
 // Materiais filtrados pela busca textual E pelo filtro multi-tópico.
 function docsFiltrados(store, st) {
-  return store.buscarDocumentos(busca).filter((d) => itemNoFiltro(st, d, filtroTop.sel));
+  // Só a busca por texto: o "quais materiais cobrem o tópico X" mora no Dossiê do tópico, que
+  // responde melhor (lista os materiais COM as páginas). O filtro daqui olhava só o tópico
+  // primário do material — com uma aula cobrindo 30 tópicos, quase nunca achava nada.
+  return store.buscarDocumentos(busca);
 }
 
 // Busca por SIGNIFICADO (semântica/IA) — sem campo próprio: usa o MESMO termo digitado no
@@ -1264,10 +1326,10 @@ function listaDocsHTML(store, st, docs, modo, busca) {
   return grupos
     .map(
       (g) => `
-      <div class="doc-grupo">
-        <div class="doc-grupo-head">${esc(g.titulo)} <span class="doc-grupo-n">${g.docs.length}</span></div>
-        ${g.docs.map((d) => docHTML(store, st, d, busca)).join("")}
-      </div>`
+      <details class="doc-grupo" data-grupo="${esc(g.titulo)}" ${busca || !gruposRecolhidos.has(g.titulo) ? "open" : ""}>
+        <summary class="doc-grupo-head"><span class="doc-grupo-seta">${icone("chevron-right")}</span>${esc(g.titulo)} <span class="doc-grupo-n">${g.docs.length}</span></summary>
+        ${g.docs.map((d) => docHTML(store, st, d, busca, modo === "disciplina" ? g.titulo : "")).join("")}
+      </details>`
     )
     .join("");
 }
@@ -1288,19 +1350,7 @@ function rotuloCurtoTopico(nome, max = 64) {
 }
 
 function disciplinaDoDoc(st, d) {
-  const contagem = new Map();
-  const anota = (topicoId) => {
-    if (!topicoId) return;
-    const t = st.topicos.find((x) => x.id === topicoId);
-    if (!t || !t.disciplinaId) return;
-    contagem.set(t.disciplinaId, (contagem.get(t.disciplinaId) || 0) + 1);
-  };
-  for (const b of (d.estrutura && d.estrutura.blocos) || []) anota(b.topicoId);
-  if (!contagem.size) (d.topicoIds || []).forEach(anota);
-  if (!contagem.size) anota(d.topicoId);
-  if (!contagem.size) return null;
-  const [discId] = [...contagem.entries()].sort((a, b) => b[1] - a[1])[0];
-  return st.disciplinas.find((x) => x.id === discId) || null;
+  return disciplinaDoDocumento(st, d);
 }
 
 function agruparDocs(st, docs, modo) {
@@ -1313,15 +1363,18 @@ function agruparDocs(st, docs, modo) {
       nome = t ? nomeTopico(st, t) : "Sem tópico";
     } else {
       const disc = disciplinaDoDoc(st, d);
-      nome = disc ? disc.nome : "Sem disciplina";
+      nome = disc ? disc.nome : GRUPO_AVULSOS;
     }
     if (!grupos.has(nome)) grupos.set(nome, []);
     grupos.get(nome).push(d);
   }
+  // Dentro do grupo, ordem natural pelo título ("Aula 2" antes de "Aula 10") — e não a ordem
+  // de importação, que espalhava os PDFs de uma mesma matéria conforme a data de cada lote.
+  for (const [k, v] of grupos) grupos.set(k, ordenarDocumentos(st, v));
   return [...grupos.entries()]
     .sort((a, b) => {
-      const sa = /^Sem /.test(a[0]);
-      const sb = /^Sem /.test(b[0]);
+      const sa = a[0] === GRUPO_AVULSOS || /^Sem /.test(a[0]);
+      const sb = b[0] === GRUPO_AVULSOS || /^Sem /.test(b[0]);
       if (sa !== sb) return sa ? 1 : -1;
       return a[0].localeCompare(b[0], "pt");
     })
@@ -1355,7 +1408,7 @@ function resultadosSemHTML(res) {
 // `alvo` = material que está sendo ATUALIZADO (veio de "Atualizar com arquivo novo"). Nesse
 // modo o destino é explícito: não se procura material de mesmo título, então renomear o
 // arquivo no cursinho não cria mais uma cópia solta.
-function formHTML(opcoesTopico, alvo) {
+function formHTML(opcoesTopico, alvo, opcoesDisciplina = "", discSelecionada = "", cursoSelecionado = "") {
   return `
     <div class="card form-doc">
       <h3>${alvo ? `Atualizar “${esc(alvo.titulo)}”` : "Adicionar material"}</h3>
@@ -1364,6 +1417,15 @@ function formHTML(opcoesTopico, alvo) {
         <label class="u-grow-2">Título <input id="doc-titulo" type="text" value="${alvo ? esc(alvo.titulo) : ""}" placeholder="Ex.: Aula 3: Atos administrativos" /></label>
         <label class="u-grow">Tópico <select id="doc-top"><option value="">— sem tópico —</option>${opcoesTopico}</select></label>
       </div>
+      <div class="form-row">
+        <label class="u-grow" data-tip="Vale para TODOS os arquivos desta importação. É o que agrupa a lista, organiza os seletores de «Gerar com IA» e limita a quais tópicos do edital o sumário pode se vincular." data-tip-pos="cima-esq">Disciplina
+          <select id="doc-disc"><option value="">— deduzir pelo nome do arquivo —</option>${opcoesDisciplina}</select>
+        </label>
+        <label class="u-grow" id="doc-curso-wrap" ${discSelecionada === "__outro" ? "" : "hidden"}>Nome do curso
+          <input id="doc-curso" type="text" value="${esc(cursoSelecionado)}" placeholder="Ex.: Legislação Penal Especial" />
+        </label>
+      </div>
+      <p class="muted small u-mt-0">Curso que não é disciplina do seu edital (Legislação Penal Especial, Difusos e Coletivos) entra pelo nome dele e ganha grupo próprio. Material geral (edital, guia, resumo de véspera) pode ficar sem nenhum — vai para "Avulsos (sem disciplina)", no fim da lista e dos seletores.</p>
       <label class="btn btn-ghost btn-file" data-tip="PDF, imagem ou texto (.txt). Pode escolher VÁRIOS de uma vez (eles entram em fila) ou arrastar os arquivos para este cartão.">${icone("paperclip")} ${alvo ? "Selecionar arquivo" : "Selecionar arquivos"}
         <input id="doc-file" type="file" accept=".pdf,.txt,.md,.jpg,.jpeg,.png,.webp,application/pdf,text/plain,image/jpeg,image/png,image/webp" ${alvo ? "" : "multiple"} hidden />
       </label>
@@ -1389,10 +1451,23 @@ function abrirImportarMaterial(app, alvoId = null) {
   const st0 = store.get();
   const alvo = alvoId ? st0.documentos.find((d) => d.id === alvoId) || null : null;
   const opcoesTopico = st0.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st0, t))}</option>`).join("");
+  // Disciplina do material: a do material que está sendo atualizado, ou nada (o campo oferece
+  // "deduzir pelo nome do arquivo", que é o comportamento antigo).
+  const dAlvo = alvo ? disciplinaDoDocumento(st0, alvo) : null;
+  const discAtual = dAlvo ? (dAlvo.tipo === "edital" ? dAlvo.id : "__outro") : "";
+  const cursoAtual = dAlvo && dAlvo.tipo === "curso" ? dAlvo.nome : "";
+  const cursos = cursosConhecidos(st0).filter((c) => c !== cursoAtual);
+  const opcoesDisciplina =
+    `<optgroup label="Disciplinas do edital">${st0.disciplinas.map((x) => `<option value="${x.id}" ${x.id === discAtual ? "selected" : ""}>${esc(x.nome)}</option>`).join("")}</optgroup>` +
+    (cursos.length || cursoAtual
+      ? `<optgroup label="Cursos fora do edital">${[cursoAtual, ...cursos].filter(Boolean).map((c) => `<option value="curso:${esc(c)}" ${c === cursoAtual ? "selected" : ""}>${esc(c)}</option>`).join("")}</optgroup>`
+      : "") +
+    `<option value="__outro">Outro curso (digitar o nome)…</option>` +
+    `<option value="__nenhuma">— sem disciplina (material geral) —</option>`;
   const pend = { pdf: null, img: null, paginas: null, estrutura: null };
   abrirJanela({
     titulo: alvo ? "Atualizar material" : "Adicionar material",
-    corpoHTML: formHTML(opcoesTopico, alvo),
+    corpoHTML: formHTML(opcoesTopico, alvo, opcoesDisciplina, discAtual, cursoAtual),
     aoMontar: (overlay, fechar) => {
       const corpo = overlay.querySelector(".mm-corpo");
       const reEstrutura = () => { const c = corpo.querySelector("#doc-estrutura"); if (c) c.innerHTML = pend.estrutura ? estruturaResumoHTML(pend.estrutura, store) : ""; };
@@ -1409,15 +1484,29 @@ function abrirImportarMaterial(app, alvoId = null) {
 
       // Salva o que está na janela (campos + `pend`). É o mesmo caminho do botão "Salvar na
       // base" e de cada arquivo da fila — daí estar fora do handler.
+      // Um só lugar traduz o seletor: "" = deduzir pelo nome (comportamento antigo),
+      // id = disciplina do edital, "curso:Nome" ou "__outro" = curso fora do edital,
+      // "__nenhuma" = material geral, que fica sem disciplina de propósito.
+      const lerEscolhaDisciplina = () => {
+        const v = corpo.querySelector("#doc-disc")?.value || "";
+        if (!v) return { deduzir: true, disciplinaId: null, cursoNome: null };
+        if (v === "__nenhuma") return { deduzir: false, disciplinaId: null, cursoNome: null, semDisciplina: true };
+        if (v === "__outro") return { deduzir: false, disciplinaId: null, cursoNome: (corpo.querySelector("#doc-curso")?.value || "").trim() || null };
+        if (v.startsWith("curso:")) return { deduzir: false, disciplinaId: null, cursoNome: v.slice(6) };
+        return { deduzir: false, disciplinaId: v, cursoNome: null };
+      };
+
       const salvarPendente = async ({ silencioso, perguntarExistente } = {}) => {
         const titulo = corpo.querySelector("#doc-titulo").value.trim();
         const texto = corpo.querySelector("#doc-texto").value.trim();
         const topicoId = corpo.querySelector("#doc-top").value;
+        const esc0 = lerEscolhaDisciplina();
         if (pend.estrutura) lerEstruturaDoDOM(corpo, pend.estrutura);
         // Veio de "Atualizar com arquivo novo": o destino já é conhecido, não se pergunta
         // nem se procura por título — é justamente o caso em que o cursinho renomeia o
         // arquivo e o casamento por nome falharia, criando uma cópia solta em silêncio.
         if (alvo) {
+          if (!esc0.deduzir) store.setDocumentoDisciplina(alvo.id, esc0.disciplinaId, esc0.cursoNome);
           store.atualizarMaterialDeImport(alvo.id, { titulo, texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
           if (!silencioso) store.indexarFonteAuto(alvo.id);
           if (!silencioso) toast("Material atualizado. Questões, flashcards e vínculos preservados.", "ok");
@@ -1432,6 +1521,7 @@ function abrirImportarMaterial(app, alvoId = null) {
             ? await confirmar(`Já existe um material chamado "${titulo}". Atualizar ele com esta importação (mantém as questões/flashcards/marcações e os tópicos já confirmados)? Escolha Cancelar para criar um novo.`)
             : true;
           if (atualizar) {
+            if (!esc0.deduzir) store.setDocumentoDisciplina(existente.id, esc0.disciplinaId, esc0.cursoNome);
             store.atualizarMaterialDeImport(existente.id, { texto, paginas: pend.paginas, pdfData: pend.pdf, imgData: pend.img, estrutura: pend.estrutura });
             if (!silencioso) store.indexarFonteAuto(existente.id); // na fila não: estoura a cota (ver acima)
             if (!silencioso) toast("Material atualizado (mesmo id; vínculos preservados).", "ok");
@@ -1445,6 +1535,9 @@ function abrirImportarMaterial(app, alvoId = null) {
           texto,
           topicoId: topicoId || null,
           topicoIds: topsEstr.length ? topsEstr : topicoId ? [topicoId] : [],
+          disciplinaId: esc0.disciplinaId,
+          cursoNome: esc0.cursoNome,
+          semDisciplina: !!esc0.semDisciplina,
           origem: "importado",
           pdfData: pend.pdf,
           imgData: pend.img,
@@ -1476,6 +1569,31 @@ function abrirImportarMaterial(app, alvoId = null) {
         return "novo";
       };
 
+      // "Outro curso…" revela o campo de texto; qualquer outra escolha o esconde.
+      const discSel = corpo.querySelector("#doc-disc");
+      const cursoWrap = corpo.querySelector("#doc-curso-wrap");
+      discSel?.addEventListener("change", () => {
+        const outro = discSel.value === "__outro";
+        if (cursoWrap) {
+          cursoWrap.hidden = !outro;
+          if (outro) corpo.querySelector("#doc-curso")?.focus();
+        }
+        // O sumário já lido foi casado com a disciplina de ANTES. Trocar a disciplina e salvar
+        // sem re-casar guardaria vínculos da matéria errada — justamente o que este campo veio
+        // evitar. Re-casa na hora e repinta o preview, para a correção ficar à vista.
+        if (!pend.estrutura) return;
+        const e = lerEscolhaDisciplina();
+        store.casarEstruturaComEdital(pend.estrutura, corpo.querySelector("#doc-titulo")?.value || "", { disciplinaId: e.disciplinaId, ignorarTitulo: !e.deduzir && !e.disciplinaId, limparSemMatch: true });
+        reEstrutura();
+      });
+
+      corpo.querySelector("#doc-curso")?.addEventListener("change", () => {
+        if (!pend.estrutura) return;
+        const e = lerEscolhaDisciplina();
+        store.casarEstruturaComEdital(pend.estrutura, corpo.querySelector("#doc-titulo")?.value || "", { disciplinaId: e.disciplinaId, ignorarTitulo: true, limparSemMatch: true });
+        reEstrutura();
+      });
+
       const fileInput = corpo.querySelector("#doc-file");
       if (fileInput) {
         ligarDropZone(fileInput);
@@ -1491,6 +1609,25 @@ function abrirImportarMaterial(app, alvoId = null) {
           if (!f) return;
           const tituloEl = corpo.querySelector("#doc-titulo");
           if (!tituloEl.value) tituloEl.value = f.name.replace(/\.[^.]+$/, "");
+          // Pré-seleciona a disciplina pelo nome do arquivo, sem passar por cima da escolha
+          // feita à mão (o campo em branco é "deduzir", então preencher aqui é ganho puro).
+          const discEl = corpo.querySelector("#doc-disc");
+          if (discEl && !discEl.value) {
+            const sug = disciplinaDoDocumento(store.get(), { titulo: f.name.replace(/\.[^.]+$/, "") }, { herdarDeVinculos: false });
+            if (sug && sug.tipo === "edital") discEl.value = sug.id;
+            else if (sug && sug.tipo === "curso") {
+              // Curso fora do edital: usa a opção já existente, ou abre o campo de texto com
+              // o nome que veio do arquivo — em nenhum caso o usuário digita de novo.
+              const opt = [...discEl.options].find((o) => o.value === `curso:${sug.nome}`);
+              if (opt) discEl.value = opt.value;
+              else {
+                discEl.value = "__outro";
+                const inp = corpo.querySelector("#doc-curso");
+                if (inp && !inp.value) inp.value = sug.nome;
+                if (cursoWrap) cursoWrap.hidden = false;
+              }
+            }
+          }
           const iaOn = store.iaDisponivel();
           docStatus.className = "import-status lendo";
           docStatus.innerHTML = `<span class="import-spin">${icone("refresh-cw")}</span> <span class="import-nome"></span>`;
@@ -1544,7 +1681,7 @@ function abrirImportarMaterial(app, alvoId = null) {
                   } catch (_) {}
                 }
                 pend.estrutura = est && est.blocos.length ? est : null;
-                if (pend.estrutura) store.casarEstruturaComEdital(pend.estrutura, corpo.querySelector("#doc-titulo")?.value || f.name);
+                if (pend.estrutura) store.casarEstruturaComEdital(pend.estrutura, corpo.querySelector("#doc-titulo")?.value || f.name, { disciplinaId: lerEscolhaDisciplina().disciplinaId });
                 const casados = pend.estrutura ? pend.estrutura.blocos.filter((b) => b.topicoId).length : 0;
                 painel.set(
                   "sumario",
@@ -1596,6 +1733,15 @@ function abrirImportarMaterial(app, alvoId = null) {
         // histórico preservados), que é o que "reimportei a apostila nova" quer dizer.
         const importarFila = async (arquivos) => {
           if (!(await confirmarAvisoDireitos())) return;
+          // Sem disciplina — nem escolhida, nem dedutível do nome do arquivo — o sumário casa
+          // contra o edital INTEIRO, e é daí que sai vínculo em outra matéria. Avisar antes é
+          // barato; descobrir depois custa uma revisão material a material.
+          const escFila = lerEscolhaDisciplina();
+          const semEscolha = escFila.deduzir; // "— deduzir pelo nome do arquivo —"
+          if (semEscolha && !arquivos.some((f) => disciplinaDoDocumento(store.get(), { titulo: f.name.replace(/\.[^.]+$/, "") }, { herdarDeVinculos: false }))) {
+            const segue = await confirmar(`Nenhuma disciplina escolhida para estes ${arquivos.length} arquivos, e o nome deles não indica uma. Os tópicos do sumário vão ser procurados em TODO o edital, o que costuma gerar vínculo na matéria errada. Importar assim mesmo?`);
+            if (!segue) return;
+          }
           emFila = true;
           const tituloEl = corpo.querySelector("#doc-titulo");
           const botaoSalvar = corpo.querySelector('[data-action="add-doc"]');
@@ -1782,7 +1928,7 @@ function visaoNudgeHTML(store, st) {
   </div>`;
 }
 
-function docHTML(store, st, d, busca) {
+function docHTML(store, st, d, busca, grupoNome = "") {
   const topicosDoc = (d.topicoIds && d.topicoIds.length ? d.topicoIds : d.topicoId ? [d.topicoId] : [])
     .map((id) => st.topicos.find((t) => t.id === id))
     .filter(Boolean);
@@ -1795,14 +1941,21 @@ function docHTML(store, st, d, busca) {
   const nPag = (d.paginas || []).length;
   const nTop = d.estrutura && d.estrutura.blocos ? d.estrutura.blocos.length : 0;
   const nFig = (d.figuras || []).filter((f) => f.descricao).length; // as "vazias" são só marcação de página conferida
-  const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : ""].filter(Boolean).join(" · ");
+  // Data de ENTRADA do material: responde "quando trouxe isto?" e "já está velho?" meses
+  // depois, sem precisar abrir nada. Reimportar o arquivo atualiza a data (e o tooltip guarda
+  // a da primeira importação).
+  const dEntrada = d.atualizadoEm || d.criadoEm;
+  const dataTxt = dEntrada
+    ? `<span class="doc-data" data-tip="${d.atualizadoEm ? `Arquivo atualizado em ${fmtData(d.atualizadoEm)}${d.criadoEm ? ` · importado pela 1ª vez em ${fmtData(d.criadoEm)}` : ""}` : `Importado em ${fmtData(d.criadoEm)}`}" data-tip-pos="cima-esq">${icone("calendar")} ${d.atualizadoEm ? "atualizado" : "importado"} em ${fmtData(dEntrada)}</span>`
+    : "";
+  const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : "", dataTxt].filter(Boolean).join(" · ");
   return `
     <div class="card doc-item" data-foco-id="${d.id}">
       <div class="doc-head">
         <div class="doc-ident">
           <span class="doc-tipo-ico" data-tip="${tipo.lb}">${icone(tipo.ic)}</span>
           <div class="doc-ident-txt">
-            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" data-tip="${nTop ? "Abrir/fechar o sumário do material" : "Abrir/fechar o texto extraído"}">${esc(d.titulo)}</span>
+            <span class="doc-titulo" data-action="abrir" data-id="${d.id}" role="button" tabindex="0" data-tip="${esc(d.titulo)}">${esc(tituloCurtoDoc(d.titulo, grupoNome))}</span>
             <div class="doc-sub muted small">${sub}</div>
           </div>
         </div>
@@ -1850,6 +2003,8 @@ function docHTML(store, st, d, busca) {
                     : ""
               }
               <button class="menu-item" data-action="editar-topicos" data-id="${d.id}" data-tip="Escolher quais tópicos do edital este material cobre (dentro do painel, a IA pode sugerir)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("link")}</span> Vincular ao edital</button>
+              <button class="menu-item" data-action="doc-disciplina" data-id="${d.id}" data-tip="Define a disciplina deste material. É ela que agrupa a lista, organiza os seletores de «Gerar com IA» e limita a quais tópicos o sumário pode se vincular." data-tip-pos="cima-esq"><span class="menu-ico">${icone("library")}</span> Definir disciplina</button>
+              <button class="menu-item" data-action="doc-renomear" data-id="${d.id}" data-tip="Muda só o nome do material (o arquivo e os vínculos continuam os mesmos)." data-tip-pos="cima-esq"><span class="menu-ico">${icone("square-pen")}</span> Renomear</button>
               <div class="menu-sep"></div>
               <div class="menu-rotulo">Arquivo</div>
               <button class="menu-item" data-action="atualizar-doc" data-id="${d.id}" data-tip="Traga a versão nova do arquivo. Questões, flashcards, mapas, vínculos com o edital e histórico continuam valendo; o texto e o sumário são substituídos." data-tip-pos="cima-esq"><span class="menu-ico">${icone("refresh-cw")}</span> Atualizar material</button>

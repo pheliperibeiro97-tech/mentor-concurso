@@ -5,6 +5,8 @@
 //   verde  = extraído/estruturado do material do usuário (confiável)
 //   amarelo = gerado pela IA (conferir)
 
+import { rotuloDocumento } from "./estrutura.js";
+
 export const SELO = {
   verde: { icone: "book-open", rotulo: "Extraído do seu material" },
   amarelo: { icone: "bot", rotulo: "Criado pelo Mentor · confira" },
@@ -564,7 +566,7 @@ export function buscarNoConteudo(state, query) {
   const out = [];
   for (const d of state.documentos || []) {
     const sc = score(d.titulo + " " + d.texto);
-    if (sc) out.push({ sc, origem: `Material: ${d.titulo}`, trecho: trechoRelevante(d.texto) });
+    if (sc) out.push({ sc, origem: `Material: ${rotuloDocumento(state, d)}`, trecho: trechoRelevante(d.texto) });
   }
   for (const r of state.resumos || []) {
     const sc = score(r.titulo + " " + r.conteudoHTML);

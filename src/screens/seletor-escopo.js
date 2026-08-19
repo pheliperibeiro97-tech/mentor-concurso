@@ -4,7 +4,8 @@
 // material (nunca "o conhecimento do Mentor" solto). Resolve um ESCOPO (store.resolverEscopo).
 // Janela via abrirJanelaFluxo + shim { store, refresh } (o app.refresh real não alcança a
 // janela, que vive fora do root) — mesmo padrão dos outros modais.
-import { abrirJanelaFluxo, toast, avisoIA } from "../ui.js";
+import { abrirJanelaFluxo, toast, avisoIA, campoMaterialHTML, ligarCampoMaterial } from "../ui.js";
+import { disciplinaDoDocumento } from "../estrutura.js";
 import { esc, humanizarErroIA } from "../util.js";
 import { icone } from "../icones.js";
 
@@ -24,12 +25,15 @@ const DESTINO = { flashcards: "flashcards", questoes: "pratica", ce: "pratica-ce
 
 // Contexto (disciplina · tópico) do material, para o usuário se situar.
 function contextoDoMaterial(st, doc) {
+  // A disciplina vem do MATERIAL (campo próprio), não do 1º tópico vinculado: material sem
+  // vínculo nenhum mostrava contexto vazio, e material com vínculo herdado mostrava a
+  // disciplina do vínculo — que é justamente o que podia estar errado.
+  const disc = disciplinaDoDocumento(st, doc);
   const tid = doc && (doc.topicoId || (Array.isArray(doc.topicoIds) && doc.topicoIds[0]));
-  if (!tid) return "";
-  const t = st.topicos.find((x) => x.id === tid);
-  if (!t) return "";
-  const d = st.disciplinas.find((x) => x.id === t.disciplinaId);
-  return d ? `${d.nome} · ${t.nome}` : t.nome;
+  const t = tid ? st.topicos.find((x) => x.id === tid) : null;
+  if (disc && t) return `${disc.nome} · ${t.nome}`;
+  if (disc) return disc.nome;
+  return t ? t.nome : "";
 }
 
 export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar com IA", permiteExtrair = false } = {}) {
@@ -122,16 +126,13 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
     const ctx = doc ? contextoDoMaterial(st, doc) : "";
     return `
       <label class="inline u-mb-8 u-block">Material (aula)
-        <select data-se="mat" style="max-width:360px">
-          <option value="">— escolha um material —</option>
-          ${docs.map((d) => `<option value="${d.id}" ${estado.docId === d.id ? "selected" : ""}>${esc(d.titulo)}</option>`).join("")}
-        </select>
+        ${campoMaterialHTML(st, { id: "escopo-mat", selecionado: estado.docId, vazio: "— escolha um material —", incluirVazio: false })}
       </label>
       ${ctx ? `<p class="muted small u-mt-4 u-mb-4">${icone("list-checks")} ${esc(ctx)}</p>` : ""}
       ${
         blocos.length
           ? `<label class="inline u-block u-mt-8">Subtópicos (índice) <span class="muted small">— marque um ou mais; nenhum marcado = material inteiro</span></label>
-             <div class="escopo-blocos">
+             <div class="escopo-blocos" data-rolagem="escopo-blocos">
                ${blocos.map((b, bi) => `<label class="escolha-item escolha-check escopo-bloco-item"><input type="checkbox" data-se="matbloco" value="${bi}" ${estado.matBlocos.includes(bi) ? "checked" : ""} /> <span class="escolha-item-txt">${esc(`${b.numero || ""} ${b.titulo}`.trim())}</span></label>`).join("")}
              </div>`
           : doc
@@ -183,10 +184,11 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
         </div>`;
 
       // ---- listeners (reatados a cada rerender) ----
-      corpo.querySelector('[data-se="mat"]')?.addEventListener("change", (e) => {
-        estado.docId = e.target.value;
-        estado.matBlocos = [];
-        rerender();
+      ligarCampoMaterial(corpo, st, {
+        id: "escopo-mat",
+        msg: "Escolha o material (aula)",
+        incluirVazio: false,
+        aoTrocar: (docId) => { estado.docId = docId; estado.matBlocos = []; rerender(); },
       });
       corpo.querySelectorAll('[data-se="matbloco"]').forEach((chk) =>
         chk.addEventListener("change", (e) => {

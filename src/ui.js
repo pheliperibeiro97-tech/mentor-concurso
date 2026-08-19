@@ -2,6 +2,7 @@
 import { SELO } from "./ia.js";
 import { esc , humanizarErroIA } from "./util.js";
 import { icone } from "./icones.js";
+import { disciplinaDoDocumento, tituloCurtoDoc, ordenarDocumentos, rotuloDocumento, GRUPO_AVULSOS } from "./estrutura.js";
 
 // Ícone de impressora — Lucide único (Fase 0: fim do SVG desenhado à mão em paralelo).
 export const iconImprimir = icone("printer", "ico-print");
@@ -222,11 +223,16 @@ export function escolher(msg, opcoes, opts = {}) {
     // único caminho era rolar um contêiner de ~55vh — inviável no celular.
     const totalItens = grupos ? grupos.reduce((n, g) => n + g.itens.length, 0) : opcoes.length;
     const comBusca = (grupos || opts.lista) && totalItens > 12;
+    // `extraNoFim`: itens soltos DEPOIS dos grupos. Usado pelos materiais avulsos, para a
+    // ordem do seletor ser a mesma da lista de Materiais (avulsos no fim) — duas ordens para a
+    // mesma coisa fazem procurar duas vezes.
+    const extraHTML = opts.extra ? `<div class="escolha-extra${opts.extraNoFim ? " escolha-extra-fim" : ""}">${opts.extra.map(itemHTML).join("")}</div>` : "";
     const corpo = grupos
       ? `${comBusca ? `<input type="search" class="escolha-busca busca-input u-mt-8" placeholder="Buscar…" aria-label="Buscar nas opções" />` : ""}
-        ${opts.extra ? `<div class="escolha-extra">${opts.extra.map(itemHTML).join("")}</div>` : ""}
+        ${opts.extraNoFim ? "" : extraHTML}
         <div class="modal-lista escolha-grupos" style="max-height:55dvh;overflow:auto;margin-top:8px">
           ${grupos.map((g, gi) => `<details class="escolha-grupo" data-gi="${gi}" data-aberto="${g.aberto ? 1 : 0}"${g.aberto ? " open" : ""}><summary class="escolha-grupo-h">${esc(g.rotulo)}</summary><div class="escolha-grupo-itens">${g.itens.map(itemHTML).join("")}</div></details>`).join("")}
+          ${opts.extraNoFim ? extraHTML : ""}
         </div>
         ${comBusca ? `<p class="escolha-vazia muted small u-mt-8" hidden>Nada encontrado.</p>` : ""}`
       : opts.lista
@@ -289,6 +295,82 @@ export function gruposTopicosPara(st, { atual } = {}) {
       return { rotulo: d.nome, aberto: tops.some((t) => t.id === atual), itens: tops.map((t) => ({ label: t.nome, value: t.id })) };
     })
     .filter(Boolean);
+}
+
+// OPÇÕES DE MATERIAL agrupadas por DISCIPLINA, em ordem natural — para todo <select> que
+// escolhe um material (Gerar com IA, adicionar questão, correção de redação, flashcards, lei
+// seca). Com uma aula por PDF a biblioteca passa de 400 itens: lista corrida, na ordem de
+// importação, torna impossível achar a aula certa — e lotes importados em datas diferentes
+// deixam a mesma matéria espalhada pela lista.
+export function opcoesMateriaisHTML(st, selecionadoId = "") {
+  const docs = ordenarDocumentos(st, st.documentos || []);
+  const grupos = new Map();
+  for (const d of docs) {
+    const disc = disciplinaDoDocumento(st, d);
+    const nome = disc ? disc.nome : GRUPO_AVULSOS;
+    if (!grupos.has(nome)) grupos.set(nome, []);
+    grupos.get(nome).push({ d, curto: tituloCurtoDoc(d.titulo, disc && disc.nome) });
+  }
+  const chaves = [...grupos.keys()].sort((a, b) => (a === GRUPO_AVULSOS ? 1 : b === GRUPO_AVULSOS ? -1 : a.localeCompare(b, "pt")));
+  return chaves
+    .map((nome) => `<optgroup label="${esc(nome)}">${grupos.get(nome).map(({ d, curto }) => `<option value="${d.id}" ${d.id === selecionadoId ? "selected" : ""}>${esc(curto)}</option>`).join("")}</optgroup>`)
+    .join("");
+}
+
+// Escolher um MATERIAL: agrupado por disciplina, com BUSCA — digitar "atos administrativos"
+// ou "aula 07" acha a aula sem rolar nada. Mesma casca do escolherTopico, porque o problema é
+// o mesmo (centenas de opções numa lista corrida) e a solução já estava resolvida ali.
+// Material sem disciplina (edital, guia do cursinho, resumo de véspera) aparece SOLTO no topo,
+// pelo próprio nome — não faz sentido escondê-lo atrás de um rótulo de grupo genérico.
+export async function escolherMaterial(st, msg, { atual = "", filtro = null, incluirVazio = false } = {}) {
+  const docs = ordenarDocumentos(st, (st.documentos || []).filter((d) => (filtro ? filtro(d) : true)));
+  if (!docs.length) { toast("Você ainda não importou nenhum material.", "erro"); return null; }
+  const porGrupo = new Map();
+  const soltos = [];
+  for (const d of docs) {
+    const disc = disciplinaDoDocumento(st, d);
+    const item = { label: disc ? tituloCurtoDoc(d.titulo, disc.nome) : d.titulo, value: d.id, desc: disc ? "" : "material avulso" };
+    if (!disc) { soltos.push(item); continue; }
+    if (!porGrupo.has(disc.nome)) porGrupo.set(disc.nome, []);
+    porGrupo.get(disc.nome).push(item);
+  }
+  const grupos = [...porGrupo.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], "pt"))
+    .map(([rotulo, itens]) => ({ rotulo, itens, aberto: itens.some((i) => i.value === atual) }));
+  const extra = [...(incluirVazio ? [{ label: "— nenhum —", value: "" }] : []), ...soltos];
+  if (!grupos.length) return escolher(msg, extra, { lista: true });
+  return escolher(msg, [], { grupos, extra: extra.length ? extra : null, extraNoFim: true });
+}
+
+// CAMPO DE MATERIAL pronto: <select> oculto (continua sendo a fonte de verdade para quem já
+// lê `.value`) + botão que abre o `escolherMaterial`, com busca. Mesmo par que o "Vincular ao
+// tópico" usa — a diferença é que aqui a lista tem centenas de aulas, então digitar é a única
+// forma decente de achar.
+export function campoMaterialHTML(st, { id, selecionado = "", vazio = "— escolher material —", incluirVazio = true } = {}) {
+  const doc = (st.documentos || []).find((d) => d.id === selecionado);
+  const rot = doc ? rotuloDocumento(st, doc) : vazio;
+  return (
+    `<select id="${id}" hidden aria-hidden="true" tabindex="-1">${incluirVazio ? `<option value=""></option>` : ""}${opcoesMateriaisHTML(st, selecionado)}</select>` +
+    `<button type="button" id="${id}-btn" class="rsx-topsel-btn" data-tip="Escolha o material — dá para digitar o nome da aula, da disciplina ou do curso." data-tip-pos="cima-esq"><span class="rsx-topsel-txt">${esc(rot)}</span>${icone("chevron-down")}</button>`
+  );
+}
+
+// Liga o botão do campo acima. `aoTrocar(docId)` roda depois de o <select> já estar atualizado
+// (e o evento `change` disparado, para quem escuta o select).
+export function ligarCampoMaterial(raiz, st, { id, msg = "Escolha o material", filtro = null, incluirVazio = true, vazio = "— escolher material —", aoTrocar = null } = {}) {
+  const sel = raiz.querySelector(`#${id}`);
+  const btn = raiz.querySelector(`#${id}-btn`);
+  if (!sel || !btn) return;
+  btn.addEventListener("click", async () => {
+    const escolhido = await escolherMaterial(st, msg, { atual: sel.value, filtro, incluirVazio });
+    if (escolhido === null) return;
+    sel.value = escolhido;
+    const doc = (st.documentos || []).find((d) => d.id === escolhido);
+    const txt = btn.querySelector(".rsx-topsel-txt");
+    if (txt) txt.textContent = doc ? rotuloDocumento(st, doc) : vazio;
+    sel.dispatchEvent(new Event("change"));
+    if (aoTrocar) aoTrocar(escolhido);
+  });
 }
 
 // Seletor de tópico agrupado por disciplina + busca (substitui os <select> flat com centenas
@@ -584,7 +666,22 @@ export function abrirJanelaFluxo({ titulo = "", telaCheia = false, render, handl
     telaCheia,
     aoMontar: (overlay, fechar) => {
       const corpo = overlay.querySelector(".mm-corpo");
-      const rerender = () => { render(corpo, { rerender, fechar }); tirarTituloRepetido(overlay, titulo); };
+      // O render reescreve o corpo inteiro (innerHTML), então TODA rolagem se perde: marcar um
+      // subtópico no meio de uma lista de 30 jogava a janela de volta ao topo a cada clique.
+      // Guarda a rolagem do corpo e a de cada área rolável identificada por `data-rolagem`,
+      // e devolve depois — quem re-renderiza não precisa saber disso.
+      const rerender = () => {
+        const y = corpo.scrollTop;
+        const internas = new Map();
+        corpo.querySelectorAll("[data-rolagem]").forEach((el) => internas.set(el.getAttribute("data-rolagem"), el.scrollTop));
+        render(corpo, { rerender, fechar });
+        tirarTituloRepetido(overlay, titulo);
+        if (y) corpo.scrollTop = y;
+        if (internas.size) corpo.querySelectorAll("[data-rolagem]").forEach((el) => {
+          const v = internas.get(el.getAttribute("data-rolagem"));
+          if (v) el.scrollTop = v;
+        });
+      };
       if (handlers) bindActions(corpo, handlers({ rerender, fechar, corpo }));
       rerender();
     },

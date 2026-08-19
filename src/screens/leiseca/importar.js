@@ -2,7 +2,7 @@
 // conferir atualização (diff), adicionar indicações (colar/PDF/material, com preview
 // editável) e marcar "o que mais cai" (IA/estatística).
 // (Extraído mecanicamente de leiseca.js — comportamento idêntico.)
-import { abrirJanelaFluxo, toast, toastCarregando, avisoIA, comOcupado, ligarDropZone, plural, dicaArquivo } from "../../ui.js";
+import { abrirJanelaFluxo, toast, toastCarregando, avisoIA, comOcupado, ligarDropZone, plural, dicaArquivo, campoMaterialHTML, ligarCampoMaterial } from "../../ui.js";
 import { ligarImportArquivo } from "../../pdf.js";
 import { esc } from "../../util.js";
 import { icone } from "../../icones.js";
@@ -56,7 +56,7 @@ art. 312, CP | Apropriar-se o funcionário público de dinheiro...`;
         st.documentos.length
           ? `<div class="add-sep">Ou extrair de um material já cadastrado (IA):</div>
              <div class="form-row" style="align-items:flex-end; gap:10px; flex-wrap:wrap">
-               <label class="inline">Material: <select id="add-doc">${st.documentos.map((d) => `<option value="${d.id}">${esc(d.titulo)}</option>`).join("")}</select></label>
+               <div class="inline">Material: ${campoMaterialHTML(st, { id: "add-doc", incluirVazio: false, vazio: "— escolher material —" })}</div>
                <button class="btn btn-ghost btn-sm" data-action="extrair-material" data-tip="A IA lê o material e extrai as ${tipo === "juris" ? "súmulas/temas/precedentes" : "referências de lei"} citadas (não inventa).">Extrair do material</button>
              </div>`
           : ""
@@ -244,6 +244,7 @@ export function abrirImportarLei(app) {
     render: (corpo) => {
       const st = store.get();
       corpo.innerHTML = estado.etapa === "preview" ? previewHTML() : formHTML(st);
+      ligarCampoMaterial(corpo, st, { id: "add-doc", msg: "Extrair de qual material?", incluirVazio: false });
       // Catálogo → preenche URL (o listener é recriado a cada render, no elemento novo).
       corpo.querySelector("#imp-cat")?.addEventListener("change", (e) => {
         estado.form.url = e.target.value || "";

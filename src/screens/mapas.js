@@ -6,6 +6,7 @@ import { icone } from "../icones.js";
 import { abrirMapaCompleto, gerarEAbrirMapa } from "../mapa-mental.js";
 import { arquivoParaBase64 } from "../pdf.js";
 import { abrirSeletorEscopo } from "./seletor-escopo.js";
+import { disciplinaDoDocumento, tituloCurtoDoc, ordenarDocumentos, GRUPO_AVULSOS } from "../estrutura.js";
 
 let filtroTop = ""; // "" = todos · id de tópico · "sem" = sem tópico
 
@@ -289,10 +290,28 @@ export default function renderMapas(root, app) {
         return gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeTopicos(ids));
       }
       let opcoes = [];
-      if (fonte === "material") opcoes = s.documentos.filter((d) => (d.texto || "").trim()).map((d) => ({ value: d.id, label: d.titulo || "Material" }));
-      else if (fonte === "resumo") opcoes = s.resumos.filter((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ").trim()).map((r) => ({ value: r.id, label: r.titulo || "Resumo" }));
-      if (!opcoes.length) return toast("Nada disponível nessa fonte ainda.", "erro");
-      const id = await escolher("Escolha a fonte do mapa:", opcoes.slice(0, 80), { lista: true });
+      let grupos = null;
+      if (fonte === "material") {
+        // Agrupado por disciplina e SEM corte: o `slice(0, 80)` de antes escondia material de
+        // verdade assim que a biblioteca passou de 80 itens — e uma aula por PDF passa disso
+        // numa disciplina e meia. A busca do próprio `escolher` resolve o tamanho.
+        const docs = ordenarDocumentos(s, (s.documentos || []).filter((d) => (d.texto || "").trim()));
+        const porGrupo = new Map();
+        for (const d of docs) {
+          const disc = disciplinaDoDocumento(s, d);
+          const nome = disc ? disc.nome : GRUPO_AVULSOS;
+          if (!porGrupo.has(nome)) porGrupo.set(nome, []);
+          porGrupo.get(nome).push({ label: tituloCurtoDoc(d.titulo, disc && disc.nome) || "Material", value: d.id });
+        }
+        grupos = [...porGrupo.entries()]
+          .sort((a, b) => (a[0] === GRUPO_AVULSOS ? 1 : b[0] === GRUPO_AVULSOS ? -1 : a[0].localeCompare(b[0], "pt")))
+          .map(([rotulo, itens]) => ({ rotulo, itens }));
+        if (!grupos.length) return toast("Nada disponível nessa fonte ainda.", "erro");
+      } else if (fonte === "resumo") opcoes = s.resumos.filter((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ").trim()).map((r) => ({ value: r.id, label: r.titulo || "Resumo" }));
+      if (!grupos && !opcoes.length) return toast("Nada disponível nessa fonte ainda.", "erro");
+      const id = grupos
+        ? await escolher("Escolha a fonte do mapa:", [], { grupos })
+        : await escolher("Escolha a fonte do mapa:", opcoes, { lista: true });
       if (!id) return;
       const ger = fonte === "material" ? () => store.gerarMapaMentalDeMaterial(id) : () => store.gerarMapaMentalDeResumo(id);
       return gerarEAbrirMapa(store, app, ger);

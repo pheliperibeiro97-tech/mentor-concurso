@@ -7,6 +7,7 @@ import { executarComando, motivoParaNaoExecutar, podeOferecerSemFonte } from "./
 import { esc, humanizarErroIA } from "./util.js";
 import { icone } from "./icones.js";
 import { skeletonDoc, plural, md } from "./ui.js";
+import { rotuloDocumento } from "./estrutura.js";
 
 export function montarChat(store, app) {
   if (document.getElementById("chat-fab")) return;
@@ -145,7 +146,7 @@ export function montarChat(store, app) {
         const cmd = await interpretarComando(cfg, {
           pergunta: q,
           topicos: (st.topicos || []).map((t) => t.nome),
-          materiais: (st.documentos || []).map((d) => d.titulo),
+          materiais: (st.documentos || []).map((d) => rotuloDocumento(st, d)),
           resumos: (st.resumos || []).map((r) => r.titulo),
         });
         pensando.remove();

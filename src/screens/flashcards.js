@@ -1,7 +1,7 @@
 // Flashcards / Revisão: recall ativo + repetição espaçada (SM-2) + exportação Anki.
 // Criar cards num painel único (digitar/colar/importar, gerar do material com IA,
 // ou gerar das questões offline). Revisão filtrável por disciplina/tópicos.
-import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado, dicaArquivo } from "../ui.js";
+import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado, dicaArquivo, campoMaterialHTML, ligarCampoMaterial } from "../ui.js";
 import { esc, fmtData, todayISO, addDays, MOTIVOS_ERRO, textoComentario } from "../util.js";
 import { icone } from "../icones.js";
 import * as sm2 from "../sm2.js";
@@ -557,7 +557,7 @@ function criarPanelHTML(st, opcoesTopico, opcoesDocs, texto = "") {
              <div class="form-row" style="align-items:flex-end; gap:12px; flex-wrap:wrap">
                ${
                  st.documentos.length
-                   ? `<label class="inline">Do material: <select id="fc-add-doc"><option value="">— escolher —</option>${opcoesDocs}</select></label>
+                   ? `<div class="inline">Do material: ${opcoesDocs}</div>
                       <button class="btn btn-ia btn-sm" data-action="gerar-do-material" data-tip="A IA extrai flashcards diretamente deste material e abre mostrando só os recém-gerados.">${icone("sparkles")} Gerar deste material</button>`
                    : ""
                }
@@ -653,14 +653,7 @@ function abrirCriarFlashcards(app) {
   const { store } = app;
   const estado = { preview: null, texto: "", topico: "" };
   const opcoesTopicoDe = (st) => st.topicos.map((t) => `<option value="${t.id}">${esc(nomeTopico(st, t))}</option>`).join("");
-  const opcoesDocsDe = (st) =>
-    st.documentos
-      .map((d) => {
-        const t = d.topicoId ? st.topicos.find((x) => x.id === d.topicoId) : null;
-        const disc = t ? st.disciplinas.find((x) => x.id === t.disciplinaId) : null;
-        return `<option value="${d.id}">${esc((disc ? disc.nome + " · " : "") + d.titulo)}</option>`;
-      })
-      .join("");
+  const opcoesDocsDe = (st) => campoMaterialHTML(st, { id: "fc-add-doc", vazio: "— escolher —", incluirVazio: false });
 
   abrirJanelaFluxo({
     titulo: "Criar flashcards",
@@ -677,6 +670,7 @@ function abrirCriarFlashcards(app) {
         return;
       }
       corpo.innerHTML = criarPanelHTML(st, opcoesTopicoDe(st), opcoesDocsDe(st), estado.texto);
+      ligarCampoMaterial(corpo, st, { id: "fc-add-doc", msg: "Criar flashcards de qual material?", incluirVazio: false });
       const topEl = corpo.querySelector("#fc-add-top");
       if (topEl && estado.topico) topEl.value = estado.topico;
       const addFile = corpo.querySelector("#fc-add-file");

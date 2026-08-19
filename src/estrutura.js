@@ -709,7 +709,7 @@ const tokensCasamento = (s) =>
 // crimes ambientais da apostila de Ambiental, que mora em Penal no edital), e é uma troca
 // consciente: vínculo errado conta como edital coberto e contamina dossiê e revisões, então
 // vazio é melhor — e o usuário pode vincular à mão no cartão do material.
-export function acharTopicoDoBloco(titulo, { topicos, disciplinas, disciplinaId, minMesma = 0.34, minOutra = 0.75 } = {}) {
+export function acharTopicoDoBloco(titulo, { topicos, disciplinas, disciplinaId, restrito = false, minMesma = 0.34, minOutra = 0.75 } = {}) {
   const alvo = tokensCasamento(titulo);
   if (!alvo.size || !Array.isArray(topicos) || !topicos.length) return null;
   const nomeDisc = (id) => {
@@ -734,6 +734,11 @@ export function acharTopicoDoBloco(titulo, { topicos, disciplinas, disciplinaId,
     const r = melhorEntre(daCasa, false);
     if (r.melhor && r.nota >= minMesma) return { topicoId: r.melhor.id, nota: r.nota, mesmaDisciplina: true };
   }
+  // Disciplina DECLARADA (campo do material ou prefixo do título) fecha a porta: o bloco fica
+  // sem tópico em vez de casar em outra matéria. Foi assim que "Fontes, interpretação e
+  // integração do Direito Administrativo" virou "Fontes do Direito Tributário" — com uma aula
+  // por material os títulos são curtos e temáticos, e o piso global de 0,75 não segura.
+  if (disciplinaId && restrito) return null;
   // Sair da disciplina do material exige um título com SUBSTÂNCIA. Um título de uma ou duas
   // palavras ("Prescrição", "Ilicitude", "Evolução Histórica") pontua 1.00 em qualquer lugar —
   // a nota é interseção/menor conjunto, então o lado curto sempre cabe inteiro dentro de algum
@@ -761,6 +766,145 @@ export function disciplinaDoMaterial(titulo, disciplinas) {
     return n.length >= 6 && (n.includes(alvo) || alvo.includes(n));
   });
   return contida ? contida.id : null;
+}
+
+// DISCIPLINA DE UM MATERIAL — fonte única, usada pela tela, pelos seletores e pelo casamento
+// bloco↔tópico. Três fontes, nesta ordem (a mesma escada que o plano do cursinho já usa para
+// as aulas, em ciclo.disciplinaDePlanoDe):
+//   1. `doc.disciplinaId` — declarado na importação ou pelo usuário. É a resposta, quando existe.
+//   2. o PREFIXO do título ("Direito Administrativo - Aula 07 - Atos"), que vem do próprio
+//      cursinho e é prova melhor do que qualquer dedução por vínculo;
+//   3. a disciplina DOMINANTE entre os blocos/tópicos vinculados — que só serve para agrupar
+//      material antigo, importado antes de o campo existir. Nunca para restringir casamento:
+//      ali seria circular (a régua sairia do próprio vínculo que se quer conferir).
+// Rótulo do grupo de quem não tem disciplina — edital em PDF, guia do cursinho, resumo de
+// véspera, prova avulsa. Um nome só, usado na lista de Materiais e em TODO seletor: dois nomes
+// para a mesma coisa ("Sem disciplina" aqui, outra coisa ali) fazem o usuário procurar duas vezes.
+export const GRUPO_AVULSOS = "Avulsos (sem disciplina)";
+
+export function disciplinaDoDocumento(st, doc, { herdarDeVinculos = true } = {}) {
+  if (!doc || !st) return null;
+  const disciplinas = st.disciplinas || [];
+  const doEdital = (d) => (d ? { id: d.id, nome: d.nome, tipo: "edital" } : null);
+  const resolver = (nome) => {
+    const alvo = normCasamento(nome).trim();
+    if (!alvo) return null;
+    return (
+      disciplinas.find((d) => normCasamento(d.nome).trim() === alvo) ||
+      disciplinas.find((d) => { const n = normCasamento(d.nome).trim(); return n.length >= 6 && (n.includes(alvo) || alvo.includes(n)); }) ||
+      null
+    );
+  };
+  // 1) Campo declarado. `cursoNome` é a resposta para o que NÃO é disciplina deste edital
+  // ("Legislação Penal Especial", "Direitos Difusos e Coletivos"): o curso existe, tem nome
+  // próprio e merece o seu grupo — dissolvê-lo dentro de uma disciplina do edital sumiria com
+  // ele do lugar onde o usuário vai procurar.
+  if (doc.disciplinaId) {
+    const d = doEdital(disciplinas.find((x) => x.id === doc.disciplinaId));
+    if (d) return d;
+  }
+  // "Avulso" é uma RESPOSTA, não ausência de resposta: o usuário disse que este material (o
+  // edital em PDF, o guia do cursinho, um resumo geral) não é de disciplina nenhuma. Sem esta
+  // marca, a herança por vínculos logo abaixo o devolvia para alguma disciplina e a escolha
+  // se desfazia sozinha na tela seguinte.
+  if (doc.semDisciplina) return null;
+  if (String(doc.cursoNome || "").trim()) {
+    const nome = String(doc.cursoNome).trim();
+    return doEdital(resolver(nome)) || { id: null, nome, tipo: "curso" };
+  }
+  // 2) Prefixo do título — "Direito Administrativo - Aula 07 - Atos". Vem do próprio cursinho
+  // e é prova melhor do que qualquer dedução por vínculo. Só vale com o "Aula NN" adiante:
+  // sem isso, "Estudo Estratégico" viraria um curso.
+  const mAula = String(doc.titulo || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
+  if (mAula) {
+    const pref = mAula[1].trim();
+    return doEdital(resolver(pref)) || { id: null, nome: pref, tipo: "curso" };
+  }
+  const porTitulo = disciplinaDoMaterial(doc.titulo, disciplinas); // "3. Direito Administrativo"
+  if (porTitulo) return doEdital(disciplinas.find((x) => x.id === porTitulo));
+  // 3) Disciplina DOMINANTE entre os vínculos — só para agrupar material antigo, importado
+  // antes de o campo existir. Nunca para restringir casamento: ali seria circular.
+  if (!herdarDeVinculos) return null;
+  const contagem = new Map();
+  const anota = (topicoId) => {
+    if (!topicoId) return;
+    const t = (st.topicos || []).find((x) => x.id === topicoId);
+    if (!t || !t.disciplinaId) return;
+    contagem.set(t.disciplinaId, (contagem.get(t.disciplinaId) || 0) + 1);
+  };
+  for (const b of (doc.estrutura && doc.estrutura.blocos) || []) anota(b.topicoId);
+  if (!contagem.size) (doc.topicoIds || []).forEach(anota);
+  if (!contagem.size) anota(doc.topicoId);
+  // Material que não é de disciplina nenhuma (edital em PDF, guia do cursinho, resumo geral)
+  // devolve null — e vai para o grupo "Sem disciplina", que é a resposta certa para ele.
+  if (!contagem.size) return null;
+  return doEdital(disciplinas.find((x) => x.id === [...contagem.entries()].sort((a, b) => b[1] - a[1])[0][0]));
+}
+
+// Dentro do grupo da própria disciplina, o prefixo "Direito Administrativo - " no título é
+// repetição do cabeçalho logo acima: some da linha (o dado continua inteiro no título). Mesma
+// regra do `nomeCurtoAula` do plano do cursinho — inclusive para poder voltar atrás sem migrar
+// dado nenhum.
+export function tituloCurtoDoc(titulo, disciplinaNome) {
+  const nome = String(titulo || "");
+  if (!disciplinaNome) return nome;
+  const m = nome.match(/^(.+?)\s[-–—]\s*(.+)$/);
+  if (!m) return nome;
+  // `disciplinaDoNomeDeArquivo` tira a numeração do cursinho ("3. Direito Administrativo"),
+  // para o resumido e o completo se comportarem igual dentro do grupo.
+  const esq = normCasamento(disciplinaDoNomeDeArquivo(m[1])).trim();
+  const dir = normCasamento(disciplinaNome).trim();
+  if (!esq || !dir) return nome;
+  const casa = esq === dir || (esq.length >= 6 && dir.length >= 6 && (dir.includes(esq) || esq.includes(dir)));
+  return casa ? m[2].trim() : nome;
+}
+
+// Nomes de CURSO já conhecidos (materiais e plano do cursinho) — para o seletor oferecer o que
+// já existe em vez de o usuário redigitar "Legislação Penal Especial" a cada importação.
+export function cursosConhecidos(st) {
+  const vistos = new Map();
+  const guarda = (nome) => {
+    const n = String(nome || "").trim();
+    if (!n) return;
+    const k = normCasamento(n).trim();
+    // Mesma régua do `disciplinaDoDocumento`: "Formação Humanística" É disciplina deste edital,
+    // que só a chama de "Noções Gerais de Direito e Formação Humanística". Comparar por
+    // igualdade exata a listava como se fosse curso de fora.
+    if (!k || (st.disciplinas || []).some((d) => { const dn = normCasamento(d.nome).trim(); return dn === k || (dn.length >= 6 && k.length >= 6 && (dn.includes(k) || k.includes(dn))); })) return;
+    if (!vistos.has(k)) vistos.set(k, n);
+  };
+  for (const d of st.documentos || []) {
+    const dd = disciplinaDoDocumento(st, d, { herdarDeVinculos: false });
+    if (dd && dd.tipo === "curso") guarda(dd.nome);
+  }
+  for (const a of st.aulas || []) {
+    if (String(a.disciplinaNome || "").trim()) { guarda(a.disciplinaNome); continue; }
+    const m = String(a.nome || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
+    if (m) guarda(m[1]);
+  }
+  return [...vistos.values()].sort((x, y) => x.localeCompare(y, "pt"));
+}
+
+// Rótulo do material para quando ele aparece FORA da lista agrupada — fonte de uma questão ou
+// flashcard, dossiê, busca, chat. Sem a disciplina, "Aula 01 - Apresentação do Curso" não diz
+// de que matéria é.
+export function rotuloDocumento(st, doc) {
+  if (!doc) return "";
+  const d = disciplinaDoDocumento(st, doc);
+  const curto = tituloCurtoDoc(doc.titulo, d && d.nome);
+  return d ? `${d.nome} · ${curto}` : doc.titulo || "";
+}
+
+// Ordem natural do material dentro da disciplina: "Aula 2" antes de "Aula 10" (localeCompare
+// com numeric), e não a ordem de importação — que espalhava os PDFs de uma mesma matéria
+// conforme a data em que cada lote entrou.
+export function ordenarDocumentos(st, docs) {
+  return [...(docs || [])].sort((a, b) => {
+    const da = disciplinaDoDocumento(st, a), db = disciplinaDoDocumento(st, b);
+    const na = da ? da.nome : "￿", nb = db ? db.nome : "￿";
+    if (na !== nb) return na.localeCompare(nb, "pt");
+    return String(a.titulo || "").localeCompare(String(b.titulo || ""), "pt", { numeric: true });
+  });
 }
 
 // O sumário determinístico é bom o bastante para dispensar a IA? Veio do ÍNDICE (ou da

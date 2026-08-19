@@ -11,7 +11,7 @@ import * as areas from "./areas.js";
 import { parsearLeiHTML, buscarLeiPlanalto, selecionarArtigos } from "./legis.js";
 import * as provas from "./provas.js";
 import * as pdf from "./pdf.js";
-import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario, paginasDeSumario, acharTopicoDoBloco, disciplinaDoMaterial } from "./estrutura.js";
+import { detectarEstrutura, montarEstruturaDeTopicos, acharPaginaSumario, paginasDeSumario, acharTopicoDoBloco, disciplinaDoMaterial, disciplinaDoDocumento, rotuloDocumento } from "./estrutura.js";
 import { buscarNoGuia } from "./guia.js";
 
 function defaultState() {
@@ -300,7 +300,10 @@ function ctxDeDoc(doc, bloco) {
     }
   }
   const topicoId = (bloco && bloco.topicoId) || topicoDoDoc(doc);
-  const fonte = { tipo: "documento", id: doc.id, titulo: bloco ? `${doc.titulo} · ${bloco.numero || ""} ${bloco.titulo}`.trim() : doc.titulo };
+  // O rótulo da FONTE viaja para longe da lista de Materiais (questão, flashcard, dossiê,
+  // busca, chat) — e lá "Aula 01 - Apresentação do Curso" não diz de que matéria é.
+  const rotDoc = rotuloDocumento(state, doc);
+  const fonte = { tipo: "documento", id: doc.id, titulo: bloco ? `${rotDoc} · ${bloco.numero || ""} ${bloco.titulo}`.trim() : rotDoc };
   if (bloco) { fonte.bloco = bloco.numero || null; fonte.paginas = [bloco.pIni, bloco.pFim]; }
   const banca = bloco && bloco.banca ? bloco.banca : undefined;
   return { texto, topicoId, fonte, banca };
@@ -338,7 +341,7 @@ function chunksDeTexto(texto, alvo = 900) {
 function fontesIndexaveis(state) {
   const out = [];
   for (const d of state.documentos || []) {
-    out.push({ id: d.id, tipo: "material", titulo: d.titulo, texto: d.texto || "", paginas: d.paginas, sig: sigTexto(d.texto) });
+    out.push({ id: d.id, tipo: "material", titulo: rotuloDocumento(state, d), texto: d.texto || "", paginas: d.paginas, sig: sigTexto(d.texto) });
   }
   for (const r of state.resumos || []) {
     const t = stripHTML(r.conteudoHTML);
@@ -1187,6 +1190,15 @@ export const store = {
         // outros ficaria sem texto até alguém trocar de concurso.
         for (const d of p.documentos || []) {
           if (!d.texto && Array.isArray(d.paginas) && d.paginas.length) recomputarTextoDoc(d);
+          // Material salvo antes de a disciplina existir como campo: adota a que a tela já
+          // mostrava (prefixo do título e, na falta dele, o tópico dominante). Idempotente e
+          // conservador — quando nada indica a disciplina, fica `null` e nada muda.
+          if (d.disciplinaId === undefined) {
+            const dd = disciplinaDoDocumento(p, d);
+            d.disciplinaId = dd && dd.tipo === "edital" ? dd.id : null;
+            d.cursoNome = dd && dd.tipo === "curso" ? dd.nome : null;
+          }
+          if (d.cursoNome === undefined) d.cursoNome = null;
           // Sinalizadores do binário: em material antigo eles não existem, e a UI precisa
           // saber se há PDF sem carregá-lo.
           if (d.temPdf === undefined) d.temPdf = !!d.pdfData;
@@ -2615,12 +2627,23 @@ export const store = {
   },
 
   // ---------- documentos ----------
-  addDocumento({ topicoId, topicoIds, titulo, texto, origem, pdfData, paginas, imgData, estrutura }) {
+  addDocumento({ topicoId, topicoIds, titulo, texto, origem, pdfData, paginas, imgData, estrutura, disciplinaId, cursoNome, semDisciplina }) {
     const tops = Array.isArray(topicoIds) ? topicoIds.filter(Boolean) : topicoId ? [topicoId] : [];
     const doc = {
       id: uid("doc"),
       topicoIds: tops,
       topicoId: tops[0] || null, // primário (legado/compat e contexto de geração)
+      // A DISCIPLINA é do material, não uma dedução dos vínculos: é ela que agrupa a lista,
+      // organiza os seletores (com centenas de aulas, procurar por nome não se sustenta) e
+      // limita o casamento bloco↔tópico. Vem da importação e o usuário pode trocar no cartão.
+      disciplinaId: disciplinaId && state.disciplinas.some((d) => d.id === disciplinaId) ? disciplinaId : null,
+      // Curso que não é disciplina DESTE edital ("Legislação Penal Especial", "Difusos e
+      // Coletivos"): ganha grupo próprio pelo nome, e os vínculos seguem livres — o conteúdo
+      // dele mora mesmo em várias matérias.
+      cursoNome: String(cursoNome || "").trim() || null,
+      // `semDisciplina` só quando a escolha foi EXPLÍCITA (o campo "material geral"); importação
+      // que não declarou nada continua deduzindo pelo nome do arquivo, como antes.
+      semDisciplina: !!semDisciplina && !disciplinaId && !String(cursoNome || "").trim(),
       titulo: (titulo || "").trim() || "Documento",
       texto: texto || "",
       origem: origem || "colado",
@@ -2762,10 +2785,40 @@ export const store = {
     const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: (await this.binarioDoc(d.id)).pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
     if (!est) return { ok: false };
     d.estrutura = est;
-    this.casarEstruturaComEdital(est, d.titulo);
+    this.casarEstruturaComEdital(est, d.titulo, { disciplinaId: d.disciplinaId });
     this.aplicarEstruturaAoMaterial(docId, est);
     commit();
     return { ok: true, blocos: est.blocos.length };
+  },
+  // Disciplina do material (campo próprio). `null` volta a valer a dedução pelo título/vínculos.
+  // Trocar a disciplina RE-CASA os blocos: o vínculo antigo era o da disciplina anterior, e
+  // mantê-lo é justamente o cruzamento que este campo veio resolver.
+  setDocumentoDisciplina(id, disciplinaId, cursoNome = null) {
+    const d = state.documentos.find((x) => x.id === id);
+    if (!d) return;
+    d.disciplinaId = disciplinaId && state.disciplinas.some((x) => x.id === disciplinaId) ? disciplinaId : null;
+    d.cursoNome = d.disciplinaId ? null : String(cursoNome || "").trim() || null;
+    // Escolher "sem disciplina" é uma decisão, e precisa grudar: sem a marca, a dedução por
+    // vínculo devolveria o material a uma disciplina no próximo render.
+    d.semDisciplina = !d.disciplinaId && !d.cursoNome;
+    if (d.estrutura && Array.isArray(d.estrutura.blocos) && d.estrutura.blocos.length) {
+      this.casarEstruturaComEdital(d.estrutura, d.titulo, { limparSemMatch: true, disciplinaId: d.disciplinaId, ignorarTitulo: !d.disciplinaId });
+      this.aplicarEstruturaAoMaterial(d.id, d.estrutura); // re-deriva topicoIds/topicoPaginas + commit
+    } else {
+      // Sem sumário não há o que re-casar; sobra tirar o vínculo que aponta para fora.
+      if (d.disciplinaId) this.setDocumentoTopicos(d.id, (d.topicoIds || []).filter((tid) => (state.topicos.find((t) => t.id === tid) || {}).disciplinaId === d.disciplinaId));
+      else commit();
+    }
+    return d;
+  },
+  // Renomear o material sem trocar o arquivo (o "Atualizar" só renomeia junto com a reimportação).
+  renomearDocumento(id, titulo) {
+    const d = state.documentos.find((x) => x.id === id);
+    const t = String(titulo || "").trim();
+    if (!d || !t || t === d.titulo) return d || null;
+    d.titulo = t;
+    commit();
+    return d;
   },
   // Define os tópicos que um material cobre (Fase 1: muitos‑para‑muitos). O 1º vira o primário.
   setDocumentoTopicos(id, topicoIds) {
@@ -3383,6 +3436,9 @@ export const store = {
   // re-vincular material já importado — sem isso o vínculo errado antigo sobreviveria à
   // correção, que é justamente o que se quer desfazer. Em estrutura recém-detectada não faz
   // diferença (não há vínculo anterior), e no refino por IA fica desligado de propósito.
+  // `opts.disciplinaId`: disciplina DECLARADA do material (campo próprio, escolhido na
+  // importação ou pelo usuário). Quando existe, ela manda — e fecha a porta do casamento
+  // global: o bloco fica sem vínculo em vez de cair em outra matéria.
   casarEstruturaComEdital(estrutura, titulo, opts = {}) {
     if (!estrutura || !Array.isArray(estrutura.blocos)) return estrutura;
     const aula = estrutura.aulaTitulo ? this.acharAulaPorTitulo(estrutura.aulaTitulo) : null;
@@ -3390,9 +3446,18 @@ export const store = {
     const topsAula = aula && Array.isArray(aula.topicoIds) ? aula.topicoIds : null;
     // Apostila que não é disciplina do edital (Legislação Civil Especial, Difusos e Coletivos)
     // devolve null aqui — e aí vale o casamento global, que é o certo para elas.
-    const disciplinaId = titulo ? disciplinaDoMaterial(titulo, state.disciplinas) : null;
+    const declarada = opts.disciplinaId && state.disciplinas.some((d) => d.id === opts.disciplinaId) ? opts.disciplinaId : null;
+    // `opts.ignorarTitulo`: o usuário disse que este material é de um CURSO fora do edital ou
+    // que é avulso. Nesse caso o prefixo do título não pode voltar pela janela e restringir o
+    // casamento — a escolha explícita vale mais do que o nome do arquivo.
+    const porTitulo = !opts.ignorarTitulo && titulo ? disciplinaDoMaterial(titulo, state.disciplinas) : null;
+    const disciplinaId = declarada || porTitulo;
+    // Restringe quando a disciplina foi DECLARADA (campo) ou lida do PREFIXO do título — as
+    // duas vêm do usuário/cursinho, não de dedução. Sem isso, um material de uma aula só,
+    // com títulos curtos, casa em qualquer matéria do edital por coincidência de palavra.
+    const restrito = !!disciplinaId;
     for (const b of estrutura.blocos) {
-      const sug = acharTopicoDoBloco(b.titulo, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId });
+      const sug = acharTopicoDoBloco(b.titulo, { topicos: state.topicos, disciplinas: state.disciplinas, disciplinaId, restrito });
       if (sug) {
         b.topicoId = sug.topicoId;
         // se o sugerido está entre os tópicos da aula, sobe a confiança
@@ -3418,7 +3483,7 @@ export const store = {
       const blocos = (d.estrutura && d.estrutura.blocos) || [];
       if (!blocos.length) continue;
       const antes = blocos.filter((b) => b.topicoId).length;
-      this.casarEstruturaComEdital(d.estrutura, d.titulo, { limparSemMatch: true });
+      this.casarEstruturaComEdital(d.estrutura, d.titulo, { limparSemMatch: true, disciplinaId: d.disciplinaId });
       const depois = blocos.filter((b) => b.topicoId).length;
       this.aplicarEstruturaAoMaterial(d.id, d.estrutura); // re-deriva topicoIds/topicoPaginas + commit
       relatorio.push({ id: d.id, titulo: d.titulo, antes, depois });
@@ -3471,7 +3536,7 @@ export const store = {
     if (!d || !Array.isArray(d.paginas) || !d.paginas.length) return null;
     const est = detectarEstrutura({ paginas: d.paginas, numPaginas: d.paginas.length });
     if (!est || !est.blocos.length) return null;
-    this.casarEstruturaComEdital(est, d.titulo);
+    this.casarEstruturaComEdital(est, d.titulo, { disciplinaId: d.disciplinaId });
     this._herdarTopicos(est, d.estrutura); // mantém o que o usuário já confirmou
     d.estrutura = est;
     commit();
@@ -3486,6 +3551,9 @@ export const store = {
     // Atualizar por botão permite renomear junto: o cursinho às vezes muda o nome do arquivo
     // entre as versões, e o material continua sendo o mesmo (mesmo id, mesmos vínculos).
     if (titulo && titulo.trim() && titulo.trim() !== d.titulo) d.titulo = titulo.trim();
+    // Quando o arquivo é REIMPORTADO, o material passa a valer daquela data — é o que responde
+    // "isto ainda é a versão do cursinho?" meses depois. `criadoEm` continua sendo a 1ª entrada.
+    if (paginas || pdfData || imgData || texto != null) d.atualizadoEm = nowISO();
     if (estrutura) this._herdarTopicos(estrutura, d.estrutura);
     if (paginas) d.paginas = paginas;
     if (texto != null) d.texto = texto;
@@ -5125,7 +5193,7 @@ export const store = {
       for (const d of docs) {
         if (!Array.isArray(d.paginas) || !d.paginas.length) continue;
         const t = d.paginas.filter((p) => p.n >= reg.ini && p.n <= reg.fim).map((p) => p.texto || "").join("\n\n").trim();
-        if (t) return { fonte: `Trecho registrado: ${d.titulo} (p.${reg.ini}–${reg.fim})`, texto: t.slice(0, 4000), docId: d.id, pagina: reg.ini };
+        if (t) return { fonte: `Trecho registrado: ${rotuloDocumento(state, d)} (p.${reg.ini}–${reg.fim})`, texto: t.slice(0, 4000), docId: d.id, pagina: reg.ini };
       }
     }
     if (docs.length) {
@@ -5136,7 +5204,7 @@ export const store = {
         const blocos = ((d.estrutura && d.estrutura.blocos) || []).filter((b) => b.topicoId === topicoId);
         for (const b of blocos) {
           const t = ctxDeDoc(d, b).texto;
-          if (t) trechos.push({ rotulo: `${d.titulo} · ${b.numero || ""} ${b.titulo} (p.${b.pIni}–${b.pFim})`.trim(), texto: t });
+          if (t) trechos.push({ rotulo: `${rotuloDocumento(state, d)} · ${b.numero || ""} ${b.titulo} (p.${b.pIni}–${b.pFim})`.trim(), texto: t });
         }
       }
       if (trechos.length) {
@@ -5144,7 +5212,7 @@ export const store = {
         return { fonte: "Trecho do material: " + trechos[0].rotulo + (trechos.length > 1 ? ` (+${trechos.length - 1})` : ""), texto };
       }
       const texto = docs.map((d) => (d.texto || "").trim()).join("\n\n").slice(0, 4000);
-      return { fonte: "Material: " + (docs[0].titulo || "sem título") + (docs.length > 1 ? ` (+${docs.length - 1})` : ""), texto };
+      return { fonte: "Material: " + (rotuloDocumento(state, docs[0]) || "sem título") + (docs.length > 1 ? ` (+${docs.length - 1})` : ""), texto };
     }
     return null;
   },
@@ -5283,7 +5351,7 @@ export const store = {
       .filter((i) => i.topicoId === topicoId)
       .forEach((i) => fontes.set("indicacao:" + i.id, { tipo: i.tipo === "juris" ? "Jurisprudência" : "Lei Seca", titulo: i.referencia }));
     state.resumos.filter((r) => r.topicoId === topicoId).forEach((r) => fontes.set("resumo:" + r.id, { tipo: "Resumo", titulo: r.titulo }));
-    state.documentos.filter((d) => docCobre(d, topicoId)).forEach((d) => fontes.set("documento:" + d.id, { tipo: "Material", titulo: d.titulo }));
+    state.documentos.filter((d) => docCobre(d, topicoId)).forEach((d) => fontes.set("documento:" + d.id, { tipo: "Material", titulo: rotuloDocumento(state, d) }));
     // documento: marca pode ser "docId" ou "docId#pagina" → casa pela base; cita a página.
     const baseId = (m) => (m.alvoTipo === "documento" ? String(m.alvoId).split("#")[0] : m.alvoId);
     const paginaDe = (m) => (m.alvoTipo === "documento" && String(m.alvoId).includes("#") ? String(m.alvoId).split("#")[1] : null);
@@ -7003,7 +7071,7 @@ export const store = {
       const blocos = (d.estrutura && d.estrutura.blocos) || [];
       blocos.forEach((b, bi) => {
         if (!set.size || (b.topicoId && set.has(b.topicoId))) {
-          out.push({ docId: d.id, bi, rotulo: `${d.titulo} · ${b.numero || ""} ${b.titulo}`.trim() });
+          out.push({ docId: d.id, bi, rotulo: `${rotuloDocumento(state, d)} · ${b.numero || ""} ${b.titulo}`.trim() });
         }
       });
     }
@@ -7033,7 +7101,7 @@ export const store = {
             const contexto = blocos.map((b) => `${b.numero || ""} ${b.titulo}`.trim()).filter(Boolean).join(" + ") || d.titulo;
             return {
               texto, topicoId: topsUnicos.length === 1 ? topsUnicos[0] : null,
-              fonte: { tipo: "material", titulo: d.titulo }, banca: (ctxs[0] && ctxs[0].banca) || null,
+              fonte: { tipo: "material", titulo: rotuloDocumento(state, d) }, banca: (ctxs[0] && ctxs[0].banca) || null,
               contexto, docIds: [d.id], bloco: null, blocos, modo: "material-multi",
             };
           }

@@ -8,6 +8,29 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.19",
+    data: "agosto/2026",
+    titulo: "O material passa a ter disciplina — e escolher a aula certa vira uma busca, não uma rolagem",
+    itens: [
+      "NOVO — cada material tem DISCIPLINA própria, escolhida na importação (vale para a fila inteira) ou depois, em «Definir disciplina» no menu do material. Antes ela era adivinhada: pelo título, na hora de casar o sumário com o edital, e pelo tópico mais frequente, na hora de agrupar a lista — duas deduções que discordavam entre si.",
+      "CORREÇÃO GRAVE — o sumário de um material podia se vincular a tópico de OUTRA matéria. Numa aula de Direito Administrativo, o capítulo \"Fontes, interpretação e integração do Direito Administrativo\" foi parar em \"Fontes do Direito Tributário\". Com a disciplina declarada, o casamento não sai dela: o bloco fica sem vínculo em vez de cair na matéria errada.",
+      "NOVO — escolher material agora é um campo com BUSCA, agrupado por disciplina: digite \"atos administrativos\", \"aula 07\" ou o nome do curso e a lista filtra. Vale nos cinco lugares em que se escolhe material (Gerar com IA, adicionar/extrair questões, flashcards, correção de redação e importar lei seca/jurisprudência). Antes era uma lista corrida na ordem de importação — com uma aula por PDF, achar a certa era rolar centenas de linhas, e lotes importados em datas diferentes deixavam a mesma matéria espalhada.",
+      "CORREÇÃO — em Mapas Mentais, a lista de materiais era cortada nos 80 primeiros, sem avisar: o resto simplesmente não aparecia. Agora vem inteira, agrupada e com busca.",
+      "Curso que não é disciplina do seu edital (\"Legislação Penal Especial\", \"Direitos Difusos e Coletivos\") entra pelo nome dele e ganha grupo próprio, como já acontecia no Plano do cursinho. Material geral — edital, guia do cursinho, resumo de véspera — fica em \"Avulsos\", no fim da lista e dos seletores.",
+      "Dentro do grupo da disciplina, o material aparece sem repetir o nome dela: \"Direito Administrativo - Aula 07 - Atos\" vira \"Aula 07 - Atos\". Onde o material aparece fora dessa lista (fonte de uma questão ou flashcard, dossiê, busca por significado, chat), o nome da disciplina vai junto — antes \"Aula 01\" não dizia de que matéria era.",
+      "NOVO — «Renomear» material, no menu. Até agora só dava para renomear trocando o arquivo.",
+      "CORREÇÃO — marcar um subtópico em \"Gerar com IA\" recarregava a janela e jogava a rolagem de volta ao topo, a cada clique.",
+      "CORREÇÃO — o seletor de material vazava para fora da linha, por cima dos botões, quando o nome era longo.",
+      "NOVO — cada material mostra a DATA em que entrou (\"importado em 19/08/2026\"), e a data muda quando você traz o arquivo novo — é o que responde \"esta apostila ainda é a versão do cursinho?\" meses depois. O tooltip guarda a data da primeira importação.",
+      "Na lista, o material fica em ordem natural pelo nome dentro da disciplina: a \"Aula 02\" importada semanas depois entra na posição 2, não no fim.",
+      "Os seletores de material perderam a opção \"nenhum\": extrair de um material ou gerar a partir dele exige um material — a opção só dava para escolher o que não funciona.",
+      "NOVO — «Recolher» em Materiais: fecha todas as disciplinas de uma vez (e cada uma abre/fecha sozinha, com a escolha lembrada). Com uma aula por PDF, uma disciplina ocupa dezenas de cartões e chegar à seguinte era rolagem pura.",
+      "O filtro por tópicos saiu da tela de Materiais: ele olhava só o tópico principal do material, então uma aula que cobre 30 tópicos só aparecia filtrando por um deles. Quem responde \"quais materiais cobrem este tópico\" é o Dossiê do tópico, que já lista os materiais COM as páginas. O «Agrupar por» perdeu a opção Tópico pelo mesmo motivo.",
+      "CORREÇÃO — a busca em Materiais não mostrava nada quando as disciplinas estavam recolhidas: o resultado ficava dentro do bloco fechado. Agora buscar abre os blocos.",
+      "CORREÇÃO — na lista de escolha, os nomes saíam centralizados em vez de alinhados à esquerda, e ficavam cortados quando o título era longo.",
+    ],
+  },
+  {
     v: "0.8.18",
     data: "agosto/2026",
     titulo: "O foco de hoje aceita qualquer tarefa do plano, com ou sem tópico",
