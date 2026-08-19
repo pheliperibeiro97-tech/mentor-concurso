@@ -18,6 +18,7 @@ let topSort = "custom"; // ordem dos tópicos DENTRO da disciplina: "custom" | "
 let cursinhoView = "aula"; // Plano do cursinho: ver "aula" (aula→tópicos) ou "topico" (tópico→aula)
 let curAcFechada = new Set(); // grupos do plano do cursinho RECOLHIDOS (padrão: todos abertos)
 let desfazerVinculos = null; // fotografia da última revisão de vínculos, para desfazer na sessão
+let curTopsAbertos = new Set(); // aulas com os tópicos do edital EXPANDIDOS (padrão: recolhidos)
 let dossieAcAberta = new Set(); // Dossiê por tópico: disciplinas com o accordion ABERTO
 let dossieAcInit = false; // 1ª vez na sessão: preserva o padrão de cada densidade (ver resumoBody)
 let topSel = new Set(); // tópicos selecionados para ações em lote (mover/unificar/nova disciplina)
@@ -681,6 +682,42 @@ function aulasAddInputHTML(estado) {
   </div>`;
 }
 
+// Cursos do cursinho que não são disciplina do edital: uma linha por curso, com a distribuição
+// real dos vínculos à vista, para a escolha ser informada e não palpite.
+function abrirMapearCursos(app) {
+  const { store } = app;
+  const render = () => {
+    const cursos = store.cursosDoPlanoNaoMapeados();
+    const st = store.get();
+    if (!cursos.length) return `<p class="muted">Nenhum curso pendente: todos já correspondem a uma disciplina do seu edital ou foram marcados como transversais.</p>`;
+    return `<p class="muted small u-mt-0">Estes cursos do seu cursinho <b>não são disciplinas do seu edital</b>, então o app não tem régua para conferir os vínculos deles — é por aí que sobra vínculo cruzado depois de "Revisar vínculos". Ligue cada um à disciplina correspondente, ou marque como <b>transversal</b> se ele cobre várias de verdade.</p>
+      ${cursos.map((c) => `<div class="card cursinho-card mapa-curso">
+        <div class="plano-h"><h3 class="u-m-0">${esc(c.curso)}</h3><span class="muted small">${plural(c.aulas, "aula", "aulas")} · ${plural(c.vinculos, "vínculo", "vínculos")}</span></div>
+        <p class="muted small u-m-0 u-mb-8">${c.porDisciplina.length ? `Hoje os vínculos apontam para: ${c.porDisciplina.map((d) => `<b>${esc(d.nome)}</b> (${d.n})`).join(" · ")}` : "Ainda sem vínculo nenhum."}</p>
+        <label class="inline">Ligar a:
+          <select class="mapa-curso-sel" data-curso="${esc(c.curso)}">
+            <option value="">— transversal (não conferir os vínculos) —</option>
+            ${st.disciplinas.map((d) => `<option value="${d.id}" ${c.porDisciplina.length && c.porDisciplina[0].id === d.id ? "selected" : ""}>${esc(d.nome)}</option>`).join("")}
+          </select>
+        </label>
+        <div class="form-acoes"><button class="btn btn-soft btn-sm" data-action="mapa-curso-aplicar" data-curso="${esc(c.curso)}">Aplicar a estas ${plural(c.aulas, "aula", "aulas")}</button></div>
+      </div>`).join("")}`;
+  };
+  const j = abrirJanela({ titulo: "Cursos do cursinho fora do edital", corpoHTML: render() });
+  const corpo = j.overlay.querySelector(".mm-corpo");
+  bindActions(corpo, {
+    "mapa-curso-aplicar": (el) => {
+      const curso = el.getAttribute("data-curso");
+      const sel = corpo.querySelector(`.mapa-curso-sel[data-curso="${CSS.escape(curso)}"]`);
+      const discId = sel ? sel.value : "";
+      const n = store.mapearCursoDoPlano(curso, discId || null);
+      toast(discId ? `${plural(n, "aula ligada", "aulas ligadas")} a ${sel.selectedOptions[0].textContent}.` : `"${curso}" marcado como transversal.`);
+      corpo.innerHTML = render();
+      app.refresh();
+    },
+  });
+}
+
 // Liga o seletor de disciplina do preview às aulas em edição: escolha do edital, ou "Outra",
 // que revela o campo de texto. Um só lugar, porque o preview aparece em dois (tela e modal).
 function ligarDiscLote(raiz, aulas) {
@@ -1071,7 +1108,7 @@ function aulaTopEditorHTML(st, a, discDaAula) {
       const etiqueta = daAula
         ? ` <span class="mini-tag" data-tip="Disciplina desta aula.">${icone("check")} desta aula</span>`
         : discId ? ` <span class="muted small">fora da disciplina desta aula</span>` : "";
-      return `<details class="ft-grupo${daAula ? " ft-grupo-daaula" : ""}"${aberta ? " open" : ""}><summary class="ft-disc"><b>${esc(disc.nome)}</b>${etiqueta}${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</details>`;
+      return `<details class="ft-grupo${daAula ? " ft-grupo-daaula" : ""}"${aberta ? " open" : ""}><summary class="ft-disc-h"><b>${esc(disc.nome)}</b>${etiqueta}${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>${tops.map((t) => `<label class="ft-top"><input type="checkbox" class="aula-top-chk" data-aula="${a.id}" value="${t.id}" ${sel.has(t.id) ? "checked" : ""} /> ${esc(t.nome)}</label>`).join("")}</details>`;
     })
     .join("");
   return `<div class="aula-top-editor"><div class="muted small u-mt-8 u-mb-8">${icone("files")} Tópicos que esta aula cobre — marque todos (uma aula pode cobrir vários). Salva na hora.</div>${grupos || `<p class="muted small">Sem tópicos cadastrados.</p>`}<div class="form-acoes"><button class="btn btn-ghost btn-sm" data-action="aula-topicos" data-id="${a.id}">Fechar</button></div></div>`;
@@ -1121,16 +1158,28 @@ function aulasListaHTML(store, st) {
             </div>
           </details>
         </div>
-        <div class="cur-aula-tops">
-          ${tops.length
-            ? tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")
-            : `<span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span>`}
-        </div>
         ${(() => {
-          // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital: no preview
-          // aparecem, mas o plano só mostrava os tópicos casados — mostramos os pendentes (não some nada).
+          // Os tópicos do edital são PARÁGRAFOS inteiros ("(31) Mandado de Segurança… 18 itens"):
+          // um chip por tópico em 61 aulas vira paredão. Ficam recolhidos atrás do contador e
+          // abrem sob demanda — mesma solução já usada nos materiais. O nome da aula, esse, fica
+          // sempre inteiro: é por ele que se acha a aula na lista.
+          // Assuntos ORIGINAIS do cursinho que ainda NÃO casaram com um tópico do edital entram
+          // no mesmo bloco (no preview aparecem; aqui não podem sumir).
           const naoCasados = (a.assuntos || []).map((s) => (s || "").trim()).filter(Boolean).filter((asn) => !store.acharTopicoPorNome(asn, { disciplinaId: a.disciplinaId, restrito: !!a.disciplinaId }));
-          return naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : "";
+          if (!tops.length && !naoCasados.length) {
+            return `<div class="cur-aula-tops"><span class="cur-sem muted small">${icone("link")} sem tópico do edital — <button class="lnk" data-action="aula-topicos" data-id="${a.id}">vincular</button></span></div>`;
+          }
+          const rotulo = [
+            tops.length ? `${tops.length} ${tops.length === 1 ? "tópico do edital" : "tópicos do edital"}` : "",
+            naoCasados.length ? `${naoCasados.length} sem tópico` : "",
+          ].filter(Boolean).join(" · ");
+          return `<details class="cur-aula-acc" data-aula-acc="${a.id}" ${curTopsAbertos.has(a.id) ? "open" : ""}>
+            <summary class="cur-aula-acc-sum">${icone("chevron-down")} <span>${rotulo}</span></summary>
+            <div class="cur-aula-tops">
+              ${tops.map((t) => `<button class="cur-top ${t.concluido ? "done" : ""}" data-action="ir-dossie" data-id="${t.id}" data-tip="Abrir o dossiê de ${esc(t.nome)}">${t.concluido ? `<span class="cur-top-chk">${icone("check")}</span>` : ""}${multi ? `<span class="cur-top-disc">${esc(discNomeDe(t))}</span>` : ""}<span class="cur-top-nome">${esc(t.nome)}</span><span class="mapa-abrir-ico">${icone("external-link")}</span></button>`).join("")}
+            </div>
+            ${naoCasados.length ? `<div class="cur-aula-pend muted small">${icone("link")} Assuntos da aula sem tópico do edital: ${naoCasados.map((asn) => `<span class="cur-assunto-chip">${esc(asn)}</span>`).join(" ")} <button class="lnk" data-action="compatibilizar-aulas-ia" data-tip="A IA casa esses assuntos com seus tópicos.">casar com IA</button></div>` : ""}
+          </details>`;
         })()}
         ${aulaTopAberto === a.id ? aulaTopEditorHTML(st, a, discPorAula.get(a.id)) : ""}
       </div>`;
@@ -1188,6 +1237,7 @@ function aulasListaHTML(store, st) {
     : st.disciplinas.filter((d) => st.topicos.some((t) => t.disciplinaId === d.id)).map((d) => d.nome);
   const algumGrupoAberto = nomesGrupos.some((n) => !curAcFechada.has(n));
   const vinculosFora = store.vinculosForaDaDisciplina();
+  const cursosPendentes = store.cursosDoPlanoNaoMapeados();
   return `
     <p class="muted small cursinho-nota">As aulas <b>agrupam os seus tópicos</b> na ordem do cursinho — <b>não criam estrutura nova</b>. Com a base "Cursinho", o app estuda na <b>ordem das aulas</b> (aqui e no Hoje); o conteúdo, o progresso e a cobertura continuam os mesmos do seu edital.</p>
     <div class="barra-acoes cursinho-barra">
@@ -1204,6 +1254,7 @@ function aulasListaHTML(store, st) {
         <summary class="ed-barra-mais-sum" data-tip-pos="cima-dir" data-tip="Compatibilizar com IA, aula avulsa, revisão de vínculos e limpeza do plano.">${icone("ellipsis")} Mais</summary>
         <div class="doc-mais-pop" role="menu">
           <button class="menu-item" data-action="compatibilizar-aulas-ia" data-tip="A IA casa os assuntos das aulas com os tópicos do seu edital (vira sinônimo), sem você marcar um por um. Uma chamada por disciplina — não sai dela."><span class="menu-ico">${icone("bot")}</span> Compatibilizar com IA</button>
+          ${cursosPendentes.length ? `<button class="menu-item" data-action="mapear-cursos" data-tip="Cursos do cursinho que não são disciplina do seu edital: sem ligá-los, os vínculos deles nunca são conferidos."><span class="menu-ico">${icone("shuffle")}</span> Mapear cursos fora do edital (${cursosPendentes.length})</button>` : ""}
           ${vinculosFora.length ? `<button class="menu-item" data-action="corrigir-vinculos" data-tip="Tira os vínculos que apontam para tópicos de outra disciplina e recasa os assuntos dentro da disciplina da aula."><span class="menu-ico">${icone("link")}</span> Revisar vínculos (${vinculosFora.length} fora da disciplina)</button>` : ""}
           ${desfazerVinculos ? `<button class="menu-item" data-action="desfazer-vinculos" data-tip="Volta as aulas ao estado anterior à última revisão de vínculos (vale nesta sessão)."><span class="menu-ico">${icone("repeat-2")}</span> Desfazer revisão de vínculos</button>` : ""}
           <div class="menu-sep"></div>
@@ -1466,6 +1517,13 @@ export default function renderEdital(root, app) {
       finally { fim(); }
     });
   }
+  // Tópicos de cada aula: persiste (sem re-render) quais estão expandidos.
+  root.querySelectorAll("details.cur-aula-acc[data-aula-acc]").forEach((det) =>
+    det.addEventListener("toggle", () => {
+      const id = det.getAttribute("data-aula-acc");
+      if (det.open) curTopsAbertos.add(id); else curTopsAbertos.delete(id);
+    })
+  );
   // Plano do cursinho: persiste (sem re-render) qual grupo está recolhido.
   root.querySelectorAll("details.cur-disc[data-cur-grupo]").forEach((det) =>
     det.addEventListener("toggle", () => {
@@ -1656,6 +1714,7 @@ export default function renderEdital(root, app) {
     "aula-remover": async (el) => {
       if (await confirmar("Remover esta aula? (não apaga os tópicos, só a aula)")) store.removerAula(el.getAttribute("data-id"));
     },
+    "mapear-cursos": () => abrirMapearCursos(app),
     "corrigir-vinculos": async () => {
       const fora = store.vinculosForaDaDisciplina();
       if (!fora.length) return toast("Nenhum vínculo fora da disciplina.");

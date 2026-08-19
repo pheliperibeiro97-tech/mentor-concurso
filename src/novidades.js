@@ -8,6 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.15",
+    data: "agosto/2026",
+    titulo: "Plano do cursinho enxuto, e os cursos que não são disciplina do edital deixam de ficar sem conferência",
+    itens: [
+      "MENOS POLUIÇÃO — cada aula volta a ser uma linha: o nome completo, o progresso e um contador (\"3 tópicos do edital\"). Os chips dos tópicos abrem sob demanda, como já acontecia no cartão do material. Com 61 aulas numa disciplina, a diferença é a tela caber.",
+      "NOVO — \"Mapear cursos fora do edital\", no menu Mais do plano. Cursos do cursinho que não existem como disciplina no seu edital (\"Legislação Penal Especial\", \"Direitos Difusos e Coletivos\") não tinham régua nenhuma: os vínculos deles nunca eram conferidos, e era daí que sobrava vínculo cruzado mesmo depois de revisar. Agora dá para ligar cada um à disciplina correspondente — com a distribuição real dos vínculos à vista para a escolha não ser palpite — ou marcá-lo como transversal, que é resposta legítima para um curso que cobre várias matérias de verdade.",
+      "O editor de tópicos do MATERIAL também recolheu: as disciplinas viraram blocos fechados, abrindo sozinha só a que já tem tópico marcado. Antes ele listava os 400 tópicos do edital de uma vez.",
+    ],
+  },
+  {
     v: "0.8.14",
     data: "agosto/2026",
     titulo: "O nome da aula passa a valer como disciplina — e aí os vínculos errados aparecem",

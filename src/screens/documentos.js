@@ -1894,11 +1894,14 @@ function docHTML(store, st, d, busca) {
 function topicosEditorHTML(store, st, d) {
   const sel = new Set(d.topicoIds && d.topicoIds.length ? d.topicoIds : d.topicoId ? [d.topicoId] : []);
   const maxPag = (d.paginas || []).length || 9999;
+  // Disciplina = <details> recolhido, e só abre sozinha a que já tem tópico marcado. Listar os
+  // 400 tópicos do edital de uma vez era o mesmo paredão que o cartão do material já resolveu.
   const grupos = st.disciplinas
     .map((disc) => {
       const tops = st.topicos.filter((t) => t.disciplinaId === disc.id);
       if (!tops.length) return "";
-      return `<div class="ft-grupo"><div class="ft-disc"><b>${esc(disc.nome)}</b></div>
+      const marcados = tops.filter((t) => sel.has(t.id)).length;
+      return `<details class="ft-grupo" ${marcados ? "open" : ""}><summary class="ft-disc-h"><b>${esc(disc.nome)}</b>${marcados ? ` <span class="muted small">(${marcados} marcado${marcados > 1 ? "s" : ""})</span>` : ""}</summary>
         ${tops
           .map((t) => {
             const checked = sel.has(t.id);
@@ -1910,7 +1913,7 @@ function topicosEditorHTML(store, st, d) {
             return `<label class="ft-top"><input type="checkbox" class="doc-top-chk" data-doc="${d.id}" value="${t.id}" ${checked ? "checked" : ""} /> ${esc(t.nome)}${pagInputs}</label>`;
           })
           .join("")}
-      </div>`;
+      </details>`;
     })
     .join("");
   const sugerirIA = (d.texto || "").trim() && store.iaDisponivel()

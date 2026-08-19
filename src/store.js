@@ -813,6 +813,7 @@ const CONFIG_PERFIL = new Set([
   "metasLeitura", "ultimaLeitura", // meta e progresso de leitura (o "leitura", que é fonte/tamanho, fica global)
   "niveisDisciplina", "disciplinasAdiadas", "atencaoAdiada",
   "bancasPreferidas", "baseEstudo", "retaFinal",
+  "cursosTransversais", // cursos do cursinho que cobrem várias matérias DESTE edital
   "atalhos", // apontam para disciplina/tópico/dossiê DESTE concurso
   // mentorPlanoVisto é comparado com mentorUltimaAnalise para dizer "há plano novo".
   // Separar as duas faria o carimbo de um perfil ser comparado com o "visto" do outro.
@@ -2352,6 +2353,73 @@ export const store = {
   // O plano na ordem em que se estuda: disciplinas na ordem de aparição, aulas pelo número.
   aulasEmOrdem() {
     return ciclo.aulasEmOrdem(state);
+  },
+  // Cursos do cursinho que NÃO são disciplina do edital ("Legislação Penal Especial", "Direitos
+  // Difusos e Coletivos"). Sem uma disciplina do edital por trás não há régua: os vínculos dessas
+  // aulas nunca são conferidos, e é por aí que sobra vínculo cruzado depois da revisão. Devolve
+  // a distribuição dos vínculos por disciplina para o usuário decidir com número à vista.
+  cursosDoPlanoNaoMapeados() {
+    const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+    const resolve = (nome) => {
+      const dn = norm(nome);
+      if (!dn) return null;
+      return state.disciplinas.find((x) => norm(x.nome) === dn)
+        || state.disciplinas.find((x) => { const xn = norm(x.nome); return xn && (xn.includes(dn) || dn.includes(xn)); }) || null;
+    };
+    const transversais = new Set((state.config.cursosTransversais || []).map(norm));
+    const mapa = new Map();
+    for (const a of state.aulas) {
+      if ((a.disciplinaNome || "").trim()) continue; // já tem disciplina declarada
+      const m = String(a.nome || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
+      if (!m) continue;
+      const pref = m[1].trim();
+      if (resolve(pref) || transversais.has(norm(pref))) continue;
+      if (!mapa.has(pref)) mapa.set(pref, { curso: pref, aulas: 0, vinculos: 0, porDisciplina: new Map() });
+      const c = mapa.get(pref);
+      c.aulas++;
+      for (const id of a.topicoIds || []) {
+        const t = state.topicos.find((x) => x.id === id);
+        if (!t || !t.disciplinaId) continue;
+        c.vinculos++;
+        c.porDisciplina.set(t.disciplinaId, (c.porDisciplina.get(t.disciplinaId) || 0) + 1);
+      }
+    }
+    return [...mapa.values()]
+      .map((c) => ({
+        curso: c.curso,
+        aulas: c.aulas,
+        vinculos: c.vinculos,
+        porDisciplina: [...c.porDisciplina.entries()]
+          .map(([id, n]) => ({ id, nome: (state.disciplinas.find((d) => d.id === id) || {}).nome || "—", n }))
+          .sort((x, y) => y.n - x.n),
+      }))
+      .sort((x, y) => y.aulas - x.aulas);
+  },
+  // Liga um curso do cursinho a uma disciplina do edital (todas as aulas com aquele prefixo), ou
+  // marca-o como TRANSVERSAL — que é resposta legítima: "Difusos e Coletivos" cobre mesmo tópicos
+  // de sete matérias, e forçá-lo a uma só apagaria vínculos corretos na revisão.
+  mapearCursoDoPlano(curso, disciplinaId) {
+    const pref = String(curso || "").trim();
+    if (!pref) return 0;
+    const alvo = pref.toLowerCase();
+    if (!disciplinaId) {
+      if (!Array.isArray(state.config.cursosTransversais)) state.config.cursosTransversais = [];
+      if (!state.config.cursosTransversais.some((x) => String(x).toLowerCase() === alvo)) state.config.cursosTransversais.push(pref);
+      commit();
+      return 0;
+    }
+    const d = state.disciplinas.find((x) => x.id === disciplinaId);
+    if (!d) return 0;
+    let n = 0;
+    for (const a of state.aulas) {
+      const m = String(a.nome || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
+      if (!m || m[1].trim().toLowerCase() !== alvo) continue;
+      a.disciplinaId = d.id;
+      a.disciplinaNome = d.nome;
+      n++;
+    }
+    if (n) commit();
+    return n;
   },
   // Vínculos que apontam para FORA da disciplina em que a aula aparece. É o estrago das
   // importações antigas, que casavam o assunto no edital inteiro — e que a compatibilização com
