@@ -105,23 +105,49 @@ export function ordenarTopicosPorBase(state, topicos) {
 export function disciplinaDePlanoDe(state, { herdar = true } = {}) {
   const disciplinas = state.disciplinas || [];
   const aulas = state.aulas || [];
-  const propria = (a) => {
-    if (a.disciplinaId) { const d = disciplinas.find((x) => x.id === a.disciplinaId); if (d) return { id: d.id, nome: d.nome }; }
+  const norm = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const resolver = (nome) => {
+    const dn = norm(nome);
+    if (!dn) return null;
+    return disciplinas.find((x) => norm(x.nome) === dn)
+      || disciplinas.find((x) => { const xn = norm(x.nome); return xn && (xn.includes(dn) || dn.includes(xn)); })
+      || null;
+  };
+  // Muitas grades nomeiam a aula com a matéria na frente ("Direito Tributário - Aula 01"). Esse
+  // prefixo é a prova mais confiável que existe da disciplina da aula, e vem do próprio cursinho.
+  const prefixoDaAula = (nome) => {
+    const m = String(nome || "").match(/^(.+?)\s[-–—]\s*aula\s*\d/i);
+    return m ? m[1].trim() : null;
+  };
+  const propria = (a, { comVinculos = true } = {}) => {
+    // 1) o que a importação/o usuário declarou. Nome que não existe no edital é resposta ("Outra"):
+    // a aula fica no plano sem vínculo nenhum.
     const bruto = (a.disciplinaNome || "").trim();
-    if (bruto) {
-      const dn = bruto.toLowerCase();
-      const d = disciplinas.find((x) => (x.nome || "").toLowerCase() === dn)
-        || disciplinas.find((x) => { const xn = (x.nome || "").toLowerCase(); return xn && (xn.includes(dn) || dn.includes(xn)); });
-      return d ? { id: d.id, nome: d.nome } : { id: null, nome: bruto };
+    if (bruto) { const d = resolver(bruto); return d ? { id: d.id, nome: d.nome } : { id: null, nome: bruto }; }
+    // 2) o prefixo do NOME da aula, quando bate com uma disciplina do edital. Vem ANTES do
+    // disciplinaId gravado de propósito: nas importações antigas esse campo era preenchido com a
+    // disciplina do PRIMEIRO tópico casado — ou seja, herdava o erro do casamento sem disciplina,
+    // e uma aula de Tributário acabava marcada como Constitucional por causa do vínculo errado.
+    const pref = prefixoDaAula(a.nome);
+    if (pref) { const d = resolver(pref); if (d) return { id: d.id, nome: d.nome }; }
+    // 3) o campo gravado, e por último a única disciplina dos tópicos vinculados.
+    if (a.disciplinaId) { const d = disciplinas.find((x) => x.id === a.disciplinaId); if (d) return { id: d.id, nome: d.nome }; }
+    // Último recurso: a disciplina DOMINANTE entre os tópicos vinculados. Serve para agrupar na
+    // tela, mas NÃO para a correção de vínculos — ali seria circular (a régua sairia justamente
+    // dos vínculos que se quer conferir, e todo erro pareceria coerente consigo mesmo).
+    if (!comVinculos) return null;
+    const conta = new Map();
+    for (const id of a.topicoIds || []) {
+      const t = (state.topicos || []).find((x) => x.id === id);
+      if (t && t.disciplinaId) conta.set(t.disciplinaId, (conta.get(t.disciplinaId) || 0) + 1);
     }
-    const tps = (a.topicoIds || []).map((id) => (state.topicos || []).find((t) => t.id === id)).filter(Boolean);
-    const dids = [...new Set(tps.map((t) => t.disciplinaId).filter(Boolean))];
-    if (dids.length === 1) { const d = disciplinas.find((x) => x.id === dids[0]); if (d) return { id: d.id, nome: d.nome }; }
+    const venc = [...conta.entries()].sort((x, y) => y[1] - x[1])[0];
+    if (venc) { const d = disciplinas.find((x) => x.id === venc[0]); if (d) return { id: d.id, nome: d.nome }; }
     return null;
   };
   const mapa = new Map();
   if (!herdar) {
-    for (const a of aulas) mapa.set(a.id, propria(a));
+    for (const a of aulas) mapa.set(a.id, propria(a, { comVinculos: false }));
     return mapa;
   }
   // A aula sem disciplina própria herda a da sequência: primeiro da seguinte (a 00 abre o bloco),

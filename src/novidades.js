@@ -8,6 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.14",
+    data: "agosto/2026",
+    titulo: "O nome da aula passa a valer como disciplina — e aí os vínculos errados aparecem",
+    itens: [
+      "CORREÇÃO — quando a grade nomeia a aula com a matéria na frente (\"Direito Tributário - Aula 01\"), esse prefixo agora define a disciplina da aula. Antes o app usava a disciplina gravada na importação, que nas versões antigas era copiada do PRIMEIRO tópico casado: se o casamento tinha errado de disciplina, a aula inteira ia junto para a disciplina errada, e o \"Revisar vínculos\" da 0.8.13 não via problema nenhum — a régua saía do próprio erro que ela deveria conferir.",
+      "Efeito prático: as aulas voltam para a disciplina que o nome delas diz, e os vínculos que apontam para tópicos de outra matéria passam a ser listados pelo \"Revisar vínculos\" (menu Mais do Plano do cursinho), com a lista completa antes de mexer e com desfazer.",
+      "A correção de vínculos nunca usa como referência uma disciplina deduzida dos próprios vínculos — seria circular, e todo erro pareceria coerente consigo mesmo. Onde não há prova independente da disciplina, ela não mexe.",
+    ],
+  },
+  {
     v: "0.8.13",
     data: "agosto/2026",
     titulo: "Plano do cursinho: cada aula fica na sua disciplina, e o vínculo não atravessa mais o edital",
