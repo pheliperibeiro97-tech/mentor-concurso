@@ -1810,9 +1810,15 @@ async function chamarGeminiVisaoRaw(cfg, { system, user, mimeType, dataB64, temp
     systemInstruction: { parts: [{ text: system }] },
     // thinkingBudget:0 DESLIGA o "pensamento" dos modelos 2.5 (flash/flash-lite). A Visão aqui
     // faz OCR/estruturação (não raciocínio longo); com thinking ligado o gemini-2.5-flash levava
-    // ~170s e ESTOURAVA o timeout. Sem thinking fica rápido (e mais barato). Ignorado por modelos
-    // que não suportam thinking.
-    generationConfig: { temperature, thinkingConfig: { thinkingBudget: 0 }, ...(json ? { responseMimeType: "application/json" } : {}) },
+    // ~170s e ESTOURAVA o timeout. Sem thinking fica rápido (e mais barato).
+    // `thinkingBudget:0` só existe nos modelos 2.5: a geração 3 responde 400 ("Request contains
+    // an invalid argument") só por receber o campo. Medido em 19/08/2026 com gemini-3.6-flash na
+    // Visão — a fila de OCR parava inteira, e o erro não dizia qual argumento era o inválido.
+    generationConfig: {
+      temperature,
+      ...(/^gemini-2\.5/.test(modelo) ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      ...(json ? { responseMimeType: "application/json" } : {}),
+    },
   };
   const resp = await fetchIA(url, {
     method: "POST",
