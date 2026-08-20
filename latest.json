@@ -1,11 +1,11 @@
 {
-  "pub_date": "2026-08-20T19:40:44Z",
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITnV3cTZTTk5DN3BEMzdRSDJzeG8xRHFyVnZjbzJsM1VDZmJoQUdXUkVoQmJiNWpIaXl1YnBrNmZwdk91bEVKN2NJNnp0YXVnK2hVK1EzWStSZnZRZ1EwPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjU0ODQ0CWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yNV94NjQtc2V0dXAuZXhlCk1tamdMNXgwN1Bac3FHRUQ5VGhCUVk3TzVvWmRNVjZydXFVSGE4OHZnSlNKbzkvdFA5bTNJQUhSZmRxY2tJTkZuMWtJUkVTbGJCRnp1ZXQvWkNiekRRPT0K",
-      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.25_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITm5kTVg3Mmc2czIvYThLK3I5SDN1ay9KRHZCZmxxNUJROXdWWGYvRk4rU2xoTWZVZk53aTYrODlndDR1R2RUN0NKcVJqQStUQ0MvUmw0YmFZMXVzTHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjYwNTEwCWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yNl94NjQtc2V0dXAuZXhlCi9CNzJ3dkdQR0FRdGNBcnB3VHE5amUwOGN0dVBIMmFpRjFWNUFyWW9mdjhKWkFYQUZpSEVCdEM3d3RPYmpxeHduTUtVQUphcmpzTE4ySnFVL05neERnPT0K",
+      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.26_x64-setup.exe"
     }
   },
-  "notes": "O conteudo do material desce quando voce precisa dele, e a IA nunca gera sem ele. Atualize TODOS os aparelhos: o cofre passa a ser gravado num formato novo e os aparelhos desatualizados param de sincronizar ate serem atualizados (sem perder nada).",
-  "version": "0.8.25"
+  "pub_date": "2026-08-20T21:15:10Z",
+  "version": "0.8.26",
+  "notes": "Correcao: cada material subia duas vezes na sincronizacao."
 }
