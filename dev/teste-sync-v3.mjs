@@ -67,7 +67,8 @@ ok(ipadA.titulo === "Aula 01" && ipadA.conteudo.n === 2, "esqueleto traz título
 const desatualizado = estado();
 desatualizado.documentos[0].paginas[1].texto = "beta MUDOU";
 const aplic2 = S.aplicarRemoto(desatualizado, snap);
-ok(aplic2.documentos[0].conteudo.pendente === true, "hash diferente marca o material para rebaixar");
+ok(aplic2.documentos[0].conteudo.desatualizado === true && Array.isArray(aplic2.documentos[0].paginas),
+   "hash diferente marca como desatualizado SEM descartar o que já se podia ler");
 
 // 6) a fatia que vai para o objeto do material leva o conteúdo completo
 const fatia = S.fatiaConteudo(estado().documentos[0]);

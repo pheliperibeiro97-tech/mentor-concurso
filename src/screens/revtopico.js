@@ -106,6 +106,17 @@ export default function renderRevTopico(root, app) {
       if (pdfData) abrirVisualizadorPdf(pdfData, d.titulo, pag);
       else toast("O PDF deste material não está disponível.", "erro");
     },
+    // Conteúdo sob demanda: o tópico TEM material, ele é que ainda não está neste aparelho.
+    "baixar-material-topico": async (el) => {
+      const ids = (el.getAttribute("data-ids") || "").split(",").filter(Boolean);
+      if (!ids.length) return;
+      el.disabled = true;
+      el.textContent = "Baixando…";
+      const r = await store.garantirConteudoDocs(ids);
+      el.disabled = false;
+      if (r && r.baixados) { toast("Material baixado — o trecho já pode ser relido.", "ok"); app.refresh(); }
+      else toast("Não consegui baixar agora (sem conexão?).", "erro");
+    },
     revisar: (el) => {
       ativo = el.getAttribute("data-id");
       modo = null;
@@ -129,7 +140,12 @@ function reviewHTML(store, topico) {
   const abrirPag = material && material.docId && material.pagina && store.temPdfDoc(st.documentos.find((d) => d.id === material.docId))
     ? `<button class="lnk" data-action="abrir-pag-registrada" data-id="${material.docId}" data-pag="${material.pagina}" data-tip="Abre o material no PDF, na página que você registrou.">${icone("file-text")} abrir na pág. ${material.pagina}</button>`
     : "";
-  const conteudo = material
+  const conteudo = material && material.pendente
+    ? `<div class="revtop-sem-fonte">
+        <p class="muted u-m-0 u-mb-12">O material deste tópico («${esc(material.titulo || "material")}») está no seu cofre e ainda não foi baixado neste aparelho. Baixe para reler o trecho aqui — ou avalie de memória pelos botões abaixo.</p>
+        <button class="btn btn-ghost btn-sm" data-action="baixar-material-topico" data-ids="${esc((material.docIds || []).join(","))}">${icone("cloud")} Baixar o material deste tópico</button>
+      </div>`
+    : material
     ? `<div class="revtop-fonte muted small">${esc(material.fonte)} ${abrirPag}</div>
        <div class="revtop-conteudo">${esc(material.texto).replace(/\n/g, "<br>")}</div>`
     : `<div class="revtop-sem-fonte">

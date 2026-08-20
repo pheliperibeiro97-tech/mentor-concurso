@@ -8,6 +8,23 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.25",
+    data: "agosto/2026",
+    titulo: "O conteúdo do material desce quando você precisa dele — e a IA nunca gera sem ele",
+    itens: [
+      "Fecha o que a 0.8.24 abriu: com o texto dos materiais fora do pacote de sincronização, faltava garantir que TUDO que gera a partir de material buscasse o conteúdo antes. Agora buscam: questões (múltipla escolha e Certo/Errado), flashcards, mapa mental, tema de escrita, extração de lei seca e jurisprudência, resumo, sumário, detecção de tópicos e relevância — pela tela, pelo chat ou por atalho.",
+      "REGRA NOVA E IMPORTANTE — se o conteúdo não puder ser baixado (sem internet, ou sincronização desligada naquele aparelho), a geração PARA e avisa, em vez de gerar assim mesmo. Sem o texto do material, a IA produziria do próprio repertório e o resultado apareceria como se tivesse saído do seu material. Gerar sem fonte continua existindo, a pedido, e vem marcado com «Sem fonte · confira».",
+      "Gerar a partir de um TÓPICO agora baixa os materiais que cobrem aquele tópico antes de montar o contexto — e recusa se eles existirem mas não descerem, em vez de cair silenciosamente no modo sem fonte.",
+      "Enquanto o material desce, aparece «Baixando «Aula 07 - Atos Administrativos»…» em qualquer caminho, para a espera não parecer travamento.",
+      "Em Materiais: o material que ainda está no cofre mostra «baixar conteúdo» no cartão (com as páginas e figuras que ele tem, pela ficha), e a busca avisa quantos materiais estão sem o texto aqui — com botões para baixar a disciplina que você está estudando ou tudo, com o tamanho à vista. A busca por palavra passou a olhar também o SUMÁRIO, que está sempre disponível.",
+      "Na revisão de tópicos, o tópico cujo material está no cofre deixa de dizer «não tem resumo para reler»: mostra o material e oferece baixá-lo, sem bloquear a avaliação de memória.",
+      "PROTEÇÃO — «Backup completo» feito num aparelho que ainda não baixou os materiais avisa que sairia sem esse conteúdo (importá-lo em outro aparelho substituiria a biblioteca pela versão vazia), e a importação de backup passou a alertar quando o arquivo tem muito menos conteúdo que o app.",
+      "Desconectar a sincronização agora avisa quantos materiais ficariam inacessíveis naquele aparelho.",
+      "A primeira sincronização (que envia o conteúdo de todos os materiais) mostra «Enviando materiais… X de N», envia quatro por vez e não desiste de tudo se um falhar — o que faltar vai na próxima.",
+      "Material apagado também apaga o pacote dele na nuvem; se estiver sem internet na hora, fica anotado e é apagado na sincronização seguinte.",
+    ],
+  },
+  {
     v: "0.8.24",
     data: "agosto/2026",
     titulo: "A sincronização deixa de mandar a biblioteca inteira a cada vez — o celular volta a dar conta",

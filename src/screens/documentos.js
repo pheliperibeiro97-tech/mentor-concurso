@@ -423,6 +423,7 @@ export default function renderDocumentos(root, app) {
       </label>
     </div>
     ${figurasNudgeHTML(store, st)}
+    ${buscaParcialHTML(store)}
     ${visaoNudgeHTML(store, st)}
 
     <div class="lista-docs">
@@ -595,6 +596,32 @@ export default function renderDocumentos(root, app) {
   // buscado quando alguém precisa dele. Este invólucro é o ponto único onde isso acontece:
   // envolver as ações que leem o conteúdo evita espalhar `await garantirConteudoDoc` por
   // dezenas de lugares e esquecer justamente o que faltar.
+  // Baixa vários materiais mostrando progresso. Confirma antes quando o volume é grande: num
+  // celular no 4G, "baixar tudo" pode ser 40 MB, e isso tem de ser escolha, não surpresa.
+  async function baixarLote(el, alvo, rotulo) {
+    if (!alvo.n) return toast("Todo o conteúdo já está neste aparelho.", "ok");
+    if (alvo.mb >= 5 && !(await confirmar(`Baixar o conteúdo de ${alvo.n} ${alvo.n === 1 ? "material" : "materiais"} (${rotulo}) — cerca de ${alvo.mb} MB. Continuar?`))) return;
+    if (el) el.disabled = true;
+    const fim = toastCarregando(`Baixando 0 de ${alvo.n}…`);
+    let feitos = 0;
+    for (const d of alvo.docs) {
+      try {
+        const r = await store.garantirConteudoDoc(d.id);
+        if (r && r.ok) feitos++;
+      } catch (_) { /* um material que falha não interrompe a fila */ }
+      fim(`Baixando ${feitos} de ${alvo.n}…`);
+    }
+    fim();
+    if (el) el.disabled = false;
+    toast(
+      feitos === alvo.n
+        ? `Pronto: ${feitos} ${feitos === 1 ? "material baixado" : "materiais baixados"} — já entram na busca.`
+        : `Baixei ${feitos} de ${alvo.n}. O resto pode ser tentado de novo (sem conexão?).`,
+      feitos ? "ok" : "erro"
+    );
+    app.refresh();
+  }
+
   const exigeConteudo = (fn) => async (el, ...resto) => {
     const id = el && el.getAttribute && el.getAttribute("data-id");
     const doc = id && store.get().documentos.find((d) => d.id === id);
@@ -621,6 +648,15 @@ export default function renderDocumentos(root, app) {
 
   bindActions(root, {
     "toggle-form": () => abrirImportarMaterial(app),
+    // Baixar em LOTE: tudo, ou só a matéria que está sendo estudada.
+    "baixar-todos-conteudos": async (el) => baixarLote(el, store.pendentesParaBaixar(), "todos os materiais"),
+    "baixar-disciplina": async (el) => {
+      const chave = el.getAttribute("data-chave");
+      const st2 = store.get();
+      const ehId = (st2.disciplinas || []).some((x) => x.id === chave);
+      const alvo = store.pendentesParaBaixar(ehId ? { disciplinaId: chave } : { cursoNome: chave });
+      baixarLote(el, alvo, nomeDaDisciplinaOuCurso(st2, chave));
+    },
     // Baixar o conteúdo por vontade própria (ex.: antes de ficar sem rede).
     "baixar-conteudo": exigeConteudo(async () => {
       toast("Conteúdo baixado — o material já pode ser lido e buscado neste aparelho.", "ok");
@@ -743,11 +779,11 @@ export default function renderDocumentos(root, app) {
       detectResultado = null;
       toast(`${plural(sel.length, "tópico", "tópicos")} na curva de revisão (24h).`);
     },
-    "detect-vincular": () => {
+    "detect-vincular": async () => {
       const sel = [...root.querySelectorAll(".detect-cb:checked")].map((cb) => detectResultado[parseInt(cb.getAttribute("data-i"), 10)]).filter(Boolean);
       if (!sel.length) return toast("Marque ao menos um tópico.", "erro");
       // Fase 6: já leva as PÁGINAS detectadas por tópico (precisão por página).
-      store.vincularTopicosComPaginas(detectDoc, sel.map((x) => ({ topicoId: x.topico.id, paginas: x.paginas })));
+      await store.vincularTopicosComPaginas(detectDoc, sel.map((x) => ({ topicoId: x.topico.id, paginas: x.paginas })));
       const comPag = sel.filter((x) => (x.paginas || []).length).length;
       detectDoc = null;
       detectResultado = null;
@@ -971,9 +1007,9 @@ export default function renderDocumentos(root, app) {
       app.refresh();
     },
     // Opcional 2: re-detecta a estrutura a partir do texto atual das páginas (ex.: após OCR).
-    "redetectar-estrutura": (el) => {
+    "redetectar-estrutura": async (el) => {
       const id = el.getAttribute("data-id");
-      const est = store.redetectarEstruturaDoc(id);
+      const est = await store.redetectarEstruturaDoc(id);
       if (est && est.limpou) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast("Sumário removido: o que havia tinha vindo do tamanho de fonte e não era um sumário de verdade. O texto do material continua inteiro.", "ok"); }
       else if (est) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast(`Sumário refeito: ${plural(est.blocos.length, "tópico do material", "tópicos do material")}.`, "ok"); }
       else toast("Não consegui montar um sumário do texto atual (sem Índice/numeração).", "erro");
@@ -1942,6 +1978,40 @@ function figurasPendentesGeral(store, st) {
 // Aparece só quando há figura por ler, e some sozinho quando acaba. É um AVISO com uma saída
 // (o mesmo componente do convite do sumário), não um botão fixo competindo com "Adicionar
 // material": diz por que aquilo importa e oferece a ação, sem número no rótulo.
+// Busca textual num aparelho que só tem o esqueleto: ela varre o texto que ESTÁ aqui, e o
+// resto do acervo continua no cofre. Dizer isso é obrigatório — busca que devolve menos sem
+// avisar faz o usuário concluir que o material não tem aquele assunto.
+function buscaParcialHTML(store) {
+  const tudo = store.pendentesParaBaixar();
+  if (!tudo.n) return "";
+  // Por disciplina: com 17 disciplinas e 496 materiais, "baixar tudo" quase nunca é o que a
+  // pessoa quer — ela está estudando UMA matéria. O botão do meio existe para isso.
+  const porDisc = new Map();
+  for (const d of tudo.docs) {
+    const chave = d.disciplinaId || d.cursoNome || "";
+    if (!chave) continue;
+    porDisc.set(chave, (porDisc.get(chave) || 0) + 1);
+  }
+  const disc = [...porDisc.entries()].sort((a, b) => b[1] - a[1])[0];
+  const nomeDisc = disc ? nomeDaDisciplinaOuCurso(store.get(), disc[0]) : "";
+  const btnDisc = disc && porDisc.size > 1
+    ? `<button class="btn btn-ghost btn-sm u-nowrap" data-action="baixar-disciplina" data-chave="${esc(disc[0])}" data-tip="Baixa o conteúdo só desta matéria — o suficiente para buscar dentro dela.">${icone("cloud")} Baixar «${esc(nomeDisc)}» (${disc[1]})</button>`
+    : "";
+  const mb = tudo.mb.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  return `<div class="sum-nudge">
+    ${icone("cloud")}
+    <span>A busca por palavra alcança o título e o sumário de tudo, mas o texto só de quem já foi baixado — faltam <b>${tudo.n}</b> ${tudo.n === 1 ? "material" : "materiais"} aqui.</span>
+    ${btnDisc}
+    <button class="btn btn-primary btn-sm" data-action="baixar-todos-conteudos" data-tip="Baixa o texto de todos os materiais que faltam neste aparelho — depois disso eles entram na busca por palavra e funcionam sem internet. Dá para usar o app enquanto baixa.">Baixar tudo (${mb} MB)</button>
+  </div>`;
+}
+
+// Nome legível de uma disciplina (por id) ou de um curso fora do edital (pelo próprio nome).
+function nomeDaDisciplinaOuCurso(st, chave) {
+  const d = (st.disciplinas || []).find((x) => x.id === chave);
+  return d ? d.nome : chave;
+}
+
 function figurasNudgeHTML(store, st) {
   if (!store.iaDisponivel()) return "";
   const { paginas, materiais } = figurasPendentesGeral(store, st);
@@ -1998,7 +2068,7 @@ function docHTML(store, st, d, busca, grupoNome = "") {
     ? `<span class="doc-data" data-tip="${d.atualizadoEm ? `Arquivo atualizado em ${fmtData(d.atualizadoEm)}${d.criadoEm ? ` · importado pela 1ª vez em ${fmtData(d.criadoEm)}` : ""}` : `Importado em ${fmtData(d.criadoEm)}`}" data-tip-pos="cima-esq">${icone("calendar")} ${d.atualizadoEm ? "atualizado" : "importado"} em ${fmtData(dEntrada)}</span>`
     : "";
   const selo = naNuvem
-    ? `<span class="doc-data" data-tip="O texto deste material está no seu cofre e ainda não foi baixado NESTE aparelho. Ele desce sozinho quando você usar o material — ou clique para baixar agora." data-tip-pos="cima-esq"><a href="#" class="link-sutil" data-action="baixar-conteudo" data-id="${d.id}">${icone("cloud")} baixar conteúdo</a></span>`
+    ? `<span class="doc-data" data-tip="O texto deste material está no seu cofre e ainda não foi baixado NESTE aparelho. Ele desce sozinho quando você usar o material — ou clique para baixar agora." data-tip-pos="cima-esq"><a href="#" class="lnk" data-action="baixar-conteudo" data-id="${d.id}">${icone("cloud")} baixar conteúdo</a></span>`
     : "";
   const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : "", selo, dataTxt].filter(Boolean).join(" · ");
   return `
@@ -2016,7 +2086,10 @@ function docHTML(store, st, d, busca, grupoNome = "") {
           ${pend ? `<button class="tag-ocr" data-action="ir-ocr" data-id="${d.id}" data-tip="Abrir o material e ler estas páginas com a Visão (elas vieram escaneadas, sem texto)." data-tip-pos="cima-dir">${icone("hourglass")} ${plural(pend, "página escaneada", "páginas escaneadas")}</button>` : ""}
           ${d.binarioDescartado ? `<span class="muted small" data-tip="O PDF original foi descartado; o texto extraído foi mantido." data-tip-pos="cima-dir">${icone("file-text")} PDF descartado</span>` : ""}
           ${
-            (d.texto || "").trim()
+            // No aparelho leve o material chega SEM texto — e a condição por texto escondia o
+            // menu inteiro, deixando o usuário sem caminho para gerar a partir de um material
+            // que ele tem. O conteúdo desce sozinho quando ele escolhe uma das opções.
+            (d.texto || "").trim() || naNuvem
               ? `<details class="doc-mais doc-gerar-menu">
                    <summary class="lnk" data-tip-pos="cima-dir" data-tip="Criar flashcards, questões e mapa mental a partir deste material.">${icone("sparkles")} Gerar com IA ${icone("chevron-down")}</summary>
                    <div class="doc-mais-pop" role="menu">

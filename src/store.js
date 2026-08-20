@@ -2039,7 +2039,8 @@ export const store = {
   //    para "Baixa". Por isso a conversão é pelo ACUMULADO, do jeito que o próprio material lê os
   //    números ("quatro temas respondem por mais da metade"): os temas que somam os primeiros
   //    50% são Altíssima, até 75% Alta, até 90% Média, o rabo é Baixa.
-  sugerirRelevanciaPorMaterial(docId) {
+  async sugerirRelevanciaPorMaterial(docId) {
+    await this.exigirConteudoDoc(docId); // sem o texto do material isto seria um palpite
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc) return { fonte: "material", itens: [], naoEncontrados: [], disciplinasIgnoradas: [], titulo: "" };
     const secoes = ia.interpretarIncidenciaPorDisciplina(doc.texto || "");
@@ -2709,6 +2710,7 @@ export const store = {
     pedidoDePararFiguras = true;
   },
   async descreverFigurasDeDoc(docId, opts = {}) {
+    await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const { onProgresso, orcamentoReserva } = typeof opts === "object" && opts ? opts : {};
     const orcamento = orcamentoReserva || { usadas: 0, max: 15 }; // sem lote: teto pequeno
     const d = state.documentos.find((x) => x.id === docId);
@@ -2801,6 +2803,7 @@ export const store = {
   },
   // F2 — reestrutura um material JÁ salvo pela IA do sumário e aplica ("caprichar com a IA").
   async caprichaEstruturaDoc(docId) {
+    await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const d = state.documentos.find((x) => x.id === docId);
     if (!d) return { ok: false };
     const est = await this.estruturarPorSumarioIA({ paginas: d.paginas, pdfData: (await this.binarioDoc(d.id)).pdfData, numPaginas: d.numPaginas || (d.paginas || []).length });
@@ -2875,7 +2878,8 @@ export const store = {
     commit();
   },
   // Fase 6: vincula tópicos JÁ com a faixa de páginas detectada pela IA (precisão por página).
-  vincularTopicosComPaginas(id, itens) {
+  async vincularTopicosComPaginas(id, itens) {
+    await this.exigirConteudoDoc(id); // sem o texto do material isto seria um palpite
     const d = state.documentos.find((x) => x.id === id);
     if (!d) return;
     if (!Array.isArray(d.topicoIds)) d.topicoIds = d.topicoId ? [d.topicoId] : [];
@@ -2907,6 +2911,12 @@ export const store = {
     esquecerPaginas(id);
     cacheBinario.delete(id);
     if (blobsDisponiveis()) delBlob(id);
+    // E o pacote de conteúdo no cofre, pela mesma razão: sem isto cada material excluído
+    // deixaria um objeto órfão no R2 para sempre. Best-effort e sem esperar — a exclusão local
+    // não pode ficar refém da rede.
+    import("./sync-nuvem.js")
+      .then((m) => m.apagarConteudoMaterial && m.apagarConteudoMaterial(id))
+      .catch(() => {});
     commit();
   },
   // Descarta o BINÁRIO do material (PDF/imagem), mantendo o texto e as páginas. Usado para
@@ -2949,8 +2959,13 @@ export const store = {
   // com título, disciplina, sumário e vínculos, mas sem o texto das páginas. Cada material
   // traz `conteudo: {n, chars, figuras, hash, pendente}` e o texto chega quando ele é aberto.
   // Sem isto, abrir uma aula no iPad exigia baixar e parsear a biblioteca inteira.
+  // Sem NADA para ler neste aparelho.
   conteudoPendente(doc) {
     return !!(doc && doc.conteudo && doc.conteudo.pendente && !(Array.isArray(doc.paginas) && doc.paginas.length));
+  },
+  // Tem conteúdo, mas outro aparelho alterou o material depois. Dá para ler; convém atualizar.
+  conteudoDesatualizado(doc) {
+    return !!(doc && doc.conteudo && doc.conteudo.desatualizado && Array.isArray(doc.paginas) && doc.paginas.length);
   },
   // Grava a fatia que veio do cofre (páginas + figuras daquele material).
   aplicarConteudoMaterial(docId, fatia) {
@@ -2958,19 +2973,69 @@ export const store = {
     if (!d || !fatia || !Array.isArray(fatia.paginas)) return false;
     d.paginas = fatia.paginas;
     d.figuras = Array.isArray(fatia.figuras) ? fatia.figuras : d.figuras || [];
-    d.conteudo = { ...(d.conteudo || {}), ...(fatia.ficha || {}), pendente: false };
+    // `baixadoHash` marca "este conteúdo veio do cofre e não foi tocado aqui". É o que impede
+    // o aparelho leve de reenviar uma versão VELHA por cima de uma alteração feita em outra
+    // máquina: se o hash atual ainda é o que foi baixado, este aparelho não é a fonte da
+    // mudança e não tem nada a dizer sobre o conteúdo daquele material.
+    const h = (fatia.ficha && fatia.ficha.hash) || null;
+    d.conteudo = { ...(d.conteudo || {}), ...(fatia.ficha || {}), pendente: false, desatualizado: false, baixadoHash: h };
     recomputarTextoDoc(d); // `texto` é derivado: quem recebe reconstrói, não trafega
     commit();
     return true;
   },
   // Garante que o material tem o conteúdo carregado antes de uma leitura que dependa dele
   // (abrir, buscar dentro, gerar a partir dele). No aparelho que já tem tudo, é um no-op.
+  // Vários de uma vez — os materiais vinculados a um tópico, por exemplo. Não é a biblioteca
+  // inteira: são os poucos que cobrem aquele tópico. Falha de um não derruba os outros.
+  async garantirConteudoDocs(ids) {
+    const alvos = [...new Set(ids || [])].filter((id) => {
+      const d = state.documentos.find((x) => x.id === id);
+      return d && (this.conteudoPendente(d) || this.conteudoDesatualizado(d));
+    });
+    if (!alvos.length) return { ok: true, baixados: 0 };
+    let baixados = 0;
+    for (const id of alvos) {
+      try {
+        const r = await this.garantirConteudoDoc(id);
+        if (r && r.ok) baixados++;
+      } catch (_) { /* material que não desce não pode impedir os demais */ }
+    }
+    return { ok: baixados === alvos.length, baixados, pedidos: alvos.length };
+  },
+  // Igual a garantirConteudoDoc, mas LANÇA se o conteúdo não puder ser obtido. É a que as
+  // gerações usam: seguir sem o texto do material faria a IA produzir do próprio repertório e
+  // o resultado chegaria rotulado como se viesse do material — inventado, com selo de fonte.
+  async exigirConteudoDoc(docId) {
+    const r = await this.garantirConteudoDoc(docId);
+    if (r && r.ok) return r;
+    const d = state.documentos.find((x) => x.id === docId);
+    const nome = (d && d.titulo) || "material";
+    const e = new Error(
+      r && r.motivo === "sem-senha"
+        ? `O conteúdo de «${nome}» está no seu cofre e este aparelho não está conectado à sincronização. Conecte-a para baixar o material.`
+        : `Não consegui baixar o conteúdo de «${nome}» agora (sem conexão?). Sem o texto do material eu não gero — sairia conteúdo inventado com cara de extraído.`
+    );
+    e.code = "CONTEUDO_INDISPONIVEL";
+    throw e;
+  },
   async garantirConteudoDoc(docId) {
     const d = state.documentos.find((x) => x.id === docId);
     if (!d) return { ok: false, motivo: "sem-doc" };
-    if (!this.conteudoPendente(d)) return { ok: true, jaTinha: true };
+    if (!this.conteudoPendente(d) && !this.conteudoDesatualizado(d)) return { ok: true, jaTinha: true };
+    // Avisa a interface que ESTE material está descendo. Sem isto, quem pediu 10 questões pelo
+    // chat ficaria olhando para uma tela parada durante o download, sem saber se travou — e o
+    // store não pode chamar `toast` direto (é camada de dados). O evento resolve para todos os
+    // caminhos de uma vez: chat, telas, atalhos.
+    const avisar = (fase, extra) => {
+      try {
+        window.dispatchEvent(new CustomEvent("mentor:conteudo", { detail: { fase, titulo: d.titulo, ...extra } }));
+      } catch (_) {}
+    };
+    avisar("baixando");
     const mod = await import("./sync-nuvem.js");
-    return mod.garantirConteudoMaterial(docId);
+    const r = await mod.garantirConteudoMaterial(docId);
+    avisar("fim", { ok: !!(r && r.ok) });
+    return r;
   },
   // ---- Vínculo com o arquivo ORIGINAL (só desktop) ----
   // Guarda o CAMINHO, não o arquivo. Serve para reabrir o original depois de descartar o
@@ -3179,6 +3244,7 @@ export const store = {
   // ("Atualizar índice" em Materiais). Se a fonte já está em dia (mesma assinatura),
   // indexarSemantica não refaz nada.
   async indexarFonteAuto(id) {
+    await this.garantirConteudoDoc(id); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     try {
       if (!id || !this.iaDisponivel()) return null;
       const idx = state.embeddings;
@@ -3276,9 +3342,30 @@ export const store = {
   buscarDocumentos(query) {
     const q = (query || "").trim().toLowerCase();
     if (!q) return state.documentos;
+    const noSumario = (d) =>
+      ((d.estrutura && d.estrutura.blocos) || []).some((b) => String(b.titulo || "").toLowerCase().includes(q));
     return state.documentos.filter(
-      (d) => d.titulo.toLowerCase().includes(q) || d.texto.toLowerCase().includes(q)
+      (d) => d.titulo.toLowerCase().includes(q) || (d.texto || "").toLowerCase().includes(q) || noSumario(d)
     );
+  },
+  // Materiais sem conteúdo local, opcionalmente só os de uma disciplina/curso. Devolve também
+  // o tamanho estimado do download, porque "baixar tudo" sem dizer quanto custa não é escolha.
+  pendentesParaBaixar({ disciplinaId = null, cursoNome = null, ids = null } = {}) {
+    let alvo = (state.documentos || []).filter((d) => this.conteudoPendente(d));
+    if (ids) alvo = alvo.filter((d) => ids.includes(d.id));
+    if (disciplinaId) alvo = alvo.filter((d) => d.disciplinaId === disciplinaId);
+    if (cursoNome) alvo = alvo.filter((d) => (d.cursoNome || "") === cursoNome);
+    const chars = alvo.reduce((n, d) => n + ((d.conteudo && d.conteudo.chars) || 0), 0);
+    // O texto natural comprime a ~30% e o envelope em base64 acrescenta um terço — medido na
+    // biblioteca real em 20/08/2026, não é chute.
+    return { docs: alvo, n: alvo.length, mb: +((chars * 0.3 * 1.33) / 1048576).toFixed(1) };
+  },
+  // Quantos materiais a busca NÃO conseguiu olhar por dentro neste aparelho (conteúdo ainda no
+  // cofre). Baixar os 496 para responder a uma busca seria pior que o problema; o honesto é a
+  // tela dizer que a varredura foi parcial — busca que devolve menos sem avisar é a pior
+  // espécie de resultado errado.
+  materiaisNaoBuscaveis() {
+    return state.documentos.filter((d) => this.conteudoPendente(d)).length;
   },
 
   // ---------- questões ----------
@@ -3587,7 +3674,8 @@ export const store = {
   // Opcional 2: RE-DETECTA a estrutura de um material salvo a partir do texto atual das páginas
   // (útil após OCR de páginas escaneadas, ou quando a 1ª detecção saiu ruim). Preserva os tópicos
   // já confirmados (casa por título) e re-casa os demais. Não tem fonte/outline (são transitórios).
-  redetectarEstruturaDoc(docId) {
+  async redetectarEstruturaDoc(docId) {
+    await this.exigirConteudoDoc(docId); // sem o texto do material isto seria um palpite
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !Array.isArray(d.paginas) || !d.paginas.length) return null;
     const est = detectarEstrutura({ paginas: d.paginas, numPaginas: d.paginas.length });
@@ -3650,6 +3738,7 @@ export const store = {
   },
   // F2: refina (IA) a estrutura de um material JÁ salvo e persiste.
   async refinarEstruturaDocIA(docId) {
+    await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !d.estrutura) return null;
     await this.casarEstruturaComEditalIA(d.estrutura);
@@ -3678,6 +3767,7 @@ export const store = {
   },
   // Geração de questões pela IA (online). Requer iaDisponivel() — a UI bloqueia antes.
   async gerarQuestoesDeDoc(docId, n = 5, dificuldade = "medio", bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc) return [];
     const { texto, topicoId, fonte, banca } = ctxDeDoc(doc, bloco);
@@ -3721,6 +3811,7 @@ export const store = {
 
   // EXTRAI as questões que já existem no próprio material (não inventa). Online.
   async extrairQuestoesDeDoc(docId, bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc) return [];
     const { texto, topicoId, fonte, banca } = ctxDeDoc(doc, bloco);
@@ -3802,6 +3893,7 @@ export const store = {
     return n;
   },
   async gerarQuestoesCEDeDoc(docId, n = 6, dificuldade = "medio", bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc) return [];
     const { texto, topicoId, fonte, banca } = ctxDeDoc(doc, bloco);
@@ -3815,6 +3907,7 @@ export const store = {
     return itens.map((x) => this.addQuestaoCE({ ...x, enunciado: x.enunciado || x.afirmacao, topicoId, fonte, banca }));
   },
   async extrairQuestoesCEDeDoc(docId, bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
     const { texto, topicoId, fonte } = ctxDeDoc(doc, bloco); // simetria com extrairQuestoesDeDoc: aceita bloco/tópico
@@ -3829,12 +3922,14 @@ export const store = {
   // captura referência/assunto/banca/ano/órgão SE estiverem no material (não inventa) e aplica o
   // gabarito de um bloco de respostas, se houver. Caso o material não tenha esses dados, ficam vazios.
   async prepararQuestoesDeDoc(docId) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
     const qs = await iaProv.extrairQuestoesPDF(state.config, { texto: doc.texto, formato: "mc" });
     return qs.map((q) => ({ ...q, topicoId: topicoDoDoc(doc) || undefined }));
   },
   async prepararQuestoesCEDeDoc(docId) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
     const itens = await iaProv.extrairQuestoesPDF(state.config, { texto: doc.texto, formato: "ce" });
@@ -4159,6 +4254,7 @@ export const store = {
   },
   // Geração de flashcards pela IA (online). Requer iaDisponivel() — a UI bloqueia antes.
   async gerarFlashcardsDeDoc(docId, n = 6, dificuldade = "medio", bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc) return [];
     const { texto, topicoId, fonte } = ctxDeDoc(doc, bloco);
@@ -4997,6 +5093,7 @@ export const store = {
   // EXTRAI referências de lei/jurisprudência citadas num material (PDF) via IA e as
   // adiciona como indicações (meta ou memória). Online (requer iaDisponivel()).
   async extrairIndicacoesDeDoc(docId, tipo, modo) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
     const itens = await iaProv.extrairIndicacoes(state.config, {
@@ -5115,6 +5212,7 @@ export const store = {
   // cita as páginas (busca textual em doc.paginas). Online. Fallback offline: o tópico do doc.
   // Devolve [{topico, paginas:[n...]}] para o usuário agendar revisão (Mentor sugere).
   async detectarTopicosDoMaterial(docId) {
+    await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !(d.texto || "").trim()) return [];
     const topicosEdital = state.topicos;
@@ -5193,7 +5291,7 @@ export const store = {
     for (let i = 0; i < extras.length; i++) {
       if (!fatias[i + 1]) continue;
       const t = extras[i];
-      resultados.push(...await this.gerarFlashcardsDeTopico(t.id, `Tópico: ${t.nome}\n${this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
+      resultados.push(...await this.gerarFlashcardsDeTopico(t.id, `Tópico: ${t.nome}\n${await this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
     }
     return resultados;
   },
@@ -5206,7 +5304,7 @@ export const store = {
     for (let i = 0; i < extras.length; i++) {
       if (!fatias[i + 1]) continue;
       const t = extras[i];
-      resultados.push(...await this.gerarQuestoesDeTopico(t.id, `Tópico: ${t.nome}\n${this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
+      resultados.push(...await this.gerarQuestoesDeTopico(t.id, `Tópico: ${t.nome}\n${await this.conteudoDeTopico(t.id)}`, fatias[i + 1], dificuldade));
     }
     return resultados;
   },
@@ -5252,6 +5350,12 @@ export const store = {
     const resumo = state.resumos.find((r) => r.topicoId === topicoId && stripHTML(r.conteudoHTML).trim());
     if (resumo) return { fonte: "Resumo: " + (resumo.titulo || "sem título"), texto: stripHTML(resumo.conteudoHTML).trim() };
     const docs = state.documentos.filter((d) => docCobre(d, topicoId) && (d.texto || "").trim());
+    // Materiais que cobrem o tópico mas cujo conteúdo ainda está no cofre: sem isto a tela
+    // afirmaria que não há o que reler, quando na verdade há — só não neste aparelho.
+    const pendentes = state.documentos.filter((d) => docCobre(d, topicoId) && this.conteudoPendente(d));
+    if (!docs.length && pendentes.length) {
+      return { fonte: "Material no cofre", texto: "", pendente: true, docIds: pendentes.map((d) => d.id), titulo: pendentes[0].titulo };
+    }
     // SINCRONIA página↔revisão: se o usuário registrou uma leitura (páginas) para este tópico,
     // relê EXATAMENTE aquele trecho do material (prioridade sobre a página do sumário).
     const reg = this.paginaRegistradaDoTopico(topicoId);
@@ -5644,6 +5748,7 @@ export const store = {
   },
   // PREVIEW da extração por IA (não grava): devolve as referências citadas no material.
   async prepararIndicacoesDeDoc(docId, tipo) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda
     const doc = state.documentos.find((d) => d.id === docId);
     if (!doc || !doc.texto.trim()) return [];
     const itens = await iaProv.extrairIndicacoes(state.config, {
@@ -6515,6 +6620,7 @@ export const store = {
     let contexto = "geral";
     let texto = "";
     if (fonte === "material") {
+      await this.exigirConteudoDoc(alvo); // sem o texto, o "tema a partir do material" seria inventado
       const d = state.documentos.find((x) => x.id === alvo);
       if (d) {
         texto = d.texto;
@@ -6625,7 +6731,16 @@ export const store = {
     return r;
   },
   // Gera um resumo (rascunho editável) a partir de uma fonte do próprio usuário.
+  // Síncrona por desenho (monta HTML na hora). No aparelho leve, um material ainda não baixado
+  // produziria um resumo VAZIO sem dizer por quê — então aqui a checagem é explícita e quem
+  // chama recebe um aviso em vez de um resumo em branco.
   gerarResumoDe(fonte, escopo) {
+    if (fonte === "material") {
+      const dPend = state.documentos.find((x) => x.id === escopo);
+      if (dPend && this.conteudoPendente(dPend)) {
+        return { erro: "conteudo-pendente", titulo: dPend.titulo };
+      }
+    }
     const escH = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const nomeTop = (id) => {
       const t = state.topicos.find((x) => x.id === id);
@@ -6946,17 +7061,36 @@ export const store = {
   // Conteúdo COMPLETO de um tópico (materiais que o cobrem + resumos vinculados), SEM cortar
   // — usado sempre que a geração precisa do tópico inteiro, não só o começo. Base para
   // gerarMapaMentalDeTopico(s) e para combinar múltiplos tópicos numa só geração.
-  conteudoDeTopico(topicoId) {
+  // ATENÇÃO: é `async` porque, no aparelho que só tem o esqueleto, o texto dos materiais que
+  // cobrem o tópico precisa descer ANTES de virar contexto da IA. Sem isto, gerar questões,
+  // flashcards ou mapa a partir de um TÓPICO produziria material a partir do nome dele —
+  // silenciosamente, que é o pior jeito de falhar.
+  async conteudoDeTopico(topicoId) {
     const t = state.topicos.find((x) => x.id === topicoId);
     if (!t) return "";
-    const mats = state.documentos.filter((d) => docCobre(d, topicoId)).map((d) => d.texto).filter(Boolean);
+    const doTopico = state.documentos.filter((d) => docCobre(d, topicoId));
+    await this.garantirConteudoDocs(doTopico.map((d) => d.id));
+    const mats = doTopico.map((d) => d.texto).filter(Boolean);
     const res = state.resumos.filter((r) => r.topicoId === topicoId).map((r) => (r.conteudoHTML || "").replace(/<[^>]+>/g, " ")).filter(Boolean);
+    // Cair no NOME do tópico é legítimo quando não há material nem resumo — é o modo sem fonte,
+    // e o app rotula o resultado como tal. Deixa de ser legítimo quando o material EXISTE e só
+    // não pôde ser baixado: aí o usuário pediu "a partir do meu material" e receberia o
+    // repertório do modelo com cara de extraído. Nesse caso, falhar dizendo o que houve.
+    if (!mats.length && !res.length && doTopico.length) {
+      const nomes = doTopico.slice(0, 2).map((d) => d.titulo).join(", ");
+      const e = new Error(
+        `O material deste tópico (${nomes}${doTopico.length > 2 ? "…" : ""}) está no seu cofre e não consegui baixá-lo agora. ` +
+        "Sem ele eu geraria do meu próprio repertório, com cara de extraído do seu material."
+      );
+      e.code = "CONTEUDO_INDISPONIVEL";
+      throw e;
+    }
     return [...mats, ...res].join("\n\n").trim() || t.nome;
   },
   async gerarMapaMentalDeTopico(topicoId) {
     const t = state.topicos.find((x) => x.id === topicoId);
     if (!t) return null;
-    const texto = this.conteudoDeTopico(topicoId);
+    const texto = await this.conteudoDeTopico(topicoId);
     const arv = await iaProv.gerarMapaMental(state.config, { texto, contexto: nomeContexto(state, topicoId) });
     return this.addMapaMental({ titulo: arv.titulo, arvore: arv, topicoId, origem: "topico" });
   },
@@ -6968,11 +7102,15 @@ export const store = {
     if (!ids.length) return null;
     if (ids.length === 1) return this.gerarMapaMentalDeTopico(ids[0]);
     const nomes = [];
-    const blocos = ids.map((id) => {
-      const t = state.topicos.find((x) => x.id === id);
-      if (t) nomes.push(t.nome);
-      return `Tópico: ${t ? t.nome : "?"}\n${this.conteudoDeTopico(id)}`;
-    });
+    // `Promise.all` porque `conteudoDeTopico` virou assíncrona (pode precisar baixar do cofre
+    // os materiais que cobrem o tópico). Em série, N tópicos seriam N esperas seguidas.
+    const blocos = await Promise.all(
+      ids.map(async (id) => {
+        const t = state.topicos.find((x) => x.id === id);
+        if (t) nomes.push(t.nome);
+        return `Tópico: ${t ? t.nome : "?"}\n${await this.conteudoDeTopico(id)}`;
+      })
+    );
     // Fatia igual do orçamento por tópico — sem isso, se a soma passar dos 8000 chars que o
     // ia-provider corta, o 1º tópico da lista comeria o limite inteiro e os outros sumiriam.
     const cota = Math.floor(8000 / blocos.length);
@@ -6982,6 +7120,7 @@ export const store = {
     return this.addMapaMental({ titulo: arv.titulo, arvore: arv, topicoId: ids[0], origem: "topico" });
   },
   async gerarMapaMentalDeMaterial(docId, bloco = null) {
+    await this.exigirConteudoDoc(docId); // conteúdo sob demanda: no aparelho que só tem o esqueleto, desce agora
     const d = state.documentos.find((x) => x.id === docId);
     if (!d) return null;
     const { texto, topicoId } = ctxDeDoc(d, bloco);
@@ -9144,6 +9283,13 @@ export const store = {
   // semântico (que é texto verbatim do material) — mantém só os metadados do material e
   // os SEUS derivados de estudo (flashcards, questões, resumos, marcações). Assim um backup
   // compartilhado não redistribui apostila protegida (que carrega sua marca-d'água/CPF).
+  // Quantos materiais sairiam SEM conteúdo num backup feito neste aparelho. Existe porque o
+  // "Backup completo" promete "inclui seus materiais (com o conteúdo)" — e num aparelho que só
+  // tem o esqueleto isso seria mentira: o arquivo sairia com 496 fichas vazias, e importá-lo no
+  // computador que tem tudo APAGARIA a biblioteca inteira. Quem chama tem de avisar antes.
+  materiaisSemConteudoLocal() {
+    return (state.documentos || []).filter((d) => this.conteudoPendente(d)).map((d) => d.titulo);
+  },
   snapshotExport(comMaterial = true) {
     if (comMaterial) return state;
     const clone = JSON.parse(JSON.stringify(state));

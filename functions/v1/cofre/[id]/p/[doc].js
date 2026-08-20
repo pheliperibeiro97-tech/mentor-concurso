@@ -22,7 +22,7 @@ const DOC_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, PUT, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Accept",
   "Access-Control-Max-Age": "86400",
 };
@@ -60,4 +60,16 @@ export async function onRequestPut(context) {
     httpMetadata: { contentType: "application/json" },
   });
   return json({ ok: true, bytes: body.length }, 200);
+}
+
+// Apagar o pacote de um material que não existe mais. Sem isto, cada material excluído deixa
+// um objeto órfão no R2 para sempre — ninguém o lê, mas ele ocupa espaço e cresce com o uso.
+// É best-effort no cliente: se o app estiver offline na hora da exclusão, o órfão fica (e
+// custa alguns KB), o que é preferível a segurar a exclusão local esperando a rede.
+export async function onRequestDelete(context) {
+  const { id, doc } = context.params;
+  if (!ID_RE.test(id) || !DOC_RE.test(doc)) return json({ erro: "id inválido" }, 400);
+  if (!context.env.COFRE_R2) return json({ erro: "nenhum armazenamento vinculado" }, 500);
+  await context.env.COFRE_R2.delete(chave(id, doc));
+  return json({ ok: true }, 200);
 }

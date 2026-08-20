@@ -207,15 +207,102 @@ async function subirConteudosAlterados(id, frase, localSnap, remotoAnterior, sta
   };
   if (remotoAnterior) { colher(remotoAnterior); (remotoAnterior.perfis || []).forEach(colher); }
 
-  const docs = materiaisComConteudo(state);
-  let enviados = 0;
-  for (const d of docs) {
+  const fila = [];
+  let preservados = 0;
+  for (const d of materiaisComConteudo(state)) {
     const ficha = fichaConteudo(d);
     if (fichasRemotas.get(d.id) === ficha.hash) continue; // já está lá, idêntico
-    await subirConteudo(id, d.id, await cifrar(frase, fatiaConteudo(d)));
-    enviados++;
+    // O conteúdo deste material veio do cofre e não foi alterado AQUI (o hash ainda é o que
+    // baixamos)? Então uma diferença em relação ao remoto significa que OUTRO aparelho o
+    // alterou depois — e reenviar seria devolver a versão velha por cima da nova. O iPad que
+    // abriu uma aula para ler não pode desfazer a figura que o desktop acabou de descrever.
+    if (d.conteudo && d.conteudo.baixadoHash && d.conteudo.baixadoHash === ficha.hash) { preservados++; continue; }
+    fila.push(d);
   }
-  return { enviados, total: docs.length };
+  if (!fila.length) return { enviados: 0, preservados, falhas: [], total: 0 };
+
+  // A PRIMEIRA subida no formato novo é a pesada: 495 materiais de uma vez. Em série, com
+  // ~0,4 s por envio, seriam minutos de app parado sem dizer nada. Daí as três coisas abaixo:
+  //  • quatro envios simultâneos (o gargalo é latência, não CPU);
+  //  • progresso em `config.syncNuvem.subindoConteudo`, que a tela mostra;
+  //  • falha de UM material não derruba a sincronização inteira — ele fica para a próxima,
+  //    porque o esqueleto só é publicado depois e o hash dele continua diferente do remoto.
+  let enviados = 0;
+  const falhas = [];
+  // Throttle: `marcar` grava o estado e acorda a interface. A cada material seriam ~500
+  // gravações e re-renderizações durante a migração — travaria a tela justamente na hora em
+  // que ela deveria informar. Uma atualização por segundo (e sempre a primeira e a última).
+  let ultimoAviso = 0;
+  const marcarProgresso = (forcar) => {
+    const feitos = enviados + falhas.length;
+    const agora = Date.now();
+    if (!forcar && feitos && agora - ultimoAviso < 1000) return;
+    ultimoAviso = agora;
+    marcar({ subindoConteudo: { feitos, total: fila.length } });
+  };
+  marcarProgresso(true);
+  const PARALELO = 4;
+  let proximo = 0;
+  const trabalhador = async () => {
+    while (proximo < fila.length) {
+      const d = fila[proximo++];
+      try {
+        await subirConteudo(id, d.id, await cifrar(frase, fatiaConteudo(d)));
+        enviados++;
+      } catch (e) {
+        // 413 = material acima do teto por objeto; o resto é rede. Nos dois casos, seguir.
+        falhas.push({ id: d.id, titulo: d.titulo, erro: e.message });
+      }
+      marcarProgresso();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PARALELO, fila.length) }, trabalhador));
+  marcar({ subindoConteudo: null });
+  return { enviados, preservados, falhas, total: fila.length };
+}
+
+// Apaga o pacote de conteúdo de um material excluído. Best-effort: falha de rede aqui não
+// pode impedir o usuário de apagar um material no app.
+export async function apagarConteudoMaterial(docId) {
+  try {
+    const frase = fraseAtual();
+    if (!frase) return { ok: false };
+    const id = await cofreId(frase);
+    const resp = await fetch(urlConteudo(id, docId), { method: "DELETE" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    return { ok: true };
+  } catch (_) {
+    // Sem rede na hora de apagar? O pacote ficaria órfão no R2 para sempre. Anota a dívida e
+    // paga na próxima sincronização — apagar material não pode depender de estar online.
+    anotarExclusaoPendente(docId);
+    return { ok: false, adiado: true };
+  }
+}
+
+// Fila local (config.syncNuvem.aApagar) dos pacotes que ficaram para trás.
+function anotarExclusaoPendente(docId) {
+  const atual = estadoSyncNuvem().aApagar || [];
+  if (atual.includes(docId)) return;
+  marcar({ aApagar: [...atual, docId].slice(-500) });
+}
+
+// Drena a fila. Chamada em toda sincronização: um item que falhe de novo continua na fila.
+async function drenarExclusoesPendentes(id) {
+  const fila = estadoSyncNuvem().aApagar || [];
+  if (!fila.length) return 0;
+  const restam = [];
+  let apagados = 0;
+  for (const docId of fila) {
+    try {
+      const resp = await fetch(urlConteudo(id, docId), { method: "DELETE" });
+      if (resp.ok) apagados++;
+      else restam.push(docId);
+    } catch (_) {
+      restam.push(docId);
+    }
+  }
+  marcar({ aApagar: restam });
+  return apagados;
 }
 
 // Busca o conteúdo de UM material sob demanda (o aparelho que baixou só o esqueleto) e o
@@ -311,6 +398,7 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
   marcar({ sincronizando: true });
   try {
     const id = await cofreId(frase);
+    await drenarExclusoesPendentes(id); // paga a dívida de pacotes apagados offline
     const state = store.get();
     const localSnap = montarSnapshotSync(state, dispositivoId());
     const envRemoto = await baixarEnvelope(id);
@@ -348,10 +436,15 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
       // ORDEM IMPORTA: o conteúdo dos materiais sobe ANTES do esqueleto. O snapshot é o
       // índice do que existe na nuvem; publicá-lo primeiro abriria uma janela em que outro
       // aparelho baixaria fichas apontando para objetos que ainda não estão lá.
-      await subirConteudosAlterados(id, frase, localSnap, remoto, state);
+      const envio = await subirConteudosAlterados(id, frase, localSnap, remoto, state);
       await subirEnvelope(id, await cifrar(frase, localSnap));
-      marcar({ sincronizando: false, ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, erro: "" });
-      return { ok: true, acao: "subiu" };
+      // Materiais que não subiram não são "erro de sincronização" (o resto foi), mas também não
+      // podem sumir em silêncio: ficam registrados e a próxima sincronização tenta de novo.
+      const aviso = envio.falhas.length
+        ? `${envio.falhas.length} ${envio.falhas.length === 1 ? "material não subiu" : "materiais não subiram"} (tentarei de novo na próxima sincronização): ${envio.falhas.slice(0, 3).map((f) => f.titulo).join(", ")}${envio.falhas.length > 3 ? "…" : ""}`
+        : "";
+      marcar({ sincronizando: false, ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, erro: aviso, subindoConteudo: null });
+      return { ok: true, acao: "subiu", conteudo: envio };
     }
     marcar({ sincronizando: false, ultimaSync: agora, baseEm: (remoto && remoto._sync && remoto._sync.atualizadoEm) || localSnap._sync.atualizadoEm, ultimoResultado: "igual", pendente: null, erro: "" });
     return { ok: true, acao: "igual" };

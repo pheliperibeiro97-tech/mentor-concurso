@@ -3,6 +3,7 @@
 // (inclusive quando uma sincronização termina), e um bloco montado à mão sumia sozinho.
 let senhaVisivel = false;
 import { bindActions, toast, header, confirmar, ligarDropZone, escolher, abrirAjudaSenha } from "../ui.js";
+import { pesoTexto, encolheriaTexto } from "../sync.js";
 import { baixarRelatorio, compartilharRelatorio, EMAIL_SUPORTE, APP_VERSION } from "../erro-log.js";
 import { verificarAtualizacao } from "../updater.js";
 import { setEstiloAlarme, tocarAlarmeTeste } from "../cronometro.js";
@@ -62,8 +63,14 @@ export default function renderConfig(root, app) {
   const sn = cfg.syncNuvem || {};
   const listaPerfis = store.perfis ? store.perfis() : [];
   const nuvemSuporta = suportaSyncNuvem();
+  // A primeira sincronização no formato novo envia o conteúdo de cada material em separado —
+  // com a biblioteca do cursinho são centenas de envios, e sem contador isso pareceria um
+  // "Sincronizando…" travado por minutos.
+  const subindo = sn.subindoConteudo;
   const nuvemStatus = sn.pendente
     ? `${icone("triangle-alert")} Decisão necessária`
+    : subindo && subindo.total
+    ? `Enviando materiais… ${subindo.feitos} de ${subindo.total}`
     : sn.sincronizando
     ? "Sincronizando…"
     : sn.ultimoResultado === "erro"
@@ -690,7 +697,14 @@ export default function renderConfig(root, app) {
     },
     "nuvem-desconectar": async () => {
       senhaVisivel = false;
-      const ok = await confirmar("Desconectar a sincronização neste aparelho? A senha será esquecida aqui (os seus dados locais continuam intactos).");
+      // Num aparelho com conteúdo sob demanda, desconectar não é neutro: os materiais cujo
+      // texto só existe no cofre ficam sem caminho de volta — a lista continua lá, mas nada
+      // do que dependa do conteúdo funciona. Dizer isso é o mínimo antes de desconectar.
+      const semConteudo = store.materiaisSemConteudoLocal();
+      const aviso = semConteudo.length
+        ? ` ATENÇÃO: ${semConteudo.length} ${semConteudo.length === 1 ? "material tem o texto" : "materiais têm o texto"} só no cofre e ${semConteudo.length === 1 ? "ficará inacessível" : "ficarão inacessíveis"} neste aparelho (gerar, buscar e reler a partir deles deixa de funcionar) até você reconectar. Se quiser, cancele e use «Baixar tudo» em Materiais antes.`
+        : "";
+      const ok = await confirmar("Desconectar a sincronização neste aparelho? A senha será esquecida aqui (os seus dados locais continuam intactos)." + aviso);
       if (!ok) return;
       await desconectarNuvem(); toast("Sincronização desconectada neste aparelho."); app.refresh();
     },
@@ -805,7 +819,20 @@ export default function renderConfig(root, app) {
       root.querySelectorAll(".ico-btn.sel").forEach((b) => b.classList.remove("sel"));
       el.classList.add("sel");
     },
-    "exportar-completo": () => exportarJSON(store.snapshotExport(true), "completo"),
+    "exportar-completo": async () => {
+      // Num aparelho que só tem o esqueleto (conteúdo sob demanda), "backup completo" seria um
+      // arquivo com os materiais VAZIOS — e importá-lo no computador que tem tudo apagaria a
+      // biblioteca, porque importar substitui. Melhor avisar e deixar a escolha explícita.
+      const semConteudo = store.materiaisSemConteudoLocal();
+      if (semConteudo.length) {
+        const ok = await confirmar(
+          `${semConteudo.length} ${semConteudo.length === 1 ? "material ainda não foi baixado" : "materiais ainda não foram baixados"} neste aparelho — o texto deles está no seu cofre. ` +
+          `Este backup sairia SEM esse conteúdo, e importá-lo em outro aparelho substituiria a biblioteca de lá pela versão vazia. Gerar assim mesmo?`
+        );
+        if (!ok) return;
+      }
+      exportarJSON(store.snapshotExport(true), semConteudo.length ? "parcial" : "completo");
+    },
     "exportar-compartilhavel": () => exportarJSON(store.snapshotExport(false), "compartilhavel"),
     reset: async () => {
       // O aviso precisa dizer o que NÃO é óbvio: que a sincronização é desconectada (e não
@@ -1051,6 +1078,22 @@ export default function renderConfig(root, app) {
       if (!(await confirmar("Importar este backup SUBSTITUI todos os dados atuais. Continuar?"))) {
         e.target.value = "";
         return;
+      }
+      // Guarda de perda por importação: o backup pode ter sido gerado num aparelho que só tinha
+      // o esqueleto (conteúdo sob demanda) ou ser um "compartilhável" (sem materiais). Nos dois
+      // casos ele traz muito menos TEXTO que o estado atual — e importar substitui. A guarda é a
+      // mesma ideia do sync (encolheriaTexto), aqui aplicada à importação manual.
+      const textoAtual = pesoTexto(store.get());
+      const textoBackup = pesoTexto(obj);
+      if (encolheriaTexto(textoAtual, textoBackup)) {
+        const mil = (n) => Math.round(n / 1000).toLocaleString("pt-BR");
+        const ok2 = await confirmar(
+          `Atenção: este backup tem MUITO menos conteúdo de material que o app tem agora ` +
+          `(${mil(textoBackup)} mil caracteres contra ${mil(textoAtual)} mil). ` +
+          `Isso acontece com backup "compartilhável" ou feito num aparelho que ainda não baixou os materiais. ` +
+          `Importar assim vai substituir a biblioteca atual pela versão menor. Tem certeza?`
+        );
+        if (!ok2) { e.target.value = ""; return; }
       }
       await store.importarBackup(obj);
       toast("Backup importado com sucesso.");

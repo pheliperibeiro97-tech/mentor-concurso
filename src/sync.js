@@ -174,10 +174,14 @@ export function fichaConteudo(doc) {
   for (const p of paginas) {
     const t = (p && p.texto) || "";
     chars += t.length;
-    // Amostra por página em vez do texto inteiro: percorrer 112 MB a cada sincronização é
-    // caro e desnecessário — número da página, tamanho e as pontas já mudam a qualquer
-    // edição real (OCR, figura descrita, reimportação).
-    sementes += (p && p.n) + ":" + t.length + ":" + t.slice(0, 24) + t.slice(-24) + "|";
+    // Amostra por página em vez do texto inteiro: percorrer 112 MB a cada sincronização é caro
+    // e desnecessário. Mas só pontas + tamanho deixaria passar uma troca NO MEIO que preserve o
+    // comprimento, então entram também o miolo e uma soma esparsa (1 caractere a cada 64) —
+    // ~1,7 milhão de operações para a biblioteca inteira, na casa dos milissegundos.
+    let soma = 0;
+    for (let i = 0; i < t.length; i += 64) soma = (soma + t.charCodeAt(i) * (i + 1)) >>> 0;
+    const meio = t.length > 48 ? t.slice(Math.floor(t.length / 2) - 12, Math.floor(t.length / 2) + 12) : "";
+    sementes += (p && p.n) + ":" + t.length + ":" + soma + ":" + t.slice(0, 24) + meio + t.slice(-24) + "|";
   }
   const figs = Array.isArray(doc.figuras) ? doc.figuras : [];
   return { n: paginas.length, chars, figuras: figs.length, hash: hashTexto(sementes + "#" + figs.length) };
@@ -293,6 +297,11 @@ export function aplicarRemoto(localState, remoto) {
         paginas: Array.isArray(d.paginas) ? d.paginas : null,
         figuras: Array.isArray(d.figuras) ? d.figuras : null,
         ficha: Array.isArray(d.paginas) && d.paginas.length ? fichaConteudo(d) : null,
+        // `baixadoHash` é marca LOCAL ("este conteúdo veio do cofre e eu não mexi") e por isso
+        // não vem no remoto. Sem devolvê-la, o aparelho esqueceria a origem a cada
+        // sincronização e voltaria a se achar dono do conteúdo — podendo reenviar uma versão
+        // velha por cima da de outro aparelho.
+        baixadoHash: (d.conteudo && d.conteudo.baixadoHash) || null,
       };
     }
   };
@@ -313,11 +322,19 @@ export function aplicarRemoto(localState, remoto) {
         if (mesmo) {
           saida.paginas = bin.paginas;
           saida.figuras = bin.figuras;
-          saida.conteudo = { ...saida.conteudo, pendente: false };
+          saida.conteudo = { ...saida.conteudo, pendente: false, desatualizado: false, baixadoHash: bin.baixadoHash || null };
+        } else if (bin && Array.isArray(bin.paginas) && bin.paginas.length) {
+          // Este aparelho TEM uma versão do conteúdo, só que velha (o hash da nuvem é outro).
+          // Jogá-la fora deixaria o usuário sem poder ler um material que ele lia — pior ainda
+          // sem rede. Fica a versão local, marcada como desatualizada: a leitura seguinte
+          // busca a nova, e até lá há o que ler.
+          saida.paginas = bin.paginas;
+          saida.figuras = bin.figuras;
+          saida.conteudo = { ...saida.conteudo, pendente: false, desatualizado: true, baixadoHash: bin.baixadoHash || null };
         } else {
           saida.paginas = null;
           saida.figuras = null;
-          saida.conteudo = { ...saida.conteudo, pendente: true };
+          saida.conteudo = { ...saida.conteudo, pendente: true, desatualizado: false };
         }
       }
       return saida;

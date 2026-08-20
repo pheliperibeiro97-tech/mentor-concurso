@@ -70,6 +70,18 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
 
   async function gerar() {
     if (ocupado) return;
+    // Conteúdo sob demanda: neste aparelho o material pode existir só como ficha. Sem baixar
+    // antes, `resolverEscopo` devolveria texto vazio e o usuário levaria um "escolha um
+    // material" logo depois de ter escolhido um — o erro mais confuso possível.
+    if (estado.docId && store.conteudoPendente((store.get().documentos || []).find((d) => d.id === estado.docId))) {
+      ocupado = true;
+      rerender();
+      toast("Baixando o conteúdo deste material…");
+      const r = await store.garantirConteudoDoc(estado.docId);
+      ocupado = false;
+      rerender();
+      if (!r || !r.ok) return toast("Não consegui baixar o conteúdo deste material agora.", "erro");
+    }
     const escopo = escopoAtual();
     if (!escopo.texto) return toast("Escolha um material importado para gerar.", "erro");
     ocupado = true;
@@ -148,7 +160,9 @@ export function abrirSeletorEscopo(app, { tipo = "flashcards", titulo = "Gerar c
       fecharJanela = ctx.fechar;
       const st = store.get();
       const escopo = escopoAtual();
-      const temConteudo = !!(escopo && escopo.texto);
+      const docSel = estado.docId ? (st.documentos || []).find((d) => d.id === estado.docId) : null;
+      const soNaNuvem = !!(docSel && store.conteudoPendente(docSel));
+      const temConteudo = !!(escopo && escopo.texto) || soNaNuvem;
 
       corpo.innerHTML = `
         <p class="muted small" style="margin-top:0; display:flex; align-items:center; gap:7px"><span class="orb orb-xs" aria-hidden="true"></span><span>A IA gera a partir do <b>material importado</b> que você escolher (ou de um <b>subtópico</b> específico dele).</span></p>

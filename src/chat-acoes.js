@@ -233,6 +233,9 @@ export async function executarComando(store, app, acao, params = {}) {
       const fonte = fontesOk.includes(p.origem) ? p.origem : "material";
       const tid = p.alvo && p.alvo !== "todos" ? topicoId(store, p.alvo) : null;
       const r = store.gerarResumoDe(fonte, tid || "todos");
+      if (r && r.erro === "conteudo-pendente") {
+        throw new Error(`O material «${r.titulo}» ainda não foi baixado neste aparelho. Abra-o em Materiais (ou clique em «baixar conteúdo») e peça de novo.`);
+      }
       if (!r) throw new Error("Não consegui montar o resumo (sem conteúdo suficiente da fonte indicada).");
       app.navigate("resumos");
       return `Resumo criado a partir de ${fonte}${tid ? ` do tópico "${p.alvo}"` : ""}.`;

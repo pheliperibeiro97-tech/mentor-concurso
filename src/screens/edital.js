@@ -966,10 +966,10 @@ function abrirSugestaoIA(app) {
         estado.carregando = ""; rerender();
       },
       // Sem IA e sem rede: os números já estão no material que o usuário importou.
-      "sug-material": (el) => {
+      "sug-material": async (el) => {
         estado.carregando = "material"; estado.rel = null; rerender();
         try {
-          const r = store.sugerirRelevanciaPorMaterial(el.dataset.id);
+          const r = await store.sugerirRelevanciaPorMaterial(el.dataset.id);
           estado.rel = r;
           if (!r.itens.length) toast("Não achei estatística de incidência aplicável aos seus tópicos neste material.", "erro");
           else {

@@ -4,7 +4,7 @@
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { store } from "./store.js";
-import { toast, plural, confirmar, pedirTexto } from "./ui.js";
+import { toast, toastCarregando, plural, confirmar, pedirTexto } from "./ui.js";
 import { esc, fmtMMSS } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
 import { abrirPaleta } from "./paleta.js";
@@ -924,6 +924,22 @@ async function bootstrap() {
   iniciarSyncNuvemAuto();
   // E garante a sincronização ao FECHAR o app.
   ligarSyncAoFechar();
+
+  // CONTEÚDO SOB DEMANDA: num aparelho que só tem o esqueleto, pedir "10 questões desta aula"
+  // dispara um download antes da geração. Sem aviso, a espera parece travamento — e o pedido
+  // pode ter vindo do chat, de um atalho ou de qualquer tela, então o aviso mora aqui, num
+  // lugar só, ouvindo o evento que o store emite.
+  let fecharAvisoConteudo = null;
+  window.addEventListener("mentor:conteudo", (ev) => {
+    const d = (ev && ev.detail) || {};
+    if (d.fase === "baixando") {
+      if (fecharAvisoConteudo) fecharAvisoConteudo();
+      fecharAvisoConteudo = toastCarregando(`Baixando «${String(d.titulo || "material").slice(0, 46)}»…`);
+    } else if (d.fase === "fim") {
+      if (fecharAvisoConteudo) { fecharAvisoConteudo(); fecharAvisoConteudo = null; }
+      if (!d.ok) toast("Não consegui baixar o conteúdo deste material agora.", "erro");
+    }
+  });
 }
 
 // Ao fechar: no desktop intercepta o fechamento e só fecha depois de tentar sincronizar
