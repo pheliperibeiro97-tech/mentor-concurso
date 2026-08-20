@@ -8,6 +8,16 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.23",
+    data: "agosto/2026",
+    titulo: "«Ler figuras e tabelas» passa a transcrever o que está dentro da figura, não a resumi-la",
+    itens: [
+      "CORREÇÃO IMPORTANTE — a leitura de figuras devolvia o ÍNDICE do diagrama, não o conteúdo: \"diagrama detalhando as autoridades competentes para os graus Ultrassecreto, Secreto e Reservado\". Quem classifica cada grau, que é a informação que só existe dentro da imagem, se perdia. Agora a IA transcreve item por item, mantendo cada rótulo junto da sua lista e usando tabela quando a figura é um quadro comparativo. Medido nas mesmas páginas: 944 caracteres de conteúdo antes, 1.569 depois.",
+      "CORREÇÃO — páginas cheias de artigo de lei ficavam pendentes para sempre. O filtro do Gemini corta a resposta quando ela reproduz texto que ele reconhece, e a fila tratava isso como se a imagem tivesse sido recusada: tentava de novo, tomava o mesmo bloqueio e desistia. Agora, ao ser barrada, a IA refaz a página reescrevendo o conteúdo em vez de copiá-lo — preservando nomes, prazos, números e artigos.",
+      "CORREÇÃO — a fila de figuras confundia \"acabou a cota do Gemini\" com outros erros em parte dos casos, por um defeito na verificação da mensagem de erro.",
+    ],
+  },
+  {
     v: "0.8.19",
     data: "agosto/2026",
     titulo: "O material passa a ter disciplina — e escolher a aula certa vira uma busca, não uma rolagem",

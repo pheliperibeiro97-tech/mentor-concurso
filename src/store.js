@@ -171,14 +171,17 @@ const ehTauriApp = () => typeof window !== "undefined" && (!!window.__TAURI_INTE
 const RITMO_GEMINI_MS = 5000; // 12 req/min — o plano grátis permite 15, e sobra folga
 const ESPERA_COTA_MS = 25000; // o próprio 429 do Gemini sugere ~15 s; 25 dá margem
 let ultimaChamadaVisao = 0;
-const ehCota = (e) => /429|RESOURCE_EXHAUSTED|quota/i.test(String((e && e.message) || e));
+const ehCota = (e) => /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(String((e && e.message) || e));
+// Resposta VAZIA por filtro do modelo, nao por erro de rede: `chamarGeminiVisaoRaw` carimba o
+// finishReason em `e.code` (RECITATION = copia de material reconhecido; SAFETY; EMPTY).
+const ehBloqueioDeConteudo = (e) => /^(RECITATION|SAFETY|EMPTY)$/.test(String((e && e.code) || ""));
 
 async function descreverUmaFigura(store, b64, pagina, conta, orcamento) {
   const cfg = state.config;
   const temGemini = !!(cfg.iaKey || "").trim();
   const temReserva = ehTauriApp(); // Claude Code local só existe no desktop
-  const chamar = (provedor) =>
-    iaProv.descreverFiguras({ ...cfg, iaProvider: provedor }, { dataB64: b64, contexto: `pág. ${pagina}` });
+  const chamar = (provedor, modo = "fiel") =>
+    iaProv.descreverFiguras({ ...cfg, iaProvider: provedor }, { dataB64: b64, contexto: `pág. ${pagina}`, modo });
   const respeitarRitmo = async () => {
     const espera = RITMO_GEMINI_MS - (Date.now() - ultimaChamadaVisao);
     if (espera > 0) await new Promise((r) => setTimeout(r, espera));
@@ -200,6 +203,24 @@ async function descreverUmaFigura(store, b64, pagina, conta, orcamento) {
         if (ehCota(e)) {
           if (tentativa === 0) { await new Promise((r) => setTimeout(r, ESPERA_COTA_MS)); continue; }
           return { parou: "cota" };
+        }
+        // BLOQUEIO DE CONTEÚDO (finishReason RECITATION): o filtro do Gemini corta a resposta que
+        // reproduz texto que ele reconhece, e é exatamente o que a transcrição literal faz numa
+        // página cheia de artigo de lei. Não é recusa da imagem nem falta de cota — mandar para a
+        // reserva paga não resolve, porque o pedido é que está sendo barrado. Refaz UMA vez com o
+        // prompt condensado (reescrever em vez de copiar): salva o conteúdo, ao custo da
+        // literalidade. Medido em 20/08/2026: 99 blocos travados só por isso, e a página ficava
+        // pendente para sempre — a rodada seguinte tentava a mesma coisa e tomava o mesmo bloqueio.
+        if (ehBloqueioDeConteudo(e) && tentativa === 0) {
+          try {
+            await respeitarRitmo();
+            const texto = await chamar("gemini", "condensado");
+            conta.gemini++;
+            conta.condensadas = (conta.condensadas || 0) + 1;
+            return { texto, via: "gemini-condensado" };
+          } catch (e2) {
+            console.warn("[figuras] condensado também barrado na pág.", pagina, e2 && e2.message);
+          }
         }
         console.warn("[figuras] Gemini recusou a pág.", pagina, e && e.message);
         conta.recusadas++;

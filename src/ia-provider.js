@@ -1976,14 +1976,48 @@ export async function extrairTextoArquivo(cfg, { dataB64, mimeType, nomeArquivo,
 
 // F1 — descreve as FIGURAS/diagramas/tabelas de UMA página (imagem). O texto corrido já foi
 // extraído em separado; aqui só o conteúdo VISUAL. Devolve "" quando a página não tem figura real.
-export async function descreverFiguras(cfg, { dataB64, contexto = "" }) {
+//
+// O pedido é TRANSCREVER, não descrever. A diferença não é estilística: o pedido antigo ("descreva
+// o conteúdo visual de forma fiel e útil") produzia o ÍNDICE da figura — "diagrama detalhando as
+// autoridades competentes para os graus Ultrassecreto, Secreto e Reservado" —, que não diz QUEM
+// classifica o quê. Medido em 20/08/2026 sobre as mesmas 28 páginas: 944 caracteres por página com
+// o pedido antigo, 1.569 com este; e o ganho não é volume, é o dado que só existe dentro da
+// imagem. Para quem descarta o PDF depois de descrever, índice é perda total.
+const SYS_FIGURAS_FIEL =
+  "Você olha a IMAGEM de UMA página de um material de estudo. O TEXTO corrido dela já foi extraído à parte — " +
+  "NÃO o repita. Sua tarefa é TRANSCREVER, item por item, TODO o conteúdo que está DENTRO de diagramas, esquemas, " +
+  "mapas mentais, fluxogramas, tabelas, quadros comparativos e linhas do tempo.\n" +
+  "REGRAS:\n" +
+  "1. NÃO RESUMA e não descreva a figura por fora. É proibido escrever 'diagrama detalhando as hipóteses' ou " +
+  "'quadro sobre os prazos' sem dizer QUAIS são as hipóteses e QUAIS são os prazos.\n" +
+  "2. PRESERVE A ASSOCIAÇÃO entre cada rótulo e os itens que pertencem a ele. Se a figura liga 'Ultrassecreto:' a " +
+  "uma lista e 'Secreto:' a outra, escreva cada rótulo com a SUA lista aninhada embaixo — perder de quem é cada " +
+  "item torna a transcrição inútil. Use listas markdown aninhadas para a hierarquia, e tabela markdown quando a " +
+  "figura for um quadro comparativo (uma coluna por lado comparado).\n" +
+  "3. Nomes, números, prazos, percentuais, artigos de lei e incisos aparecem LITERALMENTE, como estão escritos.\n" +
+  "4. IGNORE cabeçalho, rodapé, número de página, logotipo do curso e marca d'água — nada disso é conteúdo.\n" +
+  "5. Havendo mais de uma figura na página, separe-as com um título próprio, na ordem em que aparecem.\n" +
+  "6. Não invente nada que não esteja na imagem. Se a página NÃO tiver figura de conteúdo (só texto corrido, " +
+  "logotipo ou marca d'água), devolva EXATAMENTE uma string vazia.";
+
+// Variante para quando o modelo RECUSA a transcrição literal (finishReason RECITATION): o filtro
+// do Gemini corta a resposta que reproduz texto reconhecido, e é justamente o que acontece nas
+// páginas cheias de artigo de lei. Aqui se pede para REESCREVER em vez de copiar, preservando o
+// que não pode se perder (nomes, prazos, números). Perde-se a literalidade e salva-se o conteúdo —
+// melhor que a página voltar para a fila indefinidamente, como acontecia antes de 20/08/2026.
+const SYS_FIGURAS_CONDENSADO =
+  "Você olha a IMAGEM de UMA página de um material de estudo. Organize em lista hierárquica os DADOS mostrados " +
+  "nos diagramas, esquemas, tabelas e quadros da página.\n" +
+  "REGRAS:\n" +
+  "1. REESCREVA com suas palavras, de forma condensada — não copie frases inteiras do material.\n" +
+  "2. PRESERVE integralmente nomes, prazos, percentuais, números, artigos de lei e incisos.\n" +
+  "3. Mantenha cada rótulo junto dos itens que pertencem a ele (listas aninhadas).\n" +
+  "4. Ignore cabeçalho, rodapé, número de página, logotipo e marca d'água.\n" +
+  "5. Se a página não tiver figura de conteúdo, devolva EXATAMENTE uma string vazia.";
+
+export async function descreverFiguras(cfg, { dataB64, contexto = "", modo = "fiel" }) {
   if (!visaoDisponivel(cfg)) return "";
-  const system =
-    "Você olha a IMAGEM de UMA página de um material de estudo. O TEXTO corrido dela já foi extraído à parte — " +
-    "NÃO o repita. Descreva APENAS o conteúdo VISUAL relevante para estudo: diagramas, esquemas, mapas mentais, " +
-    "fluxogramas, tabelas, quadros comparativos, linhas do tempo — transcrevendo/organizando a informação de forma " +
-    "FIEL e útil (texto ou markdown, sem inventar). Se a página NÃO tiver figura de conteúdo (só texto, logotipo ou " +
-    "marca d'água), devolva EXATAMENTE uma string vazia. Seja objetivo.";
+  const system = modo === "condensado" ? SYS_FIGURAS_CONDENSADO : SYS_FIGURAS_FIEL;
   const user = `Descreva as figuras/diagramas/tabelas desta página${contexto ? ` (${contexto})` : ""}.`;
   const t = await chamarVisao(cfg, { system, user, mimeType: "image/jpeg", dataB64, temperature: 0 });
   return String(t || "").trim();
