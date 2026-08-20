@@ -29,7 +29,14 @@ for (const perfil of estado.perfis || [estado]) {
   let totBlocos = 0, totVinc = 0, totCerta = 0;
   for (const d of docs) {
     // Disciplina esperada: a do nome do arquivo ("3. Direito Administrativo").
-    const esperada = norm(d.titulo.replace(/^\s*\d+[.\-)]?\s*/, ""));
+    // A disciplina esperada vem do CAMPO declarado quando existe — é a régua que o app usa
+    // desde a v0.8.19 — e só cai no nome do arquivo quando não há campo. Antes era só o nome,
+    // e material de curso fora do edital ("Direitos Difusos e Coletivos", "Formação
+    // Humanística", que no edital é "Noções Gerais de Direito e Formação Humanística") dava
+    // sempre 0% — 141 materiais marcados XX na base do curso completo, todos corretos.
+    const declarada = d.disciplinaId ? disciplinas.get(d.disciplinaId) : null;
+    if (!declarada && (d.cursoNome || d.semDisciplina)) continue; // curso de fora: casamento global é o certo
+    const esperada = norm(declarada || d.titulo.replace(/^\s*\d+[.\-)]?\s*/, ""));
     const blocos = d.estrutura.blocos;
     let vinc = 0, certa = 0;
     const fora = [];
