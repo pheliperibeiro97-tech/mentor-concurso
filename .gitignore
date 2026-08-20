@@ -23,3 +23,7 @@ Thumbs.db
 # protótipos de design (não versionar)
 public/hoje-v3.html
 public/hoje-v3-refinado.html
+
+# Notas de migração que citam nomes de aula do cursinho — o repo é público e o
+# material é de terceiro. Ficam só no disco.
+NOTAS_IMPORT_CURSO_COMPLETO.md
