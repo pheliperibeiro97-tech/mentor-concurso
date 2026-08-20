@@ -3542,7 +3542,17 @@ export const store = {
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !Array.isArray(d.paginas) || !d.paginas.length) return null;
     const est = detectarEstrutura({ paginas: d.paginas, numPaginas: d.paginas.length });
-    if (!est || !est.blocos.length) return null;
+    // Detecção nova sem blocos NÃO é o mesmo que "deu errado": quando o sumário atual veio de
+    // um fallback fraco (tamanho de fonte, numeração solta), o vazio é a resposta CERTA — foi
+    // assim que 4 materiais do curso completo ficaram com o texto inteiro picado em 254 blocos
+    // (v0.8.20 pôs guarda no detector). Mantendo o antigo, o usuário não tinha COMO limpar pela
+    // interface. Sumário de fonte forte (índice/marcadores do PDF) continua protegido.
+    if (!est || !est.blocos.length) {
+      const fraco = ["fonte", "numeracao", "marcador"].includes((d.estrutura || {}).origem);
+      if (!fraco) return null;
+      this.aplicarEstruturaAoMaterial(docId, { aulaTitulo: (d.estrutura || {}).aulaTitulo || null, aulaId: (d.estrutura || {}).aulaId || null, aulaNome: (d.estrutura || {}).aulaNome || null, origem: null, blocos: [] });
+      return { origem: null, blocos: [], limpou: true };
+    }
     this.casarEstruturaComEdital(est, d.titulo, { disciplinaId: d.disciplinaId });
     this._herdarTopicos(est, d.estrutura); // mantém o que o usuário já confirmou
     d.estrutura = est;

@@ -940,7 +940,8 @@ export default function renderDocumentos(root, app) {
     "redetectar-estrutura": (el) => {
       const id = el.getAttribute("data-id");
       const est = store.redetectarEstruturaDoc(id);
-      if (est) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast(`Sumário refeito: ${plural(est.blocos.length, "tópico do material", "tópicos do material")}.`, "ok"); }
+      if (est && est.limpou) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast("Sumário removido: o que havia tinha vindo do tamanho de fonte e não era um sumário de verdade. O texto do material continua inteiro.", "ok"); }
+      else if (est) { textoBrutoAberto.delete(id); estruturaEditando.delete(id); toast(`Sumário refeito: ${plural(est.blocos.length, "tópico do material", "tópicos do material")}.`, "ok"); }
       else toast("Não consegui montar um sumário do texto atual (sem Índice/numeração).", "erro");
       app.refresh();
     },
