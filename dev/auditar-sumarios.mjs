@@ -68,12 +68,17 @@ const perfis = estado.perfis || [estado];
 // O número do bloco às vezes carrega a pontuação do índice ("5.1)"); o corpo abre com "5.1 ".
 const RE_COD = /^\d+\.\d+$/;
 const codDoBloco = (b) => String(b.numero || "").trim().replace(/[).\-–]+$/, "");
+// O piso de 3 códigos não enxerga o índice de uma AULA de duas seções ("16.1" e "16.2"): a
+// página de índice fica de fora, o gabarito vira a própria página do índice e o auditor acusa
+// divergência onde o app está certo. Com poucos códigos, o piso passa a ser "todos eles" — e
+// só nas primeiras páginas, que é onde índice mora.
 function paginasDeIndice(paginas, codigos) {
+  const piso = Math.max(2, Math.min(3, codigos.length));
   const idx = new Set();
   for (const p of paginas) {
     let n = 0;
     for (const cod of codigos) if (abreLinha(p.texto, cod)) n++;
-    if (n >= 3) idx.add(p.n);
+    if (n >= 3 || (n >= piso && p.n <= 10)) idx.add(p.n);
   }
   return idx;
 }

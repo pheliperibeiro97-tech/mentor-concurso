@@ -3441,7 +3441,14 @@ export const store = {
   // global: o bloco fica sem vínculo em vez de cair em outra matéria.
   casarEstruturaComEdital(estrutura, titulo, opts = {}) {
     if (!estrutura || !Array.isArray(estrutura.blocos)) return estrutura;
-    const aula = estrutura.aulaTitulo ? this.acharAulaPorTitulo(estrutura.aulaTitulo) : null;
+    // O NOME DO ARQUIVO é a fonte mais confiável da aula, quando o cursinho entrega uma aula
+    // por PDF: "Direito Civil - Aula 07 - Fato jurídico" de um lado, "Direito Civil - Aula 07"
+    // no plano do outro. Antes só se procurava pelo título inferido de DENTRO do PDF ("7. Fato
+    // jurídico"), que não bate com o rótulo da aula — e nenhum dos 475 materiais do curso
+    // completo encontrava a sua aula.
+    const rotuloAula = String(titulo || "").match(/^(.+ - Aula [0-9]+)(?![0-9])/);
+    const aula = (rotuloAula && this.acharAulaPorTitulo(rotuloAula[1]))
+      || (estrutura.aulaTitulo ? this.acharAulaPorTitulo(estrutura.aulaTitulo) : null);
     if (aula) { estrutura.aulaId = aula.id; estrutura.aulaNome = aula.nome; }
     const topsAula = aula && Array.isArray(aula.topicoIds) ? aula.topicoIds : null;
     // Apostila que não é disciplina do edital (Legislação Civil Especial, Difusos e Coletivos)

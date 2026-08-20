@@ -616,6 +616,12 @@ export function detectarPorFonte(linhasPorPagina, numPaginas, indicePag) {
     }
   }
   if (headings.length < 2) return [];
+  // Sinal que NÃO discrimina. Em apostila de fonte uniforme (ou negrito de ponta a ponta),
+  // o teste de tamanho aceita quase toda linha e o "sumário" vira o texto inteiro fatiado:
+  // medido na Aula 13 de Constitucional, 254 blocos em 33 páginas, com frases cortadas no meio.
+  // Um material real não tem duas seções e meia por página — acima disso, é melhor não haver
+  // sumário do que haver esse. O usuário ainda pode montar um pelo "Refazer sumário" com IA.
+  if (numPaginas > 0 && headings.length > numPaginas * 2.5) return [];
   const tams = [...new Set(headings.map((h) => Math.round(h.fontSize)))].sort((a, b) => b - a).slice(0, 3);
   const nivelDe = (fs) => { const i = tams.indexOf(Math.round(fs)); return i >= 0 ? i + 1 : 1; };
   return headings.map((h, k) => ({ numero: String(k + 1), titulo: h.titulo, pagina: h.pagina, nivel: nivelDe(h.fontSize) }));
