@@ -2264,8 +2264,12 @@ export async function gerarEmbedding(cfg, texto, taskType = "RETRIEVAL_QUERY") {
 // se um der 429/404, tentamos o próximo). Usado no diagnóstico do botão "Testar".
 export const GEMINI_FALLBACKS = [
   "gemini-3.1-flash-lite", // padrão: maior cota grátis observada (~500 RPD)
-  "gemini-2.5-flash-lite", // 2ª opção (cota baixa em alguns projetos, ~20 RPD)
-  "gemini-2.5-flash", // rede de segurança
+  "gemini-3.5-flash-lite", // geração seguinte, mesma pegada de cota
+  "gemini-3.6-flash", // é o que a própria API sugere no lugar do 2.5-flash
+  "gemini-2.5-flash-lite", // opção antiga (cota baixa em alguns projetos, ~20 RPD)
+  // gemini-2.5-flash saiu da lista: a API responde 404 nas chaves mais novas ("no longer
+  // available to new users"), e a última tentativa do failover era gasta nele — medido em
+  // 19/08/2026, no meio do OCR de 327 páginas escaneadas.
 ];
 
 // Teste de conexão. Para o Gemini, se o modelo configurado falhar por COTA (429) ou
