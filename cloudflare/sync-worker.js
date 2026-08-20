@@ -24,8 +24,8 @@
 // no wrangler.toml enquanto houver cofre antigo para migrar; depois é só remover.
 
 // Teto de sanidade. NÃO é o limite do R2: é o que impede um PUT anônimo de encher o
-// armazenamento gratuito. O envelope real com o curso completo tem ~29 MB.
-const LIMITE_BYTES = 64 * 1024 * 1024;
+// armazenamento gratuito. O envelope real com o curso completo tem 44,5 MB (medido apos o OCR).
+const LIMITE_BYTES = 96 * 1024 * 1024;
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/; // base64url do SHA-256 (o cliente corta/limita)
 
 function cors(origin) {

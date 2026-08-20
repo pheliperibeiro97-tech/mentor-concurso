@@ -18,7 +18,7 @@
 // anônimo de encher o armazenamento gratuito. O endpoint não tem autenticação por desenho —
 // o id é o hash da senha e o conteúdo é cifrado —, então o teto é a única barreira contra
 // abuso. O envelope real do usuário com o curso completo do cursinho tem ~29 MB.
-const LIMITE_BYTES = 64 * 1024 * 1024;
+const LIMITE_BYTES = 96 * 1024 * 1024;
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 const CORS = {
