@@ -78,5 +78,13 @@ ok(snapVazias.documentos[0].conteudo.n === 2 && snapVazias.documentos[0].conteud
    "10) material só com páginas vazias tem ficha (n=2, chars=0) e não some");
 ok(S.materiaisComConteudo(soVazias).length === 1, "10) e o pacote dele sobe (senão o OCR feito depois se perderia)");
 
+// 11) O acessor de perfil faz topo e perfil apontarem para o MESMO array: não pode contar 2x
+const compartilhado = { modificadoEm: "2026-08-20T10:00:00.000Z", config: {},
+  perfis: [{ id: "p1", nome: "Magistratura", documentos: [mat("a", "um"), mat("b", "dois")], resumos: [] }] };
+compartilhado.documentos = compartilhado.perfis[0].documentos; // é assim que o app expõe
+ok(S.materiaisComConteudo(compartilhado).length === 2,
+   "11) material contado UMA vez quando topo e perfil compartilham o array",
+   "achou " + S.materiaisComConteudo(compartilhado).length + " (antes achava 4)");
+
 console.log(falhas ? `\n${falhas} FALHA(S)` : "\nAuditoria de limites: tudo conforme");
 process.exit(falhas ? 1 : 0);

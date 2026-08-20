@@ -202,9 +202,15 @@ export function fatiaConteudo(doc) {
 
 // Percorre topo e perfis devolvendo [{doc, ficha}] de todo material que tem conteúdo próprio.
 export function materiaisComConteudo(state) {
+  // DEDUPLICA por id. `state.documentos` é um ACESSOR que roteia para o perfil ativo, então
+  // varrer o topo e depois os perfis encontra o MESMO material duas vezes — e ele subiria
+  // duas vezes. Apareceu na migração real: "Enviando materiais… 720 de 990" com 495 materiais.
+  const vistos = new Set();
   const saida = [];
   const varrer = (o) => {
     for (const d of (o && o.documentos) || []) {
+      if (!d || vistos.has(d.id)) continue;
+      vistos.add(d.id);
       if (Array.isArray(d.paginas) && d.paginas.length) saida.push(d);
     }
   };
