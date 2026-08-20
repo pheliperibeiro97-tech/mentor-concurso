@@ -8,6 +8,14 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.26",
+    data: "agosto/2026",
+    titulo: "Correção: cada material subia duas vezes na sincronização",
+    itens: [
+      "CORREÇÃO — na sincronização, o conteúdo de cada material era enviado DUAS vezes. A lista de materiais do app é a mesma do concurso ativo, e a varredura contava as duas, então uma biblioteca de 495 materiais virava 990 envios. Não havia risco de perda (o segundo envio sobrescrevia o primeiro, idêntico), mas gastava o dobro de tempo e de dados — visível no contador «Enviando materiais… X de N».",
+    ],
+  },
+  {
     v: "0.8.25",
     data: "agosto/2026",
     titulo: "O conteúdo do material desce quando você precisa dele — e a IA nunca gera sem ele",
