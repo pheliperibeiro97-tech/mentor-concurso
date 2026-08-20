@@ -14,8 +14,11 @@
 // este endpoint de forma cross-origin. Como o id é um hash da senha e o conteúdo é cifrado,
 // liberar origem é seguro.
 
-// Teto de sanidade, não limite do R2: recusa corpo absurdo antes de gastar escrita.
-const LIMITE_BYTES = 512 * 1024 * 1024;
+// Teto de sanidade. NÃO é o limite do R2 (que aceita muito mais): é o que impede um PUT
+// anônimo de encher o armazenamento gratuito. O endpoint não tem autenticação por desenho —
+// o id é o hash da senha e o conteúdo é cifrado —, então o teto é a única barreira contra
+// abuso. O envelope real do usuário com o curso completo do cursinho tem ~29 MB.
+const LIMITE_BYTES = 64 * 1024 * 1024;
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/;
 
 const CORS = {
