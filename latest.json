@@ -1,11 +1,11 @@
 {
+  "version": "0.8.24",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.23_x64-setup.exe",
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITmx6YUg4blVDbmlTeEZHMWoxcFdSTTBiVHQ2NTdtaHJ0Vk1lYkN4UldWNzNmYXliQ3QyWmFpbGVrSHZpSHRVV09IYTdLc3pmS2hRQUxybDhBNlZRSndRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjM5ODU2CWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yM194NjQtc2V0dXAuZXhlCm1rZ21OeWxTRURvc0lzdjlXb3Y1K29CcVhjdUp1OWRoVmlOQWNwNDNUZlZLRkVKd0VtMUpML011d21sbDZZMzlOcm1idHlBQXAweTZPalNDZzZYMENnPT0K"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITnBjS1NTRVZvdlhSY2ZOdlY4TWp0cUtWd25kdXJMM2tyN1IzOW9rdUkreXFxenVhbWxuWnBvWHR3c0tvcFJEbG9YS3VJTTNpWERiS1VvWXBVQ0xxemdJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjQ0MzAxCWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yNF94NjQtc2V0dXAuZXhlCllKSmxKNThFMXU2UTYxS2RLRkFaT1d4dFp3eEZteUNBdXdjb3Vwbjh0SG9vTVdxNm5DVmRWNEtySkF1Q1pYMWRyQ1pjVWJWOXNZa1E2WVMwbTFhSUN3PT0K",
+      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.24_x64-setup.exe"
     }
   },
-  "version": "0.8.23",
-  "notes": "Figuras e tabelas: a IA passa a transcrever o conteudo da figura em vez de resumi-la; paginas com muito texto de lei deixam de ficar presas na fila.",
-  "pub_date": "2026-08-20T15:31:11Z"
+  "notes": "A sincronizacao passa a enviar so o esqueleto da biblioteca; o texto de cada material desce quando voce o abre. ATENCAO: atualize os outros aparelhos - eles avisarao que o cofre e de uma versao mais nova ate serem atualizados.",
+  "pub_date": "2026-08-20T16:45:01Z"
 }
