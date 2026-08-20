@@ -11,3 +11,10 @@ compatibility_date = "2024-11-01"
 [[kv_namespaces]]
 binding = "COFRE"
 id = "0964d6f3137342ce9466438e6acf456f"
+
+# Bucket R2 que passou a guardar os cofres (19/08/2026). O KV acima continua vinculado só para
+# LER cofre gravado antes da migração — pode sair quando não houver mais nenhum.
+# Crie com:  wrangler r2 bucket create mentor-cofre
+[[r2_buckets]]
+binding = "COFRE_R2"
+bucket_name = "mentor-cofre"

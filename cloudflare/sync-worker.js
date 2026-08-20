@@ -13,10 +13,19 @@
 //   3) `wrangler kv namespace create COFRE` → cole o id no wrangler.toml
 //   4) `wrangler deploy`
 //
-// Armazenamento: KV (valor até 25 MiB — folgado para dados de texto). Se algum dia um cofre
-// passar disso, migrar este binding para R2 (mesma lógica, get/put por chave).
+// Armazenamento: R2, com o KV antigo ainda LIDO para não perder cofre existente.
+//
+// Era KV (valor até 25 MiB). Em 19/08/2026 a biblioteca do usuário passou disso — o snapshot
+// inclui o texto das páginas de cada material, e o curso completo do cursinho trouxe 49.537
+// páginas — e toda sincronização passou a devolver 413. O R2 não tem esse teto (objeto até 5 TB),
+// e a lógica é a mesma: get/put por chave.
+//
+// Deploy: `wrangler r2 bucket create mentor-cofre` e `wrangler deploy`. O binding KV pode ficar
+// no wrangler.toml enquanto houver cofre antigo para migrar; depois é só remover.
 
-const LIMITE_BYTES = 24 * 1024 * 1024; // margem sob o teto de 25 MiB do KV
+// Teto de sanidade (não é limite do R2, que aceita muito mais): recusa corpo absurdo antes de
+// gastar escrita. O envelope do usuário com o curso completo fica bem abaixo disto.
+const LIMITE_BYTES = 512 * 1024 * 1024;
 const ID_RE = /^[A-Za-z0-9_-]{16,64}$/; // base64url do SHA-256 (o cliente corta/limita)
 
 function cors(origin) {
@@ -48,17 +57,22 @@ export default {
     const id = decodeURIComponent(m[1]);
     if (!ID_RE.test(id)) return json({ erro: "id inválido" }, 400, h);
 
-    if (!env.COFRE) return json({ erro: "KV COFRE não vinculado" }, 500, h);
+    if (!env.COFRE_R2 && !env.COFRE) return json({ erro: "nenhum armazenamento vinculado" }, 500, h);
 
     if (request.method === "GET") {
-      const val = await env.COFRE.get("cofre:" + id);
+      // R2 primeiro; o KV continua sendo lido enquanto houver cofre gravado antes da migração.
+      if (env.COFRE_R2) {
+        const obj = await env.COFRE_R2.get("cofre:" + id);
+        if (obj) return new Response(obj.body, { status: 200, headers: { "Content-Type": "application/json", ...h } });
+      }
+      const val = env.COFRE ? await env.COFRE.get("cofre:" + id) : null;
       if (val == null) return new Response("", { status: 404, headers: h });
       return new Response(val, { status: 200, headers: { "Content-Type": "application/json", ...h } });
     }
 
     if (request.method === "PUT") {
       const body = await request.text();
-      if (body.length > LIMITE_BYTES) return json({ erro: "cofre grande demais para o KV; migre para R2" }, 413, h);
+      if (body.length > LIMITE_BYTES) return json({ erro: "cofre grande demais" }, 413, h);
       // Validação mínima: precisa ser o envelope cifrado do app (não guardamos lixo).
       try {
         const env0 = JSON.parse(body);
@@ -66,7 +80,8 @@ export default {
       } catch (_) {
         return json({ erro: "corpo não é JSON" }, 400, h);
       }
-      await env.COFRE.put("cofre:" + id, body);
+      if (env.COFRE_R2) await env.COFRE_R2.put("cofre:" + id, body, { httpMetadata: { contentType: "application/json" } });
+      else await env.COFRE.put("cofre:" + id, body);
       return json({ ok: true }, 200, h);
     }
 
