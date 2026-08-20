@@ -1748,13 +1748,23 @@ function abrirImportarMaterial(app, alvoId = null) {
           const botaoSalvar = corpo.querySelector('[data-action="add-doc"]');
           if (botaoSalvar) botaoSalvar.disabled = true;
           const feitos = [], falhos = [];
+          // Um `await` que NUNCA volta não é pego pelo try/catch: a fila fica parada para
+          // sempre no mesmo arquivo, sem erro, sem toast, com o contador congelado. Aconteceu
+          // na importação do curso completo (parou no 7º de 33 e ficou 20 min ali; o PDF
+          // seguinte estava íntegro e entrou normalmente na retomada). O teto é generoso de
+          // propósito — um PDF de 250 páginas com o app carregado já levou 16 minutos.
+          const TETO_POR_ARQUIVO = 15 * 60 * 1000;
+          const comTeto = (promessa, nome) => Promise.race([
+            promessa,
+            new Promise((_, rej) => setTimeout(() => rej(new Error(`"${nome}" passou de 15 minutos e foi pulado`)), TETO_POR_ARQUIVO)),
+          ]);
           for (let i = 0; i < arquivos.length; i++) {
             const f = arquivos[i];
             fila.textContent = `Importando ${i + 1} de ${arquivos.length} — ${f.name}`;
             tituloEl.value = ""; // cada arquivo traz o próprio nome
             try {
-              await lerArquivo(f);
-              await salvarPendente({ silencioso: true });
+              await comTeto(lerArquivo(f), f.name);
+              await comTeto(salvarPendente({ silencioso: true }), f.name);
               feitos.push(f.name);
             } catch (err) {
               console.error(err);
