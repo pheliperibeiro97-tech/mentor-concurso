@@ -1,0 +1,11 @@
+{
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.23_x64-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITmx6YUg4blVDbmlTeEZHMWoxcFdSTTBiVHQ2NTdtaHJ0Vk1lYkN4UldWNzNmYXliQ3QyWmFpbGVrSHZpSHRVV09IYTdLc3pmS2hRQUxybDhBNlZRSndRPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjM5ODU2CWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yM194NjQtc2V0dXAuZXhlCm1rZ21OeWxTRURvc0lzdjlXb3Y1K29CcVhjdUp1OWRoVmlOQWNwNDNUZlZLRkVKd0VtMUpML011d21sbDZZMzlOcm1idHlBQXAweTZPalNDZzZYMENnPT0K"
+    }
+  },
+  "version": "0.8.23",
+  "notes": "Figuras e tabelas: a IA passa a transcrever o conteudo da figura em vez de resumi-la; paginas com muito texto de lei deixam de ficar presas na fila.",
+  "pub_date": "2026-08-20T15:31:11Z"
+}

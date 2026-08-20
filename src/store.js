@@ -2944,6 +2944,34 @@ export const store = {
   temPdfDoc(doc) {
     return !!(doc && (doc.temPdf || doc.pdfData));
   },
+  // ---- CONTEÚDO SOB DEMANDA (sync v3) ----
+  // O aparelho que entra num cofre já cheio baixa o ESQUELETO: sabe que existem 496 materiais,
+  // com título, disciplina, sumário e vínculos, mas sem o texto das páginas. Cada material
+  // traz `conteudo: {n, chars, figuras, hash, pendente}` e o texto chega quando ele é aberto.
+  // Sem isto, abrir uma aula no iPad exigia baixar e parsear a biblioteca inteira.
+  conteudoPendente(doc) {
+    return !!(doc && doc.conteudo && doc.conteudo.pendente && !(Array.isArray(doc.paginas) && doc.paginas.length));
+  },
+  // Grava a fatia que veio do cofre (páginas + figuras daquele material).
+  aplicarConteudoMaterial(docId, fatia) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d || !fatia || !Array.isArray(fatia.paginas)) return false;
+    d.paginas = fatia.paginas;
+    d.figuras = Array.isArray(fatia.figuras) ? fatia.figuras : d.figuras || [];
+    d.conteudo = { ...(d.conteudo || {}), ...(fatia.ficha || {}), pendente: false };
+    recomputarTextoDoc(d); // `texto` é derivado: quem recebe reconstrói, não trafega
+    commit();
+    return true;
+  },
+  // Garante que o material tem o conteúdo carregado antes de uma leitura que dependa dele
+  // (abrir, buscar dentro, gerar a partir dele). No aparelho que já tem tudo, é um no-op.
+  async garantirConteudoDoc(docId) {
+    const d = state.documentos.find((x) => x.id === docId);
+    if (!d) return { ok: false, motivo: "sem-doc" };
+    if (!this.conteudoPendente(d)) return { ok: true, jaTinha: true };
+    const mod = await import("./sync-nuvem.js");
+    return mod.garantirConteudoMaterial(docId);
+  },
   // ---- Vínculo com o arquivo ORIGINAL (só desktop) ----
   // Guarda o CAMINHO, não o arquivo. Serve para reabrir o original depois de descartar o
   // binário — assim dá para não manter cópia da apostila dentro do app sem perder o acesso.

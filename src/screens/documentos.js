@@ -590,8 +590,42 @@ export default function renderDocumentos(root, app) {
     return bloco ? `de «${(bloco.titulo || "").trim() || t}»` : `do material «${t}»`;
   };
 
+  // CONTEÚDO SOB DEMANDA (sync v3): num aparelho que entrou num cofre já cheio, o material
+  // chega como ficha — título, disciplina, sumário e vínculos — e o texto das páginas só é
+  // buscado quando alguém precisa dele. Este invólucro é o ponto único onde isso acontece:
+  // envolver as ações que leem o conteúdo evita espalhar `await garantirConteudoDoc` por
+  // dezenas de lugares e esquecer justamente o que faltar.
+  const exigeConteudo = (fn) => async (el, ...resto) => {
+    const id = el && el.getAttribute && el.getAttribute("data-id");
+    const doc = id && store.get().documentos.find((d) => d.id === id);
+    if (doc && store.conteudoPendente(doc)) {
+      const fim = toastCarregando("Baixando o conteúdo deste material…");
+      try {
+        const r = await store.garantirConteudoDoc(id);
+        fim();
+        if (!r || !r.ok) {
+          return toast(
+            r && r.motivo === "sem-senha"
+              ? "Este material está na nuvem. Conecte a sincronização para baixá-lo."
+              : "Não consegui baixar o conteúdo deste material agora.",
+            "erro"
+          );
+        }
+      } catch (e) {
+        fim();
+        return toast("Não consegui baixar o conteúdo deste material: " + e.message, "erro");
+      }
+    }
+    return fn(el, ...resto);
+  };
+
   bindActions(root, {
     "toggle-form": () => abrirImportarMaterial(app),
+    // Baixar o conteúdo por vontade própria (ex.: antes de ficar sem rede).
+    "baixar-conteudo": exigeConteudo(async () => {
+      toast("Conteúdo baixado — o material já pode ser lido e buscado neste aparelho.", "ok");
+      app.refresh();
+    }),
     abrir: (el) => {
       const id = el.getAttribute("data-id");
       abertoId = abertoId === id ? null : id;
@@ -681,7 +715,7 @@ export default function renderDocumentos(root, app) {
       toast(`Material vinculado a ${plural(n, "tópico", "tópicos")} (com as páginas).`, "ok");
       app.refresh();
     },
-    "detectar-topicos": async (el) => {
+    "detectar-topicos": exigeConteudo(async (el) => {
       const id = el.getAttribute("data-id");
       detectDoc = id;
       detectResultado = null;
@@ -695,7 +729,7 @@ export default function renderDocumentos(root, app) {
       }
       detectando = false;
       app.refresh();
-    },
+    }),
     "detect-fechar": () => {
       detectDoc = null;
       detectResultado = null;
@@ -861,7 +895,7 @@ export default function renderDocumentos(root, app) {
     // Descrever FIGURAS com a IA, sob demanda: UM comando descreve todas as que faltam no
     // material (uma requisição por página com figura). Deixou de ser automático na importação
     // em fila porque 17 apostilas seguidas estouravam a cota.
-    "descrever-figuras": async (el) => {
+    "descrever-figuras": exigeConteudo(async (el) => {
       const id = el.getAttribute("data-id");
       if (!store.iaDisponivel()) return avisoIA(app, "Descrever figuras");
       const d = store.get().documentos.find((x) => x.id === id);
@@ -880,7 +914,7 @@ export default function renderDocumentos(root, app) {
       toast(mensagemFiguras(r, faltam - restam, restam), r && r.parou ? "erro" : "ok");
       store.indexarFonteAuto(id);
       app.refresh();
-    },
+    }),
     // Páginas escaneadas de TODOS os materiais, em sequência (mesmo caminho do botão que já
     // existe dentro do cartão, só que sem obrigar a abrir material por material).
     "ocr-todos": async () => {
@@ -967,7 +1001,7 @@ export default function renderDocumentos(root, app) {
     "ir-pratica": (el) => app.navigate("pratica", { topicoId: el.getAttribute("data-top") }),
 
     // Gerar a partir do material (pergunta o escopo: inteiro × tópico do sumário × faixa de páginas).
-    "doc-mapa": async (el) => {
+    "doc-mapa": exigeConteudo(async (el) => {
       el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar mapa mental");
       const id = el.getAttribute("data-id");
@@ -984,8 +1018,8 @@ export default function renderDocumentos(root, app) {
         return;
       }
       gerarEAbrirMapa(store, app, () => store.gerarMapaMentalDeMaterial(id, escopo.bloco));
-    },
-    "doc-flashcards": async (el) => {
+    }),
+    "doc-flashcards": exigeConteudo(async (el) => {
       el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const id = el.getAttribute("data-id");
@@ -1004,8 +1038,8 @@ export default function renderDocumentos(root, app) {
       if (cards == null) return; // erro já sinalizado
       toast(cards.length ? `${plural(cards.length, "flashcard criado", "flashcards criados")}.` : "Nada gerado — confira se este material tem texto.", cards.length ? "ok" : "erro");
       if (cards.length) app.navigate("flashcards", { lote, loteRotulo: rot }); // abre mostrando SÓ os recém-gerados
-    },
-    "doc-questoes": async (el) => {
+    }),
+    "doc-questoes": exigeConteudo(async (el) => {
       el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar questões");
       const id = el.getAttribute("data-id");
@@ -1024,8 +1058,8 @@ export default function renderDocumentos(root, app) {
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão criada", "questões criadas")}.` : "Nada gerado.", qs.length ? "ok" : "erro");
       if (qs.length) app.navigate("pratica", { lote, loteRotulo: rot });
-    },
-    "doc-questoes-ce": async (el) => {
+    }),
+    "doc-questoes-ce": exigeConteudo(async (el) => {
       el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar itens Certo/Errado");
       const id = el.getAttribute("data-id");
@@ -1044,8 +1078,8 @@ export default function renderDocumentos(root, app) {
       if (itens == null) return;
       toast(itens.length ? `${plural(itens.length, "item C/E criado", "itens C/E criados")}.` : "Nada gerado.", itens.length ? "ok" : "erro");
       if (itens.length) app.navigate("pratica-ce", { lote, loteRotulo: rot });
-    },
-    "doc-extrair": async (el) => {
+    }),
+    "doc-extrair": exigeConteudo(async (el) => {
       el.closest("details")?.removeAttribute("open");
       if (!store.iaDisponivel()) return avisoIA(app, "Extrair questões do material");
       const id = el.getAttribute("data-id");
@@ -1064,7 +1098,7 @@ export default function renderDocumentos(root, app) {
       if (qs == null) return;
       toast(qs.length ? `${plural(qs.length, "questão extraída", "questões extraídas")} (quando o gabarito estava no material).` : "Não encontrei questões prontas neste material.", qs.length ? "ok" : "erro");
       if (qs.length) app.navigate("pratica", { lote: loteEx, loteRotulo: rotEx });
-    },
+    }),
 
     // ---- F5: geração/extração POR BLOCO (a partir do sumário navegável) ----
     "bloco-flashcards": (el) => gerarDoBloco(el, "flashcards"),
@@ -1109,7 +1143,7 @@ export default function renderDocumentos(root, app) {
     // ---- busca inteligente (semântica) ----
     // Reprocessa em LOTE os materiais pendentes/desatualizados do índice. Depois disto,
     // salvar/atualizar material mantém o índice em dia sozinho (indexarFonteAuto).
-    "atualizar-indice": async (el) => {
+    "atualizar-indice": exigeConteudo(async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Busca inteligente");
       const pend = store.fontesIndice(SEM_ESCOPO_MAT).filter((f) => !f.indexada).map((f) => f.id);
       if (!pend.length) return toast("A busca inteligente já está em dia.", "ok");
@@ -1130,7 +1164,7 @@ export default function renderDocumentos(root, app) {
         else toast("Não consegui atualizar o índice agora. Tente de novo em instantes.", "erro");
       }
       app.refresh();
-    },
+    }),
     "result-flashcards": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Gerar flashcards");
       const r = semResultados && semResultados[+el.getAttribute("data-idx")];
@@ -1949,9 +1983,13 @@ function docHTML(store, st, d, busca, grupoNome = "") {
   // Trecho com a palavra buscada em destaque (só quando o match está no conteúdo).
   const trecho = busca && busca.trim().length >= 2 ? trechoBusca(d.texto || "", busca.trim()) : "";
   const tipo = store.temPdfDoc(d) ? { ic: "file-text", lb: "PDF" } : (d.temImg || d.imgData) ? { ic: "image", lb: "Imagem" } : { ic: "file-text", lb: "Texto" };
-  const nPag = (d.paginas || []).length;
+  // Material que veio do cofre mas cujo conteúdo ainda não foi baixado (sync v3): a ficha diz
+  // quantas páginas e figuras existem, então o cartão não fica mentindo "0 páginas".
+  const naNuvem = store.conteudoPendente(d);
+  const ficha = (naNuvem && d.conteudo) || null;
+  const nPag = ficha ? ficha.n || 0 : (d.paginas || []).length;
   const nTop = d.estrutura && d.estrutura.blocos ? d.estrutura.blocos.length : 0;
-  const nFig = (d.figuras || []).filter((f) => f.descricao).length; // as "vazias" são só marcação de página conferida
+  const nFig = ficha ? ficha.figuras || 0 : (d.figuras || []).filter((f) => f.descricao).length; // as "vazias" são só marcação de página conferida
   // Data de ENTRADA do material: responde "quando trouxe isto?" e "já está velho?" meses
   // depois, sem precisar abrir nada. Reimportar o arquivo atualiza a data (e o tooltip guarda
   // a da primeira importação).
@@ -1959,7 +1997,10 @@ function docHTML(store, st, d, busca, grupoNome = "") {
   const dataTxt = dEntrada
     ? `<span class="doc-data" data-tip="${d.atualizadoEm ? `Arquivo atualizado em ${fmtData(d.atualizadoEm)}${d.criadoEm ? ` · importado pela 1ª vez em ${fmtData(d.criadoEm)}` : ""}` : `Importado em ${fmtData(d.criadoEm)}`}" data-tip-pos="cima-esq">${icone("calendar")} ${d.atualizadoEm ? "atualizado" : "importado"} em ${fmtData(dEntrada)}</span>`
     : "";
-  const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : "", dataTxt].filter(Boolean).join(" · ");
+  const selo = naNuvem
+    ? `<span class="doc-data" data-tip="O texto deste material está no seu cofre e ainda não foi baixado NESTE aparelho. Ele desce sozinho quando você usar o material — ou clique para baixar agora." data-tip-pos="cima-esq"><a href="#" class="link-sutil" data-action="baixar-conteudo" data-id="${d.id}">${icone("cloud")} baixar conteúdo</a></span>`
+    : "";
+  const sub = [tipo.lb, nPag ? `${nPag} ${nPag === 1 ? "página" : "páginas"}` : "", nTop ? `${nTop} ${nTop === 1 ? "tópico" : "tópicos"}` : "", nFig ? `${nFig} ${nFig === 1 ? "figura" : "figuras"}` : "", selo, dataTxt].filter(Boolean).join(" · ");
   return `
     <div class="card doc-item" data-foco-id="${d.id}">
       <div class="doc-head">

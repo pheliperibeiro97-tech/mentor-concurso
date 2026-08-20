@@ -18,6 +18,9 @@ import { store } from "./store.js";
 import {
   montarSnapshotSync,
   aplicarRemoto,
+  fichaConteudo,
+  fatiaConteudo,
+  materiaisComConteudo,
   decidir,
   peso,
   encolheria,
@@ -35,7 +38,12 @@ const ENDPOINT_PADRAO = "https://mentor-concurso.pages.dev";
 
 const PBKDF2_ITER = 210000; // OWASP 2023 p/ PBKDF2-HMAC-SHA256
 // v1 = JSON cifrado direto (formato original, ainda LIDO). v2 = JSON + gzip + cifra.
-const ENVELOPE_VER = 2;
+// v3 = mesmo formato de cifra do v2 (gzip + AES-GCM), mas o snapshot NÃO leva mais o
+// conteúdo dos materiais: páginas e figuras viajam em objetos próprios. Subir a versão é o
+// que protege o aparelho desatualizado — `decifrar` recusa envelope de versão desconhecida
+// com "atualize o Mentor neste aparelho" em vez de aplicar um esqueleto por cima da
+// biblioteca cheia. O v1 e o v2 continuam sendo LIDOS (cofre antigo migra na 1ª subida).
+const ENVELOPE_VER = 3;
 
 // ---- Ambiente --------------------------------------------------------------
 // Precisa de Web Crypto (subtle) + fetch. Presente em todo navegador moderno e no WebView2.
@@ -111,12 +119,12 @@ async function cifrar(frase, obj) {
   const comprime = temCompressao;
   const dados = comprime ? await gzip(cru) : cru;
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, chave, dados);
-  return { v: comprime ? 2 : 1, salt: bufB64(salt), iv: bufB64(iv), ct: bufB64(ct) };
+  return { v: comprime ? ENVELOPE_VER : 1, salt: bufB64(salt), iv: bufB64(iv), ct: bufB64(ct) };
 }
 // Decifra o envelope → objeto. Lança se a senha estiver errada (GCM falha a autenticação).
 async function decifrar(frase, env) {
   if (!env || !env.salt || !env.iv || !env.ct) throw new Error("Cofre em formato desconhecido.");
-  if (env.v !== 1 && env.v !== ENVELOPE_VER) {
+  if (env.v !== 1 && env.v !== 2 && env.v !== ENVELOPE_VER) {
     // Antes isto era um "formato desconhecido" seco. Um cofre gravado por uma versão mais
     // nova é o caso real, e o que resolve é atualizar ESTE aparelho — vale dizer isso.
     const e = new Error("Este cofre foi gravado por uma versão mais nova do app. Atualize o Mentor neste aparelho para sincronizar.");
@@ -132,7 +140,7 @@ async function decifrar(frase, env) {
     e.code = "SENHA_ERRADA";
     throw e;
   }
-  const bytes = env.v === 2 ? await gunzip(new Uint8Array(plano)) : new Uint8Array(plano);
+  const bytes = env.v >= 2 ? await gunzip(new Uint8Array(plano)) : new Uint8Array(plano);
   return JSON.parse(dec.decode(bytes));
 }
 
@@ -162,6 +170,66 @@ async function subirEnvelope(id, env) {
     body: JSON.stringify(env),
   });
   if (!resp.ok) throw new Error(`Cofre: HTTP ${resp.status} ao enviar.`);
+}
+
+// ---- conteúdo por material (v3) --------------------------------------------
+// Um objeto por material, ao lado do cofre: `/v1/cofre/:id/p/:docId`. Ver o cabeçalho de
+// `functions/v1/cofre/[id]/p/[doc].js` para o porquê.
+function urlConteudo(id, docId) {
+  return `${urlCofre(id)}/p/${encodeURIComponent(docId)}`;
+}
+async function baixarConteudo(id, docId) {
+  const resp = await fetch(urlConteudo(id, docId), { method: "GET", headers: { Accept: "application/json" } });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error(`Cofre: HTTP ${resp.status} ao baixar o material.`);
+  const txt = (await resp.text()).trim();
+  if (!txt) return null;
+  try { return JSON.parse(txt); } catch (_) { return null; }
+}
+async function subirConteudo(id, docId, env) {
+  const resp = await fetch(urlConteudo(id, docId), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(env),
+  });
+  if (!resp.ok) throw new Error(`Cofre: HTTP ${resp.status} ao enviar o material.`);
+}
+
+// Sobe o conteúdo de todo material cujo hash mudou em relação ao que o cofre já tem.
+// O remoto anterior é a fonte da comparação: se ele não existe (cofre novo ou vindo do
+// formato v2), sobe tudo — uma vez só.
+async function subirConteudosAlterados(id, frase, localSnap, remotoAnterior, state) {
+  const fichasRemotas = new Map();
+  const colher = (o) => {
+    for (const d of (o && o.documentos) || []) {
+      if (d && d.conteudo && d.conteudo.hash) fichasRemotas.set(d.id, d.conteudo.hash);
+    }
+  };
+  if (remotoAnterior) { colher(remotoAnterior); (remotoAnterior.perfis || []).forEach(colher); }
+
+  const docs = materiaisComConteudo(state);
+  let enviados = 0;
+  for (const d of docs) {
+    const ficha = fichaConteudo(d);
+    if (fichasRemotas.get(d.id) === ficha.hash) continue; // já está lá, idêntico
+    await subirConteudo(id, d.id, await cifrar(frase, fatiaConteudo(d)));
+    enviados++;
+  }
+  return { enviados, total: docs.length };
+}
+
+// Busca o conteúdo de UM material sob demanda (o aparelho que baixou só o esqueleto) e o
+// grava no estado. É o que faz o iPad abrir uma aula sem ter a biblioteca inteira.
+export async function garantirConteudoMaterial(docId) {
+  const frase = fraseAtual();
+  if (!frase) return { ok: false, motivo: "sem-senha" };
+  const id = await cofreId(frase);
+  const env = await baixarConteudo(id, docId);
+  if (!env) return { ok: false, motivo: "sem-conteudo" };
+  const fatia = await decifrar(frase, env);
+  if (!fatia || !Array.isArray(fatia.paginas)) return { ok: false, motivo: "conteudo-invalido" };
+  store.aplicarConteudoMaterial(docId, fatia);
+  return { ok: true, paginas: fatia.paginas.length };
 }
 
 // ---- estado/meta -----------------------------------------------------------
@@ -277,6 +345,10 @@ export async function sincronizarNuvem({ motivo = "manual", silencioso = false }
     }
     if (acao === "subir") {
       if (pr > 0) await guardarBackupConflito(remoto);
+      // ORDEM IMPORTA: o conteúdo dos materiais sobe ANTES do esqueleto. O snapshot é o
+      // índice do que existe na nuvem; publicá-lo primeiro abriria uma janela em que outro
+      // aparelho baixaria fichas apontando para objetos que ainda não estão lá.
+      await subirConteudosAlterados(id, frase, localSnap, remoto, state);
       await subirEnvelope(id, await cifrar(frase, localSnap));
       marcar({ sincronizando: false, ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, erro: "" });
       return { ok: true, acao: "subiu" };
@@ -303,6 +375,9 @@ export async function resolverPendenciaNuvem(escolha) {
   const state = store.get();
   const localSnap = montarSnapshotSync(state, dispositivoId());
   if (escolha === "local") {
+    // Sem remoto anterior para comparar: manda o conteúdo de todos os materiais. É o caminho
+    // "mantenha os deste aparelho", então subir a mais é o lado seguro do erro.
+    await subirConteudosAlterados(id, frase, localSnap, null, state);
     await subirEnvelope(id, await cifrar(frase, localSnap));
     marcar({ ultimaSync: agora, baseEm: localSnap._sync.atualizadoEm, ultimoResultado: "subiu", pendente: null, ultimoConflitoEm: "", erro: "" });
     return { ok: true, acao: "subiu" };

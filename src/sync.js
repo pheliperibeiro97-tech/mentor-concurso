@@ -115,7 +115,11 @@ export function pesoTexto(snap) {
     if (!o || !Array.isArray(o.documentos)) return 0;
     let n = 0;
     for (const d of o.documentos) {
-      if (Array.isArray(d.paginas)) for (const p of d.paginas) n += p && p.texto ? p.texto.length : 0;
+      // No envelope v3 as páginas não viajam: quem responde pelo peso é a ficha do conteúdo.
+      // Sem este ramo, o primeiro snapshot no formato novo pareceria uma perda total de texto
+      // e a guarda barraria a própria migração.
+      if (d && d.conteudo && typeof d.conteudo.chars === "number" && !Array.isArray(d.paginas)) n += d.conteudo.chars;
+      else if (Array.isArray(d.paginas)) for (const p of d.paginas) n += p && p.texto ? p.texto.length : 0;
       else if (typeof d.texto === "string") n += d.texto.length;
     }
     return n;
@@ -143,6 +147,68 @@ const CHECKLIST_VAZIO = () => ({ conferidoEm: null, itens: [] });
 // Snapshot para a nuvem: clona o estado e REMOVE o que não é dado do usuário — os binários
 // (pdfData/imgData), o índice semântico, o checklist do edital e a config local do aparelho.
 // Mantém texto/páginas. Carimba metadados de sync no topo.
+// ---- CONTEÚDO SOB DEMANDA (envelope v3) ------------------------------------------------
+// O peso do cofre é o texto das páginas, e ele quase nunca muda: uma sessão de estudo mexe em
+// revisões e questões, não em apostila. Separar o conteúdo do esqueleto faz o snapshot voltar
+// a ser pequeno (metadados de 496 materiais cabem em ~2 MB) e faz a subida ser incremental —
+// só o material cujo hash mudou sobe de novo.
+
+// Hash barato e determinístico (FNV-1a de 32 bits em hex) do conteúdo do material. Não é
+// criptográfico: serve para responder "este material mudou desde a última vez?".
+function hashTexto(txt) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < txt.length; i++) {
+    h ^= txt.charCodeAt(i);
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  }
+  return h.toString(16);
+}
+
+// A FICHA do conteúdo, que fica no snapshot no lugar das páginas.
+// `chars` existe para a guarda anti-perda continuar funcionando: sem ele, `pesoTexto` veria
+// todo material como vazio e o primeiro sync no formato novo pareceria uma perda total.
+export function fichaConteudo(doc) {
+  const paginas = Array.isArray(doc.paginas) ? doc.paginas : [];
+  let chars = 0;
+  let sementes = "";
+  for (const p of paginas) {
+    const t = (p && p.texto) || "";
+    chars += t.length;
+    // Amostra por página em vez do texto inteiro: percorrer 112 MB a cada sincronização é
+    // caro e desnecessário — número da página, tamanho e as pontas já mudam a qualquer
+    // edição real (OCR, figura descrita, reimportação).
+    sementes += (p && p.n) + ":" + t.length + ":" + t.slice(0, 24) + t.slice(-24) + "|";
+  }
+  const figs = Array.isArray(doc.figuras) ? doc.figuras : [];
+  return { n: paginas.length, chars, figuras: figs.length, hash: hashTexto(sementes + "#" + figs.length) };
+}
+
+// O que viaja em objeto próprio, por material. As descrições de figura vêm aqui e NÃO no
+// snapshot: no estado elas existem duas vezes (em `figuras[].descricao` e coladas no texto da
+// página), e mandar as duas cópias custava 5,9 MB por sincronização.
+export function fatiaConteudo(doc) {
+  return {
+    v: 1,
+    docId: doc.id,
+    paginas: Array.isArray(doc.paginas) ? doc.paginas : [],
+    figuras: Array.isArray(doc.figuras) ? doc.figuras : [],
+    ficha: fichaConteudo(doc),
+  };
+}
+
+// Percorre topo e perfis devolvendo [{doc, ficha}] de todo material que tem conteúdo próprio.
+export function materiaisComConteudo(state) {
+  const saida = [];
+  const varrer = (o) => {
+    for (const d of (o && o.documentos) || []) {
+      if (Array.isArray(d.paginas) && d.paginas.length) saida.push(d);
+    }
+  };
+  varrer(state);
+  (state.perfis || []).forEach(varrer);
+  return saida;
+}
+
 export function montarSnapshotSync(state, dispositivo) {
   // O cofre é da CONTA: sobe o app inteiro, com TODOS os concursos. Uma senha, um cofre —
   // o aparelho que a digitar recebe tudo. (Um cofre por concurso gastaria uma escrita por
@@ -162,7 +228,20 @@ export function montarSnapshotSync(state, dispositivo) {
         const temPaginas = Array.isArray(d.paginas) && d.paginas.length > 0;
         // `temPdf`/`temImg` dizem se ESTE aparelho tem o arquivo — e o arquivo não viaja.
         // Subir os sinais faria o celular anunciar "Abrir PDF" para algo que não tem.
-        return { ...d, pdfData: null, imgData: null, temPdf: false, temImg: false, ...(temPaginas ? { texto: "" } : {}) };
+        const base = { ...d, pdfData: null, imgData: null, temPdf: false, temImg: false, ...(temPaginas ? { texto: "" } : {}) };
+        // CONTEÚDO SOB DEMANDA: as páginas (e as descrições de figura, que moram nelas) saem
+        // do snapshot e viram um objeto próprio por material — ver `fatiaConteudo`. O que fica
+        // aqui é só a FICHA (`d.conteudo`): quantas páginas, quantos caracteres e o hash, que
+        // é o que permite decidir se o material precisa ser rebaixado.
+        // Medido em 20/08/2026: o snapshot inteiro tinha 128,6 MB, dos quais 112,7 MB eram
+        // texto de página e 5,9 MB as descrições de figura repetidas (elas já estão coladas no
+        // texto da página). Mandar tudo junto obrigava o iPad a decifrar e fazer JSON.parse de
+        // 128 MB para abrir UMA aula — o caminho para o app virar só-desktop.
+        if (!temPaginas) return base;
+        base.paginas = null;
+        base.figuras = null;
+        base.conteudo = fichaConteudo(d);
+        return base;
       });
     }
     if (o.embeddings) o.embeddings = INDICE_VAZIO();
@@ -208,6 +287,12 @@ export function aplicarRemoto(localState, remoto) {
         // este aparelho tem o arquivo (o remoto sempre os manda desligados).
         temPdf: !!(d.temPdf || d.pdfData),
         temImg: !!(d.temImg || d.imgData),
+        // v3: o conteúdo (páginas + figuras) também não viaja no snapshot. Guardo o que este
+        // aparelho já tem para devolvê-lo intacto — sem isto, a máquina que TEM a biblioteca
+        // inteira a perderia ao baixar um esqueleto legítimo.
+        paginas: Array.isArray(d.paginas) ? d.paginas : null,
+        figuras: Array.isArray(d.figuras) ? d.figuras : null,
+        ficha: Array.isArray(d.paginas) && d.paginas.length ? fichaConteudo(d) : null,
       };
     }
   };
@@ -217,9 +302,25 @@ export function aplicarRemoto(localState, remoto) {
     if (!o || !Array.isArray(o.documentos)) return;
     o.documentos = o.documentos.map((d) => {
       const bin = binPorId[d.id];
-      return bin
+      const saida = bin
         ? { ...d, pdfData: bin.pdfData, imgData: bin.imgData, temPdf: bin.temPdf, temImg: bin.temImg }
         : { ...d, pdfData: d.pdfData || null, imgData: d.imgData || null, temPdf: !!d.temPdf, temImg: !!d.temImg };
+      // Conteúdo: o remoto v3 traz só a ficha. Se o que este aparelho já tem casa com o hash
+      // dela, fica o local (nada trafega). Se não casa — ou se não há nada local —, o material
+      // fica marcado como pendente e o conteúdo é buscado sob demanda, ao abrir.
+      if (saida.conteudo && !Array.isArray(saida.paginas)) {
+        const mesmo = bin && bin.ficha && bin.ficha.hash === saida.conteudo.hash;
+        if (mesmo) {
+          saida.paginas = bin.paginas;
+          saida.figuras = bin.figuras;
+          saida.conteudo = { ...saida.conteudo, pendente: false };
+        } else {
+          saida.paginas = null;
+          saida.figuras = null;
+          saida.conteudo = { ...saida.conteudo, pendente: true };
+        }
+      }
+      return saida;
     });
   };
   devolver(novo);

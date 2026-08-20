@@ -8,6 +8,18 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.24",
+    data: "agosto/2026",
+    titulo: "A sincronização deixa de mandar a biblioteca inteira a cada vez — o celular volta a dar conta",
+    itens: [
+      "MUDANÇA IMPORTANTE — o que sobe para o cofre passou a ser o ESQUELETO da biblioteca (títulos, disciplinas, sumários, vínculos, e todo o resto do app), e o texto de cada material virou um pacote próprio, baixado quando você abre aquele material. Medido na biblioteca real: o que subia a cada sincronização caiu de 48,6 MB para 278 KB.",
+      "Por que isso importa no iPad e no celular: antes, para abrir UMA aula, o aparelho tinha de baixar, decifrar e processar a biblioteca toda. Com o curso completo do cursinho (49 mil páginas) isso passou do que um navegador de celular aguenta — o app estava virando só-desktop.",
+      "A subida também ficou incremental: material que não mudou não sobe de novo. Uma sessão de estudo mexe em revisões e questões, não em apostila.",
+      "ATENÇÃO — os outros aparelhos precisam ser atualizados. Um aparelho em versão anterior vai avisar «este cofre foi gravado por uma versão mais nova do app» e parar de sincronizar até ser atualizado. Ele NÃO perde nada: a recusa existe justamente para não deixar uma versão antiga gravar por cima.",
+      "No material que ainda não foi baixado neste aparelho, o cartão mostra «baixar conteúdo» — e o conteúdo também desce sozinho quando você usa o material (gerar questões, flashcards, mapa mental, extrair).",
+    ],
+  },
+  {
     v: "0.8.23",
     data: "agosto/2026",
     titulo: "«Ler figuras e tabelas» passa a transcrever o que está dentro da figura, não a resumi-la",
