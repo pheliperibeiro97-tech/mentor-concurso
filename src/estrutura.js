@@ -715,7 +715,17 @@ const tokensCasamento = (s) =>
 // crimes ambientais da apostila de Ambiental, que mora em Penal no edital), e é uma troca
 // consciente: vínculo errado conta como edital coberto e contamina dossiê e revisões, então
 // vazio é melhor — e o usuário pode vincular à mão no cartão do material.
+// Títulos de SERVIÇO da apostila — não são matéria, e casam com qualquer coisa por uma palavra
+// solta: "Conteúdo Programático" foi parar em "Estrutura, conteúdo e função das constituições",
+// "Referências bibliográficas" em "Da competência", "Apresentação" em "Teoria Geral do Direito
+// e da Política". Medido no curso completo: 10 vínculos assim em 475 materiais, um por apostila.
+const RE_TITULO_DE_SERVICO = /^(apresenta[çc][ãa]o( do curso)?|conte[úu]do program[áa]tico|programa[çc][ãa]o|sum[áa]rio|[íi]ndice|cronograma|bibliografia|refer[êe]ncias?( bibliogr[áa]ficas?)?( e links.*)?|considera[çc][õo]es finais|introdu[çc][ãa]o ao curso)$/i;
+export function ehTituloDeServico(titulo) {
+  return RE_TITULO_DE_SERVICO.test(String(titulo || "").trim());
+}
+
 export function acharTopicoDoBloco(titulo, { topicos, disciplinas, disciplinaId, restrito = false, minMesma = 0.34, minOutra = 0.75 } = {}) {
+  if (ehTituloDeServico(titulo)) return null;
   const alvo = tokensCasamento(titulo);
   if (!alvo.size || !Array.isArray(topicos) || !topicos.length) return null;
   const nomeDisc = (id) => {
