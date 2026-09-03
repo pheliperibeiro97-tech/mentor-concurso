@@ -155,7 +155,8 @@ function qPreviewHTML(itens, ce, st) {
         <button class="prev-remover" data-action="remover-q-prev" data-i="${i}" data-tip-pos="cima-dir" data-tip="Remover esta questão">${icone("x")}</button>
       </div>
       ${metaRow(q, i)}
-      <details class="prev-spoiler">
+      ${q.gabarito == null ? `<p class="q-sem-gab small u-m-0 u-mb-4">${icone("alert-triangle")} <b>Sem gabarito.</b> A linha não trouxe <code>*</code> na alternativa correta — marque-a abaixo, ou remova a questão. Sem isso ela não é adicionada.</p>` : ""}
+      <details class="prev-spoiler"${q.gabarito == null ? " open" : ""}>
         <summary>${icone("eye")} ver/editar alternativas e gabarito</summary>
         <p class="muted small u-m-0 u-mb-4">Marque a alternativa correta no botão à esquerda.</p>
         <ul class="q-alts" style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:5px">
@@ -203,7 +204,8 @@ function lerPreviewQ(root, ce) {
     }
     const alternativas = [...c.querySelectorAll(".q-alt")].map((i) => i.value);
     const gabRadio = c.querySelector(".q-gab:checked");
-    const gabarito = gabRadio ? parseInt(gabRadio.getAttribute("data-a"), 10) : 0;
+    // `null`, não 0: nenhum rádio marcado significa "não sei a correta", e não "é a A".
+    const gabarito = gabRadio ? parseInt(gabRadio.getAttribute("data-a"), 10) : null;
     return { enunciado, alternativas, gabarito, ...meta };
   });
 }
@@ -488,7 +490,19 @@ function abrirAddQuestoes(app, estado, formato) {
         "descartar-q": () => cerrar(),
         "aceitar-q": () => {
           const itens = lerPreviewQ(corpo, ce);
-          const n = ce ? store.aceitarQuestoesCE(itens, estado.previewTop || null) : store.aceitarQuestoes(itens, estado.previewTop || null);
+          // Questão sem gabarito não entra, e não entra em silêncio: o preview esconde as
+          // alternativas de propósito (para não estragar a prática), então quem colou uma linha
+          // sem `*` não teria como perceber que a resposta foi inventada. Barra tudo e diz onde.
+          if (!ce) {
+            const semGab = itens.filter((q) => q.gabarito == null).length;
+            if (semGab) {
+              estado.preview = itens; // preserva as edições já feitas
+              rerender();
+              return toast(`${plural(semGab, "questão está sem gabarito", "questões estão sem gabarito")} — marque a alternativa correta (ou remova) antes de adicionar.`, "erro");
+            }
+          }
+          const r = ce ? store.aceitarQuestoesCE(itens, estado.previewTop || null) : store.aceitarQuestoes(itens, estado.previewTop || null);
+          const n = typeof r === "number" ? r : r.criadas;
           if (!n) return toast(ce ? "Cada item precisa de afirmação e gabarito." : "Cada questão precisa de enunciado e ao menos 2 alternativas.", "erro");
           cerrar();
           app.refresh();

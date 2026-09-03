@@ -3311,7 +3311,7 @@ export const store = {
       ...iaExtras(state, { topicoId, topico: contexto, dificuldade }),
     });
     const fonte = { tipo: "busca", titulo: contexto || "Busca semântica" };
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte })).filter(Boolean);
   },
 
   // Recuperação para o CHAT (híbrida): trechos semânticos do material/resumos quando há
@@ -3376,13 +3376,24 @@ export const store = {
       const t = state.topicos.find((x) => x.id === topicoId);
       if (t) discId = t.disciplinaId;
     }
+    const alts = (alternativas || []).map((a) => String(a));
+    // ÚLTIMA LINHA DE DEFESA (18 chamadores). Gabarito que não aponta para uma alternativa
+    // existente virava o índice 0 — "A" no múltipla escolha, "Certo" no C/E —, e o aluno
+    // memorizava um gabarito que o app inventou.
+    // A exceção é a questão ANULADA: prova oficial cujo gabarito não veio fica registrada,
+    // marcada e fora da pontuação (é como `importarProva` já trata o `semGabarito`).
+    const gabaritoValido = Number.isInteger(gabarito) && gabarito >= 0 && gabarito < alts.length;
+    if (!gabaritoValido && !anulada) {
+      console.warn("[questoes] recusada por falta de gabarito:", (enunciado || "").slice(0, 60));
+      return null;
+    }
     const q = {
       id: uid("ques"),
       topicoId: topicoId || null,
       disciplinaId: discId,
       enunciado: (enunciado || "").trim(),
-      alternativas: (alternativas || []).map((a) => String(a)),
-      gabarito: Number.isInteger(gabarito) ? gabarito : 0,
+      alternativas: alts,
+      gabarito: gabaritoValido ? gabarito : 0,
       selo: selo || "verde",
       fonte: fonte || null,
       referencia: (referencia || "").trim() || null,
@@ -3430,9 +3441,12 @@ export const store = {
   },
   // Importa questões: uma por linha, campos separados por "|":
   // enunciado | alt1 | alt2 | *altCorreta | ... | ref: fonte (opcional)
+  // Devolve {criadas, recusadas} — `recusadas` são as linhas sem `*` (sem gabarito), que não
+  // entram mais como alternativa "A". Sem chamador na UI hoje (o fluxo real é
+  // prepararQuestoes → preview → aceitarQuestoes), mas a regra vale para os dois.
   importQuestoes(texto, topicoId) {
     const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    let n = 0;
+    let n = 0, recusadas = 0;
     for (const l of linhas) {
       const partes = l.split("|").map((p) => p.trim()).filter(Boolean);
       if (partes.length < 3) continue; // enunciado + ao menos 2 alternativas
@@ -3447,16 +3461,20 @@ export const store = {
         altsRaw.push(p);
       }
       if (altsRaw.length < 2) continue;
-      let gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
-      if (gabarito < 0) gabarito = 0;
+      // Sem o `*` não há gabarito. Antes virava o índice 0 — a alternativa "A" — e o aluno
+      // estudava, errava e memorizava uma resposta que o app inventou. Linha sem `*` não entra.
+      const gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
+      if (gabarito < 0) { recusadas++; continue; }
       const alternativas = altsRaw.map((a) => a.replace(/^\*/, "").trim());
       this.addQuestao({ topicoId, enunciado, alternativas, gabarito, selo: "manual", referencia });
       n++;
     }
-    return n;
+    return { criadas: n, recusadas };
   },
   // PREVIEW (não grava) das questões de múltipla escolha coladas. Devolve
-  // [{enunciado, alternativas:[str], gabarito:int, referencia}].
+  // [{enunciado, alternativas:[str], gabarito:int|null, referencia}].
+  // `gabarito: null` = a linha não trouxe `*`. NÃO vira 0: o preview marca a questão e o
+  // "Adicionar" recusa enquanto o usuário não apontar a correta.
   prepararQuestoes(texto) {
     const linhas = String(texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const out = [];
@@ -3481,8 +3499,8 @@ export const store = {
         altsRaw.push(p);
       }
       if (altsRaw.length < 2) continue;
-      let gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
-      if (gabarito < 0) gabarito = 0;
+      const achado = altsRaw.findIndex((a) => a.startsWith("*"));
+      const gabarito = achado < 0 ? null : achado; // null = sem `*`; o preview cobra do usuário
       const alternativas = altsRaw.map((a) => a.replace(/^\*/, "").trim());
       out.push({ enunciado, alternativas, gabarito, ...meta });
     }
@@ -3747,13 +3765,17 @@ export const store = {
     return d.estrutura;
   },
   // Grava as questões MC aprovadas no preview (com metadados e tópico por item, se houver).
+  // Devolve {criadas, semGabarito} — a tela precisa saber quantas ficaram de fora e por quê.
   aceitarQuestoes(itens, topicoId) {
-    let n = 0;
+    let n = 0, semGabarito = 0;
     for (const q of itens || []) {
       const alternativas = (q.alternativas || []).map((a) => (a || "").trim()).filter(Boolean);
       if (!(q.enunciado || "").trim() || alternativas.length < 2) continue;
-      let gabarito = Number(q.gabarito) || 0;
-      if (gabarito < 0 || gabarito >= alternativas.length) gabarito = 0;
+      // Gabarito ausente ou fora do intervalo NÃO vira 0 ("A"). Uma questão com gabarito
+      // inventado é pior que questão nenhuma: o aluno memoriza a resposta errada e o caderno
+      // de erros ainda o culpa por ela.
+      const gabarito = Number.isInteger(q.gabarito) ? q.gabarito : Number.NaN;
+      if (!(gabarito >= 0 && gabarito < alternativas.length)) { semGabarito++; continue; }
       this.addQuestao({
         // "Vincular todas ao tópico" (topicoId) é o PADRÃO: só cai nele quando a questão não
         // trouxe um tópico próprio. O preview devolve null/"" (não undefined) quando fica "sem
@@ -3764,7 +3786,7 @@ export const store = {
       });
       n++;
     }
-    return n;
+    return { criadas: n, semGabarito };
   },
   // Geração de questões pela IA (online). Requer iaDisponivel() — a UI bloqueia antes.
   async gerarQuestoesDeDoc(docId, n = 5, dificuldade = "medio", bloco = null) {
@@ -3779,7 +3801,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca })).filter(Boolean);
   },
   // Gera SEM material, só com o conhecimento do modelo — e só quando o usuário pediu isso
   // explicitamente, sabendo que não há fonte. As questões nascem com selo "semfonte" e, se o
@@ -3805,7 +3827,7 @@ export const store = {
       formato === "ce"
         ? this.addQuestaoCE({ ...q, enunciado: q.enunciado || q.afirmacao, selo: q.selo, ...meta })
         : this.addQuestao({ ...q, selo: q.selo, ...meta })
-    );
+    ).filter(Boolean); // addQuestao recusa item sem gabarito válido
     return { questoes: salvas, pedidas: r.pedidas, geradas: r.geradas, descartadas: r.descartadas,
       comWeb: r.comWeb, fontesWeb: r.fontesWeb || [] };
   },
@@ -3821,7 +3843,7 @@ export const store = {
       texto,
       contexto: nomeContexto(state, topicoId),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca: q.banca || banca }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca: q.banca || banca })).filter(Boolean);
   },
   // ---- CERTO/ERRADO (formato 'ce') ----
   // Importa itens C/E: uma linha por item: afirmação | C ou E | justificativa (opcional).
@@ -5262,7 +5284,7 @@ export const store = {
       ...iaExtras(state, { topicoId, dificuldade }),
     });
     const fonte = { tipo: "revisao", titulo: t ? t.nome : "Revisão de tópico" };
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte })).filter(Boolean);
   },
   // O prompt da IA CORTA o texto num limite de caracteres (ver corta() em ia-provider.js —
   // 6000 p/ questões/flashcards, 8000 p/ mapa mental) — se só concatenássemos os tópicos e
@@ -6171,7 +6193,7 @@ export const store = {
     const qs = await iaProv.gerarQuestoes(state.config, { texto, contexto, n, ...extras });
     return qs.map((q) =>
       this.addQuestao({ ...q, topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte })
-    );
+    ).filter(Boolean); // addQuestao recusa item sem gabarito válido
   },
   // Itens de TREINO (drill "letra da lei") já gerados desta indicação (formato C/E, treino=true).
   itensTreinoDeIndicacao(id) {
@@ -6197,8 +6219,9 @@ export const store = {
     if (!tese) tese = (i.texto || "").trim();
     const fonte = { tipo: "juris", titulo: i.referencia };
     const criados = [];
+    const criadosPush = (q) => { if (q) criados.push(q); }; // addQuestao recusa item sem gabarito
     const add = (afirmacao, certo, orig, alt) =>
-      criados.push(this.addQuestao({
+      criadosPush(this.addQuestao({
         enunciado: afirmacao, alternativas: ["Certo", "Errado"], gabarito: certo ? 0 : 1, formato: "ce",
         justificativa: certo ? `Atribuição correta: ${refBase}${trib ? " do " + trib : ""}.` : `Atribuição incorreta — o correto é ${refBase}${trib ? " do " + trib : ""}.`,
         topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte, selo: "verde",
@@ -7045,7 +7068,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId: m.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: m.topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: m.topicoId, fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeMapa(mapaId, n = 6, dificuldade = "medio") {
     const m = state.mapasMentais.find((x) => x.id === mapaId);
@@ -7224,7 +7247,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId: r.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: r.topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: r.topicoId, fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeResumo(id, n = 6, dificuldade = "medio") {
     const r = state.resumos.find((x) => x.id === id);
@@ -7376,7 +7399,7 @@ export const store = {
       texto: escopo.texto, contexto: escopo.contexto || "geral", n,
       ...iaExtras(state, { topicoId: escopo.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: escopo.topicoId, fonte: escopo.fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: escopo.topicoId, fonte: escopo.fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeEscopo(escopo, n = 6, dificuldade = "medio") {
     if (!escopo || !escopo.texto) return [];

@@ -3732,6 +3732,11 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-card-campos input[type="number"] { width: 76px; }
 .prev-remover { flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; cursor: pointer; line-height: 1; font-size: var(--fs-base); }
 .prev-remover:hover { color: #fff; background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+/* Questão colada sem `*`: o gabarito NÃO é inventado (era a alternativa "A"), e o aviso
+   precisa ser visível porque as alternativas ficam escondidas no spoiler por padrão. */
+.q-sem-gab { display: flex; align-items: center; gap: 6px; color: var(--danger-ink); background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px; padding: 6px 8px; }
+.q-sem-gab svg { flex-shrink: 0; width: 15px; height: 15px; }
+.q-sem-gab code { background: transparent; font-family: var(--font-mono); font-weight: 700; }
 .prev-spoiler { border: 1px dashed var(--border); border-radius: 6px; padding: 6px 8px; margin-top: 2px; background: var(--surface-2); }
 .prev-spoiler > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--muted); list-style: none; user-select: none; }
 .prev-spoiler > summary::-webkit-details-marker { display: none; }
