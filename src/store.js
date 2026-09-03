@@ -1495,9 +1495,15 @@ export const store = {
   perfilAtivoId() {
     return state.perfilAtivo || null;
   },
+  // Recusa trocar de concurso com geração em voo. Todas as escritas (`addQuestao`,
+  // `addFlashcard`) vão para o perfil ATIVO no momento em que a resposta chega: trocar no meio
+  // fazia o lote inteiro cair no concurso novo, misturando as matérias de dois editais.
+  // `geracoesEmVoo` já existia, mas só travava o DOWNLOAD da nuvem.
+  // Devolve `"gerando"` em vez de `false` para a tela poder explicar o motivo.
   trocarPerfil(id) {
     if (!id || id === state.perfilAtivo) return false;
     if (!(state.perfis || []).some((p) => p.id === id)) return false;
+    if (geracoesEmVoo > 0) return "gerando";
     state.perfilAtivo = id;
     // Obrigatório: os perfis não têm as mesmas chaves (um pode ter chatHistorico e o
     // outro não), então os acessores precisam ser refeitos para o perfil que entra.
@@ -1536,8 +1542,22 @@ export const store = {
     if (ps.length < 2) return false;
     const i = ps.findIndex((p) => p.id === id);
     if (i < 0) return false;
+    const alvo = ps[i];
     ps.splice(i, 1);
     if (state.perfilAtivo === id) state.perfilAtivo = ps[0].id;
+    // APAGA O QUE MORA FORA DO ESTADO. Só o `resetTudo` limpava os blobs: apagar um concurso
+    // tirava a ficha do material do JSON e deixava no disco o PDF, as páginas e o índice
+    // semântico dele, sem nada que voltasse a apontar para eles. Numa biblioteca de cursinho
+    // isso é a maior parte do peso do banco, e ficava órfão para sempre.
+    // Em segundo plano: são dezenas de MB e travar a troca de concurso seria pior.
+    (async () => {
+      for (const d of alvo.documentos || []) {
+        await delBlob(d.id);          // binário (PDF/imagem)
+        await delBlob(`pag:${d.id}`); // páginas
+      }
+      for (const m of alvo.mapasMentais || []) await delBlob(m.id);
+      await delBlob(`emb:${alvo.id}`); // índice semântico do perfil
+    })();
     instalarAcessores();
     commit();
     return true;

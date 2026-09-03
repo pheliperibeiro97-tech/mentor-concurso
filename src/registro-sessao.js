@@ -48,13 +48,20 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
   let faseIni = fasePadrao;
   let topIni = topicoPadrao;
   let elapsed = 0;
+  // Tempo cronometrado em OUTRO concurso. O cronômetro é global (localStorage, fora do estado
+  // por perfil): sem este aviso, o tempo contado num concurso era lançado calado no outro, e o
+  // tópico herdado nem existe no edital de cá.
+  let tempoDeOutroConcurso = false;
   if (modo === "crono") {
     const sn = crono.snapshot();
     // No Pomodoro, o tempo de estudo é o ACUMULADO no ciclo (soma das fases de estudo),
     // não só a fase atual; nos demais modos, o tempo decorrido.
     elapsed = Math.round(sn.modo === "pomodoro" ? sn.pomoEstudoSeg || 0 : sn.elapsed);
+    tempoDeOutroConcurso = !!(sn.perfilId && sn.perfilId !== store.perfilAtivoId());
     faseIni = sn.fase || faseIni;
-    topIni = sn.topicoId || topIni;
+    // Tópico do outro concurso não entra: o id não existe neste edital e o registro cairia
+    // com um tópico fantasma.
+    topIni = tempoDeOutroConcurso ? topicoPadrao : sn.topicoId || topIni;
   }
   if (!faseIni || !FASES[faseIni]) faseIni = store.planoHoje().fase;
 
@@ -127,6 +134,7 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
             <div class="rsx-crono-time" data-count-static>${fmtMMSS(elapsed)}</div>
             <div class="muted small">tempo focado nesta sessão</div>
           </div>
+          ${tempoDeOutroConcurso ? `<p class="rsx-aviso-perfil small">${icone("alert-triangle")} Este tempo foi cronometrado em <b>outro concurso</b>. Registrando aqui, ele conta para o concurso atual. O tópico não foi preenchido de propósito.</p>` : ""}
         </section>`
       : `<section class="rsx-step">
           <div class="rsx-h"><span class="rsx-num">2</span> Tempo de estudo</div>

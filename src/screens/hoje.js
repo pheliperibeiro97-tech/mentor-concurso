@@ -286,6 +286,7 @@ export default function renderHoje(root, app) {
       topicoId: sel.topicoId,
       faseNome: FASES[sel.fase]?.nome || "",
       topicoLabel: t ? rotuloTopico(st, t) : (tarefaFoco ? tarefaFoco.titulo : ""),
+      perfilId: store.perfilAtivoId(), // carimba o concurso: o cronometro e global
       cor: FASES[sel.fase]?.cor,
     });
   }

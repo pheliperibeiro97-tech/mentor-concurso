@@ -7345,3 +7345,12 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
    cartao por 30 dias sem volta. */
 .fc-desfazer { display: block; margin: 10px auto 0; font-size: var(--fs-xs); opacity: .8; }
 .fc-desfazer:hover { opacity: 1; }
+
+/* Tempo cronometrado em OUTRO concurso. O cronometro e global (localStorage), entao o tempo
+   contado num concurso podia ser lancado calado no outro. */
+.rsx-aviso-perfil {
+  display: flex; align-items: flex-start; gap: 6px; margin: 8px 0 0; padding: 8px 10px;
+  color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-radius: 8px; line-height: 1.4;
+}
+.rsx-aviso-perfil svg { flex-shrink: 0; width: 15px; height: 15px; margin-top: 2px; }

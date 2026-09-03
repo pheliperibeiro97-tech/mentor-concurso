@@ -47,6 +47,10 @@ let s = {
   pomoEstudoAcum: 0, // segundos de ESTUDO acumulados no ciclo (para sugerir no registro)
   fase: null,
   topicoId: null,
+  // Concurso a que o tempo pertence. O cronômetro vive no localStorage GLOBAL, fora do estado
+  // por perfil: sem este carimbo, começar a contar num concurso e registrar no outro lançava o
+  // tempo no concurso errado, sem nada na tela dizendo isso.
+  perfilId: null,
   faseNome: "",
   topicoLabel: "",
   cor: "#2563eb",
@@ -198,6 +202,7 @@ export function snapshot() {
     alvoAtingido: s.alvoAtingido,
     fase: s.fase,
     topicoId: s.topicoId,
+    perfilId: s.perfilId,
     faseNome: s.faseNome,
     topicoLabel: s.topicoLabel,
     cor: s.cor,
@@ -300,9 +305,10 @@ export function setTargetIfIdle(seg) {
   emitir();
 }
 // Vínculo (fase/tópico) — para o registro e para o rótulo do mini-relógio.
-export function vincular({ fase, topicoId, faseNome, topicoLabel, cor }) {
+export function vincular({ fase, topicoId, faseNome, topicoLabel, cor, perfilId }) {
   s.fase = fase ?? s.fase;
   s.topicoId = topicoId ?? null;
+  if (perfilId !== undefined) s.perfilId = perfilId;
   s.faseNome = faseNome ?? s.faseNome;
   s.topicoLabel = topicoLabel ?? "";
   if (cor) s.cor = cor;

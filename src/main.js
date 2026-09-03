@@ -685,7 +685,13 @@ function render(preservarScroll = true) {
       );
       if (!ok) return;
     }
-    if (store.trocarPerfil(id)) {
+    const r = store.trocarPerfil(id);
+    // A geração escreve no concurso ATIVO quando a resposta chega: trocar no meio faria o lote
+    // inteiro cair no concurso novo. Aqui não há "trocar mesmo assim": é esperar.
+    if (r === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para trocar de concurso, senão as questões entram no concurso errado.", "erro");
+    }
+    if (r) {
       app.navigate("hoje");
       toast("Concurso trocado.");
     }
