@@ -930,6 +930,32 @@ async function bootstrap() {
   // pode ter vindo do chat, de um atalho ou de qualquer tela, então o aviso mora aqui, num
   // lugar só, ouvindo o evento que o store emite.
   let fecharAvisoConteudo = null;
+  // Gravação que falhou. Antes morria num `console.error`: o aluno estudava e o dia não tinha
+  // sido salvo, sem nada na tela. O aviso é PERSISTENTE de propósito (não é toast de 3 s) —
+  // continuar estudando por cima de um app que não grava é o pior dos dois mundos.
+  let avisoGravacao = null;
+  window.addEventListener("mentor:gravacao", (ev) => {
+    const d = (ev && ev.detail) || {};
+    if (avisoGravacao) { avisoGravacao.remove(); avisoGravacao = null; }
+    if (d.ok) return void toast("Consegui salvar. Seus dados estão gravados.", "ok");
+    const faixa = document.createElement("div");
+    faixa.className = "aviso-gravacao";
+    faixa.setAttribute("role", "alert");
+    faixa.innerHTML = `<span>${d.espaco
+      ? "<b>Acabou o espaço para salvar.</b> O que você fizer agora pode se perder. Libere espaço (ou apague um concurso que não usa) e tente de novo."
+      : "<b>Não consegui salvar.</b> O que você fizer agora pode se perder — não feche o app antes de tentar de novo."}</span>
+      <button class="btn btn-sm" data-regravar>Tentar salvar de novo</button>`;
+    faixa.querySelector("[data-regravar]").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = "Salvando…";
+      if (!(await store.tentarGravarDeNovo())) {
+        e.target.disabled = false;
+        e.target.textContent = "Tentar salvar de novo";
+      }
+    });
+    document.body.appendChild(faixa);
+    avisoGravacao = faixa;
+  });
   window.addEventListener("mentor:conteudo", (ev) => {
     const d = (ev && ev.detail) || {};
     if (d.fase === "baixando") {
@@ -955,6 +981,11 @@ async function ligarSyncAoFechar() {
         event.preventDefault(); // evita o fechamento parcial padrão (que deixaria o cronômetro segurando o app)
         if (fechando) return; // já estamos saindo
         fechando = true;
+        // GRAVAR ANTES DE SINCRONIZAR. O fechamento esperava só pela nuvem e ia embora sem
+        // esperar a escrita local: uma sessão registrada nos últimos 250 ms (o debounce do
+        // `persist`) morria com a janela. E subir para o cofre um estado que não foi gravado
+        // aqui é pior ainda — o aparelho volta a abrir com dados mais velhos do que o cofre.
+        try { await Promise.race([store.gravarAgora(), new Promise((r) => setTimeout(r, 5000))]); } catch (_) {}
         try { await Promise.race([sincronizarNuvemAoFechar(), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
         // Encerra o app INTEIRO (principal + cronômetro flutuante) de forma garantida.
         try {
@@ -966,7 +997,15 @@ async function ligarSyncAoFechar() {
       });
     } catch (_) {}
   } else {
-    window.addEventListener("pagehide", () => { try { sincronizarNuvemAoFechar(); } catch (_) {} });
+    // Na web não dá para esperar nada ao sair: o que vale é ter COMEÇADO a escrita antes de a
+    // aba morrer. `visibilitychange → hidden` é o último momento confiável no celular (trocar
+    // de app nem sempre dispara `pagehide`), por isso os dois.
+    const gravarAoSair = () => { try { store.gravarAgora(); } catch (_) {} };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") gravarAoSair(); });
+    window.addEventListener("pagehide", () => {
+      gravarAoSair();
+      try { sincronizarNuvemAoFechar(); } catch (_) {}
+    });
   }
 }
 

@@ -3732,6 +3732,19 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-card-campos input[type="number"] { width: 76px; }
 .prev-remover { flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; cursor: pointer; line-height: 1; font-size: var(--fs-base); }
 .prev-remover:hover { color: #fff; background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+/* Falha de gravação: faixa PERSISTENTE no topo, não toast. O aluno precisa decidir o que
+   fazer (liberar espaço, tentar de novo, parar de estudar) — um aviso de 3 s não serve.
+   Acima do toast porque, enquanto isso estiver na tela, é a informação mais importante. */
+.aviso-gravacao {
+  position: fixed; top: 0; left: 0; right: 0; z-index: calc(var(--z-tooltip) + 1);
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--danger); color: #fff; font-size: var(--fs-sm); line-height: 1.4;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+}
+.aviso-gravacao .btn { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.5); flex-shrink: 0; }
+.aviso-gravacao .btn:hover:not(:disabled) { background: rgba(255,255,255,.28); }
+
 /* Questão colada sem `*`: o gabarito NÃO é inventado (era a alternativa "A"), e o aviso
    precisa ser visível porque as alternativas ficam escondidas no spoiler por padrão. */
 .q-sem-gab { display: flex; align-items: center; gap: 6px; color: var(--danger-ink); background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px; padding: 6px 8px; }

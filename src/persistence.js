@@ -122,6 +122,21 @@ export function estadoParaGravar(state, opts) {
   return state;
 }
 
+// Por que a última gravação falhou. O `saveState` devolve booleano (é o que os chamadores
+// esperam), mas a tela precisa dizer ao aluno o que aconteceu: "acabou o espaço" e "o programa
+// não conseguiu escrever" pedem reações diferentes.
+let ultimoErro = null;
+export function ultimoErroDeGravacao() {
+  return ultimoErro;
+}
+// `true` quando a falha foi de ESPAÇO (cota do navegador estourada / disco cheio). É a causa
+// mais provável numa biblioteca de cursinho e a única que o aluno resolve sozinho.
+export function ehErroDeEspaco(err) {
+  const nome = (err && (err.name || err.constructor?.name)) || "";
+  const msg = String((err && err.message) || err || "");
+  return nome === "QuotaExceededError" || /quota|storage|espa[çc]o|disk|full|no space/i.test(msg);
+}
+
 export async function saveState(state) {
   const json = JSON.stringify(estadoParaGravar(state));
   try {
@@ -132,8 +147,12 @@ export async function saveState(state) {
     } else {
       localStorage.setItem(STORAGE_KEY, json);
     }
+    ultimoErro = null;
     return true;
   } catch (err) {
+    // Falha de gravação não pode morrer no console: quem estava estudando não olha o console,
+    // e o app seguia se comportando como se tivesse salvado.
+    ultimoErro = err;
     console.error("Falha ao salvar estado:", err);
     return false;
   }

@@ -1,6 +1,6 @@
 // Store central: estado do app + todas as operações de domínio.
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
-import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema } from "./persistence.js";
+import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema, ultimoErroDeGravacao, ehErroDeEspaco } from "./persistence.js";
 import { limparConfigLocal } from "./config-local.js";
 import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
@@ -1134,17 +1134,40 @@ async function salvarPaginasSujas() {
 }
 
 let gravacaoEmVoo = null; // promessa da gravação atual (para `aguardarGravacao`)
+// Gravação que FALHOU e ainda não voltou a dar certo. `saveState` devolvia `false` (cota do
+// IndexedDB estourada, disco cheio, mutex do SQLite envenenado) e o `persist` descartava o
+// retorno: o aluno estudava a noite inteira e o dia não tinha sido gravado, sem um sinal na
+// tela. Agora o estado fica marcado e a interface é avisada por evento (o store é camada de
+// dados e não chama `toast` direto — mesmo padrão de `mentor:conteudo`).
+let gravacaoFalhou = false;
+function avisarGravacao(ok, erro) {
+  if (!ok === gravacaoFalhou) return; // nada mudou: não repete o aviso a cada clique
+  gravacaoFalhou = !ok;
+  try {
+    window.dispatchEvent(new CustomEvent("mentor:gravacao", {
+      detail: { ok, espaco: !ok && ehErroDeEspaco(erro), mensagem: erro ? String(erro.message || erro) : null },
+    }));
+  } catch (_) {}
+}
 function persist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    // Primeiro o que mora fora (só o que mudou), depois o estado — assim uma queda entre os
-    // dois deixa o conteúdo no disco e o estado apontando para ele, nunca o contrário.
-    gravacaoEmVoo = (async () => {
+    // ENCADEIA na gravação anterior, em vez de disparar por cima dela. O estado é reescrito
+    // inteiro a cada gravação (centenas de ms com biblioteca grande); duas escritas em voo ao
+    // mesmo tempo podiam terminar fora de ordem e deixar no disco a versão mais VELHA.
+    gravacaoEmVoo = Promise.resolve(gravacaoEmVoo).catch(() => {}).then(async () => {
+      // Primeiro o que mora fora (só o que mudou), depois o estado — assim uma queda entre os
+      // dois deixa o conteúdo no disco e o estado apontando para ele, nunca o contrário.
       await salvarEmbeddingsSujos();
       await salvarPaginasSujas();
-      await saveState(state);
-    })();
+      const ok = await saveState(state);
+      avisarGravacao(!!ok, ok ? null : ultimoErroDeGravacao());
+      return ok;
+    }).catch((err) => {
+      avisarGravacao(false, err);
+      return false;
+    });
   }, 250);
 }
 
@@ -1367,6 +1390,31 @@ export const store = {
   async aguardarGravacao() {
     while (saveTimer) await new Promise((r) => setTimeout(r, 60));
     await Promise.resolve(gravacaoEmVoo).catch(() => {});
+    return !gravacaoFalhou;
+  },
+  // A última gravação falhou e ainda não se recuperou? A tela usa para não dizer "salvo" e
+  // para oferecer "tentar de novo".
+  gravacaoPendente() {
+    return gravacaoFalhou;
+  },
+  // Força uma nova tentativa agora (botão do aviso). Devolve true se gravou.
+  async tentarGravarDeNovo() {
+    persist();
+    return this.aguardarGravacao();
+  },
+  // Antecipa a gravação pendente: cancela o debounce de 250 ms e começa a escrever JÁ.
+  // Serve para o fechamento — no desktop dá para esperar, na web o `pagehide` não deixa
+  // esperar nada, e aí o que vale é ter COMEÇADO a escrita antes de a aba morrer.
+  gravarAgora() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    gravacaoEmVoo = Promise.resolve(gravacaoEmVoo).catch(() => {}).then(async () => {
+      await salvarEmbeddingsSujos();
+      await salvarPaginasSujas();
+      const ok = await saveState(state);
+      avisarGravacao(!!ok, ok ? null : ultimoErroDeGravacao());
+      return ok;
+    }).catch(() => false);
+    return gravacaoEmVoo;
   },
   subscribe(fn) {
     listeners.add(fn);
