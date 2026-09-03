@@ -2086,7 +2086,7 @@ function docHTML(store, st, d, busca, grupoNome = "") {
   // disco). Precisa aparecer: o material vazio na tela convida a "Atualizar com arquivo
   // novo", que RELÊ o arquivo e apaga o que a Visão transcreveu.
   const selo = d.leituraFalhou
-    ? `<span class="doc-data doc-ilegivel" data-tip="Não consegui abrir o conteúdo guardado deste material nesta sessão. Ele NÃO foi perdido — feche e abra o app. Não use «Atualizar com arquivo novo» agora: isso apagaria o que a Visão já transcreveu." data-tip-pos="cima-esq">${icone("alert-triangle")} conteúdo não abriu</span>`
+    ? `<span class="doc-data doc-ilegivel" data-tip="Não consegui abrir o conteúdo guardado deste material nesta sessão. Ele NÃO foi perdido. Feche e abra o app. Não use «Atualizar com arquivo novo» agora: isso apagaria o que a Visão já transcreveu." data-tip-pos="cima-esq">${icone("alert-triangle")} conteúdo não abriu</span>`
     : naNuvem
     ? `<span class="doc-data" data-tip="O texto deste material está no seu cofre e ainda não foi baixado NESTE aparelho. Ele desce sozinho quando você usar o material — ou clique para baixar agora." data-tip-pos="cima-esq"><a href="#" class="lnk" data-action="baixar-conteudo" data-id="${d.id}">${icone("cloud")} baixar conteúdo</a></span>`
     : "";

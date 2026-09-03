@@ -3739,7 +3739,12 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 /* Tela de recuperação: o app não conseguiu LER os dados. Cobre tudo de propósito — não há app
    utilizável por trás, e qualquer clique atrás dela seria uma escrita que não vamos permitir. */
 .recuperacao-overlay {
-  position: fixed; inset: 0; z-index: calc(var(--z-tooltip) + 2);
+  position: fixed; inset: 0;
+  /* ABAIXO de --z-modal (700) de propósito: esta tela chama `confirmar()`, que desenha em
+     .modal-overlay. Acima do modal, ela cobria o próprio diálogo e o botão "Começar do zero"
+     ficava morto — visível na árvore, inclicável na tela. Acima do app (--z-overlay = 500),
+     abaixo da confirmação. */
+  z-index: calc(var(--z-modal) - 50);
   display: flex; align-items: center; justify-content: center; padding: 24px;
   background: var(--bg);
 }
@@ -3761,8 +3766,12 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
   padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
   background: var(--danger); color: #fff; font-size: var(--fs-sm); line-height: 1.4;
   box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  /* Fica no alto de tudo para ser visto, mas NÃO intercepta clique: é uma faixa fixa na
+     largura toda, e acima dos modais ela roubaria o clique do topo de qualquer janela.
+     Mesmo padrão do container de toasts. Só o botão volta a receber clique. */
+  pointer-events: none;
 }
-.aviso-gravacao .btn { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.5); flex-shrink: 0; }
+.aviso-gravacao .btn { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.5); flex-shrink: 0; pointer-events: auto; }
 .aviso-gravacao .btn:hover:not(:disabled) { background: rgba(255,255,255,.28); }
 
 /* Questão colada sem `*`: o gabarito NÃO é inventado (era a alternativa "A"), e o aviso

@@ -951,7 +951,7 @@ async function bootstrap() {
     faixa.setAttribute("role", "alert");
     faixa.innerHTML = `<span>${d.espaco
       ? "<b>Acabou o espaço para salvar.</b> O que você fizer agora pode se perder. Libere espaço (ou apague um concurso que não usa) e tente de novo."
-      : "<b>Não consegui salvar.</b> O que você fizer agora pode se perder — não feche o app antes de tentar de novo."}</span>
+      : "<b>Não consegui salvar.</b> O que você fizer agora pode se perder. Não feche o app antes de tentar de novo."}</span>
       <button class="btn btn-sm" data-regravar>Tentar salvar de novo</button>`;
     faixa.querySelector("[data-regravar]").addEventListener("click", async (e) => {
       e.target.disabled = true;
@@ -989,7 +989,7 @@ function mostrarTelaRecuperacao(msg) {
   tela.setAttribute("aria-modal", "true");
   tela.innerHTML = `<div class="recuperacao-caixa">
     <h2>Não consegui abrir os seus dados</h2>
-    <p>Os seus dados de estudo <b>não foram apagados</b> — eu é que não consegui lê-los agora.
+    <p>Os seus dados de estudo <b>não foram apagados</b>. Eu é que não consegui lê-los agora.
     Enquanto esta tela estiver aqui, o app <b>não grava nada</b>, para não escrever por cima do que está guardado.</p>
     <p class="muted small">Costuma ser passageiro: feche tudo e abra de novo. Se insistir, o seu cofre da
     nuvem continua lá — dá para começar do zero e restaurar com a sua senha.${msg ? ` <span class="recuperacao-erro">(${esc(msg)})</span>` : ""}</p>

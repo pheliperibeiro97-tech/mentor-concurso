@@ -155,7 +155,7 @@ function qPreviewHTML(itens, ce, st) {
         <button class="prev-remover" data-action="remover-q-prev" data-i="${i}" data-tip-pos="cima-dir" data-tip="Remover esta questão">${icone("x")}</button>
       </div>
       ${metaRow(q, i)}
-      ${q.gabarito == null ? `<p class="q-sem-gab small u-m-0 u-mb-4">${icone("alert-triangle")} <b>Sem gabarito.</b> A linha não trouxe <code>*</code> na alternativa correta — marque-a abaixo, ou remova a questão. Sem isso ela não é adicionada.</p>` : ""}
+      ${q.gabarito == null ? `<p class="q-sem-gab small u-m-0 u-mb-4">${icone("alert-triangle")} <b>Sem gabarito.</b> A linha não trouxe <code>*</code> na alternativa correta. Marque-a abaixo, ou remova a questão. Sem isso ela não é adicionada.</p>` : ""}
       <details class="prev-spoiler"${q.gabarito == null ? " open" : ""}>
         <summary>${icone("eye")} ver/editar alternativas e gabarito</summary>
         <p class="muted small u-m-0 u-mb-4">Marque a alternativa correta no botão à esquerda.</p>
@@ -498,7 +498,7 @@ function abrirAddQuestoes(app, estado, formato) {
             if (semGab) {
               estado.preview = itens; // preserva as edições já feitas
               rerender();
-              return toast(`${plural(semGab, "questão está sem gabarito", "questões estão sem gabarito")} — marque a alternativa correta (ou remova) antes de adicionar.`, "erro");
+              return toast(`${plural(semGab, "questão está sem gabarito", "questões estão sem gabarito")}. Marque a alternativa correta, ou remova, antes de adicionar.`, "erro");
             }
           }
           const r = ce ? store.aceitarQuestoesCE(itens, estado.previewTop || null) : store.aceitarQuestoes(itens, estado.previewTop || null);
