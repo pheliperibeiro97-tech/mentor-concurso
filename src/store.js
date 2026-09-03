@@ -1158,6 +1158,8 @@ let modoSomenteLeitura = false;
 let erroDeLeitura = "";
 // Última nota dada a um flashcard, para o desfazer. Vive só na memória da sessão.
 let ultimaRevisao = null;
+// Id da última tentativa registrada, pelo mesmo motivo (toque errado na lista de questões).
+let ultimaTentativa = null;
 function avisarGravacao(ok, erro) {
   if (!ok === gravacaoFalhou) return; // nada mudou: não repete o aviso a cada clique
   gravacaoFalhou = !ok;
@@ -4149,8 +4151,29 @@ export const store = {
       data: nowISO(),
     };
     state.tentativas.push(t);
+    ultimaTentativa = t.id; // permite desfazer o toque errado (ver desfazerUltimaTentativa)
     commit();
     return t;
+  },
+  // Desfaz a ÚLTIMA tentativa registrada. Na LISTA de questões o toque numa alternativa grava
+  // a resposta na hora, sem confirmar (no modo foco há selecionar → confirmar), e no celular o
+  // alvo é o card inteiro: um toque errado virava erro permanente no caderno. "Refazer"
+  // ACRESCENTA uma tentativa nova, não apaga a anterior, então o erro continuava lá.
+  // Só a última, e só nesta sessão.
+  desfazerUltimaTentativa() {
+    if (!ultimaTentativa) return null;
+    const i = state.tentativas.findIndex((t) => t.id === ultimaTentativa);
+    ultimaTentativa = null;
+    if (i < 0) return null;
+    const [t] = state.tentativas.splice(i, 1);
+    commit();
+    return t;
+  },
+  podeDesfazerTentativa() {
+    return !!ultimaTentativa && state.tentativas.some((t) => t.id === ultimaTentativa);
+  },
+  idUltimaTentativa() {
+    return ultimaTentativa;
   },
   setMotivoErro(tentativaId, motivo) {
     const t = state.tentativas.find((x) => x.id === tentativaId);

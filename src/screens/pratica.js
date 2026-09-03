@@ -62,6 +62,8 @@ export function renderPraticaCE(root, app) {
 
 function render(root, app, formato) {
   const s = S[formato];
+  const { store } = app;
+  idDesfazivel = store.podeDesfazerTentativa() ? store.idUltimaTentativa() : null;
   // "Simulado" migrou para a tela "Simulados" (hub). Aqui é só o Treino (gabarito imediato).
   s.subModo = "treino";
   // Questões C/E é um MODO desta tela (a rota "pratica-ce" saiu da barra lateral):
@@ -479,6 +481,15 @@ function renderTreino(root, app, formato) {
       s.refazer.add(el.getAttribute("data-q"));
       app.refresh();
     },
+    // Desfaz o toque errado. Diferente de "Refazer", que ACRESCENTA uma tentativa e deixa o
+    // erro no caderno: aqui a resposta some, como se não tivesse acontecido.
+    "desfazer-tentativa": () => {
+      const t = store.desfazerUltimaTentativa();
+      if (!t) return toast("Não há resposta para desfazer.", "erro");
+      s.refazer.delete(t.questaoId); // volta a mostrar as alternativas clicáveis
+      toast("Resposta desfeita. A questão voltou a ficar sem resposta.", "ok");
+      app.refresh();
+    },
     "comentar-ia": async (el) => {
       if (!store.iaDisponivel()) return avisoIA(app, "Comentar o erro");
       const tId = el.getAttribute("data-t");
@@ -600,6 +611,10 @@ function vinculoQuestao(st, q) {
   return null;
 }
 
+// Id da tentativa que ainda dá para desfazer nesta sessão (a última registrada). Módulo, e não
+// parâmetro, porque `questaoHTML` é chamada de vários pontos e só um card por vez a exibe.
+let idDesfazivel = null;
+
 function questaoHTML(st, q, formato, s) {
   const ce = formato === "ce";
   const tentativas = st.tentativas.filter((t) => t.questaoId === q.id);
@@ -651,6 +666,7 @@ function questaoHTML(st, q, formato, s) {
       cardAcoes = `
         <div class="questao-rodape">
           <button class="btn btn-ghost btn-sm" data-action="refazer" data-q="${q.id}" data-tip-pos="cima-esq" data-tip="Responder de novo, sem apagar o registro do acerto.">${icone("refresh-cw")} Refazer</button>
+          ${ultima && ultima.id === idDesfazivel ? `<button class="btn btn-ghost btn-sm" data-action="desfazer-tentativa" data-tip-pos="cima-esq" data-tip="Apaga esta resposta como se não tivesse acontecido (para o toque errado).">${icone("rotate-ccw")} Não era essa</button>` : ""}
         </div>`;
     } else {
       // Painel "Análise do erro": agrupa o que é relacionado ao erro
@@ -676,6 +692,7 @@ function questaoHTML(st, q, formato, s) {
       cardAcoes = `
         <div class="questao-rodape">
           <button class="btn btn-ghost btn-sm" data-action="refazer" data-q="${q.id}" data-tip-pos="cima-dir" data-tip="Responder de novo. O erro continua registrado no Caderno de Erros.">${icone("refresh-cw")} Refazer</button>
+          ${ultima && ultima.id === idDesfazivel ? `<button class="btn btn-ghost btn-sm" data-action="desfazer-tentativa" data-tip-pos="cima-dir" data-tip="Apaga esta resposta como se não tivesse acontecido. É para o toque errado: «Refazer» acrescenta uma tentativa nova e mantém o erro no caderno; este apaga a última.">${icone("rotate-ccw")} Não era essa</button>` : ""}
         </div>`;
     }
   }
