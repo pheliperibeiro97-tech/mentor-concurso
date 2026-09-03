@@ -808,6 +808,14 @@ async function bootstrap() {
   const liberado = await checarLicenca();
   if (!liberado) return;
   await store.init();
+  // A LEITURA do estado falhou: o store está travado para escrita e o app, em memória, tem o
+  // estado padrão. Sem esta tela ele mostraria o ONBOARDING — e o primeiro clique gravaria o
+  // vazio por cima de um banco que ele só não conseguiu LER. É verificação direta, e não
+  // evento, porque o `init` acontece antes de qualquer listener existir.
+  if (store.somenteLeitura()) {
+    mostrarTelaRecuperacao(store.erroDeLeitura());
+    return; // não monta o resto do app: nada de chat, sync ou agendador escrevendo por cima
+  }
   montarChat(store, app); // widget flutuante persistente (fora do #app)
   // Paleta de comando ⌘K (launcher): de qualquer tela, navega rápido (offline) e repassa
   // pergunta/ação ao chat. Só liga depois do app pronto (não no onboarding/crono).
@@ -966,6 +974,47 @@ async function bootstrap() {
       if (!d.ok) toast("Não consegui baixar o conteúdo deste material agora.", "erro");
     }
   });
+}
+
+// Tela de recuperação: o app não conseguiu LER os dados guardados.
+//
+// A promessa que ela faz é a que o código cumpre: enquanto estiver aqui, `store.persist()` está
+// travado e nada é gravado. As duas saídas são explícitas e do usuário — não há caminho
+// automático, de propósito, porque o automático era exatamente o defeito (abrir como aparelho
+// novo e apagar o banco no primeiro clique).
+function mostrarTelaRecuperacao(msg) {
+  const tela = document.createElement("div");
+  tela.className = "recuperacao-overlay";
+  tela.setAttribute("role", "alertdialog");
+  tela.setAttribute("aria-modal", "true");
+  tela.innerHTML = `<div class="recuperacao-caixa">
+    <h2>Não consegui abrir os seus dados</h2>
+    <p>Os seus dados de estudo <b>não foram apagados</b> — eu é que não consegui lê-los agora.
+    Enquanto esta tela estiver aqui, o app <b>não grava nada</b>, para não escrever por cima do que está guardado.</p>
+    <p class="muted small">Costuma ser passageiro: feche tudo e abra de novo. Se insistir, o seu cofre da
+    nuvem continua lá — dá para começar do zero e restaurar com a sua senha.${msg ? ` <span class="recuperacao-erro">(${esc(msg)})</span>` : ""}</p>
+    <div class="recuperacao-acoes">
+      <button class="btn btn-primary" data-recarregar>Tentar abrir de novo</button>
+      <button class="btn btn-ghost" data-zerar>Começar do zero mesmo assim</button>
+    </div>
+  </div>`;
+  tela.querySelector("[data-recarregar]").addEventListener("click", () => location.reload());
+  tela.querySelector("[data-zerar]").addEventListener("click", async () => {
+    const ok = await confirmar(
+      "Começar do zero destrava a gravação: assim que você mexer em qualquer coisa, o que estiver guardado neste aparelho é substituído. Se os seus dados estão no cofre da nuvem, dá para restaurá-los depois com a sua senha. Tem certeza?"
+    );
+    if (!ok) return;
+    const btn = tela.querySelector("[data-zerar]");
+    btn.disabled = true;
+    btn.textContent = "Preparando…";
+    // Só recarrega se a limpeza + gravação funcionaram. Recarregar sem isso devolveria esta
+    // mesma tela na abertura seguinte — um laço, não uma saída.
+    if (await store.destravarEscritaComecandoDoZero()) return void location.reload();
+    btn.disabled = false;
+    btn.textContent = "Começar do zero mesmo assim";
+    toast("Também não consegui gravar neste aparelho. Verifique o espaço livre e as permissões do navegador.", "erro");
+  });
+  document.body.appendChild(tela);
 }
 
 // Ao fechar: no desktop intercepta o fechamento e só fecha depois de tentar sincronizar

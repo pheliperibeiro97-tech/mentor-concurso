@@ -60,28 +60,35 @@ export function backendName() {
   return temIndexedDB() ? "IndexedDB (navegador)" : "localStorage (navegador)";
 }
 
+// Devolve `{ estado, falhou, erro }`.
+//
+// A distinção entre `estado: null, falhou: false` (aparelho novo, legítimo) e
+// `estado: null, falhou: true` (não consegui ler o que está lá) é a coisa mais importante
+// deste arquivo. Antes os dois casos devolviam `null` e eram indistinguíveis: uma leitura
+// que falhava — banco corrompido, JSON truncado, IndexedDB bloqueado — fazia o app abrir
+// como se fosse a primeira vez, e a PRIMEIRA gravação apagava o banco bom por cima.
 export async function loadState() {
   try {
     if (isTauri()) {
       const json = await tauriInvoke("load_state");
-      return json ? JSON.parse(json) : null;
+      return { estado: json ? JSON.parse(json) : null, falhou: false, erro: null };
     }
     if (temIndexedDB()) {
       const v = await idbGet(IDB_KEY);
-      if (v != null) return typeof v === "string" ? JSON.parse(v) : v;
+      if (v != null) return { estado: typeof v === "string" ? JSON.parse(v) : v, falhou: false, erro: null };
       // Migração ÚNICA: estado antigo no localStorage → IndexedDB.
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         try { await idbPut(IDB_KEY, raw); localStorage.removeItem(STORAGE_KEY); } catch (_) {}
-        return JSON.parse(raw);
+        return { estado: JSON.parse(raw), falhou: false, erro: null };
       }
-      return null;
+      return { estado: null, falhou: false, erro: null };
     }
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return { estado: raw ? JSON.parse(raw) : null, falhou: false, erro: null };
   } catch (err) {
     console.error("Falha ao carregar estado:", err);
-    return null;
+    return { estado: null, falhou: true, erro: err };
   }
 }
 

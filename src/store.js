@@ -1140,6 +1140,10 @@ let gravacaoEmVoo = null; // promessa da gravação atual (para `aguardarGravaca
 // tela. Agora o estado fica marcado e a interface é avisada por evento (o store é camada de
 // dados e não chama `toast` direto — mesmo padrão de `mentor:conteudo`).
 let gravacaoFalhou = false;
+// Trava de escrita: ligada quando a LEITURA do estado falhou no boot. Enquanto estiver ligada,
+// nada é gravado — é o que impede o app de apagar um banco que ele só não conseguiu ler.
+let modoSomenteLeitura = false;
+let erroDeLeitura = "";
 function avisarGravacao(ok, erro) {
   if (!ok === gravacaoFalhou) return; // nada mudou: não repete o aviso a cada clique
   gravacaoFalhou = !ok;
@@ -1150,6 +1154,7 @@ function avisarGravacao(ok, erro) {
   } catch (_) {}
 }
 function persist() {
+  if (modoSomenteLeitura) return; // leitura falhou no boot: não escrever por cima do que está lá
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
@@ -1185,7 +1190,17 @@ function commit(opts) {
 export const store = {
   // ---------- ciclo de vida ----------
   async init() {
-    const carregado = await loadState();
+    const lido = await loadState();
+    // LEITURA QUE FALHOU NÃO PODE VIRAR "APARELHO NOVO". Antes `loadState` devolvia `null`
+    // para os dois casos, o app caía no `defaultState()` que já está em memória, mostrava o
+    // onboarding — e a primeira gravação (qualquer clique) escrevia o vazio por cima do banco
+    // bom. O modo somente-leitura trava toda escrita até o usuário decidir o que fazer.
+    if (lido.falhou) {
+      modoSomenteLeitura = true;
+      erroDeLeitura = lido.erro ? String(lido.erro.message || lido.erro) : "";
+      return state; // o boot confere `somenteLeitura()` e mostra a tela de recuperação
+    }
+    const carregado = lido.estado;
     if (carregado && typeof carregado === "object") {
       // ORDEM IMPORTA (multi-perfil): migrar ANTES de qualquer merge com o default.
       // O merge repõe as coleções vazias do defaultState() no TOPO; se ele viesse
@@ -1397,6 +1412,28 @@ export const store = {
   gravacaoPendente() {
     return gravacaoFalhou;
   },
+  // O app está travado para escrita porque não conseguiu LER o estado no boot.
+  somenteLeitura() {
+    return modoSomenteLeitura;
+  },
+  erroDeLeitura() {
+    return erroDeLeitura;
+  },
+  // O usuário escolheu, no diálogo de recuperação, começar do zero mesmo assim — ciente de que
+  // o que estiver gravado será substituído. Só isto destrava a escrita; não há caminho
+  // automático, de propósito.
+  //
+  // LIMPA o armazenamento antes de gravar. Sem isso, o que estava lá continuaria ilegível e a
+  // abertura seguinte cairia na mesma tela de recuperação, para sempre — destravar sem
+  // consertar a causa seria um laço, não uma saída.
+  // Devolve `false` quando nem a limpeza nem a gravação funcionam (armazenamento indisponível
+  // de verdade): aí não há começo do zero possível, e a tela tem de dizer isso.
+  async destravarEscritaComecandoDoZero() {
+    modoSomenteLeitura = false;
+    erroDeLeitura = "";
+    try { await resetState(); } catch (_) {}
+    return this.gravarAgora();
+  },
   // Força uma nova tentativa agora (botão do aviso). Devolve true se gravou.
   async tentarGravarDeNovo() {
     persist();
@@ -1406,6 +1443,7 @@ export const store = {
   // Serve para o fechamento — no desktop dá para esperar, na web o `pagehide` não deixa
   // esperar nada, e aí o que vale é ter COMEÇADO a escrita antes de a aba morrer.
   gravarAgora() {
+    if (modoSomenteLeitura) return Promise.resolve(false);
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     gravacaoEmVoo = Promise.resolve(gravacaoEmVoo).catch(() => {}).then(async () => {
       await salvarEmbeddingsSujos();

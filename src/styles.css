@@ -3732,6 +3732,22 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-card-campos input[type="number"] { width: 76px; }
 .prev-remover { flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; cursor: pointer; line-height: 1; font-size: var(--fs-base); }
 .prev-remover:hover { color: #fff; background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+/* Tela de recuperação: o app não conseguiu LER os dados. Cobre tudo de propósito — não há app
+   utilizável por trás, e qualquer clique atrás dela seria uma escrita que não vamos permitir. */
+.recuperacao-overlay {
+  position: fixed; inset: 0; z-index: calc(var(--z-tooltip) + 2);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: var(--bg);
+}
+.recuperacao-caixa {
+  max-width: 520px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius, 12px); padding: 24px 26px; box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.2));
+}
+.recuperacao-caixa h2 { margin: 0 0 12px; font-size: var(--fs-xl); }
+.recuperacao-caixa p { margin: 0 0 12px; }
+.recuperacao-erro { font-family: var(--font-mono); font-size: var(--fs-xs); opacity: .8; }
+.recuperacao-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+
 /* Falha de gravação: faixa PERSISTENTE no topo, não toast. O aluno precisa decidir o que
    fazer (liberar espaço, tentar de novo, parar de estudar) — um aviso de 3 s não serve.
    Acima do toast porque, enquanto isso estiver na tela, é a informação mais importante. */
