@@ -1,6 +1,6 @@
 // Lógica do ciclo de aprendizado (Estudo → Prática → Revisão → Planejamento).
 // Conduz o dia: decide qual fase e qual tópico priorizar agora.
-import { todayISO } from "./util.js";
+import { todayISO, diaLocal } from "./util.js";
 import { vencidos } from "./sm2.js";
 
 export const FASES = {
@@ -25,7 +25,9 @@ export function sessoesDeHoje(state) {
   const hoje = todayISO();
   const cont = { E: 0, A: 0, R: 0 };
   for (const s of state.sessoes) {
-    if (s.data && s.data.slice(0, 10) === hoje && cont[s.fase] !== undefined) {
+    // `diaLocal`, e não `slice`: a sessão é gravada em UTC, e comparar a fatia com o dia local
+    // fazia o ciclo achar que as sessões da noite eram de amanhã.
+    if (s.data && diaLocal(s.data) === hoje && cont[s.fase] !== undefined) {
       cont[s.fase] += 1;
     }
   }
@@ -34,10 +36,28 @@ export function sessoesDeHoje(state) {
 
 // Recomenda a próxima fase: a do ciclo com menos sessões hoje (mantém o ciclo girando),
 // mas prioriza Revisão se há flashcards vencidos ou erros pendentes.
+// Erro PENDENTE, e não erro histórico. `tentativas.some((t) => !t.acertou)` dizia "sim" para
+// sempre a partir do primeiro erro da vida do aluno: acertar a mesma questão depois não mudava
+// nada, e tirar o erro do caderno também não. Resultado: Revisão empatava toda escolha de fase,
+// e todo dia do plano abria com 25 min de revisão.
+//
+// Pendente = a ÚLTIMA tentativa daquela questão foi erro E o erro continua no caderno. É a
+// mesma regra que `store.cadernoErros` já usava; as duas telas só discordavam entre si.
+export function temErroPendente(state) {
+  const ultimaPorQuestao = new Map();
+  for (const t of state.tentativas || []) {
+    const anterior = ultimaPorQuestao.get(t.questaoId);
+    // Sem carimbo de data confiável, a ordem do array é a ordem de inserção: a última vence.
+    if (!anterior || (t.data || "") >= (anterior.data || "")) ultimaPorQuestao.set(t.questaoId, t);
+  }
+  for (const t of ultimaPorQuestao.values()) if (!t.acertou && !t.foraDoCaderno) return true;
+  return (state.errosManuais || []).length > 0;
+}
+
 export function proximaFase(state) {
   const cont = sessoesDeHoje(state);
   const temVencidos = vencidos(state.flashcards).length > 0;
-  const errosPendentes = state.tentativas.some((t) => !t.acertou);
+  const errosPendentes = temErroPendente(state);
 
   if ((temVencidos || errosPendentes) && cont.R <= Math.min(cont.E, cont.A)) {
     return "R";

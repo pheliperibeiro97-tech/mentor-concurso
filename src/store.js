@@ -2,7 +2,7 @@
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
 import { loadState, saveState, resetState, getBlob, lerBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema, ultimoErroDeGravacao, ehErroDeEspaco } from "./persistence.js";
 import { limparConfigLocal } from "./config-local.js";
-import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
+import { uid, todayISO, nowISO, diaLocal, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
 import * as ciclo from "./ciclo.js";
 import * as ia from "./ia.js";
@@ -91,10 +91,13 @@ function defaultState() {
   };
 }
 
-// Um tópico é "coberto" se já foi estudado (concluído) OU tem material/questões.
-// (Antes, concluir não refletia na cobertura; agora conversa.)
-// "Coberto" = o tópico foi marcado como CONCLUÍDO no Edital (decisão do usuário:
-// material/questões não bastam; só o clique de "concluído" conta para a cobertura).
+// CONCLUÍDO é a única definição de cobertura do app: o tópico foi marcado como concluído no
+// Edital. Ter material ou questões não basta (decisão do usuário).
+//
+// O nome duplo "coberto"/"concluído" sobreviveu à decisão e virou fonte de confusão: a função
+// devolvia os dois números, sempre idênticos, sob rótulos diferentes, e o comentário que
+// morava aqui ainda descrevia a regra ANTIGA ("estudado OU tem material"), contrariando o
+// código logo abaixo. Ficou um nome só.
 function topicoCoberto(state, t) {
   return !!t.concluido;
 }
@@ -4925,7 +4928,7 @@ export const store = {
     const lei = state.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && (!norma || normaDaReferencia(i.referencia) === norma));
     const lidosHoje = lei.filter((i) => (i.lidoEm || "").slice(0, 10) === hoje).length;
     const qDe = new Map(state.questoes.filter((q) => q.treino && q.treino.indicacaoId).map((q) => [q.id, q.treino.indicacaoId]));
-    const tLei = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje && qDe.has(t.questaoId));
+    const tLei = state.tentativas.filter((t) => diaLocal(t.data) === hoje && qDe.has(t.questaoId));
     const acertos = tLei.filter((t) => t.acertou).length;
     return { lidosHoje, questoesHoje: tLei.length, pctHoje: tLei.length ? Math.round((100 * acertos) / tLei.length) : null, tempoSeg: tLei.reduce((s, t) => s + (t.tempoSeg || 0), 0) };
   },
@@ -7630,11 +7633,14 @@ export const store = {
   },
 
   // Cobertura de TODO o edital (não por disciplina): tópicos cobertos / total.
+  // UM número de cobertura para o app inteiro. `cobertos` continua no retorno porque várias
+  // telas o leem, mas é o mesmo `concluidos`: são um só conceito, não dois.
+  // `pct` é sobre o TOTAL de tópicos, e não a média das disciplinas. A média não ponderada
+  // (que o anel do Hoje calculava) faz uma disciplina de 2 tópicos pesar igual a uma de 200.
   coberturaEdital() {
     const total = state.topicos.length;
-    const cobertos = state.topicos.filter((t) => topicoCoberto(state, t)).length;
-    const concluidos = state.topicos.filter((t) => t.concluido).length;
-    return { total, cobertos, concluidos, pct: total ? Math.round((cobertos / total) * 100) : 0 };
+    const concluidos = state.topicos.filter((t) => topicoCoberto(state, t)).length;
+    return { total, cobertos: concluidos, concluidos, pct: total ? Math.round((concluidos / total) * 100) : 0 };
   },
   // Reuso para a UI: um tópico está coberto?
   topicoCoberto(t) {
@@ -7786,7 +7792,7 @@ export const store = {
         metasLeituraPendentes: (state.indicacoes || []).filter((i) => i.metaLeitura && !i.lido).length,
       },
       erros: {
-        pendentes: state.tentativas.filter((t) => !t.acertou).length + state.errosManuais.length,
+        pendentes: this.cadernoErros().length, // o MESMO numero que o caderno mostra
         porMotivo: motivos,
       },
       cicloTempoMin: cicloTempo, // equilíbrio Estudo/Prática/Revisão
@@ -7833,7 +7839,7 @@ export const store = {
           }
         : null,
       observacoes: this.observacoesRecentes(8).map((o) => ({
-        data: o.data.slice(0, 10),
+        data: diaLocal(o.data), // o dia do aluno, não o de Greenwich (a sessão é gravada em UTC)
         topico: o.topicoNome,
         nota: o.comentario,
       })),
@@ -8125,7 +8131,7 @@ export const store = {
   // que pede o que o sistema já sabe é o anti-padrão nº 1 de produto IA-first.
   atividadeDoDia() {
     const hoje = todayISO();
-    const tents = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje);
+    const tents = state.tentativas.filter((t) => diaLocal(t.data) === hoje);
     const acertos = tents.filter((t) => t.acertou).length;
     const flashcards = state.flashcards.filter((f) => f.sm2 && f.sm2.lastReview === hoje).length;
     return { questoes: tents.length, acertos, erros: tents.length - acertos, flashcards };
@@ -8192,7 +8198,10 @@ export const store = {
       const comMaterial = topicos.filter((t) => topicoCoberto(state, t)).length;
       const sessoesDisc = state.sessoes.filter((s) => topicosIds.includes(s.topicoId));
       const tempoSeg = sessoesDisc.reduce((acc, s) => acc + (s.tempoSeg || 0), 0);
-      // Questões contam da Prática (tentativas) E do registro de sessão (qAcertos/qErros).
+      // Questões = tentativas feitas AQUI + `qAcertos`/`qErros`, que são as feitas FORA do app
+      // (caderno de papel, site de questões). As duas fontes não se sobrepõem: a tela de
+      // registro deixou de oferecer o botão que copiava as tentativas do próprio app para
+      // esses campos, que era o que fazia 20 questões virarem 40.
       const sessAc = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0), 0);
       const sessTot = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
       const acertos = tentativas.filter((t) => t.acertou).length + sessAc;
@@ -8225,7 +8234,7 @@ export const store = {
 
     // Sugestões proativas básicas.
     // As sugestoes por disciplina se repetiam quase palavra por palavra ("Cobertura baixa em
-    // X: N% dos topicos tem material/questoes."), uma linha por disciplina — com um edital
+    // X: N% dos topicos concluidos."), uma linha por disciplina, com um edital
     // real, oito linhas iguais empurravam o resto da tela para baixo sem dizer mais nada.
     // Agora cada tipo vira UMA frase que enumera as disciplinas.
     const sugestoes = [];
@@ -8237,7 +8246,7 @@ export const store = {
     const lista = (arr) => arr.map((l) => l.disciplina.nome).join(", ");
     if (fracas.length === 1) sugestoes.push(`Reforce ${fracas[0].disciplina.nome}: aproveitamento de ${fracas[0].percentAcerto}% (abaixo de 60%).`);
     else if (fracas.length > 1) sugestoes.push(`Reforce ${fracas.length} disciplinas com aproveitamento abaixo de 60%: ${lista(fracas)}.`);
-    if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos têm material/questões.`);
+    if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos concluídos.`);
     else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos com material/questões): ${lista(semCobertura)}.`);
     const vencidos = sm2.vencidos(state.flashcards).length;
     if (vencidos > 0) sugestoes.push(`Há ${vencidos} ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} para revisar hoje.`);
@@ -8980,7 +8989,7 @@ export const store = {
     }
     const venc = sm2.vencidos(state.flashcards).length;
     if (venc > 0) sugestoes.push({ titulo: `Revisar ${venc} ${venc === 1 ? "flashcard vencido" : "flashcards vencidos"} hoje`, categoria: "Revisão", topicoId: null });
-    const errosPend = state.tentativas.filter((t) => !t.acertou).length + state.errosManuais.length;
+    const errosPend = this.cadernoErros().length; // o que o aluno ve no caderno, nao o historico inteiro
     if (errosPend > 0) sugestoes.push({ titulo: `Refazer e revisar ${errosPend} ${errosPend === 1 ? "erro" : "erros"} do caderno`, categoria: "Revisão", topicoId: null });
 
     for (const l of diag.porDisciplina) {
@@ -8988,7 +8997,7 @@ export const store = {
         sugestoes.push({ titulo: `Reforçar ${l.disciplina.nome}: aproveitamento ${l.percentAcerto}% (resolver questões)`, categoria: "Prática", topicoId: null });
       }
       if (l.totalTopicos > 0 && l.cobertura < 50) {
-        sugestoes.push({ titulo: `Cobrir ${l.disciplina.nome}: só ${l.cobertura}% dos tópicos têm material`, categoria: "Materiais", topicoId: null });
+        sugestoes.push({ titulo: `Cobrir ${l.disciplina.nome}: só ${l.cobertura}% dos tópicos concluídos`, categoria: "Materiais", topicoId: null });
       }
     }
     // destaques (mais incidência) ainda sem material/questões
@@ -9080,7 +9089,9 @@ export const store = {
     } else {
       intercaladas = intercalarPorDisciplina(base); // interleaving entre disciplinas
     }
-    const temRevisao = this.flashcardsVencidos().length > 0 || state.tentativas.some((t) => !t.acertou);
+    // Mesma régua do ciclo: erro PENDENTE, não erro histórico. Com `some((t) => !t.acertou)`,
+    // um erro de março fazia todos os dias do plano abrirem com 25 min de revisão, para sempre.
+    const temRevisao = this.flashcardsVencidos().length > 0 || ciclo.temErroPendente(state);
 
     // Distribui pelos dias respeitando a capacidade diária; cada dia abre com revisão.
     const itens = [];

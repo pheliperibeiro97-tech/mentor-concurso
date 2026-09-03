@@ -42,6 +42,26 @@ export function nowISO() {
   return new Date().toISOString();
 }
 
+// Dia do CALENDÁRIO LOCAL (yyyy-mm-dd) de um carimbo de tempo guardado.
+//
+// Sessões e tentativas são gravadas com `nowISO()`, que é UTC. Onze lugares do app faziam
+// `s.data.slice(0, 10)` para saber "de que dia é isto", o que devolve o dia em UTC. No fuso de
+// Brasília, tudo que acontece depois das 21h já está no dia seguinte em UTC: o contador de
+// "hoje" zerava no meio da noite de estudo, e o que fora estudado à tarde sumia dele.
+//
+// `slice` é rápido e errado; isto converte de verdade. Aceita também um `yyyy-mm-dd` puro
+// (devolve ele mesmo) e datas gravadas como `yyyy-mm-ddT12:00:00.000Z`, que é como o app
+// guarda a data escolhida à mão: meio-dia em UTC cai no mesmo dia em qualquer fuso das
+// Américas, então a ida e a volta batem.
+export function diaLocal(carimbo) {
+  if (!carimbo) return "";
+  const txt = String(carimbo);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt; // já é dia puro
+  const d = new Date(txt);
+  if (Number.isNaN(d.getTime())) return txt.slice(0, 10); // carimbo estranho: não piora
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export function addDays(isoDate, days) {
   const [y, m, dd] = isoDate.slice(0, 10).split("-").map(Number);
   const d = new Date(y, m - 1, dd);

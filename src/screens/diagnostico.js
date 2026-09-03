@@ -2,7 +2,7 @@
 // mensal navegável) e desempenho por disciplina/tópico (com último dia estudado).
 // SEM "previsão de aprovação" (decisão do plano).
 import { bindActions, header, vazio, toast, confirmar, focarItem, faixaIA, abrirJanela, imprimir, botaoImprimir, plural, defMetrica } from "../ui.js";
-import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween, LEITURA_MOTIVO } from "../util.js";
+import { esc, fmtTempo, fmtTempoCurto, fmtMin, fmtData, todayISO, daysBetween, diaLocal, LEITURA_MOTIVO } from "../util.js";
 import { padroesPorDisciplina } from "./erros.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES } from "../ciclo.js";
@@ -69,17 +69,17 @@ function filtrarSessoes(store) {
   let ss, tituloSessoes;
   if (sessFiltroIni || sessFiltroFim) {
     ss = todasSessoes.filter((s) => {
-      const d = s.data.slice(0, 10);
+      const d = diaLocal(s.data);
       if (sessFiltroIni && d < sessFiltroIni) return false;
       if (sessFiltroFim && d > sessFiltroFim) return false;
       return true;
     });
     tituloSessoes = `Histórico de sessões · ${rotuloIntervalo()}`;
   } else if (diaSel) {
-    ss = todasSessoes.filter((s) => s.data.slice(0, 10) === diaSel);
+    ss = todasSessoes.filter((s) => diaLocal(s.data) === diaSel);
     tituloSessoes = `Histórico de sessões · ${fmtData(diaSel)}`;
   } else {
-    ss = todasSessoes.filter((s) => preds[periodoSel](s.data.slice(0, 10)));
+    ss = todasSessoes.filter((s) => preds[periodoSel](diaLocal(s.data)));
     tituloSessoes = `Histórico de sessões · ${LABEL[periodoSel]}`;
   }
   if (sessFiltroDisc) ss = ss.filter((s) => s.disciplinaId === sessFiltroDisc);
@@ -1021,7 +1021,7 @@ function linhaSessao(s, st, editando) {
     : "";
   const form = `<tr class="sess-edit-row"><td colspan="5">
     <div class="sess-edit">
-      <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${s.data.slice(0, 10)}" /></label>
+      <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${diaLocal(s.data)}" /></label>
       <label class="inline">Fase <select class="se-fase" data-id="${s.id}">${faseOpts}</select></label>
       <label class="inline">Tópico <select class="se-top" data-id="${s.id}">${topOpts}</select></label>
       ${aulaField}
