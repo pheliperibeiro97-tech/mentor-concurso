@@ -1,4 +1,14 @@
-// Algoritmo de repetição espaçada SM-2 (estilo Anki).
+// Repetição espaçada por ESCADA FIXA: 24h · 7 · 15 · 30 dias, escolhida pela nota.
+//
+// NÃO é o SM-2 nem o algoritmo do Anki, e o cabeçalho daqui dizia que era. O `ef` (fator de
+// facilidade) é calculado e guardado, mas NÃO entra no cálculo do intervalo: ele é estatística,
+// não agendador. Quem for mexer aqui precisa saber disso antes, e não depois.
+//
+// A escada fixa é decisão de produto do usuário (04/07/2026), tomada contra as 7 datas fixas do
+// MEI: ela reage à nota (esqueci/difícil/bom/fácil), o que as datas fixas não fazem. Trocar por
+// um SM-2 de verdade reagendaria todos os cartões que já existem, e não é conserto de defeito.
+// O que era defeito era o NOME.
+//
 // quality: qualidade da resposta no recall, de 0 (esqueci) a 5 (perfeito).
 import { addDays, todayISO } from "./util.js";
 
@@ -28,7 +38,8 @@ export function revisar(sm2, quality) {
     intervaloDias = q === 3 ? 7 : q === 4 ? 15 : 30; // Difícil | Bom | Fácil
   }
 
-  // Mantém o fator de facilidade atualizado (estatística; não afeta os intervalos fixos).
+  // Fator de facilidade: guardado como ESTATÍSTICA do cartão. Não afeta o intervalo (ver o
+  // cabeçalho): quem ler só esta linha pode achar que afeta.
   ef = ef + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
   if (ef < 1.3) ef = 1.3;
   ef = Math.round(ef * 100) / 100;

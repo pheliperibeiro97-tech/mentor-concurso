@@ -7338,3 +7338,10 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
    não existia. Vale para qualquer aparelho: onde não há recorte, env() é 0 e nada muda. */
 .topbar { padding-top: calc(8px + env(safe-area-inset-top)); }
 .sidebar { padding-top: calc(14px + env(safe-area-inset-top)); }
+
+/* Desfazer a ultima nota do flashcard. Fica FORA do cartao: dentro da face de tras ele so
+   existia enquanto a resposta estava revelada, ou seja, sumia no instante em que passava a ser
+   util. Os quatro botoes de nota ficam lado a lado e, no celular, um toque errado empurrava o
+   cartao por 30 dias sem volta. */
+.fc-desfazer { display: block; margin: 10px auto 0; font-size: var(--fs-xs); opacity: .8; }
+.fc-desfazer:hover { opacity: 1; }

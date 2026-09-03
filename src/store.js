@@ -1156,6 +1156,8 @@ let gravacaoFalhou = false;
 // nada é gravado — é o que impede o app de apagar um banco que ele só não conseguiu ler.
 let modoSomenteLeitura = false;
 let erroDeLeitura = "";
+// Última nota dada a um flashcard, para o desfazer. Vive só na memória da sessão.
+let ultimaRevisao = null;
 function avisarGravacao(ok, erro) {
   if (!ok === gravacaoFalhou) return; // nada mudou: não repete o aviso a cada clique
   gravacaoFalhou = !ok;
@@ -4500,6 +4502,15 @@ export const store = {
   revisarFlashcard(id, quality) {
     const f = state.flashcards.find((x) => x.id === id);
     if (!f) return;
+    // Guarda o estado ANTERIOR para o desfazer. Um toque errado no celular (os quatro botões
+    // ficam lado a lado) empurrava o cartão por 30 dias sem volta: a única saída era esperar,
+    // ou adiar à mão. Fica só o último, em memória, e some ao recarregar o app, que é o
+    // comportamento certo para um "Ctrl+Z" de sessão.
+    ultimaRevisao = {
+      flashcardId: id,
+      sm2: { ...f.sm2 },
+      erroAutoExistia: state.errosManuais.some((e) => e.flashcardId === id && e.auto),
+    };
     f.sm2 = sm2.revisar(f.sm2, quality);
     state.revisoes.push({ id: uid("rev"), flashcardId: id, nota: quality, data: nowISO() });
     // Loop de fraqueza por assunto: além do reagendamento (SM-2), a nota conecta o flashcard
@@ -4521,6 +4532,38 @@ export const store = {
       state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === id && e.auto));
     }
     commit();
+  },
+  // Desfaz a ÚLTIMA nota dada a um flashcard: devolve o agendamento anterior, apaga o registro
+  // da revisão e desfaz o efeito no Caderno de Erros (o "Errei" que criou um registro
+  // automático, ou o "Bom/Fácil" que removeu um). Devolve o card, ou null se não há o que
+  // desfazer. Só o último, e só nesta sessão.
+  desfazerUltimaRevisao() {
+    if (!ultimaRevisao) return null;
+    const { flashcardId, sm2: anterior, erroAutoExistia } = ultimaRevisao;
+    const f = state.flashcards.find((x) => x.id === flashcardId);
+    if (!f) { ultimaRevisao = null; return null; }
+    f.sm2 = anterior;
+    // Tira o registro da revisão desfeita (o último daquele card).
+    for (let i = state.revisoes.length - 1; i >= 0; i--) {
+      if (state.revisoes[i].flashcardId === flashcardId) { state.revisoes.splice(i, 1); break; }
+    }
+    const temAgora = state.errosManuais.some((e) => e.flashcardId === flashcardId && e.auto);
+    if (erroAutoExistia && !temAgora) {
+      state.errosManuais.push({
+        id: uid("errm"), flashcardId, auto: true,
+        disciplinaId: f.disciplinaId || null, topicoId: f.topicoId || null,
+        descricao: `[Flashcard] ${f.frente}`, correto: f.verso || "", suaResposta: "",
+        motivoErro: null, comentarioIA: f.comentarioIA || null, duvida: null, data: nowISO(),
+      });
+    } else if (!erroAutoExistia && temAgora) {
+      state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === flashcardId && e.auto));
+    }
+    ultimaRevisao = null;
+    commit();
+    return f;
+  },
+  podeDesfazerRevisao() {
+    return !!ultimaRevisao;
   },
   removerFlashcard(id) {
     state.flashcards = state.flashcards.filter((f) => f.id !== id);
