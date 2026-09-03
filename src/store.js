@@ -3754,14 +3754,24 @@ export const store = {
   },
   // F2: REFINO por IA (leve: só os títulos + a lista de tópicos). Sobrescreve o topicoId dos blocos
   // pelo casamento semântico da IA quando ela retorna um tópico válido. Requer iaDisponivel().
-  async casarEstruturaComEditalIA(estrutura) {
+  // `disciplinaId` ANCORA o casamento na matéria já declarada do material, como o caminho
+  // determinístico (`casarEstruturaComEdital`) sempre fez. Sem isso, a IA recebia os tópicos do
+  // edital INTEIRO e um clique em "refinar com IA" desfazia a âncora: foi assim que aulas de
+  // português foram parar em tópicos de Direito Constitucional.
+  async casarEstruturaComEditalIA(estrutura, disciplinaId = null) {
     if (!estrutura || !Array.isArray(estrutura.blocos) || !estrutura.blocos.length) return estrutura;
     if (!this.iaDisponivel() || !state.topicos.length) return this.casarEstruturaComEdital(estrutura);
+    const universo = disciplinaId ? state.topicos.filter((t) => t.disciplinaId === disciplinaId) : state.topicos;
+    // Disciplina declarada mas sem tópico nenhum: cair no edital inteiro seria pior que não
+    // refinar, porque devolveria justamente o vínculo cruzado que a âncora existe para impedir.
+    if (!universo.length) return this.casarEstruturaComEdital(estrutura, null, { disciplinaId });
     const titulos = estrutura.blocos.map((b) => b.titulo);
-    const nomes = await iaProv.casarTitulosComTopicos(state.config, { titulos, topicos: state.topicos.map((t) => t.nome) });
+    const nomes = await iaProv.casarTitulosComTopicos(state.config, { titulos, topicos: universo.map((t) => t.nome) });
     estrutura.blocos.forEach((b, i) => {
       const nome = nomes[i];
-      const t = nome ? (state.topicos.find((x) => x.nome.trim().toLowerCase() === nome.trim().toLowerCase()) || this.acharTopicoPorNome(nome)) : null;
+      // `restrito` porque a âncora só vale se ela impedir a saída da disciplina: sem isso o
+      // casamento flexível reencontraria o tópico de outra matéria e o filtro seria decorativo.
+      const t = nome ? (universo.find((x) => x.nome.trim().toLowerCase() === nome.trim().toLowerCase()) || this.acharTopicoPorNome(nome, { disciplinaId, restrito: !!disciplinaId })) : null;
       if (t) { b.topicoId = t.id; b.confianca = Math.min(0.99, Math.max(b.confianca || 0.7, 0.9)); }
     });
     // mantém o casamento de aula
@@ -3860,7 +3870,7 @@ export const store = {
     await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !d.estrutura) return null;
-    await this.casarEstruturaComEditalIA(d.estrutura);
+    await this.casarEstruturaComEditalIA(d.estrutura, d.disciplinaId || null); // ancora na materia do material
     commit();
     return d.estrutura;
   },
@@ -6712,7 +6722,12 @@ export const store = {
     commit();
   },
   // Dias de folga (sem estudo): dia 0=Dom ... 6=Sáb. Folga = some da agenda da semana.
-  diaEhFolga(dia) {
+  // Dia sem estudo: folga SEMANAL (dia da semana) ou FERIADO (data específica).
+  // `diasFeriado` existia no `defaultState` desde sempre e não era lido em lugar nenhum do
+  // app: cadastrar um feriado não fazia absolutamente nada, e o plano marcava tarefa nele.
+  // Aceita o índice do dia da semana (uso antigo) ou a data ISO, que é o que permite o feriado.
+  diaEhFolga(dia, dataISO) {
+    if (dataISO && (state.config.diasFeriado || []).includes(dataISO)) return true;
     return (state.config.diasFolga || []).includes(Number(dia));
   },
   toggleDiaFolga(dia) {
@@ -9084,9 +9099,14 @@ export const store = {
     const c = state.config;
     const niveis = c.niveisDisciplina || {};
     const adiadas = new Set(c.disciplinasAdiadas || []); // "fixar ajuste": disciplinas fora agora
-    const capDia = (c.dispDiariaMin || 0) > 0 ? c.dispDiariaMin : 120; // fallback 2h/dia
+    // `podeGerarPlano()` já exige `dispDiariaMin > 0`, e a tela recusa 0 antes de chegar aqui:
+    // este 120 é rede de segurança, não uma carga inventada nas costas do aluno.
+    const capDia = (c.dispDiariaMin || 0) > 0 ? c.dispDiariaMin : 120;
     const hoje = todayISO();
-    const dias = this.semanaAtual().filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d)));
+    const dias = this.semanaAtual().filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d), d));
+    // Sem dia disponível, a causa é folga/feriado, e não falta de tópico. Sem isto a tela dizia
+    // "tudo coberto/dominado", que manda o aluno procurar o problema no lugar errado.
+    const semDiaUtil = dias.length === 0;
 
     // Ranking de tópicos: relevância (peso) + lacuna de cobertura + nível da disciplina.
     const rank = state.topicos
@@ -9158,6 +9178,7 @@ export const store = {
     return {
       itens,
       dias,
+      semDiaUtil, // a tela precisa saber POR QUE não há tarefa: folga/feriado ou falta de tópico
       macro: {
         diasProva: m.diasProva,
         dataProva: m.dataProva,
@@ -9244,7 +9265,7 @@ export const store = {
     const c = state.config;
     const hoje = todayISO();
     const semana = this.semanaAtual();
-    const diasDisp = semana.filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d)));
+    const diasDisp = semana.filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d), d));
     const m = this.metas();
     const cob = this.coberturaEdital();
     const fracas = this.diagnostico()
@@ -9294,7 +9315,7 @@ export const store = {
         atual++;
         folgaSeguidas = 0;
         cursor = addDays(cursor, -1);
-      } else if (this.diaEhFolga(weekdayISO(cursor)) && folgaSeguidas < 7) {
+      } else if (this.diaEhFolga(weekdayISO(cursor), cursor) && folgaSeguidas < 7) {
         // dia de folga sem estudo: pula sem quebrar a sequência
         folgaSeguidas++;
         cursor = addDays(cursor, -1);
@@ -9303,7 +9324,7 @@ export const store = {
       }
     }
     // Dias de estudo planejados na semana corrente (exclui folgas) e quantos cumpridos.
-    const planejados = this.semanaAtual().filter((d) => !this.diaEhFolga(weekdayISO(d)));
+    const planejados = this.semanaAtual().filter((d) => !this.diaEhFolga(weekdayISO(d), d));
     const metaSemana = planejados.length; // = 7 - dias de folga
     const naSemana = planejados.filter((d) => dias.has(d)).length;
     return { atual, estudouHoje, naSemana, metaSemana, totalDias: dias.size };

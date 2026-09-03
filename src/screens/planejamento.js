@@ -960,7 +960,7 @@ function blocoSemanaHTML(st, store) {
         ? ""
         : `<div class="add-toolbar">
             <button class="btn btn-add btn-sm" data-action="abrir-import" data-tip="Digite, cole (uma por linha) ou importe um arquivo. A IA detecta os dias e data as tarefas.">${icone("square-pen")} Adicionar tarefas</button>
-            <button class="btn btn-ia btn-sm" data-action="pedir-plano" data-tip="O Mentor monta a semana inteira (tarefas datadas por dia), respeitando seu tempo e folgas.">${icone("bot")} Montar com o Mentor</button>
+            <button class="btn btn-ghost btn-sm" data-action="pedir-plano" data-tip="Monta a semana inteira (tarefas datadas por dia) a partir do seu tempo, das folgas e da relevância dos tópicos. É cálculo do app, feito offline: não usa IA nem consome a sua chave.">${icone("calendar-days")} Montar a semana</button>
             ${store.tarefasAtrasadas().length ? `<button class="btn btn-soft btn-sm" data-action="adaptar-atrasadas" data-tip="Redistribui as tarefas atrasadas pelos próximos dias disponíveis (pulando folgas). Você confirma antes.">${icone("calendar-days")} Adaptar atrasadas (${store.tarefasAtrasadas().length})</button>` : ""}
           </div>`
     }
@@ -1317,7 +1317,9 @@ function previewHTML(st) {
               </div>`;
             })
             .join("")
-        : `<p class="muted" style="padding:10px 0">Sem tarefas a sugerir agora (tudo coberto/dominado, ou faltam tópicos/relevância no Edital). Cadastre tópicos e marque os "que mais caem" no Edital.</p>`
+        : planoPreview.semDiaUtil
+        ? `<p class="muted" style="padding:10px 0">Não sobrou nenhum dia útil nesta semana: todos os dias restantes estão marcados como folga ou feriado. Ajuste em <b>Configurações</b>, ou espere a semana virar.</p>`
+        : `<p class="muted" style="padding:10px 0">Sem tarefas a sugerir agora (tudo concluído/dominado, ou faltam tópicos/relevância no Edital). Cadastre tópicos e marque os "que mais caem" no Edital.</p>`
     }
     ${planoRefino ? refinoHTML(planoRefino) : ""}
     <div class="form-acoes plano-acoes">
@@ -1387,14 +1389,14 @@ function semanaViewHTML(st, store) {
   const hoje = todayISO();
   // Dias-destino para "mover para…" no toque: dias da semana que NÃO são folga (espelha o alvo do arrastar).
   const diasMover = semana
-    .filter((dd) => !store.diaEhFolga(weekdayISO(dd)))
+    .filter((dd) => !store.diaEhFolga(weekdayISO(dd), dd))
     .map((dd) => ({ data: dd, label: `${DIAS_SEMANA_CURTO[weekdayISO(dd)]} ${dd.slice(8, 10)}/${dd.slice(5, 7)}` }));
   const grid = semana
     .map((d) => {
       const wd = weekdayISO(d);
       const [, mm, dd] = d.split("-");
       const ehHoje = d === hoje;
-      const folga = store.diaEhFolga(wd);
+      const folga = store.diaEhFolga(wd, d); // `d` é a data ISO; `dd` acima é só o dia do mês
 
       // Dia de folga: faixa enxuta, sem tarefas, com link para reativar (na própria linha).
       if (folga) {

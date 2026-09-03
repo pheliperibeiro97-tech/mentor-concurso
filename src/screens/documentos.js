@@ -681,7 +681,10 @@ export default function renderDocumentos(root, app) {
           app.refresh();
         } else if (pendingEstrutura) {
           lerEstruturaDoDOM(root, pendingEstrutura); // preserva edições de título/páginas
-          await store.casarEstruturaComEditalIA(pendingEstrutura);
+          // Âncora: a disciplina escolhida na tela. Sem ela a IA recebe o edital inteiro e o
+          // refino desfaz o vínculo de matéria que o import tinha acabado de acertar.
+          const discSel = root.querySelector("#doc-disc")?.value || "";
+          await store.casarEstruturaComEditalIA(pendingEstrutura, discSel && !discSel.startsWith("__") && !discSel.startsWith("curso:") ? discSel : null);
           const cont = root.querySelector("#doc-estrutura");
           if (cont) cont.innerHTML = estruturaResumoHTML(pendingEstrutura, store);
           toast("Vínculos refinados pela IA (confira).", "ok");
@@ -1824,8 +1827,16 @@ function abrirImportarMaterial(app, alvoId = null) {
           // barato; descobrir depois custa uma revisão material a material.
           const escFila = lerEscolhaDisciplina();
           const semEscolha = escFila.deduzir; // "— deduzir pelo nome do arquivo —"
-          if (semEscolha && !arquivos.some((f) => disciplinaDoDocumento(store.get(), { titulo: f.name.replace(/\.[^.]+$/, "") }, { herdarDeVinculos: false }))) {
-            const segue = await confirmar(`Nenhuma disciplina escolhida para estes ${arquivos.length} arquivos, e o nome deles não indica uma. Os tópicos do sumário vão ser procurados em TODO o edital, o que costuma gerar vínculo na matéria errada. Importar assim mesmo?`);
+          // `every`, não `some`. Com `some`, bastava UM nome de arquivo entre 33 "parecer" uma
+          // disciplina para os outros 32 entrarem sem aviso e casarem o sumário contra o edital
+          // INTEIRO, que é de onde saem os vínculos em outra matéria.
+          const semPista = arquivos.filter((f) => !disciplinaDoDocumento(store.get(), { titulo: f.name.replace(/\.[^.]+$/, "") }, { herdarDeVinculos: false }));
+          if (semEscolha && semPista.length) {
+            const todos = semPista.length === arquivos.length;
+            const segue = await confirmar(
+              `Nenhuma disciplina escolhida, e ${todos ? `o nome destes ${arquivos.length} arquivos não indica uma` : `o nome de ${semPista.length} de ${arquivos.length} arquivos não indica uma (${semPista.slice(0, 3).map((f) => f.name).join(", ")}${semPista.length > 3 ? ", …" : ""})`}. ` +
+              `Para esses, os tópicos do sumário vão ser procurados em TODO o edital, o que costuma gerar vínculo na matéria errada. Importar assim mesmo?`
+            );
             if (!segue) return;
           }
           emFila = true;
@@ -1895,7 +1906,7 @@ function abrirImportarMaterial(app, alvoId = null) {
           if (!store.iaDisponivel()) return avisoIA(app, "Refinar vínculos com IA");
           if (!pend.estrutura) return;
           lerEstruturaDoDOM(corpo, pend.estrutura);
-          const r = await comOcupado(() => store.casarEstruturaComEditalIA(pend.estrutura), { botao: el, msg: "Refinando os vínculos com a IA…" });
+          const r = await comOcupado(() => store.casarEstruturaComEditalIA(pend.estrutura, lerEscolhaDisciplina().disciplinaId || null), { botao: el, msg: "Refinando os vínculos com a IA…" });
           if (r === null) return;
           reEstrutura();
           toast("Vínculos refinados pela IA (confira).", "ok");
