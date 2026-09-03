@@ -1,6 +1,7 @@
 // Store central: estado do app + todas as operações de domínio.
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
 import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema } from "./persistence.js";
+import { limparConfigLocal } from "./config-local.js";
 import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
 import * as ciclo from "./ciclo.js";
@@ -9290,14 +9291,26 @@ export const store = {
   materiaisSemConteudoLocal() {
     return (state.documentos || []).filter((d) => this.conteudoPendente(d)).map((d) => d.titulo);
   },
+  // Devolve SEMPRE um clone. Antes o backup completo devolvia o `state` vivo: quem mexesse
+  // no objeto para exportar mexia no estado do app.
+  //
+  // O compartilhável tira DUAS coisas, por razões diferentes:
+  //  - o conteúdo do material, porque é obra de terceiro e carrega a marca-d'água com o CPF
+  //    de quem baixou (`limparMaterialDaFatia`);
+  //  - a config local do aparelho, porque ali estão a CHAVE de API do Gemini e a SENHA do
+  //    cofre — e a senha do cofre é a identidade do cofre: quem a recebe lê e SOBRESCREVE o
+  //    estudo do dono em qualquer aparelho. Enquanto isto faltava, o botão anunciava "seguro
+  //    para compartilhar" sobre um arquivo que entregava os dois segredos.
+  // O completo mantém a config (é arquivo local de restauração — sem a chave, restaurar
+  // deixaria o app sem IA), e por isso a tela avisa antes de gerar que ele NÃO se compartilha.
   snapshotExport(comMaterial = true) {
-    if (comMaterial) return state;
     const clone = JSON.parse(JSON.stringify(state));
+    if (comMaterial) return clone;
     // Multi-perfil: material e resumos vivem DENTRO de cada perfil. Limpar só o topo
     // deixaria as apostilas passarem no backup — por isso a limpeza é por perfil, e em
     // TODOS eles (o backup leva o app inteiro, não só o perfil ativo).
     for (const p of clone.perfis || []) limparMaterialDaFatia(p);
-    return clone;
+    return limparConfigLocal(clone);
   },
 
   // Importa um backup JSON (substitui TODOS os dados). Valida minimamente e

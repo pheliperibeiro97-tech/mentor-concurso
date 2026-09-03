@@ -13,6 +13,7 @@
 // aparelhos.)
 
 import { store } from "./store.js";
+import { CONFIG_LOCAL, limparConfigLocal } from "./config-local.js";
 
 
 const IDB_DB = "mentor-sync";
@@ -136,7 +137,9 @@ export function encolheriaTexto(de, para) {
 // de IA (o Claude Code local só existe no desktop; o celular precisa do Gemini). Enquanto
 // subiam junto, escolher um provedor num aparelho o empurrava para o outro, onde não
 // funcionava — e a chave de API viajava no cofre à toa.
-const CONFIG_LOCAL = ["sync", "syncNuvem", "iaProvider", "iaKey", "iaKeyReserva", "iaModelo"];
+// A lista mora em `config-local.js` porque o backup compartilhável precisa da MESMA: enquanto
+// ela só existia aqui, o cofre subia limpo e o backup saía com a chave do Gemini e a senha do
+// cofre dentro, num arquivo que a interface anuncia como seguro para compartilhar.
 // Caches DERIVÁVEIS que não são dado do usuário e pesam muito no cofre: o índice semântico
 // (768 números por trecho, ~6,4 KB cada, regenerável a partir do próprio material) e o
 // checklist da banca (o edital oficial verbatim, guardado só para conferir cobertura). Já
@@ -261,10 +264,7 @@ export function montarSnapshotSync(state, dispositivo) {
   (snap.perfis || []).forEach(semBinarios);
   // Metadados LOCAIS de cada máquina (handle, dispositivo, base, status, a SENHA da nuvem e
   // a configuração de IA). Nunca sincronizam.
-  if (snap.config && CONFIG_LOCAL.some((k) => snap.config[k] !== undefined)) {
-    snap.config = { ...snap.config };
-    for (const k of CONFIG_LOCAL) delete snap.config[k];
-  }
+  limparConfigLocal(snap);
   snap._sync = {
     app: "mentor-concurso",
     versao: 1,
