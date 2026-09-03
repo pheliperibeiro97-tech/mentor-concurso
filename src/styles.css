@@ -3732,6 +3732,10 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-card-campos input[type="number"] { width: 76px; }
 .prev-remover { flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; cursor: pointer; line-height: 1; font-size: var(--fs-base); }
 .prev-remover:hover { color: #fff; background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+/* Material cujo conteúdo não pôde ser lido nesta sessão (a chave `pag:` continua no disco).
+   Vermelho porque a reação errada — "Atualizar com arquivo novo" — destrói a transcrição. */
+.doc-ilegivel { color: var(--danger-ink); font-weight: 600; }
+
 /* Tela de recuperação: o app não conseguiu LER os dados. Cobre tudo de propósito — não há app
    utilizável por trás, e qualquer clique atrás dela seria uma escrita que não vamos permitir. */
 .recuperacao-overlay {

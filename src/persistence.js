@@ -112,6 +112,9 @@ export function estadoParaGravar(state, opts) {
   const comBlobs = opts && opts.blobs !== undefined ? !!opts.blobs : blobsOk;
   const enxugarDoc = (d) => {
     if (!d || typeof d !== "object") return d;
+    // `leituraFalhou` é sinal de SESSÃO (não consegui ler as páginas deste material agora), e
+    // não um fato do material. Gravá-lo faria a falha de hoje virar estado permanente.
+    if (d.leituraFalhou) d = { ...d, leituraFalhou: undefined };
     const temPaginas = Array.isArray(d.paginas) && d.paginas.length > 0;
     if (!temPaginas) return d;
     // `texto` é o join das páginas (o init recompõe); `paginas` mora fora quando há blobs.
@@ -217,25 +220,39 @@ function campoBinario(valor) {
   return null;
 }
 
-export async function getBlob(id) {
-  if (!id) return null;
+// Leitura de blob que DISTINGUE "não existe" de "não consegui ler": devolve
+// `{ ok, valor }`. `ok:false` é falha real; `ok:true, valor:null` é ausência legítima.
+//
+// A diferença importa nas PÁGINAS do material. O `getBlob` engolia o erro e devolvia `null`
+// nos dois casos, então o material ficava sem `paginas` em memória — indistinguível de um
+// material que nunca teve conteúdo. Ele abria vazio, e quem o visse assim podia mandar
+// "Atualizar material", que RELÊ o arquivo e apaga o que a Visão tinha transcrito.
+export async function lerBlob(id) {
+  if (!id) return { ok: true, valor: null };
   try {
     if (isTauri()) {
       const bin = ehChaveDeTexto(id) ? null : await tauriInvoke("get_blob_bin", { id: String(id) });
       if (bin) {
         const { campo, mime, b64 } = JSON.parse(bin);
         const dataUrl = `data:${mime};base64,${b64}`;
-        return { pdfData: campo === "pdf" ? dataUrl : null, imgData: campo === "img" ? dataUrl : null };
+        return { ok: true, valor: { pdfData: campo === "pdf" ? dataUrl : null, imgData: campo === "img" ? dataUrl : null } };
       }
       const txt = await tauriInvoke("get_blob", { id: String(id) });
-      return txt ? JSON.parse(txt) : null;
+      return { ok: true, valor: txt ? JSON.parse(txt) : null };
     }
-    if (temIndexedDB()) return (await idbReq("readonly", (s) => s.get(String(id)), IDB_BLOBS)) || null;
+    if (temIndexedDB()) {
+      return { ok: true, valor: (await idbReq("readonly", (s) => s.get(String(id)), IDB_BLOBS)) || null };
+    }
+    return { ok: true, valor: null }; // sem armazenamento de blobs: ausência, não falha
   } catch (err) {
     blobsOk = false;
     console.warn("[blobs] leitura indisponível; o binário fica no estado:", err);
+    return { ok: false, valor: null, erro: err };
   }
-  return null;
+}
+
+export async function getBlob(id) {
+  return (await lerBlob(id)).valor;
 }
 export async function setBlob(id, valor) {
   if (!id) return false;

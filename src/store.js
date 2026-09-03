@@ -1,6 +1,6 @@
 // Store central: estado do app + todas as operações de domínio.
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
-import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema, ultimoErroDeGravacao, ehErroDeEspaco } from "./persistence.js";
+import { loadState, saveState, resetState, getBlob, lerBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema, ultimoErroDeGravacao, ehErroDeEspaco } from "./persistence.js";
 import { limparConfigLocal } from "./config-local.js";
 import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
@@ -1107,8 +1107,17 @@ async function restaurarPaginas() {
   for (const p of state.perfis || []) {
     for (const d of p.documentos || []) {
       try {
+        d.leituraFalhou = false;
         if (Array.isArray(d.paginas) && d.paginas.length) continue; // MIGRAÇÃO: ver abaixo
-        const guardado = await getBlob(`pag:${d.id}`);
+        const { ok, valor: guardado } = await lerBlob(`pag:${d.id}`);
+        // FALHA DE LEITURA ≠ MATERIAL SEM CONTEÚDO. Antes as duas viravam `null`: o material
+        // abria vazio, como se nunca tivesse tido corpo. O conteúdo continua no disco (a chave
+        // `pag:` não foi tocada), mas o app mentia sobre ele — e "Atualizar material", a reação
+        // natural de quem vê a apostila vazia, RELÊ o arquivo e apaga o que a Visão transcreveu.
+        if (!ok) {
+          d.leituraFalhou = true;
+          continue; // não marca `pagsSalvas`: nada foi lido, nada está conferido
+        }
         if (guardado && Array.isArray(guardado.paginas)) {
           d.paginas = guardado.paginas;
           pagsSalvas.set(d.id, assinaturaPaginas(d)); // veio do disco: já está gravado
