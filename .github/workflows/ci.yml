@@ -1,0 +1,41 @@
+# Roda a suíte e o build a cada pull request e a cada push na main.
+#
+# Existe porque `npm test` dependia de alguém lembrar de digitá-lo: três testes de
+# sincronização ficaram quebrados uma onda inteira sem ninguém notar. Teste que só roda
+# quando a pessoa lembra é teste que não roda.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Push novo no mesmo branch cancela a execução anterior, que já não interessa a ninguém.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: npm test + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # A suíte não precisa de node_modules (os testes leem o próprio fonte), mas o build
+      # precisa; e instalar do lockfile também prova que o lockfile está de pé.
+      - run: npm ci
+
+      - run: npm test
+
+      # O build é o que pega import quebrado e erro de sintaxe, classe de defeito que
+      # nenhum dos testes enxerga.
+      - run: npm run build
