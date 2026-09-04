@@ -9,7 +9,7 @@ import { verificarAtualizacao } from "../updater.js";
 import { setEstiloAlarme, tocarAlarmeTeste } from "../cronometro.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
-import { backendName } from "../persistence.js";
+import { backendName, espacoDoNavegador } from "../persistence.js";
 import { MODELO_PADRAO, testarConexao, iaDisponivel, GEMINI_FALLBACKS, CLAUDE_MODELOS } from "../ia-provider.js";
 import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
@@ -548,7 +548,7 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("database")} Dados</h3>
-      <p class="muted small">Armazenamento: <b>${esc(backendName())}</b></p>
+      <p class="muted small">Armazenamento: <b>${esc(backendName())}</b> <span id="cfg-espaco"></span></p>
       ${
         // Multi-concurso: estes números são do concurso ATIVO. Sem dizer isso, a seção
         // "Dados" parece mostrar o total do app e engana quem tem mais de um.
@@ -645,6 +645,20 @@ export default function renderConfig(root, app) {
   ["#cfg-not-diario", "#cfg-not-horario", "#cfg-not-revisoes", "#cfg-not-tarefas", "#cfg-not-mentor", "#cfg-not-inatividade", "#cfg-not-marcos"].forEach((sel) =>
     root.querySelector(sel)?.addEventListener("change", () => salvarNotif(false))
   );
+
+  // ESPAÇO: quanto o app ocupa e quanto o navegador ainda concede. Assíncrono, então preenche
+  // depois do render. Sem isto, o aluno só descobria o limite quando a gravação falhava no meio
+  // de um import de centenas de apostilas. `persistente: false` é o aviso que importa: significa
+  // que o navegador pode apagar tudo para liberar disco.
+  espacoDoNavegador().then((e) => {
+    const alvo = root.querySelector("#cfg-espaco");
+    if (!alvo || !e) return;
+    const alerta = e.pctUsado >= 80 ? ` <b style="color:var(--danger-ink)">— espaço quase no fim</b>` : "";
+    const risco = e.persistente
+      ? ""
+      : ` · <span data-tip="O navegador ainda trata estes dados como cache: ele pode apagá-los para liberar disco. Instalar o app na tela de início costuma resolver.">sujeito a limpeza automática ${icone("info")}</span>`;
+    alvo.innerHTML = `· ${e.usadoMB} MB de ${e.cotaMB} MB (${e.pctUsado}%)${alerta}${risco}`;
+  });
 
   // O campo de chave nasce VAZIO (a chave não é renderizada no HTML). Então "vazio" quer dizer
   // "não mexi nisto", e não "apague". Devolve `{}` nesse caso, para o `setConfig` nem tocar no
