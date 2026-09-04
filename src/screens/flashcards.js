@@ -1,4 +1,5 @@
-// Flashcards / Revisão: recall ativo + repetição espaçada (SM-2) + exportação Anki.
+// Flashcards / Revisão: recall ativo + repetição espaçada (escada fixa 24h/7/15/30, ver
+// sm2.js: NÃO é o algoritmo SM-2) + exportação para o Anki (.txt).
 // Criar cards num painel único (digitar/colar/importar, gerar do material com IA,
 // ou gerar das questões offline). Revisão filtrável por disciplina/tópicos.
 import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, opcoesImpressao, avisoIA, confirmar, ligarDropZone, focarItem, pedirNumero, explicacaoIAHTML, abrirJanela, abrirJanelaFluxo, confetti , plural, comOcupado, dicaArquivo, campoMaterialHTML, ligarCampoMaterial } from "../ui.js";
@@ -23,6 +24,7 @@ let filtroTipo = "todos"; // todos | qa | afirmacao (C/E)
 let perguntandoMotivoId = null; // após "Errei": pergunta o motivo (1 toque) antes de avançar
 let puladosSessao = new Set(); // ids pulados nesta sessão (voltam depois)
 let mostrarExport = false; // painel de exportação Anki (oculto até clicar)
+let podeDesfazer = false; // ha nota para desfazer nesta sessao (store.podeDesfazerRevisao)
 let revisarId = null; // estuda UM card específico sob demanda (da lista "Ver todos"), mesmo não vencido
 let ordemRev = "recentes"; // ordem da fila: "recentes" (recém-criados primeiro, padrão) | "vencimento"
 let filtroLote = null; // #4: quando veio de uma geração, estuda SÓ os recém-gerados (geracaoId)
@@ -60,7 +62,8 @@ function filtrarPorEscopo(st, escopo) {
   return st.flashcards.filter((f) => f.topicoId === escopo);
 }
 
-// Mapa de botões amigáveis → qualidade SM-2.
+// Nota → qualidade (0-5). O intervalo que cada uma agenda é calculado e MOSTRADO no botão
+// (`1d`, `7d`, `15d`, `30d`), com o prazo por extenso no tooltip.
 const NOTAS = [
   { q: 0, label: "Errei", cls: "n-erro" },
   { q: 3, label: "Difícil", cls: "n-dif" },
@@ -71,6 +74,7 @@ const NOTAS = [
 export default function renderFlashcards(root, app) {
   const { store } = app;
   const st = store.get();
+  podeDesfazer = store.podeDesfazerRevisao(); // mostra "desfazer a última" só quando há o que desfazer
   // Foco num flashcard específico (Dossiê): abre a lista "Ver todos" e rola até ele.
   let focoFc = null;
   if (app.params && app.params.focoFlashcardId) {
@@ -237,6 +241,7 @@ export default function renderFlashcards(root, app) {
                 <button class="btn btn-add u-mt-12" data-action="toggle-criar">Criar flashcards</button>
               </div>`
       }
+      ${desfazerHTML()}
     </div>`
     }
 
@@ -413,6 +418,24 @@ export default function renderFlashcards(root, app) {
       abrirRegistroSessao(store, app, { modo: temTempo ? "crono" : "manual", fasePadrao: "R" });
     },
     ...bindFocoCrono({}), // cronômetro do foco (toggle/prog/reg/livre) — módulo compartilhado
+    // Desfaz a última nota. Os quatro botões ficam lado a lado e, no celular, um toque errado
+    // empurrava o cartão por 30 dias sem volta.
+    "desfazer-nota": () => {
+      const c = store.desfazerUltimaRevisao();
+      if (!c) return toast("Não há nota para desfazer.", "erro");
+      // No foco, volta o passo para o cartão desfeito, senão o desfazer conserta o
+      // agendamento mas a tela segue no cartão seguinte, e o aluno não vê o que aconteceu.
+      if (focoAtivo) {
+        const i = focoFila.findIndex((x) => (x.id || x) === c.id);
+        if (i >= 0) focoIdx = i;
+        delete focoPlacar[c.id];
+      }
+      revelado = false;
+      revisarId = null;
+      perguntandoMotivoId = null;
+      toast(`Desfeito. «${(c.frente || "").slice(0, 40)}» voltou ao agendamento anterior.`, "ok");
+      if (focoAtivo) atualizarFocoFlash(root, store); else app.refresh();
+    },
     nota: (el) => {
       const q = parseInt(el.getAttribute("data-q"), 10);
       const id = el.getAttribute("data-id");
@@ -526,6 +549,7 @@ export default function renderFlashcards(root, app) {
     }
     const idx = { "1": 0, "2": 1, "3": 2, "4": 3 }[e.key];
     if (idx !== undefined) { e.preventDefault(); root.querySelectorAll(`${notasSel} [data-action="nota"]`)[idx]?.click(); }
+    else if (e.key === "z" || e.key === "Z") { e.preventDefault(); root.querySelector('[data-action="desfazer-nota"]')?.click(); } // Z = desfaz a última nota
     else if (e.key === "c" || e.key === "C") { e.preventDefault(); root.querySelector('[data-action="comentar-fc"]:not([disabled])')?.click(); } // C = comentar com IA
     else if (e.key === " " || e.key === "Enter") { e.preventDefault(); root.querySelector('[data-action="voltar-pergunta"]')?.click(); } // Espaço alterna: volta à pergunta
   }
@@ -776,10 +800,13 @@ function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }, anim = "in")
   const acertos = notas.filter((q) => q >= 3).length;      // Difícil/Bom/Fácil
   const feitos = acertos + erros;
   const fim = idx >= total; // passou de todos → conclusão
-  const centro = cardMotivo ? quizMotivoHTML(st, cardMotivo) : card ? quizCardHTML(st, card) : quizConclusaoHTML(feitos, acertos);
+  // O desfazer entra no CENTRO, e não dentro do cartão: precisa sobreviver à virada para o
+  // cartão seguinte e à tela de conclusão, que é justamente onde o toque errado aparece
+  // ("marquei o último como Fácil sem querer e a fila acabou").
+  const centro = (cardMotivo ? quizMotivoHTML(st, cardMotivo) : card ? quizCardHTML(st, card) : quizConclusaoHTML(feitos, acertos)) + desfazerHTML();
   const rodape = cardMotivo
     ? `<kbd>Esc</kbd> sair · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> motivo · <kbd>Espaço</kbd> pular`
-    : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>Espaço</kbd> virar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> nota · <kbd>C</kbd> comentar`;
+    : `<kbd>Esc</kbd> sair · <kbd>←</kbd><kbd>→</kbd> navegar · <kbd>Espaço</kbd> virar · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> nota · <kbd>Z</kbd> desfazer`;
   return focoShellHTML({
     idx, total, fim, anim,
     mostrarNav: !cardMotivo, // no passo de motivo, esconde as setas
@@ -794,6 +821,7 @@ function focoQuizHTML(st, { card, cardMotivo, idx, total, placar }, anim = "in")
 // tick do cronômetro sobrevivem — buscam elementos frescos a cada evento/segundo.
 function atualizarFocoFlash(root, store) {
   const st = store.get();
+  podeDesfazer = store.podeDesfazerRevisao();
   const card = st.flashcards.find((c) => c.id === focoFila[focoIdx] && !c.suspenso);
   const cardMotivo = perguntandoMotivoId ? st.flashcards.find((c) => c.id === perguntandoMotivoId) : null;
   // "fade": só opacidade no miolo (16ms). Sem isto, cada troca em-lugar reexecutava a
@@ -837,6 +865,14 @@ function quizCardHTML(st, c) {
         <div class="fq-notas">${notas}</div>
       </div>
     </div>`;
+}
+
+// O desfazer mora FORA do cartão, de propósito. Dentro da face de trás ele só existia enquanto
+// a resposta estava revelada, ou seja, sumia no instante em que passava a ser útil: dar a nota
+// vira o cartão seguinte e esconde tudo o que estava na face de trás do anterior.
+function desfazerHTML() {
+  if (!podeDesfazer) return "";
+  return `<button class="fc-desfazer lnk" data-action="desfazer-nota" data-tip="Devolve o cartão anterior ao agendamento que ele tinha.">${icone("rotate-ccw")} desfazer a última nota (Z)</button>`;
 }
 
 function quizMotivoHTML(st, c) {
@@ -912,7 +948,7 @@ function cardRevisaoHTML(st, c) {
                  return `<button class="btn btn-nota ${n.cls}" data-action="nota" data-q="${n.q}" data-id="${c.id}" data-tip="Atalho ${i + 1} · ${esc(n.label)}: ${quando}."><span class="nota-lbl">${n.label}</span><span class="nota-int">${intCurto}</span></button>`;
                }).join("")}
              </div>
-             <div class="fc-atalhos muted small">${icone("keyboard")} <b>1–4</b> nota · <b>Espaço</b> vira</div>
+             <div class="fc-atalhos muted small">${icone("keyboard")} <b>1–4</b> nota · <b>Espaço</b> vira · <b>Z</b> desfaz</div>
              <div class="fc-extra">
                <button class="btn btn-ia btn-sm" data-action="comentar-fc" data-id="${c.id}" data-tip="A IA explica este cartão para tirar a sua dúvida.">${icone("sparkles")} Comentar com IA</button>
                ${c.fonte && (c.fonte.tipo === "lei" || c.fonte.tipo === "juris") ? `<button class="btn btn-ghost btn-sm" data-action="fc-abrir-artigo" data-ref="${esc(c.fonte.titulo || "")}" data-tipo="${c.fonte.tipo}" data-tip="Abrir o artigo de origem na ${c.fonte.tipo === "juris" ? "Jurisprudência" : "Lei Seca"}.">${icone("book-open")} Abrir artigo</button>` : ""}

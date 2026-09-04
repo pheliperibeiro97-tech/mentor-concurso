@@ -1,7 +1,7 @@
 // Data-viz v2 (FASE 0/Item 4): visualizações próprias em SVG/CSS — sem biblioteca,
 // offline e com a cara da marca. Regra de ouro (lição da auditoria): a constância
 // NUNCA pune — dia sem estudo é neutro (cinza), nunca vermelho.
-import { esc, todayISO, fmtTempoCurto } from "./util.js";
+import { esc, todayISO, fmtTempoCurto, diaLocal } from "./util.js";
 
 // ---- utilidades de data locais (sem UTC, para o dia "virar" no fuso do usuário) ----
 function isoLocal(d) {
@@ -57,7 +57,7 @@ export function progressRing(pct, { size = 66, stroke = 7, cor = "var(--primary)
 export function heatmapConstancia(sessoes, { semanas = 13, folgaDias = [] } = {}) {
   const porDia = {};
   for (const s of sessoes || []) {
-    const d = (s.data || "").slice(0, 10);
+    const d = diaLocal(s.data); // o dia do aluno: a sessao e gravada em UTC
     if (!d) continue;
     porDia[d] = (porDia[d] || 0) + (s.tempoSeg || 0);
   }
@@ -122,7 +122,7 @@ const MES_LONGO = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "
 export function linhaConstanciaMes(sessoes, { folgaDias = [] } = {}) {
   const porDia = {};
   for (const s of sessoes || []) {
-    const d = (s.data || "").slice(0, 10);
+    const d = diaLocal(s.data); // o dia do aluno: a sessao e gravada em UTC
     if (!d) continue;
     porDia[d] = (porDia[d] || 0) + (s.tempoSeg || 0);
   }

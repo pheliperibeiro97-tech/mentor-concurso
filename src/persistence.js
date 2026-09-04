@@ -60,28 +60,35 @@ export function backendName() {
   return temIndexedDB() ? "IndexedDB (navegador)" : "localStorage (navegador)";
 }
 
+// Devolve `{ estado, falhou, erro }`.
+//
+// A distinção entre `estado: null, falhou: false` (aparelho novo, legítimo) e
+// `estado: null, falhou: true` (não consegui ler o que está lá) é a coisa mais importante
+// deste arquivo. Antes os dois casos devolviam `null` e eram indistinguíveis: uma leitura
+// que falhava — banco corrompido, JSON truncado, IndexedDB bloqueado — fazia o app abrir
+// como se fosse a primeira vez, e a PRIMEIRA gravação apagava o banco bom por cima.
 export async function loadState() {
   try {
     if (isTauri()) {
       const json = await tauriInvoke("load_state");
-      return json ? JSON.parse(json) : null;
+      return { estado: json ? JSON.parse(json) : null, falhou: false, erro: null };
     }
     if (temIndexedDB()) {
       const v = await idbGet(IDB_KEY);
-      if (v != null) return typeof v === "string" ? JSON.parse(v) : v;
+      if (v != null) return { estado: typeof v === "string" ? JSON.parse(v) : v, falhou: false, erro: null };
       // Migração ÚNICA: estado antigo no localStorage → IndexedDB.
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         try { await idbPut(IDB_KEY, raw); localStorage.removeItem(STORAGE_KEY); } catch (_) {}
-        return JSON.parse(raw);
+        return { estado: JSON.parse(raw), falhou: false, erro: null };
       }
-      return null;
+      return { estado: null, falhou: false, erro: null };
     }
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    return { estado: raw ? JSON.parse(raw) : null, falhou: false, erro: null };
   } catch (err) {
     console.error("Falha ao carregar estado:", err);
-    return null;
+    return { estado: null, falhou: true, erro: err };
   }
 }
 
@@ -105,6 +112,9 @@ export function estadoParaGravar(state, opts) {
   const comBlobs = opts && opts.blobs !== undefined ? !!opts.blobs : blobsOk;
   const enxugarDoc = (d) => {
     if (!d || typeof d !== "object") return d;
+    // `leituraFalhou` é sinal de SESSÃO (não consegui ler as páginas deste material agora), e
+    // não um fato do material. Gravá-lo faria a falha de hoje virar estado permanente.
+    if (d.leituraFalhou) d = { ...d, leituraFalhou: undefined };
     const temPaginas = Array.isArray(d.paginas) && d.paginas.length > 0;
     if (!temPaginas) return d;
     // `texto` é o join das páginas (o init recompõe); `paginas` mora fora quando há blobs.
@@ -122,6 +132,21 @@ export function estadoParaGravar(state, opts) {
   return state;
 }
 
+// Por que a última gravação falhou. O `saveState` devolve booleano (é o que os chamadores
+// esperam), mas a tela precisa dizer ao aluno o que aconteceu: "acabou o espaço" e "o programa
+// não conseguiu escrever" pedem reações diferentes.
+let ultimoErro = null;
+export function ultimoErroDeGravacao() {
+  return ultimoErro;
+}
+// `true` quando a falha foi de ESPAÇO (cota do navegador estourada / disco cheio). É a causa
+// mais provável numa biblioteca de cursinho e a única que o aluno resolve sozinho.
+export function ehErroDeEspaco(err) {
+  const nome = (err && (err.name || err.constructor?.name)) || "";
+  const msg = String((err && err.message) || err || "");
+  return nome === "QuotaExceededError" || /quota|storage|espa[çc]o|disk|full|no space/i.test(msg);
+}
+
 export async function saveState(state) {
   const json = JSON.stringify(estadoParaGravar(state));
   try {
@@ -132,8 +157,12 @@ export async function saveState(state) {
     } else {
       localStorage.setItem(STORAGE_KEY, json);
     }
+    ultimoErro = null;
     return true;
   } catch (err) {
+    // Falha de gravação não pode morrer no console: quem estava estudando não olha o console,
+    // e o app seguia se comportando como se tivesse salvado.
+    ultimoErro = err;
     console.error("Falha ao salvar estado:", err);
     return false;
   }
@@ -191,25 +220,39 @@ function campoBinario(valor) {
   return null;
 }
 
-export async function getBlob(id) {
-  if (!id) return null;
+// Leitura de blob que DISTINGUE "não existe" de "não consegui ler": devolve
+// `{ ok, valor }`. `ok:false` é falha real; `ok:true, valor:null` é ausência legítima.
+//
+// A diferença importa nas PÁGINAS do material. O `getBlob` engolia o erro e devolvia `null`
+// nos dois casos, então o material ficava sem `paginas` em memória — indistinguível de um
+// material que nunca teve conteúdo. Ele abria vazio, e quem o visse assim podia mandar
+// "Atualizar material", que RELÊ o arquivo e apaga o que a Visão tinha transcrito.
+export async function lerBlob(id) {
+  if (!id) return { ok: true, valor: null };
   try {
     if (isTauri()) {
       const bin = ehChaveDeTexto(id) ? null : await tauriInvoke("get_blob_bin", { id: String(id) });
       if (bin) {
         const { campo, mime, b64 } = JSON.parse(bin);
         const dataUrl = `data:${mime};base64,${b64}`;
-        return { pdfData: campo === "pdf" ? dataUrl : null, imgData: campo === "img" ? dataUrl : null };
+        return { ok: true, valor: { pdfData: campo === "pdf" ? dataUrl : null, imgData: campo === "img" ? dataUrl : null } };
       }
       const txt = await tauriInvoke("get_blob", { id: String(id) });
-      return txt ? JSON.parse(txt) : null;
+      return { ok: true, valor: txt ? JSON.parse(txt) : null };
     }
-    if (temIndexedDB()) return (await idbReq("readonly", (s) => s.get(String(id)), IDB_BLOBS)) || null;
+    if (temIndexedDB()) {
+      return { ok: true, valor: (await idbReq("readonly", (s) => s.get(String(id)), IDB_BLOBS)) || null };
+    }
+    return { ok: true, valor: null }; // sem armazenamento de blobs: ausência, não falha
   } catch (err) {
     blobsOk = false;
     console.warn("[blobs] leitura indisponível; o binário fica no estado:", err);
+    return { ok: false, valor: null, erro: err };
   }
-  return null;
+}
+
+export async function getBlob(id) {
+  return (await lerBlob(id)).valor;
 }
 export async function setBlob(id, valor) {
   if (!id) return false;

@@ -556,13 +556,13 @@ export default function renderConfig(root, app) {
         <span><span class="num">${st.flashcards.length}</span> flashcards</span>
       </div>
       <div class="form-acoes">
-        <button class="btn btn-ghost btn-sm" data-action="exportar-completo" data-tip="Inclui TUDO, inclusive seus materiais (PDF/texto). Use só localmente: NÃO compartilhe.">${icone("download")} Backup completo (local)</button>
-        <button class="btn btn-ghost btn-sm" data-action="exportar-compartilhavel" data-tip="Remove o conteúdo dos materiais importados (mantém seus flashcards/questões/resumos/marcações). Seguro para compartilhar.">${icone("download")} Backup compartilhável (sem materiais)</button>
+        <button class="btn btn-ghost btn-sm" data-action="exportar-completo" data-tip="Inclui TUDO: seus materiais (PDF/texto), a chave da IA e a senha do cofre. Use só localmente: NÃO compartilhe.">${icone("download")} Backup completo (local)</button>
+        <button class="btn btn-ghost btn-sm" data-action="exportar-compartilhavel" data-tip="Remove o conteúdo dos materiais, a chave da IA e a senha do cofre (mantém seus flashcards/questões/resumos/marcações). Seguro para compartilhar.">${icone("download")} Backup compartilhável (sem materiais)</button>
         <label class="btn btn-ghost btn-sm btn-file">${icone("upload")} Importar backup (JSON)
           <input id="cfg-import" type="file" accept=".json,application/json" hidden />
         </label>
       </div>
-      <p class="muted small"><b>Backup completo</b> inclui seus materiais (com o conteúdo) e fica só no seu dispositivo. <b>Backup compartilhável</b> tira o conteúdo dos materiais (que podem ser protegidos por direito autoral), mantendo o que é seu (questões, flashcards, resumos, marcações). Importar <b>substitui todos os dados atuais</b>, de todos os concursos.</p>
+      <p class="muted small"><b>Backup completo</b> inclui seus materiais (com o conteúdo), a chave da sua IA e a senha do seu cofre. Serve para restaurar no seu aparelho e <b>não deve ser enviado a ninguém</b>. <b>Backup compartilhável</b> tira as três coisas: o conteúdo dos materiais (que podem ser protegidos por direito autoral), a chave da IA e a senha do cofre, mantendo o que é seu (questões, flashcards, resumos, marcações). Importar <b>substitui todos os dados atuais</b>, de todos os concursos.</p>
       <label class="inline small" style="display:flex; width:fit-content; gap:8px; margin-top:10px; font-weight:400">
         <input id="cfg-descartar-pdf" type="checkbox" ${cfg.descartarPdfAposImport ? "checked" : ""} />
         <span>Ao importar material, <b>descartar o PDF original</b> após extrair o texto (economiza espaço e não guarda a cópia do arquivo; mantém o texto. Você perde o visualizador de PDF e o OCR posterior). Não se aplica a páginas que ainda precisam de OCR.</span>

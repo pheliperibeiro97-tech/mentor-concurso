@@ -685,7 +685,13 @@ function render(preservarScroll = true) {
       );
       if (!ok) return;
     }
-    if (store.trocarPerfil(id)) {
+    const r = store.trocarPerfil(id);
+    // A geração escreve no concurso ATIVO quando a resposta chega: trocar no meio faria o lote
+    // inteiro cair no concurso novo. Aqui não há "trocar mesmo assim": é esperar.
+    if (r === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para trocar de concurso, senão as questões entram no concurso errado.", "erro");
+    }
+    if (r) {
       app.navigate("hoje");
       toast("Concurso trocado.");
     }
@@ -697,7 +703,10 @@ function render(preservarScroll = true) {
     // Sem pedir nome aqui: quem pergunta "qual concurso você vai prestar?" é o onboarding,
     // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
     // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
-    store.criarPerfil();
+    // Criar concurso troca o ATIVO, e a geração escreve no ativo quando a resposta chega.
+    if (store.criarPerfil() === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para criar outro concurso, senão as questões entram no concurso novo.", "erro");
+    }
     iniciarFluxoNovoConcurso(); // o fluxo do concurso novo tem começo e fim próprios
     app.navigate("hoje");
   }));
@@ -716,7 +725,10 @@ function render(preservarScroll = true) {
       `Remover "${atual.nome}" apaga o edital, os materiais, as questões, os flashcards e todo o histórico DESTE concurso. Os outros não são afetados, mas esta ação é irreversível.`
     );
     if (!ok) return;
-    store.removerPerfil(atual.id);
+    // Apagar o concurso ativo troca o ativo, e ainda destruiria o destino do lote em voo.
+    if (store.removerPerfil(atual.id) === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para remover o concurso.", "erro");
+    }
     app.navigate("hoje");
     toast("Concurso removido.");
   }));
@@ -808,6 +820,14 @@ async function bootstrap() {
   const liberado = await checarLicenca();
   if (!liberado) return;
   await store.init();
+  // A LEITURA do estado falhou: o store está travado para escrita e o app, em memória, tem o
+  // estado padrão. Sem esta tela ele mostraria o ONBOARDING — e o primeiro clique gravaria o
+  // vazio por cima de um banco que ele só não conseguiu LER. É verificação direta, e não
+  // evento, porque o `init` acontece antes de qualquer listener existir.
+  if (store.somenteLeitura()) {
+    mostrarTelaRecuperacao(store.erroDeLeitura());
+    return; // não monta o resto do app: nada de chat, sync ou agendador escrevendo por cima
+  }
   montarChat(store, app); // widget flutuante persistente (fora do #app)
   // Paleta de comando ⌘K (launcher): de qualquer tela, navega rápido (offline) e repassa
   // pergunta/ação ao chat. Só liga depois do app pronto (não no onboarding/crono).
@@ -930,6 +950,32 @@ async function bootstrap() {
   // pode ter vindo do chat, de um atalho ou de qualquer tela, então o aviso mora aqui, num
   // lugar só, ouvindo o evento que o store emite.
   let fecharAvisoConteudo = null;
+  // Gravação que falhou. Antes morria num `console.error`: o aluno estudava e o dia não tinha
+  // sido salvo, sem nada na tela. O aviso é PERSISTENTE de propósito (não é toast de 3 s) —
+  // continuar estudando por cima de um app que não grava é o pior dos dois mundos.
+  let avisoGravacao = null;
+  window.addEventListener("mentor:gravacao", (ev) => {
+    const d = (ev && ev.detail) || {};
+    if (avisoGravacao) { avisoGravacao.remove(); avisoGravacao = null; }
+    if (d.ok) return void toast("Consegui salvar. Seus dados estão gravados.", "ok");
+    const faixa = document.createElement("div");
+    faixa.className = "aviso-gravacao";
+    faixa.setAttribute("role", "alert");
+    faixa.innerHTML = `<span>${d.espaco
+      ? "<b>Acabou o espaço para salvar.</b> O que você fizer agora pode se perder. Libere espaço (ou apague um concurso que não usa) e tente de novo."
+      : "<b>Não consegui salvar.</b> O que você fizer agora pode se perder. Não feche o app antes de tentar de novo."}</span>
+      <button class="btn btn-sm" data-regravar>Tentar salvar de novo</button>`;
+    faixa.querySelector("[data-regravar]").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      e.target.textContent = "Salvando…";
+      if (!(await store.tentarGravarDeNovo())) {
+        e.target.disabled = false;
+        e.target.textContent = "Tentar salvar de novo";
+      }
+    });
+    document.body.appendChild(faixa);
+    avisoGravacao = faixa;
+  });
   window.addEventListener("mentor:conteudo", (ev) => {
     const d = (ev && ev.detail) || {};
     if (d.fase === "baixando") {
@@ -940,6 +986,47 @@ async function bootstrap() {
       if (!d.ok) toast("Não consegui baixar o conteúdo deste material agora.", "erro");
     }
   });
+}
+
+// Tela de recuperação: o app não conseguiu LER os dados guardados.
+//
+// A promessa que ela faz é a que o código cumpre: enquanto estiver aqui, `store.persist()` está
+// travado e nada é gravado. As duas saídas são explícitas e do usuário — não há caminho
+// automático, de propósito, porque o automático era exatamente o defeito (abrir como aparelho
+// novo e apagar o banco no primeiro clique).
+function mostrarTelaRecuperacao(msg) {
+  const tela = document.createElement("div");
+  tela.className = "recuperacao-overlay";
+  tela.setAttribute("role", "alertdialog");
+  tela.setAttribute("aria-modal", "true");
+  tela.innerHTML = `<div class="recuperacao-caixa">
+    <h2>Não consegui abrir os seus dados</h2>
+    <p>Os seus dados de estudo <b>não foram apagados</b>. Eu é que não consegui lê-los agora.
+    Enquanto esta tela estiver aqui, o app <b>não grava nada</b>, para não escrever por cima do que está guardado.</p>
+    <p class="muted small">Costuma ser passageiro: feche tudo e abra de novo. Se insistir, o seu cofre da
+    nuvem continua lá — dá para começar do zero e restaurar com a sua senha.${msg ? ` <span class="recuperacao-erro">(${esc(msg)})</span>` : ""}</p>
+    <div class="recuperacao-acoes">
+      <button class="btn btn-primary" data-recarregar>Tentar abrir de novo</button>
+      <button class="btn btn-ghost" data-zerar>Começar do zero mesmo assim</button>
+    </div>
+  </div>`;
+  tela.querySelector("[data-recarregar]").addEventListener("click", () => location.reload());
+  tela.querySelector("[data-zerar]").addEventListener("click", async () => {
+    const ok = await confirmar(
+      "Começar do zero destrava a gravação: assim que você mexer em qualquer coisa, o que estiver guardado neste aparelho é substituído. Se os seus dados estão no cofre da nuvem, dá para restaurá-los depois com a sua senha. Tem certeza?"
+    );
+    if (!ok) return;
+    const btn = tela.querySelector("[data-zerar]");
+    btn.disabled = true;
+    btn.textContent = "Preparando…";
+    // Só recarrega se a limpeza + gravação funcionaram. Recarregar sem isso devolveria esta
+    // mesma tela na abertura seguinte — um laço, não uma saída.
+    if (await store.destravarEscritaComecandoDoZero()) return void location.reload();
+    btn.disabled = false;
+    btn.textContent = "Começar do zero mesmo assim";
+    toast("Também não consegui gravar neste aparelho. Verifique o espaço livre e as permissões do navegador.", "erro");
+  });
+  document.body.appendChild(tela);
 }
 
 // Ao fechar: no desktop intercepta o fechamento e só fecha depois de tentar sincronizar
@@ -955,6 +1042,11 @@ async function ligarSyncAoFechar() {
         event.preventDefault(); // evita o fechamento parcial padrão (que deixaria o cronômetro segurando o app)
         if (fechando) return; // já estamos saindo
         fechando = true;
+        // GRAVAR ANTES DE SINCRONIZAR. O fechamento esperava só pela nuvem e ia embora sem
+        // esperar a escrita local: uma sessão registrada nos últimos 250 ms (o debounce do
+        // `persist`) morria com a janela. E subir para o cofre um estado que não foi gravado
+        // aqui é pior ainda — o aparelho volta a abrir com dados mais velhos do que o cofre.
+        try { await Promise.race([store.gravarAgora(), new Promise((r) => setTimeout(r, 5000))]); } catch (_) {}
         try { await Promise.race([sincronizarNuvemAoFechar(), new Promise((r) => setTimeout(r, 3000))]); } catch (_) {}
         // Encerra o app INTEIRO (principal + cronômetro flutuante) de forma garantida.
         try {
@@ -966,7 +1058,15 @@ async function ligarSyncAoFechar() {
       });
     } catch (_) {}
   } else {
-    window.addEventListener("pagehide", () => { try { sincronizarNuvemAoFechar(); } catch (_) {} });
+    // Na web não dá para esperar nada ao sair: o que vale é ter COMEÇADO a escrita antes de a
+    // aba morrer. `visibilitychange → hidden` é o último momento confiável no celular (trocar
+    // de app nem sempre dispara `pagehide`), por isso os dois.
+    const gravarAoSair = () => { try { store.gravarAgora(); } catch (_) {} };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") gravarAoSair(); });
+    window.addEventListener("pagehide", () => {
+      gravarAoSair();
+      try { sincronizarNuvemAoFechar(); } catch (_) {}
+    });
   }
 }
 

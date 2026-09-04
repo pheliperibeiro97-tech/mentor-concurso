@@ -282,7 +282,7 @@ export async function executarComando(store, app, acao, params = {}) {
       const fase = ["E", "A", "R"].includes(p.fase) ? p.fase : "E";
       const tid = topicoId(store, p.topico);
       const t = tid ? store.get().topicos.find((x) => x.id === tid) : null;
-      crono.vincular({ fase, topicoId: tid, faseNome: FASE_NOME[fase], topicoLabel: t ? t.nome : "" });
+      crono.vincular({ fase, topicoId: tid, faseNome: FASE_NOME[fase], topicoLabel: t ? t.nome : "", perfilId: store.perfilAtivoId() });
       if (p.minutos) crono.setTarget(clampInt(p.minutos, 1, 300, 25) * 60);
       crono.iniciar();
       app.navigate("hoje");

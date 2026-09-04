@@ -48,13 +48,20 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
   let faseIni = fasePadrao;
   let topIni = topicoPadrao;
   let elapsed = 0;
+  // Tempo cronometrado em OUTRO concurso. O cronômetro é global (localStorage, fora do estado
+  // por perfil): sem este aviso, o tempo contado num concurso era lançado calado no outro, e o
+  // tópico herdado nem existe no edital de cá.
+  let tempoDeOutroConcurso = false;
   if (modo === "crono") {
     const sn = crono.snapshot();
     // No Pomodoro, o tempo de estudo é o ACUMULADO no ciclo (soma das fases de estudo),
     // não só a fase atual; nos demais modos, o tempo decorrido.
     elapsed = Math.round(sn.modo === "pomodoro" ? sn.pomoEstudoSeg || 0 : sn.elapsed);
+    tempoDeOutroConcurso = !!(sn.perfilId && sn.perfilId !== store.perfilAtivoId());
     faseIni = sn.fase || faseIni;
-    topIni = sn.topicoId || topIni;
+    // Tópico do outro concurso não entra: o id não existe neste edital e o registro cairia
+    // com um tópico fantasma.
+    topIni = tempoDeOutroConcurso ? topicoPadrao : sn.topicoId || topIni;
   }
   if (!faseIni || !FASES[faseIni]) faseIni = store.planoHoje().fase;
 
@@ -127,6 +134,7 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
             <div class="rsx-crono-time" data-count-static>${fmtMMSS(elapsed)}</div>
             <div class="muted small">tempo focado nesta sessão</div>
           </div>
+          ${tempoDeOutroConcurso ? `<p class="rsx-aviso-perfil small">${icone("alert-triangle")} Este tempo foi cronometrado em <b>outro concurso</b>. Registrando aqui, ele conta para o concurso atual. O tópico não foi preenchido de propósito.</p>` : ""}
         </section>`
       : `<section class="rsx-step">
           <div class="rsx-h"><span class="rsx-num">2</span> Tempo de estudo</div>
@@ -148,8 +156,12 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
     ativ.flashcards ? `<b>${ativ.flashcards}</b> ${ativ.flashcards === 1 ? "flashcard" : "flashcards"}` : "",
     ativ.questoes ? `<b>${ativ.questoes}</b> ${ativ.questoes === 1 ? "questão" : "questões"} (${Math.round((ativ.acertos / ativ.questoes) * 100)}%)` : "",
   ].filter(Boolean).join(" · ");
+  // Informação, não botão. Havia um "usar no registro →" que copiava estas MESMAS tentativas
+  // para os campos de questões da sessão. Como o Acompanhamento soma tentativas + campos da
+  // sessão, um toque nele fazia 20 questões virarem 40, e o app oferecia esse toque.
+  // Agora a linha existe para o aluno saber que isso já está contado e NÃO redigitar.
   const detecHTML = ativPartes
-    ? `<div class="rsx-revsug rsx-detec"><span class="muted small">${icone("sparkles")} Detectei hoje no app: ${ativPartes}</span> <button type="button" class="lnk" id="rs-usar-ativ" data-tip="Preenche Questões e Flashcards com o que você já fez no app hoje.">usar no registro →</button></div>`
+    ? `<div class="rsx-revsug rsx-detec"><span class="muted small">${icone("check")} Já contei o que você fez no app hoje: ${ativPartes}. Não precisa repetir abaixo.</span></div>`
     : "";
 
   const step3 = `
@@ -176,7 +188,8 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
         </div>
 
         <div id="rs-card-questoes" class="rsx-card" hidden>
-          <div class="rsx-card-h">${icone("clipboard-list")} <b>Questões</b></div>
+          <div class="rsx-card-h">${icone("clipboard-list")} <b>Questões feitas FORA do app</b></div>
+          <p class="muted small u-m-0 u-mb-4">Caderno de papel, site de questões, apostila. As que você resolveu aqui dentro já foram contadas: repeti-las aqui faria o Acompanhamento contar a mesma questão duas vezes.</p>
           <div class="rsx-q">
             <label class="rsx-q-ac">Acertos<input id="rs-ac" type="number" min="0" max="9999" value="0" /></label>
             <label class="rsx-q-er">Erros<input id="rs-er" type="number" min="0" max="9999" value="0" /></label>
@@ -393,29 +406,6 @@ export function abrirRegistroSessao(store, app, { modo = "manual", fasePadrao = 
           sync();
         })
       );
-
-      // Fase 3: "usar no registro" — 1 toque preenche Questões/Flashcards com a atividade do dia.
-      q("#rs-usar-ativ")?.addEventListener("click", () => {
-        const abrirChip = (mat) => {
-          const ch = scope.querySelector(`.rsx-matchips .rsx-chip[data-mat="${mat}"]`);
-          const card = q("#rs-card-" + mat);
-          if (ch && card && card.hidden) ch.click();
-        };
-        if (ativ.questoes) {
-          abrirChip("questoes");
-          const ac = q("#rs-ac"), er = q("#rs-er");
-          if (ac) { ac.value = ativ.acertos; ac.dispatchEvent(new Event("input", { bubbles: true })); }
-          if (er) { er.value = ativ.erros; er.dispatchEvent(new Event("input", { bubbles: true })); }
-        }
-        if (ativ.flashcards) {
-          abrirChip("flashcards");
-          const fq = q("#rs-flashqtd");
-          if (fq) fq.value = ativ.flashcards;
-        }
-        sync();
-        const strip = scope.querySelector(".rsx-detec");
-        if (strip) strip.innerHTML = `<span class="muted small">${icone("check")} Preenchido com a atividade de hoje — ajuste se precisar.</span>`;
-      });
 
       // Linhas repetíveis (múltiplas leituras / vídeos), com "+" e remover.
       function addLeitura() {

@@ -3732,6 +3732,53 @@ tr.item-foco > td { animation: focoPulse 2.2s ease-out; }
 .prev-card-campos input[type="number"] { width: 76px; }
 .prev-remover { flex-shrink: 0; width: 26px; height: 26px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 6px; cursor: pointer; line-height: 1; font-size: var(--fs-base); }
 .prev-remover:hover { color: #fff; background: var(--danger, #dc2626); border-color: var(--danger, #dc2626); }
+/* Material cujo conteúdo não pôde ser lido nesta sessão (a chave `pag:` continua no disco).
+   Vermelho porque a reação errada — "Atualizar com arquivo novo" — destrói a transcrição. */
+.doc-ilegivel { color: var(--danger-ink); font-weight: 600; }
+
+/* Tela de recuperação: o app não conseguiu LER os dados. Cobre tudo de propósito — não há app
+   utilizável por trás, e qualquer clique atrás dela seria uma escrita que não vamos permitir. */
+.recuperacao-overlay {
+  position: fixed; inset: 0;
+  /* ABAIXO de --z-modal (700) de propósito: esta tela chama `confirmar()`, que desenha em
+     .modal-overlay. Acima do modal, ela cobria o próprio diálogo e o botão "Começar do zero"
+     ficava morto — visível na árvore, inclicável na tela. Acima do app (--z-overlay = 500),
+     abaixo da confirmação. */
+  z-index: calc(var(--z-modal) - 50);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: var(--bg);
+}
+.recuperacao-caixa {
+  max-width: 520px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius, 12px); padding: 24px 26px; box-shadow: var(--shadow-lg, 0 12px 40px rgba(0,0,0,.2));
+}
+.recuperacao-caixa h2 { margin: 0 0 12px; font-size: var(--fs-xl); }
+.recuperacao-caixa p { margin: 0 0 12px; }
+.recuperacao-erro { font-family: var(--font-mono); font-size: var(--fs-xs); opacity: .8; }
+.recuperacao-acoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+
+/* Falha de gravação: faixa PERSISTENTE no topo, não toast. O aluno precisa decidir o que
+   fazer (liberar espaço, tentar de novo, parar de estudar) — um aviso de 3 s não serve.
+   Acima do toast porque, enquanto isso estiver na tela, é a informação mais importante. */
+.aviso-gravacao {
+  position: fixed; top: 0; left: 0; right: 0; z-index: calc(var(--z-tooltip) + 1);
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px;
+  padding: 10px 14px; padding-top: max(10px, env(safe-area-inset-top));
+  background: var(--danger); color: #fff; font-size: var(--fs-sm); line-height: 1.4;
+  box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  /* Fica no alto de tudo para ser visto, mas NÃO intercepta clique: é uma faixa fixa na
+     largura toda, e acima dos modais ela roubaria o clique do topo de qualquer janela.
+     Mesmo padrão do container de toasts. Só o botão volta a receber clique. */
+  pointer-events: none;
+}
+.aviso-gravacao .btn { background: rgba(255,255,255,.16); color: #fff; border-color: rgba(255,255,255,.5); flex-shrink: 0; pointer-events: auto; }
+.aviso-gravacao .btn:hover:not(:disabled) { background: rgba(255,255,255,.28); }
+
+/* Questão colada sem `*`: o gabarito NÃO é inventado (era a alternativa "A"), e o aviso
+   precisa ser visível porque as alternativas ficam escondidas no spoiler por padrão. */
+.q-sem-gab { display: flex; align-items: center; gap: 6px; color: var(--danger-ink); background: var(--danger-soft); border: 1px solid var(--danger); border-radius: 6px; padding: 6px 8px; }
+.q-sem-gab svg { flex-shrink: 0; width: 15px; height: 15px; }
+.q-sem-gab code { background: transparent; font-family: var(--font-mono); font-weight: 700; }
 .prev-spoiler { border: 1px dashed var(--border); border-radius: 6px; padding: 6px 8px; margin-top: 2px; background: var(--surface-2); }
 .prev-spoiler > summary { cursor: pointer; font-size: var(--fs-xs); color: var(--muted); list-style: none; user-select: none; }
 .prev-spoiler > summary::-webkit-details-marker { display: none; }
@@ -7291,3 +7338,19 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
    não existia. Vale para qualquer aparelho: onde não há recorte, env() é 0 e nada muda. */
 .topbar { padding-top: calc(8px + env(safe-area-inset-top)); }
 .sidebar { padding-top: calc(14px + env(safe-area-inset-top)); }
+
+/* Desfazer a ultima nota do flashcard. Fica FORA do cartao: dentro da face de tras ele so
+   existia enquanto a resposta estava revelada, ou seja, sumia no instante em que passava a ser
+   util. Os quatro botoes de nota ficam lado a lado e, no celular, um toque errado empurrava o
+   cartao por 30 dias sem volta. */
+.fc-desfazer { display: block; margin: 10px auto 0; font-size: var(--fs-xs); opacity: .8; }
+.fc-desfazer:hover { opacity: 1; }
+
+/* Tempo cronometrado em OUTRO concurso. O cronometro e global (localStorage), entao o tempo
+   contado num concurso podia ser lancado calado no outro. */
+.rsx-aviso-perfil {
+  display: flex; align-items: flex-start; gap: 6px; margin: 8px 0 0; padding: 8px 10px;
+  color: var(--warn-ink); background: var(--warn-bg); border: 1px solid var(--warn-line);
+  border-radius: 8px; line-height: 1.4;
+}
+.rsx-aviso-perfil svg { flex-shrink: 0; width: 15px; height: 15px; margin-top: 2px; }

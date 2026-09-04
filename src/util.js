@@ -42,6 +42,32 @@ export function nowISO() {
   return new Date().toISOString();
 }
 
+// Dia do CALENDÁRIO LOCAL (yyyy-mm-dd) de um carimbo de tempo guardado.
+//
+// Sessões e tentativas são gravadas com `nowISO()`, que é UTC. Onze lugares do app faziam
+// `s.data.slice(0, 10)` para saber "de que dia é isto", o que devolve o dia em UTC. No fuso de
+// Brasília, tudo que acontece depois das 21h já está no dia seguinte em UTC: o contador de
+// "hoje" zerava no meio da noite de estudo, e o que fora estudado à tarde sumia dele.
+//
+// `slice` é rápido e errado; isto converte de verdade. Aceita também um `yyyy-mm-dd` puro
+// (devolve ele mesmo) e datas gravadas como `yyyy-mm-ddT12:00:00.000Z`, que é como o app
+// guarda a data escolhida à mão: meio-dia em UTC cai no mesmo dia em qualquer fuso das
+// Américas, então a ida e a volta batem.
+export function diaLocal(carimbo) {
+  if (!carimbo) return "";
+  const txt = String(carimbo);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt; // já é dia puro
+  // DATA ESCOLHIDA À MÃO. O app grava `yyyy-mm-ddT12:00:00.000Z` quando o aluno escolhe o dia
+  // no calendário: meio-dia em UTC foi escolhido justamente para o dia não escorregar. Aqui ele
+  // é devolvido literal, sem passar pelo fuso. Converter faria a escolha do aluno virar outro
+  // dia em UTC+12/+13, e o `<input type="date">` do histórico deixaria de bater na ida e volta.
+  const escolhida = txt.match(/^(\d{4}-\d{2}-\d{2})T12:00:00\.000Z$/);
+  if (escolhida) return escolhida[1];
+  const d = new Date(txt);
+  if (Number.isNaN(d.getTime())) return txt.slice(0, 10); // carimbo estranho: não piora
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
 export function addDays(isoDate, days) {
   const [y, m, dd] = isoDate.slice(0, 10).split("-").map(Number);
   const d = new Date(y, m - 1, dd);

@@ -382,8 +382,9 @@ function aplicar(root, app) {
   });
   a.questoes.forEach((q, i) => {
     if (marcado("questao", i)) {
-      store.addQuestao({ enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.correta, topicoId: topId(q.topico), selo: "amarelo", fonte });
-      n++;
+      // A IA às vezes devolve a questão sem `correta`. `addQuestao` recusa (antes virava a
+      // alternativa "A"), então só conta o que entrou de verdade — senão o aviso mentiria.
+      if (store.addQuestao({ enunciado: q.enunciado, alternativas: q.alternativas, gabarito: q.correta, topicoId: topId(q.topico), selo: "amarelo", fonte })) n++;
     }
   });
   a.erros.forEach((e, i) => {

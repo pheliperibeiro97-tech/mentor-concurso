@@ -1,7 +1,8 @@
 // Store central: estado do app + todas as operações de domínio.
 // Núcleo 100% offline. A UI assina mudanças e re-renderiza.
-import { loadState, saveState, resetState, getBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema } from "./persistence.js";
-import { uid, todayISO, nowISO, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
+import { loadState, saveState, resetState, getBlob, lerBlob, setBlob, delBlob, blobsDisponiveis, podeVincularArquivo, escolherArquivo, abrirArquivoNoSistema, ultimoErroDeGravacao, ehErroDeEspaco } from "./persistence.js";
+import { limparConfigLocal } from "./config-local.js";
+import { uid, todayISO, nowISO, diaLocal, addDays, daysBetween, weekdayISO, inicioSemanaISO, textoComentario } from "./util.js";
 import * as sm2 from "./sm2.js";
 import * as ciclo from "./ciclo.js";
 import * as ia from "./ia.js";
@@ -90,10 +91,13 @@ function defaultState() {
   };
 }
 
-// Um tópico é "coberto" se já foi estudado (concluído) OU tem material/questões.
-// (Antes, concluir não refletia na cobertura; agora conversa.)
-// "Coberto" = o tópico foi marcado como CONCLUÍDO no Edital (decisão do usuário:
-// material/questões não bastam; só o clique de "concluído" conta para a cobertura).
+// CONCLUÍDO é a única definição de cobertura do app: o tópico foi marcado como concluído no
+// Edital. Ter material ou questões não basta (decisão do usuário).
+//
+// O nome duplo "coberto"/"concluído" sobreviveu à decisão e virou fonte de confusão: a função
+// devolvia os dois números, sempre idênticos, sob rótulos diferentes, e o comentário que
+// morava aqui ainda descrevia a regra ANTIGA ("estudado OU tem material"), contrariando o
+// código logo abaixo. Ficou um nome só.
 function topicoCoberto(state, t) {
   return !!t.concluido;
 }
@@ -1062,7 +1066,12 @@ async function restaurarEmbeddings() {
   if (!blobsDisponiveis()) return;
   for (const p of state.perfis || []) {
     try {
-      const guardado = await getBlob(`emb:${p.id}`);
+      // `lerBlob` pelo mesmo motivo das páginas: falha de leitura não pode passar por
+      // "não há índice". Aqui o estrago é menor (não há um "Atualizar" que apague OCR, e
+      // `salvarEmbeddingsSujos` recua quando `blobsOk` cai), mas a busca semântica ficaria
+      // muda até o próximo boot sem nada dizer por quê.
+      const { ok, valor: guardado } = await lerBlob(`emb:${p.id}`);
+      if (!ok) { console.warn("[emb] índice não pôde ser lido nesta sessão:", p.id); continue; }
       if (guardado && typeof guardado === "object" && Array.isArray(guardado.itens)) {
         p.embeddings = guardado;
         embSalvos.set(p.id, assinaturaEmb(p)); // veio do disco: já está gravado
@@ -1106,8 +1115,17 @@ async function restaurarPaginas() {
   for (const p of state.perfis || []) {
     for (const d of p.documentos || []) {
       try {
+        d.leituraFalhou = false;
         if (Array.isArray(d.paginas) && d.paginas.length) continue; // MIGRAÇÃO: ver abaixo
-        const guardado = await getBlob(`pag:${d.id}`);
+        const { ok, valor: guardado } = await lerBlob(`pag:${d.id}`);
+        // FALHA DE LEITURA ≠ MATERIAL SEM CONTEÚDO. Antes as duas viravam `null`: o material
+        // abria vazio, como se nunca tivesse tido corpo. O conteúdo continua no disco (a chave
+        // `pag:` não foi tocada), mas o app mentia sobre ele — e "Atualizar material", a reação
+        // natural de quem vê a apostila vazia, RELÊ o arquivo e apaga o que a Visão transcreveu.
+        if (!ok) {
+          d.leituraFalhou = true;
+          continue; // não marca `pagsSalvas`: nada foi lido, nada está conferido
+        }
         if (guardado && Array.isArray(guardado.paginas)) {
           d.paginas = guardado.paginas;
           pagsSalvas.set(d.id, assinaturaPaginas(d)); // veio do disco: já está gravado
@@ -1133,17 +1151,49 @@ async function salvarPaginasSujas() {
 }
 
 let gravacaoEmVoo = null; // promessa da gravação atual (para `aguardarGravacao`)
+// Gravação que FALHOU e ainda não voltou a dar certo. `saveState` devolvia `false` (cota do
+// IndexedDB estourada, disco cheio, mutex do SQLite envenenado) e o `persist` descartava o
+// retorno: o aluno estudava a noite inteira e o dia não tinha sido gravado, sem um sinal na
+// tela. Agora o estado fica marcado e a interface é avisada por evento (o store é camada de
+// dados e não chama `toast` direto — mesmo padrão de `mentor:conteudo`).
+let gravacaoFalhou = false;
+// Trava de escrita: ligada quando a LEITURA do estado falhou no boot. Enquanto estiver ligada,
+// nada é gravado — é o que impede o app de apagar um banco que ele só não conseguiu ler.
+let modoSomenteLeitura = false;
+let erroDeLeitura = "";
+// Última nota dada a um flashcard, para o desfazer. Vive só na memória da sessão.
+let ultimaRevisao = null;
+// Id da última tentativa registrada, pelo mesmo motivo (toque errado na lista de questões).
+let ultimaTentativa = null;
+function avisarGravacao(ok, erro) {
+  if (!ok === gravacaoFalhou) return; // nada mudou: não repete o aviso a cada clique
+  gravacaoFalhou = !ok;
+  try {
+    window.dispatchEvent(new CustomEvent("mentor:gravacao", {
+      detail: { ok, espaco: !ok && ehErroDeEspaco(erro), mensagem: erro ? String(erro.message || erro) : null },
+    }));
+  } catch (_) {}
+}
 function persist() {
+  if (modoSomenteLeitura) return; // leitura falhou no boot: não escrever por cima do que está lá
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    // Primeiro o que mora fora (só o que mudou), depois o estado — assim uma queda entre os
-    // dois deixa o conteúdo no disco e o estado apontando para ele, nunca o contrário.
-    gravacaoEmVoo = (async () => {
+    // ENCADEIA na gravação anterior, em vez de disparar por cima dela. O estado é reescrito
+    // inteiro a cada gravação (centenas de ms com biblioteca grande); duas escritas em voo ao
+    // mesmo tempo podiam terminar fora de ordem e deixar no disco a versão mais VELHA.
+    gravacaoEmVoo = Promise.resolve(gravacaoEmVoo).catch(() => {}).then(async () => {
+      // Primeiro o que mora fora (só o que mudou), depois o estado — assim uma queda entre os
+      // dois deixa o conteúdo no disco e o estado apontando para ele, nunca o contrário.
       await salvarEmbeddingsSujos();
       await salvarPaginasSujas();
-      await saveState(state);
-    })();
+      const ok = await saveState(state);
+      avisarGravacao(!!ok, ok ? null : ultimoErroDeGravacao());
+      return ok;
+    }).catch((err) => {
+      avisarGravacao(false, err);
+      return false;
+    });
   }, 250);
 }
 
@@ -1161,7 +1211,17 @@ function commit(opts) {
 export const store = {
   // ---------- ciclo de vida ----------
   async init() {
-    const carregado = await loadState();
+    const lido = await loadState();
+    // LEITURA QUE FALHOU NÃO PODE VIRAR "APARELHO NOVO". Antes `loadState` devolvia `null`
+    // para os dois casos, o app caía no `defaultState()` que já está em memória, mostrava o
+    // onboarding — e a primeira gravação (qualquer clique) escrevia o vazio por cima do banco
+    // bom. O modo somente-leitura trava toda escrita até o usuário decidir o que fazer.
+    if (lido.falhou) {
+      modoSomenteLeitura = true;
+      erroDeLeitura = lido.erro ? String(lido.erro.message || lido.erro) : "";
+      return state; // o boot confere `somenteLeitura()` e mostra a tela de recuperação
+    }
+    const carregado = lido.estado;
     if (carregado && typeof carregado === "object") {
       // ORDEM IMPORTA (multi-perfil): migrar ANTES de qualquer merge com o default.
       // O merge repõe as coleções vazias do defaultState() no TOPO; se ele viesse
@@ -1366,6 +1426,54 @@ export const store = {
   async aguardarGravacao() {
     while (saveTimer) await new Promise((r) => setTimeout(r, 60));
     await Promise.resolve(gravacaoEmVoo).catch(() => {});
+    return !gravacaoFalhou;
+  },
+  // A última gravação falhou e ainda não se recuperou? A tela usa para não dizer "salvo" e
+  // para oferecer "tentar de novo".
+  gravacaoPendente() {
+    return gravacaoFalhou;
+  },
+  // O app está travado para escrita porque não conseguiu LER o estado no boot.
+  somenteLeitura() {
+    return modoSomenteLeitura;
+  },
+  erroDeLeitura() {
+    return erroDeLeitura;
+  },
+  // O usuário escolheu, no diálogo de recuperação, começar do zero mesmo assim — ciente de que
+  // o que estiver gravado será substituído. Só isto destrava a escrita; não há caminho
+  // automático, de propósito.
+  //
+  // LIMPA o armazenamento antes de gravar. Sem isso, o que estava lá continuaria ilegível e a
+  // abertura seguinte cairia na mesma tela de recuperação, para sempre — destravar sem
+  // consertar a causa seria um laço, não uma saída.
+  // Devolve `false` quando nem a limpeza nem a gravação funcionam (armazenamento indisponível
+  // de verdade): aí não há começo do zero possível, e a tela tem de dizer isso.
+  async destravarEscritaComecandoDoZero() {
+    modoSomenteLeitura = false;
+    erroDeLeitura = "";
+    try { await resetState(); } catch (_) {}
+    return this.gravarAgora();
+  },
+  // Força uma nova tentativa agora (botão do aviso). Devolve true se gravou.
+  async tentarGravarDeNovo() {
+    persist();
+    return this.aguardarGravacao();
+  },
+  // Antecipa a gravação pendente: cancela o debounce de 250 ms e começa a escrever JÁ.
+  // Serve para o fechamento — no desktop dá para esperar, na web o `pagehide` não deixa
+  // esperar nada, e aí o que vale é ter COMEÇADO a escrita antes de a aba morrer.
+  gravarAgora() {
+    if (modoSomenteLeitura) return Promise.resolve(false);
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    gravacaoEmVoo = Promise.resolve(gravacaoEmVoo).catch(() => {}).then(async () => {
+      await salvarEmbeddingsSujos();
+      await salvarPaginasSujas();
+      const ok = await saveState(state);
+      avisarGravacao(!!ok, ok ? null : ultimoErroDeGravacao());
+      return ok;
+    }).catch(() => false);
+    return gravacaoEmVoo;
   },
   subscribe(fn) {
     listeners.add(fn);
@@ -1394,9 +1502,15 @@ export const store = {
   perfilAtivoId() {
     return state.perfilAtivo || null;
   },
+  // Recusa trocar de concurso com geração em voo. Todas as escritas (`addQuestao`,
+  // `addFlashcard`) vão para o perfil ATIVO no momento em que a resposta chega: trocar no meio
+  // fazia o lote inteiro cair no concurso novo, misturando as matérias de dois editais.
+  // `geracoesEmVoo` já existia, mas só travava o DOWNLOAD da nuvem.
+  // Devolve `"gerando"` em vez de `false` para a tela poder explicar o motivo.
   trocarPerfil(id) {
     if (!id || id === state.perfilAtivo) return false;
     if (!(state.perfis || []).some((p) => p.id === id)) return false;
+    if (geracoesEmVoo > 0) return "gerando";
     state.perfilAtivo = id;
     // Obrigatório: os perfis não têm as mesmas chaves (um pode ter chatHistorico e o
     // outro não), então os acessores precisam ser refeitos para o perfil que entra.
@@ -1407,7 +1521,13 @@ export const store = {
   // Cria um perfil VAZIO (nasce do default, sem herdar nada do atual) e troca para ele.
   // O onboarding cuida de preencher concurso/edital — é a mesma porta de entrada do
   // primeiro uso, reaproveitada.
+  // Devolve o id do perfil novo, ou `"gerando"` se houver geração em voo.
+  // MESMA guarda do `trocarPerfil`, e pelo mesmo motivo: isto também troca o perfil ATIVO, e a
+  // geração escreve no ativo quando a resposta chega. Sem esta guarda o AUD-20 continuava
+  // aberto pela porta dos fundos: "Novo concurso" no meio de uma geração jogava o lote inteiro
+  // no concurso recém-criado, vazio.
   criarPerfil(nome) {
+    if (geracoesEmVoo > 0) return "gerando";
     const base = migrarParaPerfis(defaultState());
     const novo = base.perfis[0];
     novo.id = uid("perf");
@@ -1430,13 +1550,31 @@ export const store = {
   },
   // Remover é irreversível e leva junto TODO o estudo daquele concurso — a tela confirma
   // antes. O último perfil não pode ser removido (o app ficaria sem estado).
+  // `"gerando"` pela mesma razão do `criarPerfil`: apagar o perfil ativo troca o ativo, e o
+  // lote em voo cairia no concurso que sobrou. Além disso, apagar o perfil no qual a geração
+  // está escrevendo destruiria o próprio destino do lote.
   removerPerfil(id) {
     const ps = state.perfis || [];
     if (ps.length < 2) return false;
+    if (geracoesEmVoo > 0) return "gerando";
     const i = ps.findIndex((p) => p.id === id);
     if (i < 0) return false;
+    const alvo = ps[i];
     ps.splice(i, 1);
     if (state.perfilAtivo === id) state.perfilAtivo = ps[0].id;
+    // APAGA O QUE MORA FORA DO ESTADO. Só o `resetTudo` limpava os blobs: apagar um concurso
+    // tirava a ficha do material do JSON e deixava no disco o PDF, as páginas e o índice
+    // semântico dele, sem nada que voltasse a apontar para eles. Numa biblioteca de cursinho
+    // isso é a maior parte do peso do banco, e ficava órfão para sempre.
+    // Em segundo plano: são dezenas de MB e travar a troca de concurso seria pior.
+    (async () => {
+      for (const d of alvo.documentos || []) {
+        await delBlob(d.id);          // binário (PDF/imagem)
+        await delBlob(`pag:${d.id}`); // páginas
+      }
+      for (const m of alvo.mapasMentais || []) await delBlob(m.id);
+      await delBlob(`emb:${alvo.id}`); // índice semântico do perfil
+    })();
     instalarAcessores();
     commit();
     return true;
@@ -3310,7 +3448,7 @@ export const store = {
       ...iaExtras(state, { topicoId, topico: contexto, dificuldade }),
     });
     const fonte = { tipo: "busca", titulo: contexto || "Busca semântica" };
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte })).filter(Boolean);
   },
 
   // Recuperação para o CHAT (híbrida): trechos semânticos do material/resumos quando há
@@ -3375,13 +3513,24 @@ export const store = {
       const t = state.topicos.find((x) => x.id === topicoId);
       if (t) discId = t.disciplinaId;
     }
+    const alts = (alternativas || []).map((a) => String(a));
+    // ÚLTIMA LINHA DE DEFESA (18 chamadores). Gabarito que não aponta para uma alternativa
+    // existente virava o índice 0 — "A" no múltipla escolha, "Certo" no C/E —, e o aluno
+    // memorizava um gabarito que o app inventou.
+    // A exceção é a questão ANULADA: prova oficial cujo gabarito não veio fica registrada,
+    // marcada e fora da pontuação (é como `importarProva` já trata o `semGabarito`).
+    const gabaritoValido = Number.isInteger(gabarito) && gabarito >= 0 && gabarito < alts.length;
+    if (!gabaritoValido && !anulada) {
+      console.warn("[questoes] recusada por falta de gabarito:", (enunciado || "").slice(0, 60));
+      return null;
+    }
     const q = {
       id: uid("ques"),
       topicoId: topicoId || null,
       disciplinaId: discId,
       enunciado: (enunciado || "").trim(),
-      alternativas: (alternativas || []).map((a) => String(a)),
-      gabarito: Number.isInteger(gabarito) ? gabarito : 0,
+      alternativas: alts,
+      gabarito: gabaritoValido ? gabarito : 0,
       selo: selo || "verde",
       fonte: fonte || null,
       referencia: (referencia || "").trim() || null,
@@ -3429,9 +3578,12 @@ export const store = {
   },
   // Importa questões: uma por linha, campos separados por "|":
   // enunciado | alt1 | alt2 | *altCorreta | ... | ref: fonte (opcional)
+  // Devolve {criadas, recusadas} — `recusadas` são as linhas sem `*` (sem gabarito), que não
+  // entram mais como alternativa "A". Sem chamador na UI hoje (o fluxo real é
+  // prepararQuestoes → preview → aceitarQuestoes), mas a regra vale para os dois.
   importQuestoes(texto, topicoId) {
     const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-    let n = 0;
+    let n = 0, recusadas = 0;
     for (const l of linhas) {
       const partes = l.split("|").map((p) => p.trim()).filter(Boolean);
       if (partes.length < 3) continue; // enunciado + ao menos 2 alternativas
@@ -3446,16 +3598,20 @@ export const store = {
         altsRaw.push(p);
       }
       if (altsRaw.length < 2) continue;
-      let gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
-      if (gabarito < 0) gabarito = 0;
+      // Sem o `*` não há gabarito. Antes virava o índice 0 — a alternativa "A" — e o aluno
+      // estudava, errava e memorizava uma resposta que o app inventou. Linha sem `*` não entra.
+      const gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
+      if (gabarito < 0) { recusadas++; continue; }
       const alternativas = altsRaw.map((a) => a.replace(/^\*/, "").trim());
       this.addQuestao({ topicoId, enunciado, alternativas, gabarito, selo: "manual", referencia });
       n++;
     }
-    return n;
+    return { criadas: n, recusadas };
   },
   // PREVIEW (não grava) das questões de múltipla escolha coladas. Devolve
-  // [{enunciado, alternativas:[str], gabarito:int, referencia}].
+  // [{enunciado, alternativas:[str], gabarito:int|null, referencia}].
+  // `gabarito: null` = a linha não trouxe `*`. NÃO vira 0: o preview marca a questão e o
+  // "Adicionar" recusa enquanto o usuário não apontar a correta.
   prepararQuestoes(texto) {
     const linhas = String(texto || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const out = [];
@@ -3480,8 +3636,8 @@ export const store = {
         altsRaw.push(p);
       }
       if (altsRaw.length < 2) continue;
-      let gabarito = altsRaw.findIndex((a) => a.startsWith("*"));
-      if (gabarito < 0) gabarito = 0;
+      const achado = altsRaw.findIndex((a) => a.startsWith("*"));
+      const gabarito = achado < 0 ? null : achado; // null = sem `*`; o preview cobra do usuário
       const alternativas = altsRaw.map((a) => a.replace(/^\*/, "").trim());
       out.push({ enunciado, alternativas, gabarito, ...meta });
     }
@@ -3635,14 +3791,24 @@ export const store = {
   },
   // F2: REFINO por IA (leve: só os títulos + a lista de tópicos). Sobrescreve o topicoId dos blocos
   // pelo casamento semântico da IA quando ela retorna um tópico válido. Requer iaDisponivel().
-  async casarEstruturaComEditalIA(estrutura) {
+  // `disciplinaId` ANCORA o casamento na matéria já declarada do material, como o caminho
+  // determinístico (`casarEstruturaComEdital`) sempre fez. Sem isso, a IA recebia os tópicos do
+  // edital INTEIRO e um clique em "refinar com IA" desfazia a âncora: foi assim que aulas de
+  // português foram parar em tópicos de Direito Constitucional.
+  async casarEstruturaComEditalIA(estrutura, disciplinaId = null) {
     if (!estrutura || !Array.isArray(estrutura.blocos) || !estrutura.blocos.length) return estrutura;
     if (!this.iaDisponivel() || !state.topicos.length) return this.casarEstruturaComEdital(estrutura);
+    const universo = disciplinaId ? state.topicos.filter((t) => t.disciplinaId === disciplinaId) : state.topicos;
+    // Disciplina declarada mas sem tópico nenhum: cair no edital inteiro seria pior que não
+    // refinar, porque devolveria justamente o vínculo cruzado que a âncora existe para impedir.
+    if (!universo.length) return this.casarEstruturaComEdital(estrutura, null, { disciplinaId });
     const titulos = estrutura.blocos.map((b) => b.titulo);
-    const nomes = await iaProv.casarTitulosComTopicos(state.config, { titulos, topicos: state.topicos.map((t) => t.nome) });
+    const nomes = await iaProv.casarTitulosComTopicos(state.config, { titulos, topicos: universo.map((t) => t.nome) });
     estrutura.blocos.forEach((b, i) => {
       const nome = nomes[i];
-      const t = nome ? (state.topicos.find((x) => x.nome.trim().toLowerCase() === nome.trim().toLowerCase()) || this.acharTopicoPorNome(nome)) : null;
+      // `restrito` porque a âncora só vale se ela impedir a saída da disciplina: sem isso o
+      // casamento flexível reencontraria o tópico de outra matéria e o filtro seria decorativo.
+      const t = nome ? (universo.find((x) => x.nome.trim().toLowerCase() === nome.trim().toLowerCase()) || this.acharTopicoPorNome(nome, { disciplinaId, restrito: !!disciplinaId })) : null;
       if (t) { b.topicoId = t.id; b.confianca = Math.min(0.99, Math.max(b.confianca || 0.7, 0.9)); }
     });
     // mantém o casamento de aula
@@ -3741,18 +3907,22 @@ export const store = {
     await this.garantirConteudoDoc(docId); // conteúdo sob demanda
     const d = state.documentos.find((x) => x.id === docId);
     if (!d || !d.estrutura) return null;
-    await this.casarEstruturaComEditalIA(d.estrutura);
+    await this.casarEstruturaComEditalIA(d.estrutura, d.disciplinaId || null); // ancora na materia do material
     commit();
     return d.estrutura;
   },
   // Grava as questões MC aprovadas no preview (com metadados e tópico por item, se houver).
+  // Devolve {criadas, semGabarito} — a tela precisa saber quantas ficaram de fora e por quê.
   aceitarQuestoes(itens, topicoId) {
-    let n = 0;
+    let n = 0, semGabarito = 0;
     for (const q of itens || []) {
       const alternativas = (q.alternativas || []).map((a) => (a || "").trim()).filter(Boolean);
       if (!(q.enunciado || "").trim() || alternativas.length < 2) continue;
-      let gabarito = Number(q.gabarito) || 0;
-      if (gabarito < 0 || gabarito >= alternativas.length) gabarito = 0;
+      // Gabarito ausente ou fora do intervalo NÃO vira 0 ("A"). Uma questão com gabarito
+      // inventado é pior que questão nenhuma: o aluno memoriza a resposta errada e o caderno
+      // de erros ainda o culpa por ela.
+      const gabarito = Number.isInteger(q.gabarito) ? q.gabarito : Number.NaN;
+      if (!(gabarito >= 0 && gabarito < alternativas.length)) { semGabarito++; continue; }
       this.addQuestao({
         // "Vincular todas ao tópico" (topicoId) é o PADRÃO: só cai nele quando a questão não
         // trouxe um tópico próprio. O preview devolve null/"" (não undefined) quando fica "sem
@@ -3763,7 +3933,7 @@ export const store = {
       });
       n++;
     }
-    return n;
+    return { criadas: n, semGabarito };
   },
   // Geração de questões pela IA (online). Requer iaDisponivel() — a UI bloqueia antes.
   async gerarQuestoesDeDoc(docId, n = 5, dificuldade = "medio", bloco = null) {
@@ -3778,7 +3948,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca })).filter(Boolean);
   },
   // Gera SEM material, só com o conhecimento do modelo — e só quando o usuário pediu isso
   // explicitamente, sabendo que não há fonte. As questões nascem com selo "semfonte" e, se o
@@ -3804,7 +3974,7 @@ export const store = {
       formato === "ce"
         ? this.addQuestaoCE({ ...q, enunciado: q.enunciado || q.afirmacao, selo: q.selo, ...meta })
         : this.addQuestao({ ...q, selo: q.selo, ...meta })
-    );
+    ).filter(Boolean); // addQuestao recusa item sem gabarito válido
     return { questoes: salvas, pedidas: r.pedidas, geradas: r.geradas, descartadas: r.descartadas,
       comWeb: r.comWeb, fontesWeb: r.fontesWeb || [] };
   },
@@ -3820,7 +3990,7 @@ export const store = {
       texto,
       contexto: nomeContexto(state, topicoId),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca: q.banca || banca }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte, banca: q.banca || banca })).filter(Boolean);
   },
   // ---- CERTO/ERRADO (formato 'ce') ----
   // Importa itens C/E: uma linha por item: afirmação | C ou E | justificativa (opcional).
@@ -3996,8 +4166,29 @@ export const store = {
       data: nowISO(),
     };
     state.tentativas.push(t);
+    ultimaTentativa = t.id; // permite desfazer o toque errado (ver desfazerUltimaTentativa)
     commit();
     return t;
+  },
+  // Desfaz a ÚLTIMA tentativa registrada. Na LISTA de questões o toque numa alternativa grava
+  // a resposta na hora, sem confirmar (no modo foco há selecionar → confirmar), e no celular o
+  // alvo é o card inteiro: um toque errado virava erro permanente no caderno. "Refazer"
+  // ACRESCENTA uma tentativa nova, não apaga a anterior, então o erro continuava lá.
+  // Só a última, e só nesta sessão.
+  desfazerUltimaTentativa() {
+    if (!ultimaTentativa) return null;
+    const i = state.tentativas.findIndex((t) => t.id === ultimaTentativa);
+    ultimaTentativa = null;
+    if (i < 0) return null;
+    const [t] = state.tentativas.splice(i, 1);
+    commit();
+    return t;
+  },
+  podeDesfazerTentativa() {
+    return !!ultimaTentativa && state.tentativas.some((t) => t.id === ultimaTentativa);
+  },
+  idUltimaTentativa() {
+    return ultimaTentativa;
   },
   setMotivoErro(tentativaId, motivo) {
     const t = state.tentativas.find((x) => x.id === tentativaId);
@@ -4379,6 +4570,19 @@ export const store = {
   revisarFlashcard(id, quality) {
     const f = state.flashcards.find((x) => x.id === id);
     if (!f) return;
+    // Guarda o estado ANTERIOR para o desfazer. Um toque errado no celular (os quatro botões
+    // ficam lado a lado) empurrava o cartão por 30 dias sem volta: a única saída era esperar,
+    // ou adiar à mão. Fica só o último, em memória, e some ao recarregar o app, que é o
+    // comportamento certo para um "Ctrl+Z" de sessão.
+    // Guarda o OBJETO do erro automático, não só "existia". Um booleano fazia o desfazer
+    // recriar o registro do zero, com id e data novos, perdendo o `motivoErro` e a `duvida`
+    // que o aluno já tivesse classificado nele, e furando qualquer tela ancorada no id antigo.
+    const erroAuto = state.errosManuais.find((e) => e.flashcardId === id && e.auto) || null;
+    ultimaRevisao = {
+      flashcardId: id,
+      sm2: { ...f.sm2 },
+      erroAuto: erroAuto ? { ...erroAuto } : null,
+    };
     f.sm2 = sm2.revisar(f.sm2, quality);
     state.revisoes.push({ id: uid("rev"), flashcardId: id, nota: quality, data: nowISO() });
     // Loop de fraqueza por assunto: além do reagendamento (SM-2), a nota conecta o flashcard
@@ -4400,6 +4604,33 @@ export const store = {
       state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === id && e.auto));
     }
     commit();
+  },
+  // Desfaz a ÚLTIMA nota dada a um flashcard: devolve o agendamento anterior, apaga o registro
+  // da revisão e desfaz o efeito no Caderno de Erros (o "Errei" que criou um registro
+  // automático, ou o "Bom/Fácil" que removeu um). Devolve o card, ou null se não há o que
+  // desfazer. Só o último, e só nesta sessão.
+  desfazerUltimaRevisao() {
+    if (!ultimaRevisao) return null;
+    const { flashcardId, sm2: anterior, erroAuto } = ultimaRevisao;
+    const f = state.flashcards.find((x) => x.id === flashcardId);
+    if (!f) { ultimaRevisao = null; return null; }
+    f.sm2 = anterior;
+    // Tira o registro da revisão desfeita (o último daquele card).
+    for (let i = state.revisoes.length - 1; i >= 0; i--) {
+      if (state.revisoes[i].flashcardId === flashcardId) { state.revisoes.splice(i, 1); break; }
+    }
+    const temAgora = state.errosManuais.some((e) => e.flashcardId === flashcardId && e.auto);
+    if (erroAuto && !temAgora) {
+      state.errosManuais.push({ ...erroAuto }); // o registro ORIGINAL de volta, com id, data, motivo e dúvida
+    } else if (!erroAuto && temAgora) {
+      state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === flashcardId && e.auto));
+    }
+    ultimaRevisao = null;
+    commit();
+    return f;
+  },
+  podeDesfazerRevisao() {
+    return !!ultimaRevisao;
   },
   removerFlashcard(id) {
     state.flashcards = state.flashcards.filter((f) => f.id !== id);
@@ -4442,7 +4673,7 @@ export const store = {
       else aprendizado += 1;
     }
     const limite = addDays(hoje, -(Math.max(1, dias) - 1));
-    const revs = state.revisoes.filter((r) => r.flashcardId && (r.data || "").slice(0, 10) >= limite);
+    const revs = state.revisoes.filter((r) => r.flashcardId && diaLocal(r.data) >= limite);
     const revisados = revs.length;
     const acertos = revs.filter((r) => (r.nota || 0) >= 3).length;
     return {
@@ -4805,9 +5036,9 @@ export const store = {
   resumoLeituraHoje(norma = null) {
     const hoje = todayISO();
     const lei = state.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && (!norma || normaDaReferencia(i.referencia) === norma));
-    const lidosHoje = lei.filter((i) => (i.lidoEm || "").slice(0, 10) === hoje).length;
+    const lidosHoje = lei.filter((i) => diaLocal(i.lidoEm) === hoje).length;
     const qDe = new Map(state.questoes.filter((q) => q.treino && q.treino.indicacaoId).map((q) => [q.id, q.treino.indicacaoId]));
-    const tLei = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje && qDe.has(t.questaoId));
+    const tLei = state.tentativas.filter((t) => diaLocal(t.data) === hoje && qDe.has(t.questaoId));
     const acertos = tLei.filter((t) => t.acertou).length;
     return { lidosHoje, questoesHoje: tLei.length, pctHoje: tLei.length ? Math.round((100 * acertos) / tLei.length) : null, tempoSeg: tLei.reduce((s, t) => s + (t.tempoSeg || 0), 0) };
   },
@@ -4836,7 +5067,7 @@ export const store = {
     const hoje = todayISO();
     const limite = addDays(hoje, -21);
     const porDia = {};
-    for (const i of arts) { const d = (i.lidoEm || "").slice(0, 10); if (d && d >= limite) porDia[d] = (porDia[d] || 0) + 1; }
+    for (const i of arts) { const d = diaLocal(i.lidoEm); if (d && d >= limite) porDia[d] = (porDia[d] || 0) + 1; }
     const dias = Object.keys(porDia);
     const ritmoDia = dias.length ? dias.reduce((s, d) => s + porDia[d], 0) / dias.length : 0;
     const previsaoDias = ritmoDia > 0 && faltam > 0 ? Math.ceil(faltam / ritmoDia) : null;
@@ -4849,7 +5080,7 @@ export const store = {
     // Leitura NESTA semana (Dom–hoje) — momento/ofensiva leve.
     const dowHoje = new Date(hoje + "T12:00:00").getDay();
     const inicioSem = addDays(hoje, -dowHoje);
-    const lidosSemana = arts.filter((i) => (i.lidoEm || "").slice(0, 10) >= inicioSem).length;
+    const lidosSemana = arts.filter((i) => diaLocal(i.lidoEm) >= inicioSem).length;
     return {
       total, lidos, faltam, pct: total ? Math.round((100 * lidos) / total) : 0,
       dominados, pctDominado: total ? Math.round((100 * dominados) / total) : 0,
@@ -5261,7 +5492,7 @@ export const store = {
       ...iaExtras(state, { topicoId, dificuldade }),
     });
     const fonte = { tipo: "revisao", titulo: t ? t.nome : "Revisão de tópico" };
-    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId, fonte })).filter(Boolean);
   },
   // O prompt da IA CORTA o texto num limite de caracteres (ver corta() em ia-provider.js —
   // 6000 p/ questões/flashcards, 8000 p/ mapa mental) — se só concatenássemos os tópicos e
@@ -6170,7 +6401,7 @@ export const store = {
     const qs = await iaProv.gerarQuestoes(state.config, { texto, contexto, n, ...extras });
     return qs.map((q) =>
       this.addQuestao({ ...q, topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte })
-    );
+    ).filter(Boolean); // addQuestao recusa item sem gabarito válido
   },
   // Itens de TREINO (drill "letra da lei") já gerados desta indicação (formato C/E, treino=true).
   itensTreinoDeIndicacao(id) {
@@ -6196,8 +6427,9 @@ export const store = {
     if (!tese) tese = (i.texto || "").trim();
     const fonte = { tipo: "juris", titulo: i.referencia };
     const criados = [];
+    const criadosPush = (q) => { if (q) criados.push(q); }; // addQuestao recusa item sem gabarito
     const add = (afirmacao, certo, orig, alt) =>
-      criados.push(this.addQuestao({
+      criadosPush(this.addQuestao({
         enunciado: afirmacao, alternativas: ["Certo", "Errado"], gabarito: certo ? 0 : 1, formato: "ce",
         justificativa: certo ? `Atribuição correta: ${refBase}${trib ? " do " + trib : ""}.` : `Atribuição incorreta — o correto é ${refBase}${trib ? " do " + trib : ""}.`,
         topicoId: i.topicoId, disciplinaId: i.disciplinaId, referencia: i.referencia, fonte, selo: "verde",
@@ -6547,7 +6779,12 @@ export const store = {
     commit();
   },
   // Dias de folga (sem estudo): dia 0=Dom ... 6=Sáb. Folga = some da agenda da semana.
-  diaEhFolga(dia) {
+  // Dia sem estudo: folga SEMANAL (dia da semana) ou FERIADO (data específica).
+  // `diasFeriado` existia no `defaultState` desde sempre e não era lido em lugar nenhum do
+  // app: cadastrar um feriado não fazia absolutamente nada, e o plano marcava tarefa nele.
+  // Aceita o índice do dia da semana (uso antigo) ou a data ISO, que é o que permite o feriado.
+  diaEhFolga(dia, dataISO) {
+    if (dataISO && (state.config.diasFeriado || []).includes(dataISO)) return true;
     return (state.config.diasFolga || []).includes(Number(dia));
   },
   toggleDiaFolga(dia) {
@@ -7044,7 +7281,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId: m.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: m.topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: m.topicoId, fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeMapa(mapaId, n = 6, dificuldade = "medio") {
     const m = state.mapasMentais.find((x) => x.id === mapaId);
@@ -7223,7 +7460,7 @@ export const store = {
       n,
       ...iaExtras(state, { topicoId: r.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: r.topicoId, fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: r.topicoId, fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeResumo(id, n = 6, dificuldade = "medio") {
     const r = state.resumos.find((x) => x.id === id);
@@ -7375,7 +7612,7 @@ export const store = {
       texto: escopo.texto, contexto: escopo.contexto || "geral", n,
       ...iaExtras(state, { topicoId: escopo.topicoId, dificuldade }),
     });
-    return qs.map((q) => this.addQuestao({ ...q, topicoId: escopo.topicoId, fonte: escopo.fonte }));
+    return qs.map((q) => this.addQuestao({ ...q, topicoId: escopo.topicoId, fonte: escopo.fonte })).filter(Boolean);
   },
   async gerarQuestoesCEDeEscopo(escopo, n = 6, dificuldade = "medio") {
     if (!escopo || !escopo.texto) return [];
@@ -7511,11 +7748,14 @@ export const store = {
   },
 
   // Cobertura de TODO o edital (não por disciplina): tópicos cobertos / total.
+  // UM número de cobertura para o app inteiro. `cobertos` continua no retorno porque várias
+  // telas o leem, mas é o mesmo `concluidos`: são um só conceito, não dois.
+  // `pct` é sobre o TOTAL de tópicos, e não a média das disciplinas. A média não ponderada
+  // (que o anel do Hoje calculava) faz uma disciplina de 2 tópicos pesar igual a uma de 200.
   coberturaEdital() {
     const total = state.topicos.length;
-    const cobertos = state.topicos.filter((t) => topicoCoberto(state, t)).length;
-    const concluidos = state.topicos.filter((t) => t.concluido).length;
-    return { total, cobertos, concluidos, pct: total ? Math.round((cobertos / total) * 100) : 0 };
+    const concluidos = state.topicos.filter((t) => topicoCoberto(state, t)).length;
+    return { total, cobertos: concluidos, concluidos, pct: total ? Math.round((concluidos / total) * 100) : 0 };
   },
   // Reuso para a UI: um tópico está coberto?
   topicoCoberto(t) {
@@ -7667,7 +7907,7 @@ export const store = {
         metasLeituraPendentes: (state.indicacoes || []).filter((i) => i.metaLeitura && !i.lido).length,
       },
       erros: {
-        pendentes: state.tentativas.filter((t) => !t.acertou).length + state.errosManuais.length,
+        pendentes: this.cadernoErros().length, // o MESMO numero que o caderno mostra
         porMotivo: motivos,
       },
       cicloTempoMin: cicloTempo, // equilíbrio Estudo/Prática/Revisão
@@ -7676,7 +7916,7 @@ export const store = {
       simulados: (() => {
         const rs = this.simuladosResumo();
         const ult = this.simuladosLista()[0] || null;
-        return { total: rs.total, media: rs.media, melhor: rs.melhor, ultimo: ult ? { aproveitamento: ult.aproveitamento, data: (ult.data || "").slice(0, 10), nome: ult.nome } : null };
+        return { total: rs.total, media: rs.media, melhor: rs.melhor, ultimo: ult ? { aproveitamento: ult.aproveitamento, data: diaLocal(ult.data), nome: ult.nome } : null };
       })(),
       disciplinas: diag.porDisciplina.map((l) => ({
         id: l.disciplina.id,
@@ -7714,7 +7954,7 @@ export const store = {
           }
         : null,
       observacoes: this.observacoesRecentes(8).map((o) => ({
-        data: o.data.slice(0, 10),
+        data: diaLocal(o.data), // o dia do aluno, não o de Greenwich (a sessão é gravada em UTC)
         topico: o.topicoNome,
         nota: o.comentario,
       })),
@@ -7858,7 +8098,7 @@ export const store = {
     if (resVenc > 0) lista.push({ key: "revresumo", icone: "file-text", txt: `${resVenc} ${resVenc === 1 ? "resumo" : "resumos"} para revisar hoje`, acao: { rota: "revisoes", label: "Revisar" } });
     // Ofensiva prestes a quebrar: você tem sequência de dias mas ainda não estudou hoje.
     const ofens = (snap.comportamento && snap.comportamento.ofensivaDias) || 0;
-    const estudouHoje = (state.sessoes || []).some((s) => (s.data || "").slice(0, 10) === todayISO());
+    const estudouHoje = (state.sessoes || []).some((s) => diaLocal(s.data) === todayISO());
     if (ofens >= 3 && !estudouHoje) lista.push({ key: "ofensiva", icone: "flame", txt: `Sua sequência de ${ofens} dias quebra hoje se você não estudar`, acao: { rota: "hoje", label: "Estudar agora" } });
     // Simulados: queda no último vs. sua média; ou, sem nenhum simulado e prova perto, um diagnóstico.
     const simList = this.simuladosLista();
@@ -8006,7 +8246,7 @@ export const store = {
   // que pede o que o sistema já sabe é o anti-padrão nº 1 de produto IA-first.
   atividadeDoDia() {
     const hoje = todayISO();
-    const tents = state.tentativas.filter((t) => (t.data || "").slice(0, 10) === hoje);
+    const tents = state.tentativas.filter((t) => diaLocal(t.data) === hoje);
     const acertos = tents.filter((t) => t.acertou).length;
     const flashcards = state.flashcards.filter((f) => f.sm2 && f.sm2.lastReview === hoje).length;
     return { questoes: tents.length, acertos, erros: tents.length - acertos, flashcards };
@@ -8015,7 +8255,7 @@ export const store = {
   // não havia ponte: revisar dava baixa mas não virava/sugeria sessão).
   revisadosHoje() {
     const hoje = todayISO();
-    const feitas = (state.revisoesFeitas || []).filter((r) => (r.data || "").slice(0, 10) === hoje);
+    const feitas = (state.revisoesFeitas || []).filter((r) => diaLocal(r.data) === hoje);
     const ids = new Set();
     for (const r of feitas) {
       let tid = null;
@@ -8073,7 +8313,10 @@ export const store = {
       const comMaterial = topicos.filter((t) => topicoCoberto(state, t)).length;
       const sessoesDisc = state.sessoes.filter((s) => topicosIds.includes(s.topicoId));
       const tempoSeg = sessoesDisc.reduce((acc, s) => acc + (s.tempoSeg || 0), 0);
-      // Questões contam da Prática (tentativas) E do registro de sessão (qAcertos/qErros).
+      // Questões = tentativas feitas AQUI + `qAcertos`/`qErros`, que são as feitas FORA do app
+      // (caderno de papel, site de questões). As duas fontes não se sobrepõem: a tela de
+      // registro deixou de oferecer o botão que copiava as tentativas do próprio app para
+      // esses campos, que era o que fazia 20 questões virarem 40.
       const sessAc = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0), 0);
       const sessTot = sessoesDisc.reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
       const acertos = tentativas.filter((t) => t.acertou).length + sessAc;
@@ -8093,6 +8336,8 @@ export const store = {
       return {
         disciplina: d,
         totalTopicos: topicos.length,
+        // Nome legado: e o numero de topicos CONCLUIDOS (topicoCoberto = !!t.concluido).
+        // Fica como esta para nao quebrar leitor externo; a copy deixou de dizer "material".
         topicosComMaterial: comMaterial,
         cobertura: topicos.length ? Math.round((comMaterial / topicos.length) * 100) : 0,
         totalTentativas: totalQ,
@@ -8106,7 +8351,7 @@ export const store = {
 
     // Sugestões proativas básicas.
     // As sugestoes por disciplina se repetiam quase palavra por palavra ("Cobertura baixa em
-    // X: N% dos topicos tem material/questoes."), uma linha por disciplina — com um edital
+    // X: N% dos topicos concluidos."), uma linha por disciplina, com um edital
     // real, oito linhas iguais empurravam o resto da tela para baixo sem dizer mais nada.
     // Agora cada tipo vira UMA frase que enumera as disciplinas.
     const sugestoes = [];
@@ -8118,8 +8363,8 @@ export const store = {
     const lista = (arr) => arr.map((l) => l.disciplina.nome).join(", ");
     if (fracas.length === 1) sugestoes.push(`Reforce ${fracas[0].disciplina.nome}: aproveitamento de ${fracas[0].percentAcerto}% (abaixo de 60%).`);
     else if (fracas.length > 1) sugestoes.push(`Reforce ${fracas.length} disciplinas com aproveitamento abaixo de 60%: ${lista(fracas)}.`);
-    if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos têm material/questões.`);
-    else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos com material/questões): ${lista(semCobertura)}.`);
+    if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos concluídos.`);
+    else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos concluídos): ${lista(semCobertura)}.`);
     const vencidos = sm2.vencidos(state.flashcards).length;
     if (vencidos > 0) sugestoes.push(`Há ${vencidos} ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} para revisar hoje.`);
 
@@ -8693,7 +8938,7 @@ export const store = {
   // Log de revisões CONCLUÍDAS nos últimos N dias (para a aba Concluídas + taxa).
   revisoesConcluidasLog(dias = 30) {
     const lim = addDays(todayISO(), -dias);
-    return (state.revisoesFeitas || []).filter((x) => (x.data || "").slice(0, 10) >= lim).sort((a, b) => (a.data < b.data ? 1 : -1));
+    return (state.revisoesFeitas || []).filter((x) => diaLocal(x.data) >= lim).sort((a, b) => (a.data < b.data ? 1 : -1));
   },
   // Reprograma (só move a data `proxima`, sem mexer no intervalo/escada) por id do item.
   reprogramarRevisao(itemId, novaData) {
@@ -8835,7 +9080,7 @@ export const store = {
   calendarioMes(mesISO) {
     const map = {};
     for (const s of state.sessoes) {
-      const d = (s.data || "").slice(0, 10);
+      const d = diaLocal(s.data);
       if (d.slice(0, 7) === mesISO) {
         if (!map[d]) map[d] = { tempoSeg: 0, sessoes: 0, fases: {} };
         map[d].tempoSeg += s.tempoSeg || 0;
@@ -8861,7 +9106,7 @@ export const store = {
     }
     const venc = sm2.vencidos(state.flashcards).length;
     if (venc > 0) sugestoes.push({ titulo: `Revisar ${venc} ${venc === 1 ? "flashcard vencido" : "flashcards vencidos"} hoje`, categoria: "Revisão", topicoId: null });
-    const errosPend = state.tentativas.filter((t) => !t.acertou).length + state.errosManuais.length;
+    const errosPend = this.cadernoErros().length; // o que o aluno ve no caderno, nao o historico inteiro
     if (errosPend > 0) sugestoes.push({ titulo: `Refazer e revisar ${errosPend} ${errosPend === 1 ? "erro" : "erros"} do caderno`, categoria: "Revisão", topicoId: null });
 
     for (const l of diag.porDisciplina) {
@@ -8869,7 +9114,7 @@ export const store = {
         sugestoes.push({ titulo: `Reforçar ${l.disciplina.nome}: aproveitamento ${l.percentAcerto}% (resolver questões)`, categoria: "Prática", topicoId: null });
       }
       if (l.totalTopicos > 0 && l.cobertura < 50) {
-        sugestoes.push({ titulo: `Cobrir ${l.disciplina.nome}: só ${l.cobertura}% dos tópicos têm material`, categoria: "Materiais", topicoId: null });
+        sugestoes.push({ titulo: `Cobrir ${l.disciplina.nome}: só ${l.cobertura}% dos tópicos concluídos`, categoria: "Materiais", topicoId: null });
       }
     }
     // destaques (mais incidência) ainda sem material/questões
@@ -8913,9 +9158,14 @@ export const store = {
     const c = state.config;
     const niveis = c.niveisDisciplina || {};
     const adiadas = new Set(c.disciplinasAdiadas || []); // "fixar ajuste": disciplinas fora agora
-    const capDia = (c.dispDiariaMin || 0) > 0 ? c.dispDiariaMin : 120; // fallback 2h/dia
+    // `podeGerarPlano()` já exige `dispDiariaMin > 0`, e a tela recusa 0 antes de chegar aqui:
+    // este 120 é rede de segurança, não uma carga inventada nas costas do aluno.
+    const capDia = (c.dispDiariaMin || 0) > 0 ? c.dispDiariaMin : 120;
     const hoje = todayISO();
-    const dias = this.semanaAtual().filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d)));
+    const dias = this.semanaAtual().filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d), d));
+    // Sem dia disponível, a causa é folga/feriado, e não falta de tópico. Sem isto a tela dizia
+    // "tudo coberto/dominado", que manda o aluno procurar o problema no lugar errado.
+    const semDiaUtil = dias.length === 0;
 
     // Ranking de tópicos: relevância (peso) + lacuna de cobertura + nível da disciplina.
     const rank = state.topicos
@@ -8961,7 +9211,9 @@ export const store = {
     } else {
       intercaladas = intercalarPorDisciplina(base); // interleaving entre disciplinas
     }
-    const temRevisao = this.flashcardsVencidos().length > 0 || state.tentativas.some((t) => !t.acertou);
+    // Mesma régua do ciclo: erro PENDENTE, não erro histórico. Com `some((t) => !t.acertou)`,
+    // um erro de março fazia todos os dias do plano abrirem com 25 min de revisão, para sempre.
+    const temRevisao = this.flashcardsVencidos().length > 0 || ciclo.temErroPendente(state);
 
     // Distribui pelos dias respeitando a capacidade diária; cada dia abre com revisão.
     const itens = [];
@@ -8985,6 +9237,7 @@ export const store = {
     return {
       itens,
       dias,
+      semDiaUtil, // a tela precisa saber POR QUE não há tarefa: folga/feriado ou falta de tópico
       macro: {
         diasProva: m.diasProva,
         dataProva: m.dataProva,
@@ -9071,7 +9324,7 @@ export const store = {
     const c = state.config;
     const hoje = todayISO();
     const semana = this.semanaAtual();
-    const diasDisp = semana.filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d)));
+    const diasDisp = semana.filter((d) => d >= hoje && !this.diaEhFolga(weekdayISO(d), d));
     const m = this.metas();
     const cob = this.coberturaEdital();
     const fracas = this.diagnostico()
@@ -9103,7 +9356,7 @@ export const store = {
   // Espírito: gentil, opt-in, sem gamificação excessiva. Streak + balanço + reforço positivo.
   // Dias com estudo = dias com ao menos uma sessão registrada.
   diasComEstudo() {
-    return new Set(state.sessoes.map((s) => (s.data || "").slice(0, 10)).filter(Boolean));
+    return new Set(state.sessoes.map((s) => diaLocal(s.data)).filter(Boolean));
   },
   // Streak consecutivo () + "X de N dias" na semana corrente (N = dias de estudo
   // configurados = 7 menos os dias de folga). Os dias de folga NÃO interrompem a
@@ -9121,7 +9374,7 @@ export const store = {
         atual++;
         folgaSeguidas = 0;
         cursor = addDays(cursor, -1);
-      } else if (this.diaEhFolga(weekdayISO(cursor)) && folgaSeguidas < 7) {
+      } else if (this.diaEhFolga(weekdayISO(cursor), cursor) && folgaSeguidas < 7) {
         // dia de folga sem estudo: pula sem quebrar a sequência
         folgaSeguidas++;
         cursor = addDays(cursor, -1);
@@ -9130,7 +9383,7 @@ export const store = {
       }
     }
     // Dias de estudo planejados na semana corrente (exclui folgas) e quantos cumpridos.
-    const planejados = this.semanaAtual().filter((d) => !this.diaEhFolga(weekdayISO(d)));
+    const planejados = this.semanaAtual().filter((d) => !this.diaEhFolga(weekdayISO(d), d));
     const metaSemana = planejados.length; // = 7 - dias de folga
     const naSemana = planejados.filter((d) => dias.has(d)).length;
     return { atual, estudouHoje, naSemana, metaSemana, totalDias: dias.size };
@@ -9141,7 +9394,7 @@ export const store = {
     const rot = this.tarefasDoDia(dataISO).filter((x) => x.tipo === "rotina");
     const planejadas = tarefas.length + rot.length;
     const feitas = tarefas.filter((m) => m.concluida).length + rot.filter((r) => r.concluida).length;
-    const sess = state.sessoes.filter((s) => (s.data || "").slice(0, 10) === dataISO);
+    const sess = state.sessoes.filter((s) => diaLocal(s.data) === dataISO);
     const tempoMin = Math.round(sess.reduce((a, s) => a + (s.tempoSeg || 0), 0) / 60);
     return { data: dataISO, planejadas, feitas, tempoMin, sessoes: sess.length };
   },
@@ -9290,14 +9543,26 @@ export const store = {
   materiaisSemConteudoLocal() {
     return (state.documentos || []).filter((d) => this.conteudoPendente(d)).map((d) => d.titulo);
   },
+  // Devolve SEMPRE um clone. Antes o backup completo devolvia o `state` vivo: quem mexesse
+  // no objeto para exportar mexia no estado do app.
+  //
+  // O compartilhável tira DUAS coisas, por razões diferentes:
+  //  - o conteúdo do material, porque é obra de terceiro e carrega a marca-d'água com o CPF
+  //    de quem baixou (`limparMaterialDaFatia`);
+  //  - a config local do aparelho, porque ali estão a CHAVE de API do Gemini e a SENHA do
+  //    cofre — e a senha do cofre é a identidade do cofre: quem a recebe lê e SOBRESCREVE o
+  //    estudo do dono em qualquer aparelho. Enquanto isto faltava, o botão anunciava "seguro
+  //    para compartilhar" sobre um arquivo que entregava os dois segredos.
+  // O completo mantém a config (é arquivo local de restauração — sem a chave, restaurar
+  // deixaria o app sem IA), e por isso a tela avisa antes de gerar que ele NÃO se compartilha.
   snapshotExport(comMaterial = true) {
-    if (comMaterial) return state;
     const clone = JSON.parse(JSON.stringify(state));
+    if (comMaterial) return clone;
     // Multi-perfil: material e resumos vivem DENTRO de cada perfil. Limpar só o topo
     // deixaria as apostilas passarem no backup — por isso a limpeza é por perfil, e em
     // TODOS eles (o backup leva o app inteiro, não só o perfil ativo).
     for (const p of clone.perfis || []) limparMaterialDaFatia(p);
-    return clone;
+    return limparConfigLocal(clone);
   },
 
   // Importa um backup JSON (substitui TODOS os dados). Valida minimamente e

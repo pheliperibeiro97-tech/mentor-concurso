@@ -21,6 +21,35 @@ function novoSS() {
 const SS = { mc: novoSS(), ce: novoSS() };
 let formatoAtivo = "mc";
 
+// A prova em andamento vivia SÓ em variável de módulo: um F5 no meio, ou o recarregamento
+// automático do service worker, apagava respostas, embaralho e tempo decorrido sem aviso.
+// Vai para o `sessionStorage` (e não `localStorage`): a prova pertence a esta aba e a esta
+// sessão de estudo; ressuscitá-la semanas depois, noutra aba, seria pior que perdê-la.
+const SIM_KEY = (formato) => `mentor_simulado_v1_${formato}`;
+function salvarSim(formato) {
+  try {
+    const sim = SS[formato] && SS[formato].sim;
+    if (!sim) return void sessionStorage.removeItem(SIM_KEY(formato));
+    // `intervalId` é handle do timer desta montagem: guardá-lo faria a retomada tentar limpar
+    // um timer que não existe mais.
+    const { intervalId, ...resto } = sim;
+    sessionStorage.setItem(SIM_KEY(formato), JSON.stringify(resto));
+  } catch (_) {} // sessionStorage indisponível (modo restrito): a prova segue só em memória
+}
+function restaurarSim(formato) {
+  try {
+    const txt = sessionStorage.getItem(SIM_KEY(formato));
+    if (!txt) return;
+    const sim = JSON.parse(txt);
+    if (!sim || !Array.isArray(sim.questaoIds) || !sim.questaoIds.length) return;
+    // Volta PAUSADA: o tempo de parede correu enquanto a página estava fora do ar, e
+    // descontá-lo em silêncio daria uma prova que "perdeu" minutos sem explicação.
+    SS[formato].sim = { ...sim, intervalId: null, pausado: true, pausadoDesde: sim.pausadoDesde || Date.now() };
+  } catch (_) {}
+}
+restaurarSim("mc");
+restaurarSim("ce");
+
 // Gate do pool do simulado: questão do formato certo e NÃO anulada (anuladas ficam fora
 // da prática e da pontuação — não têm gabarito válido).
 const ehDoFormato = (q, formato) => !q.anulada && (formato === "ce" ? q.formato === "ce" : q.formato !== "ce");
@@ -496,6 +525,7 @@ function renderEmAndamento(root, app, st, formato) {
       return { q, escolha, respondida, acertou };
     });
     sim.resultado = { itens, acertos, total: sim.questaoIds.length, respondidas: Object.keys(sim.respostas).length, tempoSeg: decorrido };
+    salvarSim(formato);
     if (decorrido > 0) store.registrarSessao({ fase: "A", topicoId: null, tempoSeg: decorrido });
     // Auto-registra no histórico de Simulados (uma vez). Erros = respondidas − acertos;
     // brancos = total − respondidas. Guarda também o desempenho por disciplina.
@@ -542,6 +572,7 @@ function renderEmAndamento(root, app, st, formato) {
         sim._ultimoMarco = agora;
       }
       sim.respostas[qId] = i;
+      salvarSim(formato); // um F5 no meio da prova não pode apagar a resposta
       root.querySelectorAll(`.sim-alt[data-q="${qId}"]`).forEach((b) => {
         b.classList.toggle("selected", parseInt(b.getAttribute("data-i"), 10) === i);
       });
@@ -571,10 +602,12 @@ function renderEmAndamento(root, app, st, formato) {
         pararTimer();
         sim.pausadoDesde = Date.now(); // congela o relógio de parede; retomar soma em pausadoMs
         sim.pausado = true;
+        salvarSim(formato);
         app.refresh();
       } else if (op === "descartar") {
         pararTimer();
         ss.sim = null;
+        salvarSim(formato);
         app.refresh();
       }
       // "voltar" / fechar fora: nada — a prova continua.
@@ -596,7 +629,19 @@ function renderEmAndamento(root, app, st, formato) {
   }
   document.addEventListener("keydown", onKey);
 
-  return () => { pararTimer(); document.removeEventListener("keydown", onKey); };
+  // Sair da tela PAUSA a prova. O relógio é de parede (proposital: prova é prova), mas antes
+  // isso valia até para quem navegava para outra tela: voltava e tinha perdido meia hora sem
+  // ter respondido nada. O cleanup só parava o `setInterval`, que é o desenho da tela, e não
+  // o cronômetro da prova.
+  return () => {
+    pararTimer();
+    document.removeEventListener("keydown", onKey);
+    if (ss.sim && !ss.sim.resultado && !ss.sim.pausado) {
+      ss.sim.pausado = true;
+      if (!ss.sim.pausadoDesde) ss.sim.pausadoDesde = Date.now();
+      salvarSim(formato);
+    }
+  };
 }
 
 // ---------- Pausado ----------
@@ -628,11 +673,13 @@ function renderPausado(root, app, formato) {
         sim.pausadoDesde = null;
       }
       sim.pausado = false;
+      salvarSim(formato);
       app.refresh();
     },
     "descartar-pausado": async () => {
       if (!(await confirmar("Descartar a prova pausada? As respostas serão perdidas."))) return;
       ss.sim = null;
+      salvarSim(formato);
       app.refresh();
     },
   });
@@ -897,17 +944,20 @@ function renderResultado(root, app, st, formato) {
   bindActions(root, {
     novo: () => {
       ss.sim = null;
+      salvarSim(formato);
       notaAnimou = false; // próxima prova volta a animar a nota (sem afetar o toggle Cebraspe desta)
       app.refresh();
     },
     "ir-erros": () => {
       ss.sim = null;
+      salvarSim(formato);
       app.navigate("erros");
     },
     // Fase 3: fecha o loop no pico de motivação — refaz SÓ as erradas, direto no Modo Foco.
     "refazer-erradas": () => {
       const ids = erradasIds.slice();
       ss.sim = null;
+      salvarSim(formato);
       app.navigate(formato === "ce" ? "pratica-ce" : "pratica", { focoErrosIds: ids });
     },
     "toggle-cebraspe": (el) => {

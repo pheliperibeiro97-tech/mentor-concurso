@@ -2,7 +2,7 @@
 // cards de Revisar/Treinar/Gerar, sugestões do Mentor e estatísticas do escopo.
 // (Extraído mecanicamente de leiseca.js — comportamento idêntico.)
 import { vazio, plural } from "../../ui.js";
-import { esc, fmtData, todayISO, addDays } from "../../util.js";
+import { esc, fmtData, todayISO, addDays, diaLocal } from "../../util.js";
 import { progressRing } from "../../viz.js";
 import { icone } from "../../icones.js";
 import { S, parseIntervaloArt } from "./estado.js";
@@ -188,7 +188,7 @@ export function estudarCorpoHTML(store, st, tipo, r) {
     return { tema: t.tema, total: arts.length, lidos, esquec, pct: arts.length ? Math.round((100 * lidos) / arts.length) : 0 };
   }).filter((t) => t.total > 0).sort((a, b) => b.esquec - a.esquec || b.total - a.total).slice(0, 8);
   const dias14 = []; for (let k = 13; k >= 0; k--) dias14.push(addDays(hojeISOe, -k));
-  const lidosPorDia = dias14.map((d) => statsBase.filter((i) => (i.lidoEm || "").slice(0, 10) === d).length);
+  const lidosPorDia = dias14.map((d) => statsBase.filter((i) => diaLocal(i.lidoEm) === d).length);
   const maxDia = Math.max(1, ...lidosPorDia);
   const temStats = statsBase.length && (lidosEsc > 0 || temaPerf.length > 0); // F3: stats p/ juris também
   const statsHTML = temStats ? `<details class="estat-lei">

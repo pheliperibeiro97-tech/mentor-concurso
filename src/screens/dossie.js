@@ -3,7 +3,7 @@
 // NÃO é rota própria: vive embutido no Edital. Exporta dossieResumoHTML (visão de todo o
 // edital) e renderDossieDetalhe (a pasta viva de um tópico).
 import { bindActions, toast, header, seloBadge, vazio, imprimir, botaoImprimir, confirmar, escolher, iconImprimir, skeletonDoc , plural, defMetrica, ligarArrastar } from "../ui.js";
-import { esc, fmtTempo, pct, fmtData, todayISO } from "../util.js";
+import { esc, fmtTempo, pct, fmtData, todayISO, diaLocal } from "../util.js";
 import { icone } from "../icones.js";
 import { progressRing } from "../viz.js";
 import { relBandClass, relLabel, relValor, relPillSelectHTML, aplicarRelNamed, relNamedValor, relNamedNome, abrirAnexarLink } from "./edital.js";
@@ -842,7 +842,7 @@ function linhaSessaoDossie(st, s) {
   const paginas = s.paginaInicial && s.paginaFinal ? `${s.paginaInicial}–${s.paginaFinal}${s.paginas ? ` (${s.paginas})` : ""}` : s.paginas ? `${s.paginas}` : "";
   const form = `<tr class="sess-edit-row"><td colspan="5">
     <div class="sess-edit">
-      <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${s.data.slice(0, 10)}" /></label>
+      <label class="inline">Data <input type="date" class="se-data" data-id="${s.id}" value="${diaLocal(s.data)}" /></label>
       <label class="inline">Fase <select class="se-fase" data-id="${s.id}">${faseOpts}</select></label>
       <label class="inline">Minutos <input type="number" min="0" max="1440" class="se-min" data-id="${s.id}" value="${Math.round((s.tempoSeg || 0) / 60)}" /></label>
       <label class="inline">Certas <input type="number" min="0" max="9999" class="se-ac" data-id="${s.id}" value="${s.qAcertos || 0}" /></label>

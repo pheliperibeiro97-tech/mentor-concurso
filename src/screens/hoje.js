@@ -2,7 +2,7 @@
 // Cronômetro com dois modos: REGRESSIVO (conta para baixo de um tempo definível) e
 // PROGRESSIVO (conta para cima até você interromper).
 import { bindActions, toast, header, escolher, faixaIA, celebrarMeta, plural, abrirJanela, ativarCountUp, revelarTexto } from "../ui.js";
-import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO } from "../util.js";
+import { esc, fmtMMSS, fmtTempo, fmtData, fmtMin, todayISO, diaLocal } from "../util.js";
 import { icone } from "../icones.js";
 import { FASES, ORDEM_FASES, ordenarTopicosPorBase } from "../ciclo.js";
 import * as crono from "../cronometro.js";
@@ -286,6 +286,7 @@ export default function renderHoje(root, app) {
       topicoId: sel.topicoId,
       faseNome: FASES[sel.fase]?.nome || "",
       topicoLabel: t ? rotuloTopico(st, t) : (tarefaFoco ? tarefaFoco.titulo : ""),
+      perfilId: store.perfilAtivoId(), // carimba o concurso: o cronometro e global
       cor: FASES[sel.fase]?.cor,
     });
   }
@@ -464,8 +465,10 @@ function ringsHTML(store) {
   const m = store.metas();
   let diag;
   try { diag = store.diagnostico(); } catch (_) { diag = { porDisciplina: [], percentGeral: null }; }
-  const discComTop = (diag.porDisciplina || []).filter((l) => l.topicos && l.topicos.length);
-  const cob = discComTop.length ? Math.round(discComTop.reduce((a, l) => a + l.cobertura, 0) / discComTop.length) : 0;
+  // O MESMO número que o Acompanhamento e o Mentor mostram. Este anel calculava a média não
+  // ponderada da cobertura por disciplina, o que fazia uma matéria de 2 tópicos pesar igual a
+  // uma de 200: as três telas exibiam percentuais diferentes sob o mesmo rótulo.
+  const cob = store.coberturaEdital().pct;
   const aprov = diag.percentGeral;
   const metaSem = m.metaSemanalMin > 0 ? Math.min(100, Math.round((m.feitoSemanaMin / m.metaSemanalMin) * 100)) : null;
   const metaDia = m.metaDiariaMin > 0 ? Math.min(100, Math.round((m.feitoHojeMin / m.metaDiariaMin) * 100)) : null;
@@ -644,21 +647,26 @@ function abrirSeletorTopico(store, onPick) {
     },
   });
 }
-function hojeStr() {
-  return new Date().toISOString().slice(0, 10);
-}
+// "Hoje" é o dia do calendário do aluno, não o de Greenwich. O `hojeStr()` que morava aqui era
+// `toISOString().slice(0,10)`, ou seja, UTC, enquanto todo o resto do app usa `todayISO()`,
+// que é local. No fuso de Brasília isso trocava de dia às 21h: o rodapé zerava no meio da
+// noite de estudo e as sessões da tarde saíam da conta.
 function sessoesHoje(st) {
-  return st.sessoes.filter((s) => s.data.slice(0, 10) === hojeStr()).length;
+  const hoje = todayISO();
+  return st.sessoes.filter((s) => diaLocal(s.data) === hoje).length;
 }
 function tempoHoje(st) {
-  return st.sessoes.filter((s) => s.data.slice(0, 10) === hojeStr()).reduce((a, s) => a + (s.tempoSeg || 0), 0);
+  const hoje = todayISO();
+  return st.sessoes.filter((s) => diaLocal(s.data) === hoje).reduce((a, s) => a + (s.tempoSeg || 0), 0);
 }
-// Questões feitas hoje = tentativas na Prática/Simulado + questões lançadas manualmente.
+// Questões feitas hoje. Só as TENTATIVAS registradas no app: `qAcertos`/`qErros` da sessão são
+// questões feitas FORA dele (caderno de papel, site de terceiro), e somar os dois contava a
+// mesma questão duas vezes. Ver `store.diagnostico`, que sofria do mesmo mal.
 function questoesHoje(st) {
-  const hoje = hojeStr();
-  const tent = st.tentativas.filter((t) => t.data.slice(0, 10) === hoje).length;
-  const man = st.sessoes
-    .filter((s) => s.data.slice(0, 10) === hoje)
+  const hoje = todayISO();
+  const tent = st.tentativas.filter((t) => diaLocal(t.data) === hoje).length;
+  const externas = st.sessoes
+    .filter((s) => diaLocal(s.data) === hoje)
     .reduce((a, s) => a + (s.qAcertos || 0) + (s.qErros || 0), 0);
-  return tent + man;
+  return tent + externas;
 }
