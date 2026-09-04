@@ -340,7 +340,7 @@ function montarWidget() {
              primeira tentativa — o iPad aceita o pedido e não abre nada, e isso só se descobre
              tentando; com dois botões, o widget precisaria ser remontado no meio. -->
         <button class="cf-x" data-cf-tela-cheia aria-label="Tela cheia" title="Tela cheia, com o relógio centralizado.">${icone("maximize-2")}</button>
-        <button class="cf-x cf-pip" data-cf-flutuar aria-label="Flutuar por cima">${icone("picture-in-picture-2")}</button>
+        <button class="cf-x cf-pip" data-cf-flutuar aria-label="Flutuar por cima" data-tip="No aplicativo de computador, abre uma janelinha que fica acima de qualquer programa. No navegador, a janelinha só fica acima da própria aba.">${icone("picture-in-picture-2")}</button>
         <button class="cf-x" data-cf-fechar aria-label="Fechar">${icone("x")}</button>
       </div>
       <div class="cf-disp"><div class="cf-big">00:00</div><div class="cf-cap"></div></div>
@@ -393,6 +393,36 @@ function montarWidget() {
   const on = (sel, ev, fn) => widget.querySelector(sel)?.addEventListener(ev, fn);
   on(".cf-btn", "click", (e) => { e.stopPropagation(); setPopAberto(!popAberto); });
   on("[data-cf-fechar]", "click", () => setPopAberto(false));
+  const ehDesktop = () => typeof window !== "undefined" && (!!window.__TAURI_INTERNALS__ || !!window.__TAURI__);
+
+  // Janela NATIVA sempre por cima (só no app de computador).
+  //
+  // O caso de uso é "estudar no PDF do cursinho com o tempo à vista", e ele não funcionava: o
+  // botão caía no PiP de VÍDEO, que fica por cima da janela do navegador, não por cima de
+  // outros aplicativos. Toda a infraestrutura já existia — `crono.html` no build, o label
+  // `crono` nas permissões, a detecção em `main.js` e o fechamento aqui — só faltava quem
+  // CRIASSE a janela. As permissões `allow-set-always-on-top` e `allow-create-webview-window`
+  // estavam declaradas sem nenhum chamador.
+  const abrirJanelaNativa = async () => {
+    const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
+    const existente = await WebviewWindow.getByLabel("crono");
+    if (existente) { await existente.setFocus(); return true; }
+    const janela = new WebviewWindow("crono", {
+      url: "crono.html",
+      title: "Cronômetro",
+      width: 260, height: 132, minWidth: 200, minHeight: 110,
+      alwaysOnTop: true,   // o ponto todo: fica acima do PDF, do navegador, de tudo
+      decorations: false,  // sem barra de título: 260x132 é pequeno demais para gastar com ela
+      resizable: true,
+      skipTaskbar: true,   // é acessório da janela principal, não um segundo app na barra
+    });
+    return await new Promise((resolve) => {
+      janela.once("tauri://created", () => resolve(true));
+      janela.once("tauri://error", () => resolve(false));
+      setTimeout(() => resolve(false), 4000); // não deixa o clique pendurado se nada responder
+    });
+  };
+
   const abrirSoCronometro = () => {
     try {
       window.open("crono.html", "_blank", "noopener");
@@ -407,6 +437,16 @@ function montarWidget() {
   const ehMobile = () => window.matchMedia("(max-width: 560px), (pointer: coarse)").matches;
   on("[data-cf-flutuar]", "click", async (e) => {
     e.stopPropagation();
+    // No app de computador, a janela NATIVA vem primeiro: é a única que fica acima de outros
+    // aplicativos, que é o que "flutuar" promete. O PiP de vídeo continua como reserva para o
+    // navegador (e para o caso de a janela não abrir).
+    if (ehDesktop()) {
+      try {
+        if (await abrirJanelaNativa()) { setPopAberto(false); return; }
+      } catch (err) {
+        console.warn("[crono] janela nativa indisponível:", err);
+      }
+    }
     if (ehMobile() || !pipDisponivel()) return abrirSoCronometro();
     try {
       await alternarPip({

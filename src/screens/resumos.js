@@ -572,15 +572,56 @@ function textoPuro(html) {
 // Sanitização de HTML de resumo. Exportada porque precisa rodar também na LEITURA
 // (aqui e na Central de Revisões): conteúdo vindo de sync/import antigo pode nunca
 // ter passado pelo salvar, então sanitizar só no save não protege o render.
+// ALLOWLIST, não lista negra. A versão anterior removia `script,style,iframe,object,embed` e os
+// atributos `on*`: cobre o óbvio e deixa passar o resto. `<a href="data:text/html,...">`,
+// `<form action>`, `<button formaction>`, `<base href>`, `<svg><use href>` e `<meta refresh>`
+// não estavam na lista negra e continuavam vivos.
+//
+// Isto importa porque o HTML aqui é gerado por IA a partir do MATERIAL do aluno, que é um PDF
+// de terceiro. E, no desktop, XSS não é só roubo de conteúdo: o webview tem a ponte do Tauri.
+//
+// Só o que um resumo precisa passa. Qualquer tag fora da lista é DESEMBRULHADA (o texto dela
+// sobrevive), e qualquer atributo fora da lista some.
+const TAGS_OK = new Set([
+  "p", "br", "hr", "div", "span", "b", "strong", "i", "em", "u", "s", "mark", "small", "sub", "sup",
+  "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "dl", "dt", "dd",
+  "blockquote", "pre", "code", "kbd", "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption", "a",
+]);
+// `style` fica de fora de propósito: `style="..."` carrega `url()`, `position:fixed` e coisas
+// que servem para disfarçar um clique. Cor e negrito vêm das tags.
+const ATTRS_OK = new Set(["href", "title", "colspan", "rowspan", "start", "type", "class"]);
+const TAGS_APAGAR = new Set(["script", "style", "iframe", "object", "embed", "form", "input", "button", "select", "textarea", "base", "meta", "link", "svg", "math", "template", "noscript"]);
+
+// Só http(s) e mailto. `javascript:` é o clássico; `data:` deixa embutir uma página inteira no
+// link; e um href relativo poderia arrastar a navegação para dentro do app.
+function hrefSeguro(valor) {
+  const v = String(valor || "").trim();
+  return /^(https?:|mailto:)/i.test(v) ? v : null;
+}
+
 export function sanitize(html) {
   const tpl = document.createElement("template");
   tpl.innerHTML = html || "";
-  tpl.content.querySelectorAll("script,style,iframe,object,embed").forEach((n) => n.remove());
-  tpl.content.querySelectorAll("*").forEach((n) => {
-    [...n.attributes].forEach((a) => {
-      if (/^on/i.test(a.name) || (a.name === "href" && /javascript:/i.test(a.value))) n.removeAttribute(a.name);
-    });
-  });
+  // Some com conteúdo e tudo: o que está aqui dentro não é texto de resumo.
+  tpl.content.querySelectorAll([...TAGS_APAGAR].join(",")).forEach((n) => n.remove());
+  // Varre de dentro para fora: desembrulhar um pai antes moveria os filhos e a lista viva
+  // do querySelectorAll pularia nós.
+  for (const n of [...tpl.content.querySelectorAll("*")].reverse()) {
+    const tag = n.tagName.toLowerCase();
+    if (!TAGS_OK.has(tag)) {
+      n.replaceWith(...n.childNodes); // desembrulha: perde a tag, mantém o texto
+      continue;
+    }
+    for (const a of [...n.attributes]) {
+      const nome = a.name.toLowerCase();
+      if (!ATTRS_OK.has(nome)) { n.removeAttribute(a.name); continue; }
+      if (nome === "href") {
+        const seguro = hrefSeguro(a.value);
+        if (seguro) { n.setAttribute("href", seguro); n.setAttribute("rel", "noopener noreferrer"); n.setAttribute("target", "_blank"); }
+        else n.removeAttribute("href");
+      }
+    }
+  }
   const div = document.createElement("div");
   div.appendChild(tpl.content.cloneNode(true));
   return div.innerHTML;

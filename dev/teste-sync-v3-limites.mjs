@@ -4,7 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 const src = readFileSync("src/sync.js", "utf8").replace('import { store } from "./store.js";', "const store = { get: () => ({}) };");
-const arq = join(mkdtempSync(join(tmpdir(), "sync-lim-")), "sync.mjs");
+// `sync.js` importa `config-local.js` (a lista de segredos que NAO sobem para o cofre,
+// compartilhada com o backup). O modulo tem de viajar junto para o diretorio temporario,
+// senao o import falha e o teste morre por motivo que nao e o que ele afere.
+const dirTmp = mkdtempSync(join(tmpdir(), "sync-lim-"));
+writeFileSync(join(dirTmp, "config-local.js"), readFileSync("src/config-local.js", "utf8"));
+const arq = join(dirTmp, "sync.mjs");
 writeFileSync(arq, src);
 const S = await import(pathToFileURL(arq).href);
 let falhas = 0;

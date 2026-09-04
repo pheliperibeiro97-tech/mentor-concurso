@@ -444,7 +444,12 @@ async function abrirVisualizadorProprio(dataUrl, titulo, paginaInicial) {
     document.removeEventListener("keydown", onKey);
     if (io) io.disconnect();
     if (document.fullscreenElement === overlay) document.exitFullscreen().catch(() => {});
+    // Zera os canvas ANTES de tirar o overlay do DOM: remover o elemento não devolve o bitmap,
+    // e são páginas inteiras renderizadas em escala. Depois fecha o documento e o worker, que
+    // ficavam vivos a cada apostila aberta — numa sessão de estudo isso empilha rápido.
+    overlay.querySelectorAll("canvas").forEach((c) => { c.width = 0; c.height = 0; });
     overlay.remove();
+    if (pdf) { try { pdf.destroy(); } catch (_) {} pdf = null; }
   }
   function onKey(e) {
     if (e.key === "Escape" && barraBusca.classList.contains("oculto")) fechar();

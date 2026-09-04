@@ -60,6 +60,74 @@ export function backendName() {
   return temIndexedDB() ? "IndexedDB (navegador)" : "localStorage (navegador)";
 }
 
+// ---- UMA ABA POR VEZ (web) --------------------------------------------------------------
+// Cada aba mantém o estado inteiro na memória e o reescreve inteiro a cada mudança. Duas abas
+// abertas viravam last-write-wins: a segunda gravava por cima de tudo o que a primeira tinha
+// feito desde que ela carregou, sem erro e sem aviso. É fácil de acontecer: o PWA no celular e
+// a mesma URL aberta no navegador contam como duas.
+//
+// Web Locks é a ferramenta certa: o lock é da ORIGEM, o navegador o solta sozinho quando a aba
+// morre (nada de "trava fantasma" depois de um fechamento sujo) e não exige coordenação.
+// Quem não tem a API (Safari antigo) segue como antes: melhor um app que funciona sem a guarda
+// do que um app que se recusa a abrir.
+let liberarDono = null;
+export async function tentarSerAbaDona() {
+  try {
+    if (isTauri() || !navigator.locks?.request) return true; // desktop tem um processo só
+    return await new Promise((resolve) => {
+      let resolvido = false;
+      navigator.locks.request("mentor_concurso_aba", { ifAvailable: true }, (lock) => {
+        if (!lock) { resolve(false); return; } // outra aba já é a dona
+        resolve(true);
+        resolvido = true;
+        // A promessa devolvida SEGURA o lock: ela só resolve quando esta aba desistir dele.
+        return new Promise((soltar) => { liberarDono = soltar; });
+      }).catch(() => { if (!resolvido) resolve(true); });
+    });
+  } catch (_) {
+    return true;
+  }
+}
+// Usado quando o usuário escolhe "assumir nesta aba" na outra ponta, e no encerramento.
+export function soltarAbaDona() {
+  if (liberarDono) { liberarDono(); liberarDono = null; }
+}
+
+// ---- ESPAÇO no navegador ----------------------------------------------------------------
+// Sem `storage.persist()`, o navegador trata os dados do app como cache descartável: o Safari
+// apaga o que não foi tocado por alguns dias e o Chrome despeja sob pressão de disco. Quem
+// guarda uma biblioteca de cursinho inteira num PWA descobre isso do pior jeito.
+// Chamado uma vez no boot da web. Não pede nada ao usuário: o navegador concede sozinho quando
+// o app foi instalado ou tem engajamento, e nega em silêncio quando não.
+export async function pedirArmazenamentoPersistente() {
+  try {
+    if (isTauri() || !navigator.storage?.persist) return null;
+    if (await navigator.storage.persisted?.()) return true;
+    return await navigator.storage.persist();
+  } catch (_) {
+    return null;
+  }
+}
+
+// Quanto o app já ocupa e quanto o navegador ainda concede: `{usadoMB, cotaMB, pctUsado}`.
+// Serve para a tela avisar ANTES de estourar, em vez de a gravação falhar no meio de um import
+// de 400 apostilas. `null` quando o navegador não informa (Safari costuma não informar).
+export async function espacoDoNavegador() {
+  try {
+    if (isTauri() || !navigator.storage?.estimate) return null;
+    const { usage, quota } = await navigator.storage.estimate();
+    if (!quota) return null;
+    return {
+      usadoMB: Math.round((usage || 0) / 1048576),
+      cotaMB: Math.round(quota / 1048576),
+      pctUsado: Math.round(((usage || 0) / quota) * 100),
+      persistente: !!(await navigator.storage.persisted?.()),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 // Devolve `{ estado, falhou, erro }`.
 //
 // A distinção entre `estado: null, falhou: false` (aparelho novo, legítimo) e

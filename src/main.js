@@ -4,6 +4,7 @@
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/jetbrains-mono/wght.css";
 import { store } from "./store.js";
+import { tentarSerAbaDona, pedirArmazenamentoPersistente } from "./persistence.js";
 import { toast, toastCarregando, plural, confirmar, pedirTexto } from "./ui.js";
 import { esc, fmtMMSS } from "./util.js";
 import { montarChat, atualizarChatVisibilidade } from "./chat.js";
@@ -819,7 +820,22 @@ async function bootstrap() {
   // Se barrar, a tela de ativação assume o #app e o boot do app não prossegue.
   const liberado = await checarLicenca();
   if (!liberado) return;
+  // UMA ABA POR VEZ. Cada aba reescreve o estado inteiro a cada mudança: com duas abertas, a
+  // segunda gravava por cima de tudo o que a primeira fez desde que carregou, calada. Verificado
+  // ANTES do `init` para não montar meio app e depois pedir para fechar.
+  // `mentor_ignorar_lock` é a escolha explícita de "estudar nesta janela" feita na tela abaixo.
+  // Vive no sessionStorage: vale só para esta aba e some quando ela fecha, então a guarda volta
+  // a valer na próxima abertura em vez de ficar desligada para sempre.
+  const ignorarLock = (() => { try { return sessionStorage.getItem("mentor_ignorar_lock") === "1"; } catch (_) { return false; } })();
+  if (!ignorarLock && !(await tentarSerAbaDona())) {
+    mostrarTelaSegundaAba();
+    return;
+  }
   await store.init();
+  // Espaço: sem isto o navegador trata a biblioteca inteira como cache descartável (o Safari
+  // apaga o que não é tocado por alguns dias). Não pede nada ao usuário; o navegador concede
+  // sozinho quando o app foi instalado ou tem uso frequente.
+  pedirArmazenamentoPersistente();
   // A LEITURA do estado falhou: o store está travado para escrita e o app, em memória, tem o
   // estado padrão. Sem esta tela ele mostraria o ONBOARDING — e o primeiro clique gravaria o
   // vazio por cima de um banco que ele só não conseguiu LER. É verificação direta, e não
@@ -950,6 +966,18 @@ async function bootstrap() {
   // pode ter vindo do chat, de um atalho ou de qualquer tela, então o aviso mora aqui, num
   // lugar só, ouvindo o evento que o store emite.
   let fecharAvisoConteudo = null;
+  // Entrou num cofre que já existe usando uma senha curta (criada quando o mínimo era 6).
+  // Não bloqueia: trocar a senha muda o ENDEREÇO do cofre, então é decisão do usuário, com
+  // calma, e não algo para empurrar no meio de um login.
+  window.addEventListener("mentor:senha-fraca", (ev) => {
+    const min = ((ev && ev.detail) || {}).minimo || 12;
+    toast(
+      `A senha do seu cofre é curta (menos de ${min} caracteres). Ela é o endereço E a chave dos seus dados: ` +
+      `considere trocá-la por uma frase de 3 ou 4 palavras em Configurações.`,
+      "erro"
+    );
+  });
+
   // Gravação que falhou. Antes morria num `console.error`: o aluno estudava e o dia não tinha
   // sido salvo, sem nada na tela. O aviso é PERSISTENTE de propósito (não é toast de 3 s) —
   // continuar estudando por cima de um app que não grava é o pior dos dois mundos.
@@ -986,6 +1014,41 @@ async function bootstrap() {
       if (!d.ok) toast("Não consegui baixar o conteúdo deste material agora.", "erro");
     }
   });
+}
+
+// Segunda aba do mesmo app. Não é erro: é a situação normal de quem tem o PWA instalado e abre
+// a mesma URL no navegador. O que não pode é as duas gravarem, porque cada uma reescreve o
+// estado inteiro e a última a salvar apaga o trabalho da outra.
+function mostrarTelaSegundaAba() {
+  const tela = document.createElement("div");
+  tela.className = "recuperacao-overlay";
+  tela.setAttribute("role", "alertdialog");
+  tela.setAttribute("aria-modal", "true");
+  tela.innerHTML = `<div class="recuperacao-caixa">
+    <h2>O Mentor já está aberto em outra janela</h2>
+    <p>Para não perder nada, o app funciona numa janela por vez: se as duas gravassem, a última a
+    salvar apagaria o que você fez na outra.</p>
+    <p class="muted small">Volte para a janela onde já estava estudando. Se ela não existe mais
+    (fechou sem querer, travou), use o botão abaixo.</p>
+    <div class="recuperacao-acoes">
+      <button class="btn btn-primary" data-recarregar>Tentar de novo</button>
+      <button class="btn btn-ghost" data-assumir>Estudar nesta janela</button>
+    </div>
+  </div>`;
+  tela.querySelector("[data-recarregar]").addEventListener("click", () => location.reload());
+  tela.querySelector("[data-assumir]").addEventListener("click", async () => {
+    const ok = await confirmar(
+      "Assumir aqui só é seguro se a outra janela estiver realmente fechada. Se ela ainda estiver aberta e você mexer nas duas, uma vai apagar o trabalho da outra. Continuar?"
+    );
+    if (!ok) return;
+    // Não há como "roubar" o lock: quem o tem é a outra aba. O que dá para fazer é seguir sem
+    // ele, que é exatamente o comportamento de antes desta guarda, agora com o usuário ciente.
+    // Não há como "roubar" um Web Lock: quem o tem é a outra aba. O que dá para fazer é seguir
+    // sem ele — exatamente o comportamento de antes desta guarda, agora com o usuário ciente.
+    try { sessionStorage.setItem("mentor_ignorar_lock", "1"); } catch (_) {}
+    location.reload();
+  });
+  document.body.appendChild(tela);
 }
 
 // Tela de recuperação: o app não conseguiu LER os dados guardados.

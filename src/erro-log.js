@@ -27,13 +27,22 @@ function gravar(arr) {
 }
 
 // Registra um erro no buffer (capado). origem: "error" | "promise" | "app".
+// Tira a chave de API de qualquer texto antes de ele ser guardado. Este log é EXPORTADO: o
+// usuário anexa o arquivo num e-mail de suporte. A chave não viaja mais na URL das chamadas
+// (foi para o cabeçalho), mas um stack trace pode carregar uma URL montada em qualquer lugar,
+// e o custo de conferir é zero. Duas formas: `?key=...` e o prefixo `AIza` das chaves Google.
+const semChaveNoTexto = (t) =>
+  String(t == null ? "" : t)
+    .replace(/([?&]key=)[A-Za-z0-9_\-]{10,}/g, "$1<oculta>")
+    .replace(/AIza[A-Za-z0-9_\-]{20,}/g, "<chave oculta>");
+
 export function registrarErro(origem, msg, stack) {
   const arr = ler();
   arr.push({
     t: new Date().toISOString(),
     origem,
-    msg: String(msg == null ? "(sem mensagem)" : msg).slice(0, 600),
-    stack: stack ? String(stack).slice(0, 1200) : "",
+    msg: semChaveNoTexto(msg == null ? "(sem mensagem)" : msg).slice(0, 600),
+    stack: stack ? semChaveNoTexto(stack).slice(0, 1200) : "",
   });
   gravar(arr);
 }

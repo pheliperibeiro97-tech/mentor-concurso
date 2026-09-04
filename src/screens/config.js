@@ -9,11 +9,11 @@ import { verificarAtualizacao } from "../updater.js";
 import { setEstiloAlarme, tocarAlarmeTeste } from "../cronometro.js";
 import { esc } from "../util.js";
 import { icone } from "../icones.js";
-import { backendName } from "../persistence.js";
+import { backendName, espacoDoNavegador } from "../persistence.js";
 import { MODELO_PADRAO, testarConexao, iaDisponivel, GEMINI_FALLBACKS, CLAUDE_MODELOS } from "../ia-provider.js";
 import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
-import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem } from "../sync-nuvem.js";
+import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem, sugerirFraseSenha } from "../sync-nuvem.js";
 
 // "há X" curto para o status de sincronização.
 function haQuanto(iso) {
@@ -56,6 +56,12 @@ export default function renderConfig(root, app) {
   const iaInativa = ["offline"].includes(cfg.iaProvider);
   // Provedores que NÃO usam chave de API (Claude Code local usa a autenticação local da CLI).
   const semChave = cfg.iaProvider === "claude-cli";
+  // A chave NÃO é renderizada no campo. Ela vinha em `value=`, então o segredo ficava no HTML da
+  // página: legível por qualquer extensão, por um "inspecionar elemento" e por qualquer captura
+  // de tela da aba. O campo nasce vazio e "vazio" significa "mantenha a que está" — por isso
+  // existe um botão explícito para remover, senão não haveria como apagá-la.
+  const temChaveSalva = !!(cfg.iaKey || "").trim();
+  const temReservaSalva = !!(cfg.iaKeyReserva || "").trim();
   // "Sem meta por enquanto": nenhuma das 3 metas definida.
   const semMetas = !cfg.metaDiariaMin && !cfg.metaSemanalMin && !cfg.metaMensalMin;
   const nt = cfg.notificacoes || {};
@@ -280,12 +286,14 @@ export default function renderConfig(root, app) {
         </label>
       </div>
       <label>Chave de API
-        <input id="cfg-key" type="password" value="${esc(cfg.iaKey || "")}" placeholder="${semChave ? "não precisa — usa a autenticação local do Claude Code" : "cole a chave aqui"}" ${iaInativa || semChave ? "disabled" : ""} />
+        <input id="cfg-key" type="password" value="" autocomplete="off" placeholder="${semChave ? "não precisa — usa a autenticação local do Claude Code" : temChaveSalva ? "chave salva · deixe em branco para manter" : "cole a chave aqui"}" ${iaInativa || semChave ? "disabled" : ""} />
+        ${temChaveSalva && !semChave ? `<button type="button" class="lnk cfg-key-limpar" data-action="limpar-chave" data-alvo="iaKey">${icone("trash-2")} remover a chave salva</button>` : ""}
       </label>
       ${
         cfg.iaProvider === "gemini"
           ? `<label>Chave reserva <span class="muted small" data-tip="Opcional. Use uma 2ª chave grátis do Gemini (de outra conta Google). Ela só entra em ação automaticamente quando a chave principal estoura a cota diária (erro 429) — no uso normal, a principal é sempre usada.">${icone("info")}</span>
-        <input id="cfg-key2" type="password" value="${esc(cfg.iaKeyReserva || "")}" placeholder="opcional — entra só quando a principal esgota a cota" ${iaInativa ? "disabled" : ""} />
+        <input id="cfg-key2" type="password" value="" autocomplete="off" placeholder="${temReservaSalva ? "chave salva · deixe em branco para manter" : "opcional — entra só quando a principal esgota a cota"}" ${iaInativa ? "disabled" : ""} />
+        ${temReservaSalva ? `<button type="button" class="lnk cfg-key-limpar" data-action="limpar-chave" data-alvo="iaKeyReserva">${icone("trash-2")} remover a chave reserva</button>` : ""}
       </label>`
           : ""
       }
@@ -491,10 +499,11 @@ export default function renderConfig(root, app) {
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-frase">Senha</label>
                      <div class="campo-senha">
-                       <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
+                       <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, com 3 ou 4 palavras" />
                        <button type="button" class="ver-senha" data-action="ver-senha" data-alvo="nuvem-frase" aria-label="Mostrar a senha" data-tip="Mostrar/ocultar a senha">${icone("eye")}</button>
                      </div>
                    </div>
+                   <p class="muted small u-m-0 u-mt-4">Esta senha é o <b>endereço e a chave</b> dos seus dados na nuvem: não há conta, nem e-mail de recuperação. Quem a adivinhar lê e sobrescreve o seu estudo, então ela precisa ser difícil de adivinhar e você precisa conseguir lembrar. <button type="button" class="lnk" data-action="sugerir-frase">${icone("sparkles")} sugerir uma frase</button></p>
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-dica">Dica <span class="muted">(opcional)</span></label>
                      <input id="nuvem-dica" type="text" class="input" autocomplete="off" maxlength="80" value="${esc(sn.dica || "")}" placeholder="algo que lembre a frase — não escreva a senha aqui" />
@@ -540,7 +549,7 @@ export default function renderConfig(root, app) {
 
     <section class="card">
       <h3>${icone("database")} Dados</h3>
-      <p class="muted small">Armazenamento: <b>${esc(backendName())}</b></p>
+      <p class="muted small">Armazenamento: <b>${esc(backendName())}</b> <span id="cfg-espaco"></span></p>
       ${
         // Multi-concurso: estes números são do concurso ATIVO. Sem dizer isso, a seção
         // "Dados" parece mostrar o total do app e engana quem tem mais de um.
@@ -637,6 +646,31 @@ export default function renderConfig(root, app) {
   ["#cfg-not-diario", "#cfg-not-horario", "#cfg-not-revisoes", "#cfg-not-tarefas", "#cfg-not-mentor", "#cfg-not-inatividade", "#cfg-not-marcos"].forEach((sel) =>
     root.querySelector(sel)?.addEventListener("change", () => salvarNotif(false))
   );
+
+  // ESPAÇO: quanto o app ocupa e quanto o navegador ainda concede. Assíncrono, então preenche
+  // depois do render. Sem isto, o aluno só descobria o limite quando a gravação falhava no meio
+  // de um import de centenas de apostilas. `persistente: false` é o aviso que importa: significa
+  // que o navegador pode apagar tudo para liberar disco.
+  espacoDoNavegador().then((e) => {
+    const alvo = root.querySelector("#cfg-espaco");
+    if (!alvo || !e) return;
+    const alerta = e.pctUsado >= 80 ? ` <b style="color:var(--danger-ink)">— espaço quase no fim</b>` : "";
+    const risco = e.persistente
+      ? ""
+      : ` · <span data-tip="O navegador ainda trata estes dados como cache: ele pode apagá-los para liberar disco. Instalar o app na tela de início costuma resolver.">sujeito a limpeza automática ${icone("info")}</span>`;
+    alvo.innerHTML = `· ${e.usadoMB} MB de ${e.cotaMB} MB (${e.pctUsado}%)${alerta}${risco}`;
+  });
+
+  // O campo de chave nasce VAZIO (a chave não é renderizada no HTML). Então "vazio" quer dizer
+  // "não mexi nisto", e não "apague". Devolve `{}` nesse caso, para o `setConfig` nem tocar no
+  // campo; devolve `{chave: valor}` quando o usuário digitou algo.
+  const chaveOuMantem = (seletor, campo) => {
+    const v = (root.querySelector(seletor)?.value || "").trim();
+    return v ? { [campo]: v } : {};
+  };
+  // A chave em uso agora: a digitada, ou a que já está salva. O "Testar" precisa disso, senão
+  // testar sem redigitar diria "cole a chave" com a chave salva funcionando.
+  const chaveEmUso = (seletor, campo) => (root.querySelector(seletor)?.value || "").trim() || (store.get().config[campo] || "").trim();
 
   bindActions(root, {
     "abrir-guia": () => abrirGuia(),
@@ -744,11 +778,34 @@ export default function renderConfig(root, app) {
     "set-tema": (el) => {
       store.setConfig({ tema: el.getAttribute("data-tema") });
     },
+    // Frase-senha sorteada com aleatoriedade do sistema. Preenche o campo e o REVELA: uma senha
+    // que o usuário não consegue ler é uma senha que ele não anota nem memoriza, e aqui não há
+    // recuperação possível.
+    "sugerir-frase": () => {
+      const campo = root.querySelector("#nuvem-frase");
+      if (!campo) return;
+      campo.value = sugerirFraseSenha();
+      campo.type = "text";
+      campo.focus();
+      campo.select();
+      toast("Frase sugerida. Guarde-a agora: sem ela não há como recuperar o cofre.", "ok");
+    },
+    // Único caminho para APAGAR uma chave, já que o campo em branco significa "manter".
+    "limpar-chave": async (el) => {
+      const alvo = el.getAttribute("data-alvo");
+      const qual = alvo === "iaKeyReserva" ? "reserva" : "principal";
+      if (!(await confirmar(`Remover a chave ${qual}? A IA para de funcionar até você colar outra.`))) return;
+      store.setConfig({ [alvo]: "" });
+      toast(`Chave ${qual} removida.`);
+      app.refresh();
+    },
     "salvar-ia": () => {
       store.setConfig({
         iaProvider: root.querySelector("#cfg-ia").value,
-        iaKey: root.querySelector("#cfg-key")?.value || "",
-        iaKeyReserva: root.querySelector("#cfg-key2")?.value || "",
+        // Campo vazio = MANTER a chave salva (ela não é renderizada no HTML, então "vazio" não
+        // significa "o usuário apagou"). Para apagar existe o botão "remover a chave salva".
+        ...chaveOuMantem("#cfg-key", "iaKey"),
+        ...chaveOuMantem("#cfg-key2", "iaKeyReserva"),
         iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
       });
       const conectada = store.iaDisponivel();
@@ -759,7 +816,7 @@ export default function renderConfig(root, app) {
       // Usa os valores atuais do formulário (sem precisar salvar antes).
       const cfgTeste = {
         iaProvider: root.querySelector("#cfg-ia").value,
-        iaKey: root.querySelector("#cfg-key")?.value || "",
+        iaKey: chaveEmUso("#cfg-key", "iaKey"), // testar sem redigitar usa a chave já salva
         iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
       };
       const msg = root.querySelector("#ia-msg");
@@ -1107,7 +1164,7 @@ export default function renderConfig(root, app) {
   root.querySelector("#cfg-ia").addEventListener("change", (e) => {
     store.setConfig({
       iaProvider: e.target.value,
-      iaKey: root.querySelector("#cfg-key")?.value || "",
+      ...chaveOuMantem("#cfg-key", "iaKey"), // vazio = mantém (o campo não traz a chave salva)
       iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
     });
     app.refresh();

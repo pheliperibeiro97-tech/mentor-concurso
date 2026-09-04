@@ -45,6 +45,14 @@ async function bytesDe(source) {
   throw new Error("Fonte de PDF não suportada.");
 }
 
+// Fecha o documento e o worker que o pdf.js abriu para ele. Sem isto, cada PDF lido deixava
+// para trás o worker e o cache de páginas: numa biblioteca de cursinho (centenas de apostilas,
+// dezenas de milhares de páginas) a aba ia acumulando até o Safari/iOS matá-la no meio do
+// import. Silencioso de propósito: falhar ao fechar não pode derrubar quem já leu o conteúdo.
+async function fecharPdf(pdf) {
+  try { await pdf?.destroy(); } catch (_) {}
+}
+
 async function abrirPdf(source) {
   const pdfjs = await getPdfjs();
   const data = await bytesDe(source);
@@ -204,6 +212,7 @@ function reconstruirLinhas(items) {
 export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
   const pdfjs = await getPdfjs();
   const pdf = await abrirPdf(source);
+  try {
   const ehImg = (fn) =>
     fn === pdfjs.OPS.paintImageXObject ||
     fn === pdfjs.OPS.paintInlineImageXObject ||
@@ -255,7 +264,13 @@ export async function extrairPdfPaginas(source, { ate, onProgresso } = {}) {
   }
   decidirFiguras(paginas);
   const outline = await lerOutline(pdf);
-  return { paginas, numPaginas: pdf.numPages, outline, linhasPorPagina };
+  const numPaginas = pdf.numPages; // lido ANTES do destroy: depois dele o documento não responde
+  return { paginas, numPaginas, outline, linhasPorPagina };
+  } finally {
+    // Fecha em TODOS os caminhos. Um PDF corrompido no meio de uma fila de 17 apostilas lançava
+    // daqui e deixava o worker preso, e a fila seguia para o arquivo seguinte abrindo outro.
+    await fecharPdf(pdf);
+  }
 }
 
 // Segundo passe: resolve as imagens de PÁGINA CHEIA, que a página sozinha não consegue
@@ -311,22 +326,29 @@ function escalaEfetiva(escala) {
 // `aoPagina(img, i, total)` pode devolver `false` para interromper (ex.: botão Cancelar).
 export async function rasterizarPaginasStream(source, listaN, aoPagina, escala = 2) {
   const pdf = await abrirPdf(source);
-  const esc = escalaEfetiva(escala);
-  const alvos = listaN.filter((n) => n >= 1 && n <= pdf.numPages);
-  for (let i = 0; i < alvos.length; i++) {
-    const n = alvos[i];
-    const page = await pdf.getPage(n);
-    const viewport = page.getViewport({ scale: esc });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const ctx = canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
-    canvas.width = 0; canvas.height = 0; // libera o bitmap antes da próxima página
-    try { page.cleanup(); } catch (_) {}
-    const seguir = await aoPagina({ n, dataUrl }, i, alvos.length);
-    if (seguir === false) break;
+  // `finally`: o laço sai por `break` (botão Cancelar) e pode sair por erro de render. Nos três
+  // caminhos o documento tem de fechar, senão cancelar um OCR longo era o jeito mais fácil de
+  // deixar um worker preso.
+  try {
+    const esc = escalaEfetiva(escala);
+    const alvos = listaN.filter((n) => n >= 1 && n <= pdf.numPages);
+    for (let i = 0; i < alvos.length; i++) {
+      const n = alvos[i];
+      const page = await pdf.getPage(n);
+      const viewport = page.getViewport({ scale: esc });
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+      canvas.width = 0; canvas.height = 0; // libera o bitmap antes da próxima página
+      try { page.cleanup(); } catch (_) {}
+      const seguir = await aoPagina({ n, dataUrl }, i, alvos.length);
+      if (seguir === false) break;
+    }
+  } finally {
+    await fecharPdf(pdf);
   }
 }
 

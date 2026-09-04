@@ -13,6 +13,10 @@ const src = readFileSync("src/sync.js", "utf8").replace(
   "const store = { get: () => ({}) };"
 );
 const dir = mkdtempSync(join(tmpdir(), "sync-v3-"));
+// `sync.js` importa `config-local.js` (a lista de segredos que NAO sobem para o cofre,
+// compartilhada com o backup). O modulo tem de viajar junto para o diretorio temporario,
+// senao o import falha e o teste morre por motivo que nao e o que ele afere.
+writeFileSync(join(dir, "config-local.js"), readFileSync("src/config-local.js", "utf8"));
 const arq = join(dir, "sync.mjs");
 writeFileSync(arq, src);
 const S = await import(pathToFileURL(arq).href);
