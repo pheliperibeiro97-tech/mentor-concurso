@@ -8,6 +8,29 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.27",
+    data: "setembro/2026",
+    titulo: "Seus dados não se perdem mais em silêncio, e os números do app pararam de mentir",
+    itens: [
+      "🔴 SEGURANÇA — o «Backup compartilhável» levava a chave da sua IA e a SENHA DO SEU COFRE dentro do arquivo, num botão que dizia «seguro para compartilhar». A senha do cofre é a identidade dele: quem recebesse o arquivo poderia ler e SOBRESCREVER o seu estudo em qualquer aparelho. Agora as duas coisas saem do arquivo, e a tela diz o que cada backup leva de verdade.",
+      "🔴 Questão colada sem gabarito virava a alternativa «A». Você estudava, «errava» e memorizava uma resposta que o app tinha inventado, e o erro ainda entrava no Caderno como se fosse seu. Agora a questão sem gabarito é marcada em vermelho e o «Adicionar» recusa até você apontar a correta.",
+      "🔴 Quando o app não conseguia SALVAR (espaço acabando, por exemplo), nada aparecia na tela: você estudava a noite inteira e o dia não tinha sido gravado. Agora surge um aviso que fica, com «tentar salvar de novo».",
+      "🔴 Quando o app não conseguia LER os seus dados na abertura, ele se comportava como aparelho novo e o primeiro clique apagava tudo por cima. Agora ele para, avisa que os dados NÃO foram apagados e não grava nada até você escolher o que fazer.",
+      "Material cujo conteúdo não abriu numa sessão passou a dizer isso, em vez de parecer vazio. Isso importa porque «Atualizar material» relê o arquivo e apagaria o que a Visão transcreveu das páginas escaneadas — agora ele pede confirmação nesse caso.",
+      "O dia passou a ser o SEU, não o de Greenwich. Depois das 21h, o contador de hoje zerava, o calendário pintava o quadrado errado e a sua sequência de dias «quebrava» com você estudando.",
+      "Um erro antigo empurrava Revisão para sempre: acertar a mesma questão depois não mudava nada, e tirar o erro do Caderno também não. Agora conta a ÚLTIMA resposta daquela questão.",
+      "As questões feitas no app eram contadas duas vezes no Acompanhamento, por um botão que o próprio app oferecia («usar no registro»). O botão saiu; o campo de questões do registro agora diz claramente que é para as feitas FORA do app.",
+      "«Cobertura do edital» mostrava três números diferentes em três telas. Agora é um só, e ele conta os tópicos concluídos.",
+      "DESFAZER — errou o toque no flashcard e mandou o cartão para daqui a 30 dias? «desfazer a última nota» (ou a tecla Z) devolve o agendamento. Na lista de questões, «Não era essa» apaga a resposta, diferente de «Refazer», que acrescenta uma tentativa nova.",
+      "O simulado sobrevive ao F5: antes, recarregar a página no meio da prova apagava respostas, embaralho e tempo. Ele volta pausado, com tudo. E sair da tela agora pausa a prova, em vez de deixar o relógio correndo.",
+      "Feriado no Planejamento passou a existir: o campo estava lá e não era lido por nada, então o plano marcava tarefa no feriado. A semana sem dia útil também deixou de dizer que o problema era falta de tópico.",
+      "Ao importar vários arquivos de uma vez, o aviso de «sem disciplina» era silenciado se UM nome entre dezenas parecesse uma matéria. E «refinar com IA» mandava o edital inteiro, desfazendo a matéria que o import tinha acertado: era daí que vinha aula de português vinculada a Direito Constitucional.",
+      "Trocar, criar ou remover concurso no meio de uma geração da IA agora é recusado com aviso: o lote cairia no concurso errado. O cronômetro passou a saber de qual concurso é o tempo, e o registro avisa quando ele veio de outro.",
+      "Apagar um concurso passou a apagar também os PDFs, as páginas e o índice dele, que antes ficavam ocupando espaço no banco para sempre.",
+      "Nota: o agendamento dos flashcards continua sendo a escada 24h · 7 · 15 · 30 dias, como sempre foi. O que mudou foi o comentário no código, que se descrevia como «SM-2» sem ser.",
+    ],
+  },
+  {
     v: "0.8.26",
     data: "agosto/2026",
     titulo: "Correção: cada material subia duas vezes na sincronização",
