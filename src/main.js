@@ -598,6 +598,182 @@ function ligarAutoOcultarFabs(content) {
   }, { passive: true });
 }
 
+// ===== AUD-26, fase A: o chrome deixa de ser refeito a cada mudança de estado =====
+// Até aqui QUALQUER commit reescrevia o `#app` inteiro — barra lateral, topo, barra
+// inferior e conteúdo. Marcar uma tarefa no celular reconstruía o aplicativo, e o
+// auto-sync, que carimba o próprio estado, fazia isso sozinho a cada três minutos.
+// Agora o esqueleto é montado uma vez e cada peça do chrome só é reescrita quando o HTML
+// dela de fato muda. O `#content` continua sendo trocado por inteiro: isso é a fase B.
+let shellMontado = false;
+let htmlNav = "";
+let htmlTopbar = "";
+let htmlBottom = "";
+
+const fecharDrawer = () => document.body.classList.remove("nav-aberta");
+
+// A gaveta do celular é aberta pelo botão "Mais" da barra inferior, mas fechada por quatro
+// caminhos (destino, fundo escuro, Esc, navegação). O botão declara o estado para o leitor
+// de tela, então quem fecha precisa avisá-lo — daí ser função de módulo, e não um fechamento
+// preso ao render que a montou.
+function sincronizarMais() {
+  document
+    .querySelector("[data-mbb-mais]")
+    ?.setAttribute("aria-expanded", document.body.classList.contains("nav-aberta") ? "true" : "false");
+}
+
+// Trocar de perfil troca TODO o estudo à vista. Se houver cronômetro rodando, o tempo
+// seria contado para o concurso errado — então avisamos antes em vez de trocar calado.
+async function trocarDePerfil(id) {
+  if (cronoSnapshot().running) {
+    const ok = await confirmar(
+      "O cronômetro está rodando. Trocando de concurso agora, o tempo em andamento não será registrado neste. Trocar mesmo assim?"
+    );
+    if (!ok) return;
+  }
+  const r = store.trocarPerfil(id);
+  // A geração escreve no concurso ATIVO quando a resposta chega: trocar no meio faria o lote
+  // inteiro cair no concurso novo. Aqui não há "trocar mesmo assim": é esperar.
+  if (r === "gerando") {
+    return void toast("Há uma geração em andamento. Espere ela terminar para trocar de concurso, senão as questões entram no concurso errado.", "erro");
+  }
+  if (r) {
+    app.navigate("hoje");
+    toast("Concurso trocado.");
+  }
+}
+
+// O seletor de concurso nasce em DOIS lugares (barra lateral e topo), conforme a largura
+// da tela, então quem liga os botões são as duas peças.
+function ligarPerfil(escopo) {
+  escopo.querySelectorAll("[data-perfil-ir]").forEach((b) =>
+    b.addEventListener("click", () => trocarDePerfil(b.getAttribute("data-perfil-ir")))
+  );
+  escopo.querySelectorAll("[data-perfil-novo]").forEach((b) => b.addEventListener("click", () => {
+    // Sem pedir nome aqui: quem pergunta "qual concurso você vai prestar?" é o onboarding,
+    // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
+    // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
+    // Criar concurso troca o ATIVO, e a geração escreve no ativo quando a resposta chega.
+    if (store.criarPerfil() === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para criar outro concurso, senão as questões entram no concurso novo.", "erro");
+    }
+    iniciarFluxoNovoConcurso(); // o fluxo do concurso novo tem começo e fim próprios
+    app.navigate("hoje");
+  }));
+  escopo.querySelectorAll("[data-perfil-renomear]").forEach((b) => b.addEventListener("click", async () => {
+    const atual = store.perfis().find((p) => p.ativo);
+    if (!atual) return;
+    const nome = await pedirTexto("Renomear concurso:", { valor: atual.nome });
+    if (!nome) return;
+    store.renomearPerfil(atual.id, nome);
+    app.refresh();
+  }));
+  escopo.querySelectorAll("[data-perfil-remover]").forEach((b) => b.addEventListener("click", async () => {
+    const atual = store.perfis().find((p) => p.ativo);
+    if (!atual) return;
+    const ok = await confirmar(
+      `Remover "${atual.nome}" apaga o edital, os materiais, as questões, os flashcards e todo o histórico DESTE concurso. Os outros não são afetados, mas esta ação é irreversível.`
+    );
+    if (!ok) return;
+    // Apagar o concurso ativo troca o ativo, e ainda destruiria o destino do lote em voo.
+    if (store.removerPerfil(atual.id) === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para remover o concurso.", "erro");
+    }
+    app.navigate("hoje");
+    toast("Concurso removido.");
+  }));
+}
+
+function ligarNav(el) {
+  if (!el) return;
+  el.setAttribute("id", "app-sidebar"); // alvo do aria-controls do botão "Mais"
+  el.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      fecharDrawer(); // no mobile, navegar pela sidebar fecha o drawer
+      const atl = btn.getAttribute("data-atalho");
+      if (atl) {
+        const a = (store.get().config.atalhos || []).find((x) => x.id === atl);
+        navegarAtalho(a);
+      } else {
+        app.navigate(btn.getAttribute("data-rota"));
+      }
+    });
+  });
+  el.querySelector("[data-toggle-sidebar]")?.addEventListener("click", () => {
+    store.setConfig({ navFixa: !store.get().config.navFixa });
+  });
+  el.querySelector("[data-novidades]")?.addEventListener("click", () => {
+    abrirNovidades(store);
+    render(); // some o badge após ver
+  });
+  // Abre/fecha os grupos colapsáveis (Estudar/Praticar/Revisar) sem trocar de tela.
+  el.querySelectorAll(".nav-sec-head").forEach((h) => {
+    h.addEventListener("click", () => {
+      const g = h.getAttribute("data-grupo");
+      if (!gruposNavAbertos) gruposNavAbertos = new Set();
+      if (gruposNavAbertos.has(g)) gruposNavAbertos.delete(g);
+      else gruposNavAbertos.add(g);
+      render();
+    });
+  });
+  ligarPerfil(el);
+}
+
+function ligarTopbar(el) {
+  if (!el) return;
+  // Barra de comando no topo: abre a mesma paleta do atalho Ctrl/⌘+K.
+  el.querySelector("[data-cmdk]")?.addEventListener("click", () => abrirPaleta(app));
+  // Chips do topbar que navegam (ex.: ofensiva → constância).
+  el.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => app.navigate(b.getAttribute("data-nav"))));
+  // Toggle de tema no topbar (move a função que estava só em Configurações).
+  el.querySelector("[data-toggle-tema]")?.addEventListener("click", () => store.setConfig({ tema: store.get().config.tema === "escuro" ? "claro" : "escuro" }));
+  ligarPerfil(el);
+}
+
+function ligarBottomBar(el) {
+  if (!el) return;
+  // Barra inferior (mobile): navegar pelas áreas + alternar o drawer "Mais".
+  el.querySelectorAll(".mbb-item[data-rota]").forEach((b) => {
+    b.addEventListener("click", () => { fecharDrawer(); app.navigate(b.getAttribute("data-rota")); });
+  });
+  // A gaveta do celular declara o estado (aria-expanded) e o Esc fecha — antes só o toque no
+  // fundo escuro ou num destino fechava, e leitor de tela não sabia que aquele botão abria
+  // alguma coisa.
+  const btnMais = el.querySelector("[data-mbb-mais]");
+  btnMais?.setAttribute("aria-controls", "app-sidebar");
+  btnMais?.addEventListener("click", () => { document.body.classList.toggle("nav-aberta"); sincronizarMais(); });
+  sincronizarMais();
+}
+
+// Troca uma peça do chrome no lugar, sem tocar nas outras nem no conteúdo, e religa só ela.
+function trocarPeca(root, seletor, html, ligar) {
+  const atual = root.querySelector(seletor);
+  if (!atual) return;
+  const molde = document.createElement("div");
+  molde.innerHTML = html.trim();
+  const novo = molde.firstElementChild;
+  if (!novo) return;
+  atual.replaceWith(novo);
+  ligar(novo);
+}
+
+function montarShell(root, nav, top, bottom) {
+  root.innerHTML = `
+    <div class="shell">
+      ${nav}
+      <div class="main-col">
+        ${top}
+        <main class="content" id="content"></main>
+      </div>
+    </div>
+    <div class="nav-backdrop" id="nav-backdrop"></div>
+    ${bottom}`;
+  ligarNav(root.querySelector(".sidebar"));
+  ligarTopbar(root.querySelector(".topbar"));
+  ligarBottomBar(root.querySelector(".mobile-bottombar"));
+  root.querySelector("#nav-backdrop")?.addEventListener("click", () => { fecharDrawer(); sincronizarMais(); });
+  shellMontado = true;
+}
+
 function render(preservarScroll = true) {
   esconderTooltip(); // re-render/navegação destrói a âncora — sem isto o portal fica "preso" visível
   const root = document.getElementById("app");
@@ -628,139 +804,42 @@ function render(preservarScroll = true) {
   document.body.classList.toggle("onboarding", noOnboarding);
   atualizarChatVisibilidade(!noOnboarding);
   if (noOnboarding) {
+    shellMontado = false; // o onboarding toma o #app: o chrome terá de ser remontado depois
     cleanupAtual = renderOnboardingFull(root);
     return;
   }
 
-  root.innerHTML = `
-    <div class="shell">
-      ${navHTML()}
-      <div class="main-col">
-        ${topbarHTML(store)}
-        <main class="content" id="content"></main>
-      </div>
-    </div>
-    <div class="nav-backdrop" id="nav-backdrop"></div>
-    ${bottomBarHTML()}`;
-
-  const fecharDrawer = () => document.body.classList.remove("nav-aberta");
-
-  root.querySelectorAll(".nav-item").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      fecharDrawer(); // no mobile, navegar pela sidebar fecha o drawer
-      const atl = btn.getAttribute("data-atalho");
-      if (atl) {
-        const a = (store.get().config.atalhos || []).find((x) => x.id === atl);
-        navegarAtalho(a);
-      } else {
-        app.navigate(btn.getAttribute("data-rota"));
-      }
-    });
-  });
-
-  // Barra inferior (mobile): navegar pelas áreas + alternar o drawer "Mais".
-  root.querySelectorAll(".mbb-item[data-rota]").forEach((b) => {
-    b.addEventListener("click", () => { fecharDrawer(); app.navigate(b.getAttribute("data-rota")); });
-  });
-  root.querySelector("[data-toggle-sidebar]")?.addEventListener("click", () => {
-    store.setConfig({ navFixa: !store.get().config.navFixa });
-  });
-  root.querySelector("[data-novidades]")?.addEventListener("click", () => {
-    abrirNovidades(store);
-    render(); // some o badge após ver
-  });
-  // Barra de comando no topo: abre a mesma paleta do atalho Ctrl/⌘+K.
-  root.querySelector("[data-cmdk]")?.addEventListener("click", () => abrirPaleta(app));
-  // Chips do topbar que navegam (ex.: ofensiva → constância).
-  root.querySelectorAll("[data-nav]").forEach((b) => b.addEventListener("click", () => app.navigate(b.getAttribute("data-nav"))));
-  // Toggle de tema no topbar (move a função que estava só em Configurações).
-  root.querySelector("[data-toggle-tema]")?.addEventListener("click", () => store.setConfig({ tema: store.get().config.tema === "escuro" ? "claro" : "escuro" }));
-
-  // ----- Seletor de perfil (concurso) -----
-  // Trocar de perfil troca TODO o estudo à vista. Se houver cronômetro rodando, o tempo
-  // seria contado para o concurso errado — então avisamos antes em vez de trocar calado.
-  const trocarDePerfil = async (id) => {
-    if (cronoSnapshot().running) {
-      const ok = await confirmar(
-        "O cronômetro está rodando. Trocando de concurso agora, o tempo em andamento não será registrado neste. Trocar mesmo assim?"
-      );
-      if (!ok) return;
-    }
-    const r = store.trocarPerfil(id);
-    // A geração escreve no concurso ATIVO quando a resposta chega: trocar no meio faria o lote
-    // inteiro cair no concurso novo. Aqui não há "trocar mesmo assim": é esperar.
-    if (r === "gerando") {
-      return void toast("Há uma geração em andamento. Espere ela terminar para trocar de concurso, senão as questões entram no concurso errado.", "erro");
-    }
-    if (r) {
-      app.navigate("hoje");
-      toast("Concurso trocado.");
-    }
-  };
-  root.querySelectorAll("[data-perfil-ir]").forEach((b) =>
-    b.addEventListener("click", () => trocarDePerfil(b.getAttribute("data-perfil-ir")))
-  );
-  root.querySelectorAll("[data-perfil-novo]").forEach((b) => b.addEventListener("click", () => {
-    // Sem pedir nome aqui: quem pergunta "qual concurso você vai prestar?" é o onboarding,
-    // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
-    // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
-    // Criar concurso troca o ATIVO, e a geração escreve no ativo quando a resposta chega.
-    if (store.criarPerfil() === "gerando") {
-      return void toast("Há uma geração em andamento. Espere ela terminar para criar outro concurso, senão as questões entram no concurso novo.", "erro");
-    }
-    iniciarFluxoNovoConcurso(); // o fluxo do concurso novo tem começo e fim próprios
-    app.navigate("hoje");
-  }));
-  root.querySelectorAll("[data-perfil-renomear]").forEach((b) => b.addEventListener("click", async () => {
-    const atual = store.perfis().find((p) => p.ativo);
-    if (!atual) return;
-    const nome = await pedirTexto("Renomear concurso:", { valor: atual.nome });
-    if (!nome) return;
-    store.renomearPerfil(atual.id, nome);
-    app.refresh();
-  }));
-  root.querySelectorAll("[data-perfil-remover]").forEach((b) => b.addEventListener("click", async () => {
-    const atual = store.perfis().find((p) => p.ativo);
-    if (!atual) return;
-    const ok = await confirmar(
-      `Remover "${atual.nome}" apaga o edital, os materiais, as questões, os flashcards e todo o histórico DESTE concurso. Os outros não são afetados, mas esta ação é irreversível.`
-    );
-    if (!ok) return;
-    // Apagar o concurso ativo troca o ativo, e ainda destruiria o destino do lote em voo.
-    if (store.removerPerfil(atual.id) === "gerando") {
-      return void toast("Há uma geração em andamento. Espere ela terminar para remover o concurso.", "erro");
-    }
-    app.navigate("hoje");
-    toast("Concurso removido.");
-  }));
-
-  // Gaveta do celular: o botão "Mais" declara o estado (aria-expanded) e o Esc fecha —
-  // antes só o toque no fundo escuro ou num destino fechava, e leitor de tela não sabia
-  // que aquele botão abria alguma coisa.
-  const btnMais = root.querySelector("[data-mbb-mais]");
-  const sincronizarMais = () => btnMais?.setAttribute("aria-expanded", document.body.classList.contains("nav-aberta") ? "true" : "false");
-  btnMais?.setAttribute("aria-controls", "app-sidebar");
-  root.querySelector(".sidebar")?.setAttribute("id", "app-sidebar");
+  // O chrome só é reescrito quando o HTML dele muda. No commit típico (marcar tarefa,
+  // responder questão) as três peças saem idênticas e o DOM delas não é tocado; nav e topo
+  // mudam quando muda a rota ativa, um selo de pendência ou a ofensiva.
+  const nav = navHTML();
+  const top = topbarHTML(store);
+  const bottom = bottomBarHTML();
+  // A tela de licença e a de recuperação também moram no #app: se uma delas passou por aqui,
+  // o esqueleto não existe mais, ainda que a marca diga que sim.
+  if (!shellMontado || !root.querySelector(".shell")) {
+    montarShell(root, nav, top, bottom);
+  } else {
+    if (nav !== htmlNav) trocarPeca(root, ".sidebar", nav, ligarNav);
+    if (top !== htmlTopbar) trocarPeca(root, ".topbar", top, ligarTopbar);
+    if (bottom !== htmlBottom) trocarPeca(root, ".mobile-bottombar", bottom, ligarBottomBar);
+  }
+  htmlNav = nav;
+  htmlTopbar = top;
+  htmlBottom = bottom;
   sincronizarMais();
-  btnMais?.addEventListener("click", () => { document.body.classList.toggle("nav-aberta"); sincronizarMais(); });
-  root.querySelector("#nav-backdrop")?.addEventListener("click", () => { fecharDrawer(); sincronizarMais(); });
-
-  // Abre/fecha os grupos colapsáveis (Estudar/Praticar/Revisar) sem trocar de tela.
-  root.querySelectorAll(".nav-sec-head").forEach((h) => {
-    h.addEventListener("click", () => {
-      const g = h.getAttribute("data-grupo");
-      if (!gruposNavAbertos) gruposNavAbertos = new Set();
-      if (gruposNavAbertos.has(g)) gruposNavAbertos.delete(g);
-      else gruposNavAbertos.add(g);
-      render();
-    });
-  });
 
   const rota = ROTAS.find((r) => r.id === rotaAtual) || ROTAS[0];
   const content = root.querySelector("#content");
+  // O `#content` agora SOBREVIVE ao render, e duas coisas que o nó recém-criado dava de
+  // graça passam a ser explícitas: esvaziar o que estava lá (tela que faça append em vez de
+  // substituir duplicaria o conteúdo) e reiniciar a animação de troca de tela.
+  content.innerHTML = "";
+  content.classList.remove("rota-enter");
   // Movimento: fade suave SÓ quando a tela muda (não a cada re-render de estado), p/
   // tirar a sensação "seca" da troca instantânea sem piscar ao responder uma questão.
   if (rotaAtual !== rotaRenderizada) {
+    void content.offsetWidth; // reflow: no mesmo nó, sem isto a animação não recomeça
     content.classList.add("rota-enter");
     rotaRenderizada = rotaAtual;
   }
@@ -772,16 +851,15 @@ function render(preservarScroll = true) {
   setOrbsOffline(!store.iaDisponivel()); // Fase 2: orb informa o estado (apagado sem IA)
   montarOrbs(document); // orb "vivo" (plasma canvas) em todo .orb novo; ignora os já montados
   ligarAutoOcultarFabs(content); // celular: os 3 flutuantes saem da frente ao rolar
-  if (scrollAnterior) {
-    // Reforça a restauração em vários momentos: imediato, próximos frames e um tick.
-    // Evita o "pulo para o topo" quando o conteúdo recém-renderizado ainda não foi
-    // medido (o navegador faz clamp para 0 antes de o layout estabilizar) — caso típico
-    // ao responder uma questão, que re-renderiza a tela inteira.
-    const restaurar = () => { content.scrollTop = scrollAnterior; };
-    restaurar();
-    requestAnimationFrame(() => { restaurar(); requestAnimationFrame(restaurar); });
-    setTimeout(restaurar, 0);
-  }
+  // Reforça a restauração em vários momentos: imediato, próximos frames e um tick.
+  // Evita o "pulo para o topo" quando o conteúdo recém-renderizado ainda não foi
+  // medido (o navegador faz clamp para 0 antes de o layout estabilizar) — caso típico
+  // ao responder uma questão, que re-renderiza a tela inteira. Vale também para o ZERO:
+  // com o nó persistente, navegar não zera mais a rolagem sozinho.
+  const restaurar = () => { content.scrollTop = scrollAnterior; };
+  restaurar();
+  requestAnimationFrame(() => { restaurar(); requestAnimationFrame(restaurar); });
+  setTimeout(restaurar, 0);
 }
 
 async function bootstrap() {
@@ -917,8 +995,12 @@ async function bootstrap() {
   // é exatamente o "parece que recarregou" ao passar de card — quase invisível no desktop e
   // muito evidente no celular, onde reconstruir o app inteiro custa caro. Quem fecha o foco
   // sempre chama `app.refresh()`, então a tela de trás volta atualizada.
-  store.subscribe(() => {
+  store.subscribe((_, motivos) => {
     if (document.querySelector(".fc-foco")) return;
+    // Só metadado de sincronização mudou: o auto-sync marca início e fim a cada três
+    // minutos, e com o app à vista isso remontava a tela no meio da leitura, sem ninguém
+    // ter clicado em nada. Nenhuma tela mostra esse estado, exceto Configurações.
+    if (motivos && motivos.size === 1 && motivos.has("sync-meta") && rotaAtual !== "config") return;
     render();
   });
   render();

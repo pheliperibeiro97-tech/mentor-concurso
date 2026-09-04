@@ -1029,24 +1029,33 @@ let state = migrarParaPerfis(defaultState());
 instalarAcessores(); // app zerado (sem estado salvo) já nasce com as coleções roteadas
 let saveTimer = null;
 let emitAgendado = false;
+let motivosEmit = new Set(); // motivos dos commits desde o último aviso (ver agendarEmit)
 // Lote de geração atual: quando um handler abre um lote (iniciarLoteGeracao), TODO flashcard/questão
 // criado enquanto ele estiver aberto recebe o mesmo geracaoId — permite mostrar "só os recém-gerados".
 let loteGeracao = null;
 let geracoesEmVoo = 0; // quantas gerações estão em curso (trava a sync automática)
 
-function emit() {
-  for (const fn of listeners) fn(state);
+function emit(motivos) {
+  for (const fn of listeners) fn(state, motivos);
 }
 
 // Notificação deferida (microtask): garante que o handler do evento termine de
 // ajustar o estado LOCAL da tela (ex.: fechar formulário, zerar cronômetro)
 // ANTES do re-render. Coalesce múltiplos commits do mesmo handler num só render.
-function agendarEmit() {
+//
+// O aviso carrega os MOTIVOS acumulados desde o último, para quem escuta poder distinguir
+// mudança de dados de ruído. O caso que motivou isto: o auto-sync marca "sincronizando" e
+// depois "igual" a cada três minutos, e cada marca dessas remontava o app inteiro no meio
+// da leitura. Sem motivo declarado, vale "estado" — e aí ninguém filtra nada.
+function agendarEmit(motivo) {
+  motivosEmit.add(motivo || 'estado');
   if (emitAgendado) return;
   emitAgendado = true;
   queueMicrotask(() => {
     emitAgendado = false;
-    emit();
+    const motivos = motivosEmit;
+    motivosEmit = new Set();
+    emit(motivos);
   });
 }
 
@@ -1205,7 +1214,7 @@ function commit(opts) {
   if (!opts || !opts.semCarimbo) state.modificadoEm = new Date().toISOString();
   recolherOrfas(); // nenhuma coleção escapa para o topo entre a escrita e o save
   persist();
-  agendarEmit();
+  agendarEmit(opts && opts.motivo);
 }
 
 export const store = {
@@ -9484,7 +9493,9 @@ export const store = {
   // src/sync-nuvem.js.
   setSyncNuvemMeta(patch) {
     state.config.syncNuvem = { ...(state.config.syncNuvem || {}), ...patch };
-    commit({ semCarimbo: true });
+    // Metadado de sincronização não é dado de estudo: quem escuta pode ignorar (ver
+    // agendarEmit). Só a tela de Configurações mostra isso.
+    commit({ semCarimbo: true, motivo: 'sync-meta' });
   },
   // ---------- atalhos personalizados (HOJE e, opcional, barra lateral) ----------
   addAtalho({ nome, tipo, alvo, icone, naNav, noHoje }) {
