@@ -81,6 +81,25 @@ async function sha256b64url(txt) {
   return b64url(bufB64(h));
 }
 // Endereço do cofre = hash da senha com um "tempero" fixo do app (namespacing).
+// ⚠️ Por que o id do cofre NÃO virou um PBKDF2 de alto custo (auditoria AUD-06, 03/09/2026).
+//
+// O achado é correto: o id é um SHA-256 simples da senha, enquanto a CIFRA usa PBKDF2 com 210
+// mil iterações. Ou seja, o localizador não tem fator de trabalho e a chave tem.
+//
+// Mas a conta muda quando se olha o que o atacante precisa fazer. Não existe oráculo offline: o
+// id sozinho não prova nada, ele precisa PERGUNTAR ao servidor se aquele cofre existe. O ataque
+// é limitado pela rede, não pela CPU — então o que o encarece é limite de requisição no
+// servidor e uma senha que não se adivinha, não um fator de trabalho no hash.
+//
+// E mudar a derivação custaria caro no lugar errado: o id é o caminho do envelope E dos ~495
+// objetos de conteúdo (`/v1/cofre/:id/p/:doc`, ~48 MB). Escrever nos dois ids durante a
+// migração duplicaria isso; escrever só no novo faria o aparelho ainda na versão antiga
+// continuar gravando no id velho, e as duas versões divergiriam em silêncio — exatamente a
+// classe de defeito que esta onda existe para eliminar.
+//
+// A defesa foi para onde ela de fato resolve: SENHA FORTE (abaixo) e `If-Match` no servidor.
+// O limite de requisição por IP continua em aberto: precisa de um binding no Cloudflare que
+// não dá para provisionar com segurança daqui. Está registrado como pendência.
 export async function cofreId(frase) {
   return sha256b64url("mentor-concurso|cofre|v1|" + frase);
 }
@@ -155,10 +174,17 @@ function urlCofre(id) {
   return `${base}/v1/cofre/${encodeURIComponent(id)}`;
 }
 // GET → envelope (ou null se o cofre ainda não existe).
+// Versão do cofre que ESTE aparelho leu por último. Vai no `If-Match` da subida seguinte, para
+// o servidor recusar a gravação quando outro aparelho tiver subido no meio do caminho.
+// Vive na memória: se o app reiniciar, a próxima subida é incondicional, que é o comportamento
+// de sempre. A guarda serve para a janela em que dois aparelhos estão ativos juntos.
+let etagLido = null;
+
 async function baixarEnvelope(id) {
   const resp = await fetch(urlCofre(id), { method: "GET", headers: { Accept: "application/json" } });
-  if (resp.status === 404) return null;
+  if (resp.status === 404) { etagLido = null; return null; }
   if (!resp.ok) throw new Error(`Cofre: HTTP ${resp.status} ao baixar.`);
+  etagLido = resp.headers.get("ETag");
   const txt = (await resp.text()).trim();
   if (!txt) return null;
   try { return JSON.parse(txt); } catch (_) { return null; }
@@ -166,10 +192,25 @@ async function baixarEnvelope(id) {
 async function subirEnvelope(id, env) {
   const resp = await fetch(urlCofre(id), {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(etagLido ? { "If-Match": etagLido } : {}) },
     body: JSON.stringify(env),
   });
+  // 412: outro aparelho gravou depois da nossa leitura. Não insistir — quem chamou precisa
+  // baixar de novo e reconciliar, que é o caminho normal do newest-wins. Antes disso, a nossa
+  // versão simplesmente apagava a do outro.
+  if (resp.status === 412) {
+    etagLido = null; // a próxima tentativa recomeça pela leitura
+    // A mensagem não promete repetir agora: quem repete é a próxima sincronização automática
+    // (ao voltar o foco, ao alterar algo, ao sair), e ela começa baixando, então reconcilia.
+    // Nada se perde nesta recusa: o que estava para subir continua aqui.
+    const e = new Error("Outro aparelho sincronizou primeiro. Nada foi perdido: a próxima sincronização traz o que mudou lá antes de enviar o daqui.");
+    e.code = "CONFLITO";
+    throw e;
+  }
   if (!resp.ok) throw new Error(`Cofre: HTTP ${resp.status} ao enviar.`);
+  // A gravação virou a versão corrente; o ETag antigo não vale mais. Sem limpar, a subida
+  // seguinte usaria um ETag vencido e tomaria 412 sozinha.
+  etagLido = resp.headers.get("ETag") || null;
 }
 
 // ---- conteúdo por material (v3) --------------------------------------------
@@ -341,20 +382,66 @@ function fraseAtual() {
 
 // ---- API de alto nível -----------------------------------------------------
 
+// A senha do cofre é a ÚNICA credencial que existe: ela deriva o endereço (`cofreId`) e a chave
+// de cifra. Não há conta, não há segundo fator, não há recuperação. Uma senha de 6 caracteres,
+// que era o mínimo, está entre as primeiras de qualquer lista de dicionário: quem a adivinhar lê
+// e SOBRESCREVE o estudo inteiro, em qualquer aparelho.
+//
+// 12 caracteres é o mínimo agora. Não é arbitrário: uma frase curta de 3 ou 4 palavras passa
+// disso naturalmente, e é o que o gerador abaixo propõe.
+const MIN_SENHA = 12;
+
+// Lista curta de palavras comuns em português, sem acento e sem ambiguidade de grafia — o que
+// importa numa frase-senha é ser fácil de digitar e de lembrar, não ter vocabulário rico.
+// Quatro palavras destas 128 dão 2^28 combinações, e o app ainda intercala um número.
+const PALAVRAS = ("agua areia arroz azul banco barco bolo bravo cabo caixa calor campo capa carro casa cedo ceu chave chuva cinza claro copo corda corpo costa dado dedo dente doce duro escada esfera falcao farol favo febre feira ferro festa fibra ficha filme fogo folha forte fruta fumo galho ganso garfo gelo gesso globo gosto grama grave greve grito grupo horta jarra jogo jornal junco justo lago lampada lapis largo leite lenco letra livro lobo lona luar lupa maca malha manga mapa marca massa mesa milho moeda molho monte morro motor muro nave neve ninho nobre noite norte nota nuvem obra onda ouro ovelha padre palco papel parede passo pato pedra peixe pena perto peso pinho placa planta ponte porta posto prato praia preto prova queda queijo raiz ramo rede regra remo rio risco roda rosa sabor saco sala selo sino sopa sorte sul teia telha tempo terra teto tigre tinta torre trave trigo tubo turma vaga vale vapor vela vento verde vidro vinho voz zebra").split(" ");
+
+// Gera uma frase-senha com aleatoriedade do sistema (nunca `Math.random`, que é previsível).
+export function sugerirFraseSenha() {
+  const n = 4;
+  const sorteio = new Uint32Array(n + 1);
+  crypto.getRandomValues(sorteio);
+  const palavras = [];
+  for (let i = 0; i < n; i++) palavras.push(PALAVRAS[sorteio[i] % PALAVRAS.length]);
+  // Um número no fim afasta a frase de qualquer lista pronta de combinações de palavras.
+  return palavras.join("-") + "-" + (10 + (sorteio[n] % 90));
+}
+
+// Mensagem única, para as duas portas de entrada dizerem a mesma coisa.
+function conferirSenha(frase) {
+  if (frase.length < MIN_SENHA) {
+    const e = new Error(
+      `A senha do cofre precisa de pelo menos ${MIN_SENHA} caracteres. Ela é o endereço E a chave dos seus dados: ` +
+      `quem a adivinhar lê e sobrescreve o seu estudo. Uma frase de 3 ou 4 palavras já resolve — use o botão "sugerir uma frase".`
+    );
+    e.code = "SENHA_CURTA";
+    throw e;
+  }
+}
+
 // Conecta este aparelho ao cofre: valida a senha contra o que já existe na nuvem (se houver)
 // e faz a 1ª sincronização. Se o cofre estiver vazio, sobe o estado local.
 export async function conectarNuvem(frase, { endpoint, dica } = {}) {
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a sincronização na nuvem.");
   frase = (frase || "").trim();
-  if (frase.length < 6) throw new Error("Escolha uma senha com pelo menos 6 caracteres (fácil de você lembrar).");
-  // Grava a senha (e endpoint avançado) localmente ANTES de sincronizar.
-  marcar({ frase, endpoint: (endpoint || "").trim() || undefined, ...(dica !== undefined ? { dica: String(dica).slice(0, 80) } : {}) });
+  if (!frase) throw new Error("Escolha uma senha para o seu cofre.");
+  // A exigência de senha forte vale para COFRE NOVO. Quem já tem um cofre criado com a senha
+  // curta de antes precisa continuar entrando nele: barrar aqui trancaria o usuário para fora
+  // dos próprios dados, que é pior que o risco que a regra evita.
   const id = await cofreId(frase);
   const env = await baixarEnvelope(id);
+  if (!env) conferirSenha(frase); // não existe cofre nesta senha: é criação
+  // Grava a senha (e endpoint avançado) localmente ANTES de sincronizar.
+  marcar({ frase, endpoint: (endpoint || "").trim() || undefined, ...(dica !== undefined ? { dica: String(dica).slice(0, 80) } : {}) });
   if (env) {
     // Cofre já existe: valida a senha decifrando. Se a senha estiver errada, aborta a conexão.
     try { await decifrar(frase, env); }
     catch (e) { marcar({ frase: "", conectado: false }); throw e; }
+    // Entrou num cofre existente com senha fraca: avisa, sem bloquear. Trocar a senha move o
+    // cofre de endereço, então é decisão do usuário e não coisa para fazer no meio de um login.
+    if (frase.length < MIN_SENHA) {
+      try { window.dispatchEvent(new CustomEvent("mentor:senha-fraca", { detail: { minimo: MIN_SENHA } })); } catch (_) {}
+    }
   }
   marcar({ conectado: true, cofre: id.slice(0, 8), erro: "" });
   return sincronizarNuvem({ motivo: "conexao" });
@@ -366,7 +453,10 @@ export async function conectarNuvem(frase, { endpoint, dica } = {}) {
 export async function restaurarDaNuvem(frase, { endpoint, dica } = {}) {
   if (!suportaSyncNuvem()) throw new Error("Este ambiente não suporta a restauração segura.");
   frase = (frase || "").trim();
-  if (frase.length < 6) throw new Error("A senha tem pelo menos 6 caracteres.");
+  // Sem mínimo aqui, de propósito: restaurar é o caminho de quem está TRAZENDO um cofre que já
+  // existe para um aparelho novo. Exigir senha forte neste ponto trancaria para fora quem criou
+  // o cofre quando o mínimo era 6.
+  if (!frase) throw new Error("Digite a senha do seu cofre.");
   marcar({ frase, endpoint: (endpoint || "").trim() || undefined, ...(dica !== undefined ? { dica: String(dica).slice(0, 80) } : {}) });
   const id = await cofreId(frase);
   const envRemoto = await baixarEnvelope(id);

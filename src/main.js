@@ -966,6 +966,18 @@ async function bootstrap() {
   // pode ter vindo do chat, de um atalho ou de qualquer tela, então o aviso mora aqui, num
   // lugar só, ouvindo o evento que o store emite.
   let fecharAvisoConteudo = null;
+  // Entrou num cofre que já existe usando uma senha curta (criada quando o mínimo era 6).
+  // Não bloqueia: trocar a senha muda o ENDEREÇO do cofre, então é decisão do usuário, com
+  // calma, e não algo para empurrar no meio de um login.
+  window.addEventListener("mentor:senha-fraca", (ev) => {
+    const min = ((ev && ev.detail) || {}).minimo || 12;
+    toast(
+      `A senha do seu cofre é curta (menos de ${min} caracteres). Ela é o endereço E a chave dos seus dados: ` +
+      `considere trocá-la por uma frase de 3 ou 4 palavras em Configurações.`,
+      "erro"
+    );
+  });
+
   // Gravação que falhou. Antes morria num `console.error`: o aluno estudava e o dia não tinha
   // sido salvo, sem nada na tela. O aviso é PERSISTENTE de propósito (não é toast de 3 s) —
   // continuar estudando por cima de um app que não grava é o pior dos dois mundos.

@@ -13,7 +13,7 @@ import { backendName, espacoDoNavegador } from "../persistence.js";
 import { MODELO_PADRAO, testarConexao, iaDisponivel, GEMINI_FALLBACKS, CLAUDE_MODELOS } from "../ia-provider.js";
 import { NAV_ITENS, NAV_FIXOS, ordemNavEfetiva, gruposNav } from "../main.js";
 import { abrirGuia } from "./ajuda.js";
-import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem } from "../sync-nuvem.js";
+import { suportaSyncNuvem, conectarNuvem, sincronizarNuvem, desconectarNuvem, resolverPendenciaNuvem, sugerirFraseSenha } from "../sync-nuvem.js";
 
 // "há X" curto para o status de sincronização.
 function haQuanto(iso) {
@@ -499,10 +499,11 @@ export default function renderConfig(root, app) {
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-frase">Senha</label>
                      <div class="campo-senha">
-                       <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, fácil de lembrar" />
+                       <input id="nuvem-frase" type="password" class="input" autocomplete="off" placeholder="uma frase sua, com 3 ou 4 palavras" />
                        <button type="button" class="ver-senha" data-action="ver-senha" data-alvo="nuvem-frase" aria-label="Mostrar a senha" data-tip="Mostrar/ocultar a senha">${icone("eye")}</button>
                      </div>
                    </div>
+                   <p class="muted small u-m-0 u-mt-4">Esta senha é o <b>endereço e a chave</b> dos seus dados na nuvem: não há conta, nem e-mail de recuperação. Quem a adivinhar lê e sobrescreve o seu estudo, então ela precisa ser difícil de adivinhar e você precisa conseguir lembrar. <button type="button" class="lnk" data-action="sugerir-frase">${icone("sparkles")} sugerir uma frase</button></p>
                    <div class="form-linha u-mt-8">
                      <label class="small" for="nuvem-dica">Dica <span class="muted">(opcional)</span></label>
                      <input id="nuvem-dica" type="text" class="input" autocomplete="off" maxlength="80" value="${esc(sn.dica || "")}" placeholder="algo que lembre a frase — não escreva a senha aqui" />
@@ -776,6 +777,18 @@ export default function renderConfig(root, app) {
     },
     "set-tema": (el) => {
       store.setConfig({ tema: el.getAttribute("data-tema") });
+    },
+    // Frase-senha sorteada com aleatoriedade do sistema. Preenche o campo e o REVELA: uma senha
+    // que o usuário não consegue ler é uma senha que ele não anota nem memoriza, e aqui não há
+    // recuperação possível.
+    "sugerir-frase": () => {
+      const campo = root.querySelector("#nuvem-frase");
+      if (!campo) return;
+      campo.value = sugerirFraseSenha();
+      campo.type = "text";
+      campo.focus();
+      campo.select();
+      toast("Frase sugerida. Guarde-a agora: sem ela não há como recuperar o cofre.", "ok");
     },
     // Único caminho para APAGAR uma chave, já que o campo em branco significa "manter".
     "limpar-chave": async (el) => {
