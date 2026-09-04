@@ -284,7 +284,11 @@ export function montarChat(store, app) {
         const webHTML = r.fontesWeb && r.fontesWeb.length
           ? `<div class="chat-web-fontes"><b class="chat-nota">${icone("globe")} Fontes da web:</b>${r.fontesWeb
               .slice(0, 6)
-              .map((f) => `<a href="${esc(f.uri)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>`)
+              // `esc()` protege o HTML, mas não o ESQUEMA da URL: `javascript:...` passava
+              // escapado e continuava executando no clique. Estes links vêm do grounding do
+              // Gemini, então a origem não é o nosso código. Só http(s) vira link.
+              .filter((f) => /^https?:\/\//i.test(String(f.uri || "")))
+              .map((f) => `<a href="${esc(f.uri)}" target="_blank" rel="noopener noreferrer">${esc(f.titulo)}</a>`)
               .join("")}</div>`
           : "";
         // Rodapé de origem: quando apoiado no material, a própria nota é o "abridor"
