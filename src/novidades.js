@@ -8,6 +8,24 @@ import { abrirJanela } from "./ui.js";
 // Changelog (mais recente primeiro). Cada versão: { v, data, itens:[...] }.
 export const NOVIDADES = [
   {
+    v: "0.8.28",
+    data: "setembro/2026",
+    titulo: "Seus segredos pararam de circular, e o app na web virou produto de verdade",
+    itens: [
+      "🔴 SEGURANÇA — a chave da sua IA viajava dentro do endereço das chamadas (e endereço fica em histórico, em log de rede e em mensagem de erro) e ficava escrita no HTML da própria página, legível por qualquer extensão do navegador. Agora vai num cabeçalho, e o campo de configuração nasce vazio: deixe em branco para manter a chave salva, ou use «remover a chave salva».",
+      "🔴 A senha do cofre exigia só 6 caracteres, sendo ela o endereço E a chave dos seus dados na nuvem — não há conta, e-mail de recuperação nem segundo fator. Cofre novo agora pede 12 caracteres, e há um botão que sugere uma frase de 4 palavras. Quem já tem cofre com senha curta continua entrando normalmente; o app só avisa.",
+      "🔴 Dois aparelhos podiam se sobrescrever ao sincronizar. Agora o servidor recusa gravar por cima de uma versão que o seu aparelho não viu, e a próxima sincronização traz o que mudou antes de enviar.",
+      "🔴 Duas janelas do app abertas ao mesmo tempo se apagavam mutuamente: cada uma grava o estado inteiro, então a última a salvar vencia. Agora o app funciona numa janela por vez e diz isso, com saída para o caso de a outra ter travado.",
+      "🔴 O navegador podia apagar a sua biblioteca inteira para liberar espaço, porque tratava os dados do app como cache. Agora o app pede que sejam preservados, e Configurações mostra quanto você ocupa, quanto cabe, e avisa se ainda estiverem sujeitos a limpeza automática.",
+      "O texto dos seus materiais é enviado à IA como CONTEÚDO A ANALISAR, com uma regra explícita de que nada dentro dele é ordem. Uma apostila com instruções escondidas no meio do texto não consegue mais mudar o que a IA faz.",
+      "Resumos gerados por IA passaram por uma revisão de segurança: o app agora aceita apenas a formatação que um resumo precisa (títulos, listas, tabelas, negrito, links) e descarta o resto, mantendo o texto.",
+      "No aplicativo de computador: o cronômetro flutuante virou uma janelinha de verdade, que fica acima de qualquer programa. Antes ela só ficava acima da própria janela do app, o que não servia para estudar num PDF com o tempo à vista.",
+      "No celular: importar PDF agora funciona sem internet (o leitor de PDF passou a ser guardado junto com o app) e o ícone na tela de início deixou de sair borrado.",
+      "Abrir vários PDFs numa sessão deixou de acumular memória. Em bibliotecas grandes, isso era o que fazia o app travar ou fechar sozinho no meio de uma importação.",
+      "O Mentor no chat aprendeu a abrir cinco telas que ele não conhecia: Simulados, Mapas mentais, Revisões, o Guia e o «Por onde começar».",
+    ],
+  },
+  {
     v: "0.8.27",
     data: "setembro/2026",
     titulo: "Seus dados não se perdem mais em silêncio, e os números do app pararam de mentir",
