@@ -6,16 +6,21 @@ import * as crono from "./cronometro.js";
 import { abrirMapaCompleto } from "./mapa-mental.js";
 import { rotuloDocumento } from "./estrutura.js";
 
-const ROTAS_VALIDAS = new Set([
-  "hoje", "planejamento", "diagnostico", "mentor", "edital", "documentos", "leiseca",
-  "jurisprudencia", "pratica", "pratica-ce", "correcao", "flashcards", "revtopico", "erros", "resumos", "config",
-]);
+// Telas que o chat sabe abrir. Tem de bater com o `ROTAS` do `main.js`: faltavam cinco telas
+// que existem (Simulados, Mapas mentais, Revisões, o Guia e o "Por onde começar"), então pedir
+// "abre os simulados" ao Mentor respondia "qual tela você quer abrir?".
+// A lista é duplicada aqui de propósito: importar de `main.js` fecharia um ciclo de módulos
+// (main → chat → chat-acoes → main). Quem impede a divergência é `dev/teste-rotas-chat.mjs`,
+// que compara os dois arquivos e falha quando uma rota nova não chega aqui.
 const NOME_TELA = {
   hoje: "Hoje", planejamento: "Planejamento", diagnostico: "Acompanhamento", mentor: "Mentor IA",
   edital: "Edital", documentos: "Materiais", leiseca: "Lei Seca", jurisprudencia: "Jurisprudência",
-  pratica: "Questões", "pratica-ce": "Questões C/E", correcao: "Discursiva", flashcards: "Flashcards",
-  revtopico: "Revisão de Tópicos", erros: "Caderno de Erros", resumos: "Resumos", config: "Configurações",
+  resumos: "Resumos", mapas: "Mapas mentais",
+  pratica: "Questões", "pratica-ce": "Questões C/E", correcao: "Escrita", simulados: "Simulados",
+  revisoes: "Revisões", flashcards: "Flashcards", revtopico: "Revisão de Tópicos", erros: "Caderno de Erros",
+  config: "Configurações", ajuda: "Guia do sistema", comecar: "Por onde começar",
 };
+const ROTAS_VALIDAS = new Set(Object.keys(NOME_TELA));
 const FASE_NOME = { E: "Estudo", A: "Prática", R: "Revisão" };
 
 function clampInt(v, min, max, pad) {

@@ -23,7 +23,10 @@ export default defineConfig({
       // O worker flutuante do cronômetro (crono.html) NÃO deve cair no fallback de SPA.
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff2,png,svg}"],
-        globIgnores: ["**/pdf.worker*"], // 1,4 MB só p/ importar PDF (tarefa de desktop) — carrega da rede quando precisar
+        // O worker do pdf.js ENTRA no precache. Ele ficava de fora com a justificativa de que
+        // importar PDF é "tarefa de desktop" — não é: a web importa PDF, e é no celular que a
+        // conexão falha. Sem ele em cache, importar offline quebrava com o app parecendo
+        // instalado e completo. São 1,4 MB pagos uma vez na instalação.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/crono/, /^\/v1\//],
@@ -39,8 +42,14 @@ export default defineConfig({
         display: "standalone",
         background_color: "#ffffff",
         theme_color: "#1d4ed8",
+        // Android pede 192 e 512; iOS usa o maior que achar. Havia só um 256x256, que não é
+        // nenhum dos dois: o ícone da tela de início saía reescalado e borrado.
+        // `maskable` é o que deixa o Android recortar no formato do sistema (círculo, squircle)
+        // sem cortar o desenho — sem ele, o ícone ganha a moldura branca de "app de site".
         icons: [
-          { src: "/brand-logo.png", sizes: "256x256", type: "image/png", purpose: "any" },
+          { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
     }),
