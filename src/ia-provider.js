@@ -144,6 +144,16 @@ function chamarVisaoJson(cfg, { system, user, mimeType, dataB64, temperature = 0
 
 // fetch com TIMEOUT (evita "Processando…" infinito quando a API trava/sobrecarrega) e 1 retry
 // automático em erros 5xx transitórios (ex.: 503 "high demand" do Gemini, comum no tier grátis).
+// Cabeçalhos das chamadas ao Gemini, com a chave no HEADER e não na query string.
+//
+// A chave viajava em `?key=...` nas cinco chamadas. URL não é lugar de segredo: ela entra no
+// histórico do navegador, nos logs de qualquer proxy corporativo no caminho, no `Referer` e nas
+// mensagens de erro que o próprio app mostra e que o usuário cola num relatório de diagnóstico.
+// O `x-goog-api-key` é o cabeçalho oficial da API e não aparece em nenhum desses lugares.
+function cabecalhosGemini(cfg) {
+  return { "Content-Type": "application/json", "x-goog-api-key": (cfg.iaKey || "").trim() };
+}
+
 async function fetchIA(url, opts, nome, timeoutMs = 60000) {
   const TIMEOUT_MS = timeoutMs;
   for (let tentativa = 0; tentativa < 2; tentativa++) {
@@ -232,8 +242,7 @@ function chamarGemini(cfg, opts) {
 async function chamarGeminiRaw(cfg, { system, user, json, temperature }) {
   const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.gemini;
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent` +
-    `?key=${encodeURIComponent(cfg.iaKey.trim())}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`;
   const body = {
     contents: [{ role: "user", parts: [{ text: user }] }],
     generationConfig: {
@@ -245,7 +254,7 @@ async function chamarGeminiRaw(cfg, { system, user, json, temperature }) {
 
   const resp = await fetchIA(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabecalhosGemini(cfg),
     body: JSON.stringify(body),
   }, "Gemini");
   const data = await resp.json();
@@ -980,8 +989,7 @@ export async function responderChat(cfg, { pergunta, fontes, web, perfil }) {
 async function geminiStreamRaw(cfg, { system, contents, temperature = 0.4, tools, onChunk, signal }) {
   const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.gemini;
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:streamGenerateContent` +
-    `?alt=sse&key=${encodeURIComponent(cfg.iaKey.trim())}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:streamGenerateContent` + `?alt=sse`;
   const body = {
     contents,
     generationConfig: { temperature },
@@ -990,7 +998,7 @@ async function geminiStreamRaw(cfg, { system, contents, temperature = 0.4, tools
   };
   let resp;
   try {
-    resp = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal });
+    resp = await fetch(url, { method: "POST", headers: cabecalhosGemini(cfg), body: JSON.stringify(body), signal });
   } catch (e) {
     if (e && e.name === "AbortError") throw e; // parada pedida pelo usuário: propaga como está
     const err = new Error(`Gemini: falha de conexão (${e && e.message ? e.message : "rede"}).`);
@@ -1089,8 +1097,7 @@ function responderChatWebGemini(cfg, opts) {
 async function responderChatWebGeminiRaw(cfg, { system, user }) {
   const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.gemini;
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent` +
-    `?key=${encodeURIComponent(cfg.iaKey.trim())}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`;
   const body = {
     contents: [{ role: "user", parts: [{ text: user }] }],
     systemInstruction: { parts: [{ text: system }] },
@@ -1099,7 +1106,7 @@ async function responderChatWebGeminiRaw(cfg, { system, user }) {
   };
   const resp = await fetchIA(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabecalhosGemini(cfg),
     body: JSON.stringify(body),
   }, "Gemini (web)");
   const data = await resp.json();
@@ -1803,8 +1810,7 @@ function chamarGeminiVisao(cfg, opts) {
 async function chamarGeminiVisaoRaw(cfg, { system, user, mimeType, dataB64, temperature = 0.1, json = false, timeoutMs }) {
   const modelo = (cfg.iaModelo || "").trim() || MODELO_PADRAO.gemini;
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent` +
-    `?key=${encodeURIComponent(cfg.iaKey.trim())}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:generateContent`;
   const body = {
     contents: [{ role: "user", parts: [{ text: user }, { inlineData: { mimeType, data: dataB64 } }] }],
     systemInstruction: { parts: [{ text: system }] },
@@ -1822,7 +1828,7 @@ async function chamarGeminiVisaoRaw(cfg, { system, user, mimeType, dataB64, temp
   };
   const resp = await fetchIA(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabecalhosGemini(cfg),
     body: JSON.stringify(body),
   }, "Gemini (visão)", timeoutMs);
   const data = await resp.json();
@@ -2230,8 +2236,7 @@ function embedUm(cfg, modelo, texto, taskType) {
 
 async function embedUmRaw(cfg, modelo, texto, taskType) {
   const url =
-    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:embedContent` +
-    `?key=${encodeURIComponent(cfg.iaKey.trim())}`;
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelo)}:embedContent`;
   const body = {
     model: `models/${modelo}`,
     content: { parts: [{ text: texto }] },
@@ -2240,7 +2245,7 @@ async function embedUmRaw(cfg, modelo, texto, taskType) {
   };
   const resp = await fetchIA(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: cabecalhosGemini(cfg),
     body: JSON.stringify(body),
   }, "Gemini (embedding)");
   const data = await resp.json();

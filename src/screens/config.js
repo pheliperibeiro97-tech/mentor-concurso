@@ -56,6 +56,12 @@ export default function renderConfig(root, app) {
   const iaInativa = ["offline"].includes(cfg.iaProvider);
   // Provedores que NÃO usam chave de API (Claude Code local usa a autenticação local da CLI).
   const semChave = cfg.iaProvider === "claude-cli";
+  // A chave NÃO é renderizada no campo. Ela vinha em `value=`, então o segredo ficava no HTML da
+  // página: legível por qualquer extensão, por um "inspecionar elemento" e por qualquer captura
+  // de tela da aba. O campo nasce vazio e "vazio" significa "mantenha a que está" — por isso
+  // existe um botão explícito para remover, senão não haveria como apagá-la.
+  const temChaveSalva = !!(cfg.iaKey || "").trim();
+  const temReservaSalva = !!(cfg.iaKeyReserva || "").trim();
   // "Sem meta por enquanto": nenhuma das 3 metas definida.
   const semMetas = !cfg.metaDiariaMin && !cfg.metaSemanalMin && !cfg.metaMensalMin;
   const nt = cfg.notificacoes || {};
@@ -280,12 +286,14 @@ export default function renderConfig(root, app) {
         </label>
       </div>
       <label>Chave de API
-        <input id="cfg-key" type="password" value="${esc(cfg.iaKey || "")}" placeholder="${semChave ? "não precisa — usa a autenticação local do Claude Code" : "cole a chave aqui"}" ${iaInativa || semChave ? "disabled" : ""} />
+        <input id="cfg-key" type="password" value="" autocomplete="off" placeholder="${semChave ? "não precisa — usa a autenticação local do Claude Code" : temChaveSalva ? "chave salva · deixe em branco para manter" : "cole a chave aqui"}" ${iaInativa || semChave ? "disabled" : ""} />
+        ${temChaveSalva && !semChave ? `<button type="button" class="lnk cfg-key-limpar" data-action="limpar-chave" data-alvo="iaKey">${icone("trash-2")} remover a chave salva</button>` : ""}
       </label>
       ${
         cfg.iaProvider === "gemini"
           ? `<label>Chave reserva <span class="muted small" data-tip="Opcional. Use uma 2ª chave grátis do Gemini (de outra conta Google). Ela só entra em ação automaticamente quando a chave principal estoura a cota diária (erro 429) — no uso normal, a principal é sempre usada.">${icone("info")}</span>
-        <input id="cfg-key2" type="password" value="${esc(cfg.iaKeyReserva || "")}" placeholder="opcional — entra só quando a principal esgota a cota" ${iaInativa ? "disabled" : ""} />
+        <input id="cfg-key2" type="password" value="" autocomplete="off" placeholder="${temReservaSalva ? "chave salva · deixe em branco para manter" : "opcional — entra só quando a principal esgota a cota"}" ${iaInativa ? "disabled" : ""} />
+        ${temReservaSalva ? `<button type="button" class="lnk cfg-key-limpar" data-action="limpar-chave" data-alvo="iaKeyReserva">${icone("trash-2")} remover a chave reserva</button>` : ""}
       </label>`
           : ""
       }
@@ -638,6 +646,17 @@ export default function renderConfig(root, app) {
     root.querySelector(sel)?.addEventListener("change", () => salvarNotif(false))
   );
 
+  // O campo de chave nasce VAZIO (a chave não é renderizada no HTML). Então "vazio" quer dizer
+  // "não mexi nisto", e não "apague". Devolve `{}` nesse caso, para o `setConfig` nem tocar no
+  // campo; devolve `{chave: valor}` quando o usuário digitou algo.
+  const chaveOuMantem = (seletor, campo) => {
+    const v = (root.querySelector(seletor)?.value || "").trim();
+    return v ? { [campo]: v } : {};
+  };
+  // A chave em uso agora: a digitada, ou a que já está salva. O "Testar" precisa disso, senão
+  // testar sem redigitar diria "cole a chave" com a chave salva funcionando.
+  const chaveEmUso = (seletor, campo) => (root.querySelector(seletor)?.value || "").trim() || (store.get().config[campo] || "").trim();
+
   bindActions(root, {
     "abrir-guia": () => abrirGuia(),
     "enviar-sugestao": () => {
@@ -744,11 +763,22 @@ export default function renderConfig(root, app) {
     "set-tema": (el) => {
       store.setConfig({ tema: el.getAttribute("data-tema") });
     },
+    // Único caminho para APAGAR uma chave, já que o campo em branco significa "manter".
+    "limpar-chave": async (el) => {
+      const alvo = el.getAttribute("data-alvo");
+      const qual = alvo === "iaKeyReserva" ? "reserva" : "principal";
+      if (!(await confirmar(`Remover a chave ${qual}? A IA para de funcionar até você colar outra.`))) return;
+      store.setConfig({ [alvo]: "" });
+      toast(`Chave ${qual} removida.`);
+      app.refresh();
+    },
     "salvar-ia": () => {
       store.setConfig({
         iaProvider: root.querySelector("#cfg-ia").value,
-        iaKey: root.querySelector("#cfg-key")?.value || "",
-        iaKeyReserva: root.querySelector("#cfg-key2")?.value || "",
+        // Campo vazio = MANTER a chave salva (ela não é renderizada no HTML, então "vazio" não
+        // significa "o usuário apagou"). Para apagar existe o botão "remover a chave salva".
+        ...chaveOuMantem("#cfg-key", "iaKey"),
+        ...chaveOuMantem("#cfg-key2", "iaKeyReserva"),
         iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
       });
       const conectada = store.iaDisponivel();
@@ -759,7 +789,7 @@ export default function renderConfig(root, app) {
       // Usa os valores atuais do formulário (sem precisar salvar antes).
       const cfgTeste = {
         iaProvider: root.querySelector("#cfg-ia").value,
-        iaKey: root.querySelector("#cfg-key")?.value || "",
+        iaKey: chaveEmUso("#cfg-key", "iaKey"), // testar sem redigitar usa a chave já salva
         iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
       };
       const msg = root.querySelector("#ia-msg");
@@ -1107,7 +1137,7 @@ export default function renderConfig(root, app) {
   root.querySelector("#cfg-ia").addEventListener("change", (e) => {
     store.setConfig({
       iaProvider: e.target.value,
-      iaKey: root.querySelector("#cfg-key")?.value || "",
+      ...chaveOuMantem("#cfg-key", "iaKey"), // vazio = mantém (o campo não traz a chave salva)
       iaModelo: root.querySelector("#cfg-modelo")?.value.trim() || "",
     });
     app.refresh();

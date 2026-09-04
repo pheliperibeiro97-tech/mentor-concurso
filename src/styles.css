@@ -7354,3 +7354,8 @@ button.ml-d:hover { box-shadow: 0 0 0 2px var(--primary-l); transform: translate
   border-radius: 8px; line-height: 1.4;
 }
 .rsx-aviso-perfil svg { flex-shrink: 0; width: 15px; height: 15px; margin-top: 2px; }
+
+/* "remover a chave salva": o campo de chave nasce vazio (a chave nao vai para o HTML), entao
+   vazio significa "manter" e precisa existir um caminho explicito para apagar. */
+.cfg-key-limpar { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: var(--fs-xs); color: var(--danger-ink); }
+.cfg-key-limpar svg { width: 13px; height: 13px; }
