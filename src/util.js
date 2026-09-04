@@ -57,6 +57,12 @@ export function diaLocal(carimbo) {
   if (!carimbo) return "";
   const txt = String(carimbo);
   if (/^\d{4}-\d{2}-\d{2}$/.test(txt)) return txt; // já é dia puro
+  // DATA ESCOLHIDA À MÃO. O app grava `yyyy-mm-ddT12:00:00.000Z` quando o aluno escolhe o dia
+  // no calendário: meio-dia em UTC foi escolhido justamente para o dia não escorregar. Aqui ele
+  // é devolvido literal, sem passar pelo fuso. Converter faria a escolha do aluno virar outro
+  // dia em UTC+12/+13, e o `<input type="date">` do histórico deixaria de bater na ida e volta.
+  const escolhida = txt.match(/^(\d{4}-\d{2}-\d{2})T12:00:00\.000Z$/);
+  if (escolhida) return escolhida[1];
   const d = new Date(txt);
   if (Number.isNaN(d.getTime())) return txt.slice(0, 10); // carimbo estranho: não piora
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;

@@ -570,9 +570,9 @@ export default function renderDiagnostico(root, app) {
       const hoje = new Date();
       const seg = new Date(hoje); seg.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
       const iniISO = `${seg.getFullYear()}-${String(seg.getMonth() + 1).padStart(2, "0")}-${String(seg.getDate()).padStart(2, "0")}`;
-      const sem = (st2.sessoes || []).filter((s) => (s.data || "").slice(0, 10) >= iniISO);
+      const sem = (st2.sessoes || []).filter((s) => diaLocal(s.data) >= iniISO);
       const minSem = Math.round(sem.reduce((a, s) => a + (s.tempoSeg || 0), 0) / 60);
-      const tents = (st2.tentativas || []).filter((s) => (s.data || "").slice(0, 10) >= iniISO);
+      const tents = (st2.tentativas || []).filter((s) => diaLocal(s.data) >= iniISO);
       const acer = tents.filter((x) => x.acertou).length;
       const resumoNums = `tempo ${minSem} min em ${sem.length} sessões; questões ${tents.length} (${tents.length ? Math.round((acer / tents.length) * 100) : 0}% de acerto)`;
       app.perguntarNoChat(`Explique minha semana de estudos em linguagem simples e me diga o que ajustar (números desta semana: ${resumoNums}).`);

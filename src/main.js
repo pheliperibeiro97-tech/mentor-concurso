@@ -703,7 +703,10 @@ function render(preservarScroll = true) {
     // Sem pedir nome aqui: quem pergunta "qual concurso você vai prestar?" é o onboarding,
     // logo em seguida. Perguntar nos dois lugares fazia o app guardar um nome de perfil e
     // um cargo diferentes, convivendo. O nome passa a ser derivado do concurso.
-    store.criarPerfil();
+    // Criar concurso troca o ATIVO, e a geração escreve no ativo quando a resposta chega.
+    if (store.criarPerfil() === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para criar outro concurso, senão as questões entram no concurso novo.", "erro");
+    }
     iniciarFluxoNovoConcurso(); // o fluxo do concurso novo tem começo e fim próprios
     app.navigate("hoje");
   }));
@@ -722,7 +725,10 @@ function render(preservarScroll = true) {
       `Remover "${atual.nome}" apaga o edital, os materiais, as questões, os flashcards e todo o histórico DESTE concurso. Os outros não são afetados, mas esta ação é irreversível.`
     );
     if (!ok) return;
-    store.removerPerfil(atual.id);
+    // Apagar o concurso ativo troca o ativo, e ainda destruiria o destino do lote em voo.
+    if (store.removerPerfil(atual.id) === "gerando") {
+      return void toast("Há uma geração em andamento. Espere ela terminar para remover o concurso.", "erro");
+    }
     app.navigate("hoje");
     toast("Concurso removido.");
   }));

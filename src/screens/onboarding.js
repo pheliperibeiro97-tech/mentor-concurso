@@ -374,8 +374,12 @@ export default function renderOnboarding(root, app) {
         const atual = store.perfis().find((p) => p.ativo);
         if (!atual) return;
         if (!(await confirmar(`Descartar "${atual.nome}"? Ele está vazio — nada do outro concurso é afetado.`))) return;
+        // Não deveria haver geração num concurso recém-criado, mas se houver, o descarte é
+        // recusado e o aviso não pode dizer "descartado" sobre algo que ficou.
+        if (store.removerPerfil(atual.id) === "gerando") {
+          return void toast("Há uma geração em andamento. Espere ela terminar para descartar este concurso.", "erro");
+        }
         encerrarFluxoNovoConcurso();
-        store.removerPerfil(atual.id);
         passo = 1;
         app.navigate("hoje");
         toast("Concurso descartado.");

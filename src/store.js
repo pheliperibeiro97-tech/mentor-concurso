@@ -1066,7 +1066,12 @@ async function restaurarEmbeddings() {
   if (!blobsDisponiveis()) return;
   for (const p of state.perfis || []) {
     try {
-      const guardado = await getBlob(`emb:${p.id}`);
+      // `lerBlob` pelo mesmo motivo das páginas: falha de leitura não pode passar por
+      // "não há índice". Aqui o estrago é menor (não há um "Atualizar" que apague OCR, e
+      // `salvarEmbeddingsSujos` recua quando `blobsOk` cai), mas a busca semântica ficaria
+      // muda até o próximo boot sem nada dizer por quê.
+      const { ok, valor: guardado } = await lerBlob(`emb:${p.id}`);
+      if (!ok) { console.warn("[emb] índice não pôde ser lido nesta sessão:", p.id); continue; }
       if (guardado && typeof guardado === "object" && Array.isArray(guardado.itens)) {
         p.embeddings = guardado;
         embSalvos.set(p.id, assinaturaEmb(p)); // veio do disco: já está gravado
@@ -1516,7 +1521,13 @@ export const store = {
   // Cria um perfil VAZIO (nasce do default, sem herdar nada do atual) e troca para ele.
   // O onboarding cuida de preencher concurso/edital — é a mesma porta de entrada do
   // primeiro uso, reaproveitada.
+  // Devolve o id do perfil novo, ou `"gerando"` se houver geração em voo.
+  // MESMA guarda do `trocarPerfil`, e pelo mesmo motivo: isto também troca o perfil ATIVO, e a
+  // geração escreve no ativo quando a resposta chega. Sem esta guarda o AUD-20 continuava
+  // aberto pela porta dos fundos: "Novo concurso" no meio de uma geração jogava o lote inteiro
+  // no concurso recém-criado, vazio.
   criarPerfil(nome) {
+    if (geracoesEmVoo > 0) return "gerando";
     const base = migrarParaPerfis(defaultState());
     const novo = base.perfis[0];
     novo.id = uid("perf");
@@ -1539,9 +1550,13 @@ export const store = {
   },
   // Remover é irreversível e leva junto TODO o estudo daquele concurso — a tela confirma
   // antes. O último perfil não pode ser removido (o app ficaria sem estado).
+  // `"gerando"` pela mesma razão do `criarPerfil`: apagar o perfil ativo troca o ativo, e o
+  // lote em voo cairia no concurso que sobrou. Além disso, apagar o perfil no qual a geração
+  // está escrevendo destruiria o próprio destino do lote.
   removerPerfil(id) {
     const ps = state.perfis || [];
     if (ps.length < 2) return false;
+    if (geracoesEmVoo > 0) return "gerando";
     const i = ps.findIndex((p) => p.id === id);
     if (i < 0) return false;
     const alvo = ps[i];
@@ -4559,10 +4574,14 @@ export const store = {
     // ficam lado a lado) empurrava o cartão por 30 dias sem volta: a única saída era esperar,
     // ou adiar à mão. Fica só o último, em memória, e some ao recarregar o app, que é o
     // comportamento certo para um "Ctrl+Z" de sessão.
+    // Guarda o OBJETO do erro automático, não só "existia". Um booleano fazia o desfazer
+    // recriar o registro do zero, com id e data novos, perdendo o `motivoErro` e a `duvida`
+    // que o aluno já tivesse classificado nele, e furando qualquer tela ancorada no id antigo.
+    const erroAuto = state.errosManuais.find((e) => e.flashcardId === id && e.auto) || null;
     ultimaRevisao = {
       flashcardId: id,
       sm2: { ...f.sm2 },
-      erroAutoExistia: state.errosManuais.some((e) => e.flashcardId === id && e.auto),
+      erroAuto: erroAuto ? { ...erroAuto } : null,
     };
     f.sm2 = sm2.revisar(f.sm2, quality);
     state.revisoes.push({ id: uid("rev"), flashcardId: id, nota: quality, data: nowISO() });
@@ -4592,7 +4611,7 @@ export const store = {
   // desfazer. Só o último, e só nesta sessão.
   desfazerUltimaRevisao() {
     if (!ultimaRevisao) return null;
-    const { flashcardId, sm2: anterior, erroAutoExistia } = ultimaRevisao;
+    const { flashcardId, sm2: anterior, erroAuto } = ultimaRevisao;
     const f = state.flashcards.find((x) => x.id === flashcardId);
     if (!f) { ultimaRevisao = null; return null; }
     f.sm2 = anterior;
@@ -4601,14 +4620,9 @@ export const store = {
       if (state.revisoes[i].flashcardId === flashcardId) { state.revisoes.splice(i, 1); break; }
     }
     const temAgora = state.errosManuais.some((e) => e.flashcardId === flashcardId && e.auto);
-    if (erroAutoExistia && !temAgora) {
-      state.errosManuais.push({
-        id: uid("errm"), flashcardId, auto: true,
-        disciplinaId: f.disciplinaId || null, topicoId: f.topicoId || null,
-        descricao: `[Flashcard] ${f.frente}`, correto: f.verso || "", suaResposta: "",
-        motivoErro: null, comentarioIA: f.comentarioIA || null, duvida: null, data: nowISO(),
-      });
-    } else if (!erroAutoExistia && temAgora) {
+    if (erroAuto && !temAgora) {
+      state.errosManuais.push({ ...erroAuto }); // o registro ORIGINAL de volta, com id, data, motivo e dúvida
+    } else if (!erroAuto && temAgora) {
       state.errosManuais = state.errosManuais.filter((e) => !(e.flashcardId === flashcardId && e.auto));
     }
     ultimaRevisao = null;
@@ -4659,7 +4673,7 @@ export const store = {
       else aprendizado += 1;
     }
     const limite = addDays(hoje, -(Math.max(1, dias) - 1));
-    const revs = state.revisoes.filter((r) => r.flashcardId && (r.data || "").slice(0, 10) >= limite);
+    const revs = state.revisoes.filter((r) => r.flashcardId && diaLocal(r.data) >= limite);
     const revisados = revs.length;
     const acertos = revs.filter((r) => (r.nota || 0) >= 3).length;
     return {
@@ -5022,7 +5036,7 @@ export const store = {
   resumoLeituraHoje(norma = null) {
     const hoje = todayISO();
     const lei = state.indicacoes.filter((i) => i.tipo === "lei" && !i.metaLeitura && (!norma || normaDaReferencia(i.referencia) === norma));
-    const lidosHoje = lei.filter((i) => (i.lidoEm || "").slice(0, 10) === hoje).length;
+    const lidosHoje = lei.filter((i) => diaLocal(i.lidoEm) === hoje).length;
     const qDe = new Map(state.questoes.filter((q) => q.treino && q.treino.indicacaoId).map((q) => [q.id, q.treino.indicacaoId]));
     const tLei = state.tentativas.filter((t) => diaLocal(t.data) === hoje && qDe.has(t.questaoId));
     const acertos = tLei.filter((t) => t.acertou).length;
@@ -5053,7 +5067,7 @@ export const store = {
     const hoje = todayISO();
     const limite = addDays(hoje, -21);
     const porDia = {};
-    for (const i of arts) { const d = (i.lidoEm || "").slice(0, 10); if (d && d >= limite) porDia[d] = (porDia[d] || 0) + 1; }
+    for (const i of arts) { const d = diaLocal(i.lidoEm); if (d && d >= limite) porDia[d] = (porDia[d] || 0) + 1; }
     const dias = Object.keys(porDia);
     const ritmoDia = dias.length ? dias.reduce((s, d) => s + porDia[d], 0) / dias.length : 0;
     const previsaoDias = ritmoDia > 0 && faltam > 0 ? Math.ceil(faltam / ritmoDia) : null;
@@ -5066,7 +5080,7 @@ export const store = {
     // Leitura NESTA semana (Dom–hoje) — momento/ofensiva leve.
     const dowHoje = new Date(hoje + "T12:00:00").getDay();
     const inicioSem = addDays(hoje, -dowHoje);
-    const lidosSemana = arts.filter((i) => (i.lidoEm || "").slice(0, 10) >= inicioSem).length;
+    const lidosSemana = arts.filter((i) => diaLocal(i.lidoEm) >= inicioSem).length;
     return {
       total, lidos, faltam, pct: total ? Math.round((100 * lidos) / total) : 0,
       dominados, pctDominado: total ? Math.round((100 * dominados) / total) : 0,
@@ -7902,7 +7916,7 @@ export const store = {
       simulados: (() => {
         const rs = this.simuladosResumo();
         const ult = this.simuladosLista()[0] || null;
-        return { total: rs.total, media: rs.media, melhor: rs.melhor, ultimo: ult ? { aproveitamento: ult.aproveitamento, data: (ult.data || "").slice(0, 10), nome: ult.nome } : null };
+        return { total: rs.total, media: rs.media, melhor: rs.melhor, ultimo: ult ? { aproveitamento: ult.aproveitamento, data: diaLocal(ult.data), nome: ult.nome } : null };
       })(),
       disciplinas: diag.porDisciplina.map((l) => ({
         id: l.disciplina.id,
@@ -8084,7 +8098,7 @@ export const store = {
     if (resVenc > 0) lista.push({ key: "revresumo", icone: "file-text", txt: `${resVenc} ${resVenc === 1 ? "resumo" : "resumos"} para revisar hoje`, acao: { rota: "revisoes", label: "Revisar" } });
     // Ofensiva prestes a quebrar: você tem sequência de dias mas ainda não estudou hoje.
     const ofens = (snap.comportamento && snap.comportamento.ofensivaDias) || 0;
-    const estudouHoje = (state.sessoes || []).some((s) => (s.data || "").slice(0, 10) === todayISO());
+    const estudouHoje = (state.sessoes || []).some((s) => diaLocal(s.data) === todayISO());
     if (ofens >= 3 && !estudouHoje) lista.push({ key: "ofensiva", icone: "flame", txt: `Sua sequência de ${ofens} dias quebra hoje se você não estudar`, acao: { rota: "hoje", label: "Estudar agora" } });
     // Simulados: queda no último vs. sua média; ou, sem nenhum simulado e prova perto, um diagnóstico.
     const simList = this.simuladosLista();
@@ -8241,7 +8255,7 @@ export const store = {
   // não havia ponte: revisar dava baixa mas não virava/sugeria sessão).
   revisadosHoje() {
     const hoje = todayISO();
-    const feitas = (state.revisoesFeitas || []).filter((r) => (r.data || "").slice(0, 10) === hoje);
+    const feitas = (state.revisoesFeitas || []).filter((r) => diaLocal(r.data) === hoje);
     const ids = new Set();
     for (const r of feitas) {
       let tid = null;
@@ -8322,6 +8336,8 @@ export const store = {
       return {
         disciplina: d,
         totalTopicos: topicos.length,
+        // Nome legado: e o numero de topicos CONCLUIDOS (topicoCoberto = !!t.concluido).
+        // Fica como esta para nao quebrar leitor externo; a copy deixou de dizer "material".
         topicosComMaterial: comMaterial,
         cobertura: topicos.length ? Math.round((comMaterial / topicos.length) * 100) : 0,
         totalTentativas: totalQ,
@@ -8348,7 +8364,7 @@ export const store = {
     if (fracas.length === 1) sugestoes.push(`Reforce ${fracas[0].disciplina.nome}: aproveitamento de ${fracas[0].percentAcerto}% (abaixo de 60%).`);
     else if (fracas.length > 1) sugestoes.push(`Reforce ${fracas.length} disciplinas com aproveitamento abaixo de 60%: ${lista(fracas)}.`);
     if (semCobertura.length === 1) sugestoes.push(`Cobertura baixa em ${semCobertura[0].disciplina.nome}: ${semCobertura[0].cobertura}% dos tópicos concluídos.`);
-    else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos com material/questões): ${lista(semCobertura)}.`);
+    else if (semCobertura.length > 1) sugestoes.push(`Cobertura baixa em ${semCobertura.length} disciplinas (menos da metade dos tópicos concluídos): ${lista(semCobertura)}.`);
     const vencidos = sm2.vencidos(state.flashcards).length;
     if (vencidos > 0) sugestoes.push(`Há ${vencidos} ${vencidos === 1 ? "flashcard vencido" : "flashcards vencidos"} para revisar hoje.`);
 
@@ -8922,7 +8938,7 @@ export const store = {
   // Log de revisões CONCLUÍDAS nos últimos N dias (para a aba Concluídas + taxa).
   revisoesConcluidasLog(dias = 30) {
     const lim = addDays(todayISO(), -dias);
-    return (state.revisoesFeitas || []).filter((x) => (x.data || "").slice(0, 10) >= lim).sort((a, b) => (a.data < b.data ? 1 : -1));
+    return (state.revisoesFeitas || []).filter((x) => diaLocal(x.data) >= lim).sort((a, b) => (a.data < b.data ? 1 : -1));
   },
   // Reprograma (só move a data `proxima`, sem mexer no intervalo/escada) por id do item.
   reprogramarRevisao(itemId, novaData) {
@@ -9064,7 +9080,7 @@ export const store = {
   calendarioMes(mesISO) {
     const map = {};
     for (const s of state.sessoes) {
-      const d = (s.data || "").slice(0, 10);
+      const d = diaLocal(s.data);
       if (d.slice(0, 7) === mesISO) {
         if (!map[d]) map[d] = { tempoSeg: 0, sessoes: 0, fases: {} };
         map[d].tempoSeg += s.tempoSeg || 0;
@@ -9340,7 +9356,7 @@ export const store = {
   // Espírito: gentil, opt-in, sem gamificação excessiva. Streak + balanço + reforço positivo.
   // Dias com estudo = dias com ao menos uma sessão registrada.
   diasComEstudo() {
-    return new Set(state.sessoes.map((s) => (s.data || "").slice(0, 10)).filter(Boolean));
+    return new Set(state.sessoes.map((s) => diaLocal(s.data)).filter(Boolean));
   },
   // Streak consecutivo () + "X de N dias" na semana corrente (N = dias de estudo
   // configurados = 7 menos os dias de folga). Os dias de folga NÃO interrompem a
@@ -9378,7 +9394,7 @@ export const store = {
     const rot = this.tarefasDoDia(dataISO).filter((x) => x.tipo === "rotina");
     const planejadas = tarefas.length + rot.length;
     const feitas = tarefas.filter((m) => m.concluida).length + rot.filter((r) => r.concluida).length;
-    const sess = state.sessoes.filter((s) => (s.data || "").slice(0, 10) === dataISO);
+    const sess = state.sessoes.filter((s) => diaLocal(s.data) === dataISO);
     const tempoMin = Math.round(sess.reduce((a, s) => a + (s.tempoSeg || 0), 0) / 60);
     return { data: dataISO, planejadas, feitas, tempoMin, sessoes: sess.length };
   },
