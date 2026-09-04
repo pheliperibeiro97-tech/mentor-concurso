@@ -1,11 +1,11 @@
 {
   "platforms": {
     "windows-x86_64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITm5kTVg3Mmc2czIvYThLK3I5SDN1ay9KRHZCZmxxNUJROXdWWGYvRk4rU2xoTWZVZk53aTYrODlndDR1R2RUN0NKcVJqQStUQ0MvUmw0YmFZMXVzTHdrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg3MjYwNTEwCWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yNl94NjQtc2V0dXAuZXhlCi9CNzJ3dkdQR0FRdGNBcnB3VHE5amUwOGN0dVBIMmFpRjFWNUFyWW9mdjhKWkFYQUZpSEVCdEM3d3RPYmpxeHduTUtVQUphcmpzTE4ySnFVL05neERnPT0K",
-      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.26_x64-setup.exe"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRNE9PeXI4L2FITmhzWEcwZ3JncCtBT1dISnJlQ0tLVDZsZTE3Y1NzVVVpdzFLMnd6N3hMMzBUTEdxWnAzL2lFeTdaQ01UZ2QyZW9lYWllR1RIVXRrTjJLZ1lPeWdWQ1FrPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzg4NDgxNDk3CWZpbGU6TWVudG9yIENvbmN1cnNvXzAuOC4yN194NjQtc2V0dXAuZXhlCjBEeDlnK1hyZHFhODdDL1ZBSGR5ZSs4NWRSTVhGcTBqNlRUazNUOFMyUy9uNVJVbDdKZlNEVUFkMTJROGpIREF0TTZ1UHJnZGdOeVR2QmZTYjZmbkFBPT0K",
+      "url": "https://github.com/pheliperibeiro97-tech/mentor-concurso/releases/latest/download/Mentor.Concurso_0.8.27_x64-setup.exe"
     }
   },
-  "pub_date": "2026-08-20T21:15:10Z",
-  "version": "0.8.26",
-  "notes": "Correcao: cada material subia duas vezes na sincronizacao."
+  "pub_date": "2026-09-04T00:25:17Z",
+  "version": "0.8.27",
+  "notes": "Backup compartilhavel nao leva mais a chave da IA nem a senha do cofre; questao sem gabarito nao vira alternativa A; falha ao salvar e ao ler deixou de ser silenciosa; o dia passou a ser o seu, nao o de Greenwich; desfazer em flashcards e questoes; o simulado sobrevive ao F5."
 }
